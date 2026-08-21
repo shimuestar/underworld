@@ -69,10 +69,15 @@ export function tick(world: World, _dt: number): void {
   }
 
   if (executeTarget) {
-    // 처형 — 스태거 적 즉사. 마나 획득은 M4의 Mana 시스템이 이 이벤트를 구독해 처리
+    // 처형 — 스태거 적 즉사. 마나는 Mana가, 각인 드랍은 Sigils가 이 이벤트를 구독해 처리
     const enemy = executeTarget.enemy;
     enemy.alive = false;
-    world.events.emit('melee_kill', { enemyType: enemy.type, execution: true });
+    world.events.emit('melee_kill', {
+      enemyType: enemy.type,
+      execution: true,
+      x: enemy.x,
+      z: enemy.z,
+    });
     return;
   }
 

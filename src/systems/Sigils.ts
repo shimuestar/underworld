@@ -20,16 +20,41 @@ export function defaultModifiers(): Modifiers {
   };
 }
 
+let nextGroundItemId = 1;
+
 /** 처형 드랍 구독. 시작 시 1회 호출 */
 export function init(world: World): void {
   world.events.on('melee_kill', (payload) => {
-    const { enemyType, execution } = payload as { enemyType: string; execution?: boolean };
+    const { enemyType, execution, x, z } = payload as {
+      enemyType: string;
+      execution?: boolean;
+      x?: number;
+      z?: number;
+    };
     if (!execution) return;
     for (const id of enemyDef(enemyType).drops ?? []) {
-      world.sigils.inventory.push(id);
-      world.events.emit('sigil_acquired', { id });
+      world.groundItems.push({
+        id: nextGroundItemId++,
+        sigilId: id,
+        x: x ?? world.player.x,
+        z: z ?? world.player.z,
+      });
+      world.events.emit('sigil_dropped', { id });
     }
   });
+}
+
+/** 바닥 각인 줍기 — 접근하면 자동 획득 */
+export function tick(world: World, _dt: number): void {
+  if (world.groundItems.length === 0) return;
+  const p = world.player;
+  for (let i = world.groundItems.length - 1; i >= 0; i--) {
+    const item = world.groundItems[i]!;
+    if (Math.hypot(p.x - item.x, p.z - item.z) > balance.sigil.pickupRadius) continue;
+    world.groundItems.splice(i, 1);
+    world.sigils.inventory.push(item.sigilId);
+    world.events.emit('sigil_acquired', { id: item.sigilId });
+  }
 }
 
 /** 인벤토리의 각인을 해당 부위에 부착. 슬롯이 차 있으면 실패 */

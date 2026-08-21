@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import type { EnemyState, ProjectileState } from '../core/World';
+import type { EnemyState, GroundItemState, ProjectileState } from '../core/World';
 import { HandModel } from './HandModel';
 
 // 적 타입별 몸통 색 (시각 팔레트 — 튜닝값 아님)
@@ -19,6 +19,7 @@ const STAGGER_COLOR = 0xcc9922; // 스태거 = 처형 가능 표시
 const WINDUP_TINT = 0x0e2440; // 예비 동작의 옅은 예고 (본 섬광은 종료 4t 전)
 const BURN_TINT = 0x8f3300; // 화상 중
 const FIREBALL_COLOR = 0xff7733;
+const GROUND_ITEM_COLOR = 0xe8c76a; // 바닥 각인 — 어둠 속 금색 발광
 
 // 트레이서 시각 상수 (튜닝값 아님 — 순수 연출)
 const TRACER_COLOR = 0xffe9b8;
@@ -59,6 +60,7 @@ export class Stage {
   private readonly eyeHeight = balance.player.eyeHeight;
   private readonly enemyVisuals = new Map<number, EnemyVisual>();
   private readonly projectileVisuals = new Map<number, THREE.Group>();
+  private readonly groundItemVisuals = new Map<number, THREE.Group>();
   private readonly tracers: Tracer[] = [];
   private readonly hands = new HandModel();
   private ambientLight: THREE.AmbientLight | null = null;
@@ -395,6 +397,47 @@ export class Stage {
         }
       });
       this.projectileVisuals.delete(id);
+    }
+  }
+
+  /** 바닥 각인 — 떠서 회전하는 금색 팔면체 + 점광원 */
+  syncGroundItems(items: GroundItemState[]): void {
+    const now = performance.now();
+    const seen = new Set<number>();
+    for (const item of items) {
+      seen.add(item.id);
+      let group = this.groundItemVisuals.get(item.id);
+      if (!group) {
+        group = new THREE.Group();
+        const gem = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.22),
+          new THREE.MeshLambertMaterial({
+            color: GROUND_ITEM_COLOR,
+            emissive: GROUND_ITEM_COLOR,
+            emissiveIntensity: 0.55,
+          }),
+        );
+        gem.name = 'gem';
+        group.add(gem);
+        group.add(new THREE.PointLight(GROUND_ITEM_COLOR, 0.9, 5, 0));
+        this.groundItemVisuals.set(item.id, group);
+        this.scene.add(group);
+      }
+      const bob = 0.55 + Math.sin(now / 400 + item.id) * 0.1;
+      group.position.set(item.x, bob, item.z);
+      const gem = group.getObjectByName('gem');
+      if (gem) gem.rotation.y = now / 700;
+    }
+    for (const [id, group] of this.groundItemVisuals) {
+      if (seen.has(id)) continue;
+      this.scene.remove(group);
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          (obj.material as THREE.Material).dispose();
+        }
+      });
+      this.groundItemVisuals.delete(id);
     }
   }
 

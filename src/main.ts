@@ -143,6 +143,7 @@ for (const name of [
   'cast_failed',
   'spell_impact',
   'spell_kill',
+  'sigil_dropped',
   'sigil_acquired',
   'sigil_attached',
   'sigil_detached',
@@ -165,6 +166,7 @@ events.on('shot_blocked', () => audio.play('shot_blocked'));
 events.on('dodge_step', () => audio.play('dodge'));
 events.on('cast_spell', () => audio.play('cast_fire'));
 events.on('spell_impact', () => audio.play('spell_impact'));
+events.on('sigil_acquired', () => audio.play('pickup'));
 
 // ---- 패링 화면 탈색 (mix-blend-mode 오버레이) ----
 function screenFlash(strength: number, durationMs: number): void {
@@ -226,6 +228,7 @@ const systems = [
   PlayerMove.tick,
   Enemies.tick,
   Reaction.tick,
+  Sigils.tick,
   Weapons.tick,
   Projectiles.tick,
   Mana.tick,
@@ -280,6 +283,7 @@ function render(alpha: number): void {
   stage.setMuzzleFlash(world.weapon.muzzleFlash > 0);
   stage.syncEnemies(world.enemies, alpha);
   stage.syncProjectiles(world.projectiles, alpha);
+  stage.syncGroundItems(world.groundItems);
   stage.updateHands({ reloading: world.weapon.reloading > 0, stunned: p.stunTicks > 0 });
   minimap.update(p, world.enemies, alpha);
 

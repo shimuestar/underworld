@@ -11,7 +11,8 @@ export type SoundName =
   | 'shot_blocked'
   | 'dodge'
   | 'cast_fire'
-  | 'spell_impact';
+  | 'spell_impact'
+  | 'pickup';
 
 const MASTER_GAIN = 0.25;
 
@@ -67,6 +68,11 @@ export class GameAudio {
       case 'spell_impact':
         this.noise(0.16, 0.7, 1000);
         this.tone(180, 0.2, 'square', 0.5, 0, 90);
+        break;
+      case 'pickup':
+        // 밝은 2음 차임
+        this.tone(1568, 0.12, 'sine', 0.6);
+        this.tone(2093, 0.2, 'sine', 0.6, 0.07);
         break;
     }
   }

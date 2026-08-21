@@ -156,6 +156,7 @@
   },
 
   "sigil": {
+    "pickupRadius": 1.3,
     "scarRatio": 0.5,
     "slotPenalty": {
       "eye": { "flashbangSelfDamage": true },

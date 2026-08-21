@@ -60,15 +60,26 @@ beforeEach(() => {
 });
 
 describe('각인 드랍과 부착', () => {
-  it('창병 처형 → sig_fireball 인벤토리 획득 (소지만으로는 효과 없음)', () => {
-    world.events.emit('melee_kill', { enemyType: 'goblin_spear', execution: true });
+  it('창병 처형 → 그 자리에 드랍, 접근하면 획득 (소지만으로는 효과 없음)', () => {
+    world.events.emit('melee_kill', { enemyType: 'goblin_spear', execution: true, x: 14, z: 6 });
+    expect(world.groundItems).toHaveLength(1);
+    expect(world.sigils.inventory).toHaveLength(0); // 아직 줍지 않음
+
+    // 멀리 있는 동안은 획득하지 않는다
+    Sigils.tick(world, DT);
+    expect(world.sigils.inventory).toHaveLength(0);
+
+    // 접근 → 자동 획득
+    world.player.x = 14 - balance.sigil.pickupRadius + 0.1;
+    Sigils.tick(world, DT);
     expect(world.sigils.inventory).toContain('sig_fireball');
+    expect(world.groundItems).toHaveLength(0);
     expect(world.modifiers.reloadTimeMul).toBe(1);
   });
 
   it('일반 근접 처치는 드랍 없음', () => {
-    world.events.emit('melee_kill', { enemyType: 'goblin_spear', execution: false });
-    expect(world.sigils.inventory).toHaveLength(0);
+    world.events.emit('melee_kill', { enemyType: 'goblin_spear', execution: false, x: 8, z: 6 });
+    expect(world.groundItems).toHaveLength(0);
   });
 
   it('부착: 오른팔 페널티(재장전 배율) + 오염 pending 누적', () => {

@@ -79,6 +79,14 @@ export interface SpellState {
   cooldown: number;
 }
 
+/** 바닥에 떨어진 각인. 접근하면 획득 */
+export interface GroundItemState {
+  id: number;
+  sigilId: string;
+  x: number;
+  z: number;
+}
+
 export interface ManaState {
   value: number;
   /** 연쇄 단계 (balance.chain.multipliers 인덱스, 상한은 배열 끝) */
@@ -163,6 +171,7 @@ export class World {
   corruption: CorruptionState;
   projectiles: ProjectileState[] = [];
   spell: SpellState = { cooldown: 0 };
+  groundItems: GroundItemState[] = [];
   enemies: EnemyState[];
   level: Level;
 
