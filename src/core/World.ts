@@ -17,6 +17,16 @@ export interface PlayerState {
   yaw: number;
   pitch: number;
   health: number;
+  /** 패링 실패 경직 잔여 틱. >0이면 이동/사격/반응 불가 */
+  stunTicks: number;
+  /** 회피 대시 잔여 틱 */
+  dodgeTicks: number;
+  dodgeDirX: number;
+  dodgeDirZ: number;
+  /** 회피 무적 잔여 틱 */
+  iframeTicks: number;
+  /** 히트스톱 중 눌린 반응 입력의 버퍼 잔여 틱 */
+  reactionBufferTicks: number;
 }
 
 export interface LanternState {
@@ -38,7 +48,17 @@ export interface WeaponState {
   muzzleFlash: number;
 }
 
-export type EnemyAiState = 'idle' | 'chase' | 'windup' | 'recover';
+// 근접 적 공격 상태 머신 — docs/systems/combat.md §2.
+// active_perfect가 active_normal보다 먼저 온다 (완벽 패링 = 가장 이른 순간).
+export type EnemyAiState =
+  | 'idle'
+  | 'chase'
+  | 'windup'
+  | 'active_perfect'
+  | 'active_normal'
+  | 'impact'
+  | 'recover'
+  | 'staggered';
 
 export interface EnemyState {
   id: number;
@@ -47,10 +67,12 @@ export interface EnemyState {
   z: number;
   prevX: number;
   prevZ: number;
+  /** 바라보는 방향 (플레이어와 같은 규약: yaw 0 = -Z) */
+  yaw: number;
   health: number;
   alive: boolean;
   ai: EnemyAiState;
-  /** 현재 ai 상태의 남은 틱 (windup/recover) */
+  /** 현재 ai 상태의 남은 틱 */
   timer: number;
 }
 

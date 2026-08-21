@@ -12,7 +12,7 @@ export interface EntityPlacement {
 }
 
 /** 현재 구현된 적 타입만 스폰한다. 새 적을 구현하면 여기에 추가. */
-const IMPLEMENTED = new Set(['goblin_runner']);
+const IMPLEMENTED = new Set(['goblin_runner', 'goblin_spear']);
 
 export function spawnEnemies(placements: EntityPlacement[], level: Level): EnemyState[] {
   const enemies: EnemyState[] = [];
@@ -36,6 +36,7 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
       z,
       prevX: x,
       prevZ: z,
+      yaw: 0,
       health: def.health,
       alive: true,
       ai: 'idle',

@@ -8,6 +8,7 @@ export interface EnemyAttackDef {
   recoverTicks: number;
   impactRangeMul: number;
   parryable: boolean;
+  telegraph?: string;
 }
 
 export interface EnemyDef {
@@ -19,6 +20,9 @@ export interface EnemyDef {
   aggroRange: number;
   attackRange: number;
   attack: EnemyAttackDef;
+  /** 정면 방패 — 전방 투사체 무효 (goblin_spear) */
+  frontalShieldBlocksProjectiles?: boolean;
+  shieldArcDeg?: number;
 }
 
 export function enemyDef(type: string): EnemyDef {

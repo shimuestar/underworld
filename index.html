@@ -53,10 +53,20 @@
       #death.visible {
         display: flex;
       }
+      /* 패링 탈색 — mix-blend-mode 오버레이 (docs/architecture.md §6) */
+      #flash {
+        position: fixed;
+        inset: 0;
+        background: #fff;
+        mix-blend-mode: saturation;
+        opacity: 0;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="flash"></div>
     <div id="hud"></div>
     <div id="crosshair"></div>
     <div id="death">

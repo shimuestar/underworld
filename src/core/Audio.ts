@@ -1,0 +1,104 @@
+// Web Audio API 직접 사용 — 라이브러리 없음, 에셋 없음 (전부 합성음).
+// 텔레그래프 사운드는 시각 신호보다 먼저 재생된다 — docs/architecture.md §7.
+// AudioBufferSourceNode/오실레이터는 매번 새로 만든다 (레이턴시 최소화).
+
+export type SoundName =
+  | 'telegraph_blue'
+  | 'parry_perfect'
+  | 'parry_normal'
+  | 'parry_fail'
+  | 'execute'
+  | 'shot_blocked'
+  | 'dodge';
+
+const MASTER_GAIN = 0.25;
+
+export class GameAudio {
+  private ctx: AudioContext | null = null;
+
+  /** 사용자 제스처(클릭) 시점에 호출 — 오디오 컨텍스트 생성/재개 */
+  unlock(): void {
+    if (!this.ctx) this.ctx = new AudioContext();
+    if (this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
+  play(name: SoundName): void {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== 'running') return;
+
+    switch (name) {
+      case 'telegraph_blue':
+        // 금속성 고음 2연타 — 청색(패링 가능) 예고
+        this.tone(1760, 0.09, 'triangle', 0.9);
+        this.tone(2637, 0.12, 'triangle', 0.7, 0.05);
+        break;
+      case 'parry_perfect':
+        // 밝은 종소리 + 노이즈 스파크
+        this.tone(2093, 0.28, 'sine', 1.0);
+        this.tone(3136, 0.2, 'sine', 0.5);
+        this.noise(0.06, 0.5, 4000);
+        break;
+      case 'parry_normal':
+        this.tone(1319, 0.14, 'sine', 0.7);
+        this.noise(0.04, 0.3, 3000);
+        break;
+      case 'parry_fail':
+        // 저음 둔탁음
+        this.tone(110, 0.22, 'square', 0.8, 0, 55);
+        break;
+      case 'execute':
+        this.noise(0.18, 0.9, 1200);
+        this.tone(220, 0.25, 'sawtooth', 0.6, 0, 80);
+        break;
+      case 'shot_blocked':
+        // 짧은 금속 튕김
+        this.tone(988, 0.05, 'square', 0.5);
+        break;
+      case 'dodge':
+        this.noise(0.12, 0.35, 800);
+        break;
+    }
+  }
+
+  /** 단일 오실레이터 톤. freqEnd가 있으면 지수 슬라이드 */
+  private tone(
+    freq: number,
+    durSec: number,
+    type: OscillatorType,
+    gain: number,
+    delaySec = 0,
+    freqEnd?: number,
+  ): void {
+    const ctx = this.ctx!;
+    const t0 = ctx.currentTime + delaySec;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, t0 + durSec);
+    g.gain.setValueAtTime(gain * MASTER_GAIN, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + durSec);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + durSec);
+  }
+
+  /** 화이트 노이즈 버스트 (로우패스) */
+  private noise(durSec: number, gain: number, filterFreq: number): void {
+    const ctx = this.ctx!;
+    const t0 = ctx.currentTime;
+    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * durSec), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = filterFreq;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain * MASTER_GAIN, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + durSec);
+    src.connect(filter).connect(g).connect(ctx.destination);
+    src.start(t0);
+  }
+}

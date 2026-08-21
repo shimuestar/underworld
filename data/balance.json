@@ -21,14 +21,17 @@
   },
 
   "reaction": {
+    "radius": 3.2,
     "windowPerfectTicks": 6,
     "windowNormalTicks": 12,
     "windowDeflectTicks": 8,
     "failStunTicks": 20,
     "hitstopPerfectTicks": 4,
     "hitstopNormalTicks": 2,
+    "staggerTicks": 90,
     "dodgeIFrameTicks": 8,
     "dodgeDistance": 3.5,
+    "dodgeDashTicks": 6,
     "inputBufferTicks": 4
   },
 

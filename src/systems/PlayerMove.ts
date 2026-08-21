@@ -16,6 +16,9 @@ export function tick(world: World, dt: number): void {
   p.prevY = p.y;
   p.prevZ = p.z;
 
+  // 경직/회피 대시 중에는 일반 이동 불가 (시선은 위에서 이미 처리 — 계속 돌아본다)
+  if (p.stunTicks > 0 || p.dodgeTicks > 0) return;
+
   // 이동 방향 (yaw 기준, XZ 평면)
   const fx = -Math.sin(p.yaw);
   const fz = -Math.cos(p.yaw);

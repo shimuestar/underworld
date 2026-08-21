@@ -9,8 +9,13 @@ import type { EnemyState } from '../core/World';
 // 적 타입별 몸통 색 (시각 팔레트 — 튜닝값 아님)
 const ENEMY_COLORS: Record<string, number> = {
   goblin_runner: 0x4a8f3c,
+  goblin_spear: 0x3c7a8f,
 };
 const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
+
+// 텔레그래프 이외 상태 표시색 (텔레그래프 3색과 겹치지 않게 — 색이 곧 문법)
+const STAGGER_COLOR = 0xcc9922; // 스태거 = 처형 가능 표시
+const WINDUP_TINT = 0x0e2440; // 예비 동작의 옅은 예고 (본 섬광은 종료 4t 전)
 
 // 트레이서 시각 상수 (튜닝값 아님 — 순수 연출)
 const TRACER_COLOR = 0xffe9b8;
@@ -204,11 +209,21 @@ export class Stage {
         def.height / 2,
         enemy.prevZ + (enemy.z - enemy.prevZ) * alpha,
       );
+      mesh.rotation.y = enemy.yaw;
 
-      // windup 텔레그래프 — 패링 가능 공격은 청색 (색 규약: balance.telegraph)
+      // 텔레그래프 — 청색 섬광은 windup 종료 visualLeadTicks 전부터 판정 창 내내.
+      // 그 전 windup은 옅은 예고 틴트. 스태거는 처형 가능 표시(황색).
       const material = mesh.material as THREE.MeshLambertMaterial;
-      if (enemy.ai === 'windup') {
+      const flashing =
+        (enemy.ai === 'windup' && enemy.timer <= balance.telegraph.visualLeadTicks) ||
+        enemy.ai === 'active_perfect' ||
+        enemy.ai === 'active_normal';
+      if (flashing) {
         material.emissive.set(balance.telegraph.colorParryable);
+      } else if (enemy.ai === 'windup') {
+        material.emissive.set(WINDUP_TINT);
+      } else if (enemy.ai === 'staggered') {
+        material.emissive.set(STAGGER_COLOR);
       } else {
         material.emissive.set(0x000000);
       }

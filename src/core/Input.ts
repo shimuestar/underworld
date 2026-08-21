@@ -18,6 +18,8 @@ export interface InputSnapshot {
   firePressed: boolean;
   /** 이번 틱에 재장전 키가 눌렸는가 (엣지) */
   reload: boolean;
+  /** 이번 틱에 반응 버튼(우클릭)이 눌렸는가 (엣지) */
+  reactionPressed: boolean;
 }
 
 export class Input {
@@ -28,6 +30,7 @@ export class Input {
   private batterySwaps = 0;
   private fireClicks = 0;
   private reloads = 0;
+  private reactionClicks = 0;
 
   constructor(private readonly lockTarget: HTMLElement) {
     lockTarget.addEventListener('click', () => {
@@ -52,8 +55,11 @@ export class Input {
 
     // 포인터 락을 얻는 그 클릭은 발사로 치지 않는다 (mousedown 시점엔 아직 미잠금)
     window.addEventListener('mousedown', (e) => {
-      if (e.button === 0 && this.pointerLocked) this.fireClicks++;
+      if (!this.pointerLocked) return;
+      if (e.button === 0) this.fireClicks++;
+      if (e.button === 2) this.reactionClicks++;
     });
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
   get pointerLocked(): boolean {
@@ -72,6 +78,7 @@ export class Input {
       batterySwap: this.batterySwaps > 0,
       firePressed: this.fireClicks > 0,
       reload: this.reloads > 0,
+      reactionPressed: this.reactionClicks > 0,
     };
     this.dx = 0;
     this.dy = 0;
@@ -79,6 +86,7 @@ export class Input {
     this.batterySwaps = 0;
     this.fireClicks = 0;
     this.reloads = 0;
+    this.reactionClicks = 0;
     return snapshot;
   }
 
@@ -93,6 +101,7 @@ export class Input {
       batterySwap: false,
       firePressed: false,
       reload: false,
+      reactionPressed: false,
     };
   }
 }
