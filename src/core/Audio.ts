@@ -13,7 +13,10 @@ export type SoundName =
   | 'cast_fire'
   | 'cast_fizzle'
   | 'spell_impact'
-  | 'pickup';
+  | 'pickup'
+  | 'gunshot'
+  | 'hit_flesh'
+  | 'hit_wall';
 
 const MASTER_GAIN = 0.25;
 
@@ -79,6 +82,21 @@ export class GameAudio {
         this.tone(1568, 0.12, 'sine', 0.6);
         this.tone(2093, 0.2, 'sine', 0.6, 0.07);
         break;
+      case 'gunshot':
+        // 권총 — 날카로운 노이즈 크랙 + 저음 펀치
+        this.noise(0.09, 1.0, 4500);
+        this.tone(150, 0.12, 'square', 0.7, 0, 55);
+        break;
+      case 'hit_flesh':
+        // 적 명중 — 둔탁한 살점음 (착탄 지연 살짝)
+        this.noise(0.07, 0.6, 480, 0.035);
+        this.tone(210, 0.1, 'sine', 0.6, 0.035, 120);
+        break;
+      case 'hit_wall':
+        // 벽 명중 — 높은 돌 튕김
+        this.noise(0.05, 0.4, 2600, 0.035);
+        this.tone(1180, 0.07, 'triangle', 0.35, 0.035, 700);
+        break;
     }
   }
 
@@ -106,9 +124,9 @@ export class GameAudio {
   }
 
   /** 화이트 노이즈 버스트 (로우패스) */
-  private noise(durSec: number, gain: number, filterFreq: number): void {
+  private noise(durSec: number, gain: number, filterFreq: number, delaySec = 0): void {
     const ctx = this.ctx!;
-    const t0 = ctx.currentTime;
+    const t0 = ctx.currentTime + delaySec;
     const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * durSec), ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;

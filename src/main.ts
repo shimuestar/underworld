@@ -220,9 +220,11 @@ events.on('sigil_acquired', (payload) => {
 events.on('player_died', () => deathOverlay.classList.add('visible'));
 
 events.on('shot_fired', (payload) => {
-  const shot = payload as { ex: number; ey: number; ez: number };
+  const shot = payload as { ex: number; ey: number; ez: number; hitEnemy: boolean };
   stage.spawnTracer(shot.ex, shot.ey, shot.ez);
   stage.triggerRecoil();
+  audio.play('gunshot');
+  audio.play(shot.hitEnemy ? 'hit_flesh' : 'hit_wall');
 });
 events.on('parry_attempt', (payload) => {
   stage.triggerParry((payload as { result: string }).result);
