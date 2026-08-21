@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
 import type { EnemyState } from '../core/World';
+import { HandModel } from './HandModel';
 
 // 적 타입별 몸통 색 (시각 팔레트 — 튜닝값 아님)
 const ENEMY_COLORS: Record<string, number> = {
@@ -19,7 +20,23 @@ const WINDUP_TINT = 0x0e2440; // 예비 동작의 옅은 예고 (본 섬광은 �
 
 // 트레이서 시각 상수 (튜닝값 아님 — 순수 연출)
 const TRACER_COLOR = 0xffe9b8;
-const MUZZLE_OFFSET = { x: 0.18, y: -0.14, z: -0.35 }; // 카메라 로컬: 오른쪽 아래 총구 위치
+const MUZZLE_OFFSET = { x: 0.16, y: -0.1, z: -0.66 }; // 카메라 로컬: 권총 총구 끝
+
+// 적 부속물 색
+const SHIELD_COLOR = 0x6f7480;
+const SPEAR_SHAFT = 0x5c4a33;
+const SPEAR_TIP = 0x9aa2ad;
+const HEAD_DARKEN = 0.72;
+
+interface EnemyVisual {
+  group: THREE.Group;
+  /** 텔레그래프 발광을 적용할 머티리얼들 (몸통/머리/창끝) */
+  flashMaterials: THREE.MeshLambertMaterial[];
+  shield?: THREE.Mesh;
+  shieldMaterial?: THREE.MeshLambertMaterial;
+  spear?: THREE.Object3D;
+  shieldFlashUntil: number;
+}
 const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 그린다 (근접부 왜곡 방지)
 const TRACER_WIDTH = 0.022;
 
@@ -38,8 +55,9 @@ export class Stage {
   private readonly lantern: THREE.SpotLight;
   private readonly muzzleLight: THREE.PointLight;
   private readonly eyeHeight = balance.player.eyeHeight;
-  private readonly enemyMeshes = new Map<number, THREE.Mesh>();
+  private readonly enemyVisuals = new Map<number, EnemyVisual>();
   private readonly tracers: Tracer[] = [];
+  private readonly hands = new HandModel();
 
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -84,9 +102,30 @@ export class Stage {
       0,
     );
     this.muzzleLight.visible = false;
+    this.muzzleLight.position.set(MUZZLE_OFFSET.x, MUZZLE_OFFSET.y, MUZZLE_OFFSET.z);
     this.camera.add(this.muzzleLight);
 
+    // 1인칭 뷰모델
+    this.camera.add(this.hands.group);
+
     window.addEventListener('resize', this.onResize);
+  }
+
+  triggerRecoil(): void {
+    this.hands.triggerRecoil();
+  }
+
+  triggerParry(result: string): void {
+    this.hands.triggerParry(result);
+  }
+
+  flashShield(enemyId: number): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    if (visual) visual.shieldFlashUntil = performance.now() + 120;
+  }
+
+  updateHands(state: { reloading: boolean; stunned: boolean }): void {
+    this.hands.update(state);
   }
 
   setLevel(group: THREE.Group, ambientIntensity: number): void {
@@ -183,58 +222,124 @@ export class Stage {
     }
   }
 
-  /** 적 메시 생성/제거/이동을 world.enemies와 동기화 */
+  /** 타입별 적 외형 조립 — 몸통+머리, 창병은 방패+창 추가 */
+  private buildEnemyVisual(type: string): EnemyVisual {
+    const def = enemyDef(type);
+    const baseColor = ENEMY_COLORS[type] ?? ENEMY_COLOR_FALLBACK;
+    const group = new THREE.Group();
+    const flashMaterials: THREE.MeshLambertMaterial[] = [];
+
+    const bodyMat = new THREE.MeshLambertMaterial({ color: baseColor });
+    flashMaterials.push(bodyMat);
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(def.radius * 2, def.height * 0.78, def.radius * 2),
+      bodyMat,
+    );
+    body.position.y = (def.height * 0.78) / 2;
+    group.add(body);
+
+    const headMat = new THREE.MeshLambertMaterial({
+      color: new THREE.Color(baseColor).multiplyScalar(HEAD_DARKEN),
+    });
+    flashMaterials.push(headMat);
+    const headSize = def.radius * 0.9;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), headMat);
+    head.position.set(0, def.height - headSize / 2, -def.radius * 0.2);
+    group.add(head);
+
+    const visual: EnemyVisual = { group, flashMaterials, shieldFlashUntil: 0 };
+
+    if (def.frontalShieldBlocksProjectiles) {
+      visual.shieldMaterial = new THREE.MeshLambertMaterial({ color: SHIELD_COLOR });
+      visual.shield = new THREE.Mesh(
+        new THREE.BoxGeometry(def.radius * 2.3, def.height * 0.72, 0.09),
+        visual.shieldMaterial,
+      );
+      visual.shield.position.set(-0.15, def.height * 0.5, -(def.radius + 0.12));
+      group.add(visual.shield);
+    }
+
+    if (type === 'goblin_spear') {
+      const spear = new THREE.Group();
+      const shaft = new THREE.Mesh(
+        new THREE.BoxGeometry(0.055, 0.055, 1.7),
+        new THREE.MeshLambertMaterial({ color: SPEAR_SHAFT }),
+      );
+      spear.add(shaft);
+      const tipMat = new THREE.MeshLambertMaterial({ color: SPEAR_TIP });
+      flashMaterials.push(tipMat);
+      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.075, 0.24), tipMat);
+      tip.position.z = -0.95;
+      spear.add(tip);
+      spear.position.set(def.radius + 0.15, def.height * 0.62, -0.3);
+      visual.spear = spear;
+      group.add(spear);
+    }
+
+    return visual;
+  }
+
+  /** 적 시각 생성/제거/이동을 world.enemies와 동기화 */
   syncEnemies(enemies: EnemyState[], alpha: number): void {
+    const now = performance.now();
     const seen = new Set<number>();
     for (const enemy of enemies) {
       if (!enemy.alive) continue;
       seen.add(enemy.id);
 
-      let mesh = this.enemyMeshes.get(enemy.id);
-      if (!mesh) {
-        const def = enemyDef(enemy.type);
-        mesh = new THREE.Mesh(
-          new THREE.BoxGeometry(def.radius * 2, def.height, def.radius * 2),
-          new THREE.MeshLambertMaterial({
-            color: ENEMY_COLORS[enemy.type] ?? ENEMY_COLOR_FALLBACK,
-          }),
-        );
-        this.enemyMeshes.set(enemy.id, mesh);
-        this.scene.add(mesh);
+      let visual = this.enemyVisuals.get(enemy.id);
+      if (!visual) {
+        visual = this.buildEnemyVisual(enemy.type);
+        this.enemyVisuals.set(enemy.id, visual);
+        this.scene.add(visual.group);
       }
 
-      const def = enemyDef(enemy.type);
-      mesh.position.set(
+      visual.group.position.set(
         enemy.prevX + (enemy.x - enemy.prevX) * alpha,
-        def.height / 2,
+        0,
         enemy.prevZ + (enemy.z - enemy.prevZ) * alpha,
       );
-      mesh.rotation.y = enemy.yaw;
+      visual.group.rotation.y = enemy.yaw;
 
       // 텔레그래프 — 청색 섬광은 windup 종료 visualLeadTicks 전부터 판정 창 내내.
       // 그 전 windup은 옅은 예고 틴트. 스태거는 처형 가능 표시(황색).
-      const material = mesh.material as THREE.MeshLambertMaterial;
       const flashing =
         (enemy.ai === 'windup' && enemy.timer <= balance.telegraph.visualLeadTicks) ||
         enemy.ai === 'active_perfect' ||
         enemy.ai === 'active_normal';
-      if (flashing) {
-        material.emissive.set(balance.telegraph.colorParryable);
-      } else if (enemy.ai === 'windup') {
-        material.emissive.set(WINDUP_TINT);
-      } else if (enemy.ai === 'staggered') {
-        material.emissive.set(STAGGER_COLOR);
-      } else {
-        material.emissive.set(0x000000);
+      let emissive = 0x000000;
+      if (flashing) emissive = new THREE.Color(balance.telegraph.colorParryable).getHex();
+      else if (enemy.ai === 'windup') emissive = WINDUP_TINT;
+      else if (enemy.ai === 'staggered') emissive = STAGGER_COLOR;
+      for (const material of visual.flashMaterials) material.emissive.set(emissive);
+
+      // 창 찌르기 — windup에 당겼다가 판정 창~impact에 내지른다
+      if (visual.spear) {
+        let targetZ = -0.3;
+        if (enemy.ai === 'windup') targetZ = 0.15;
+        else if (enemy.ai.startsWith('active') || enemy.ai === 'impact') targetZ = -1.1;
+        visual.spear.position.z += (targetZ - visual.spear.position.z) * 0.35;
+      }
+
+      // 방패 — 피격 시 흰 번쩍, 스태거 중엔 내려가서 열린다
+      if (visual.shield && visual.shieldMaterial) {
+        visual.shieldMaterial.emissive.set(now < visual.shieldFlashUntil ? 0xffffff : 0x000000);
+        const def = enemyDef(enemy.type);
+        const targetY = enemy.ai === 'staggered' ? def.height * 0.18 : def.height * 0.5;
+        visual.shield.position.y += (targetY - visual.shield.position.y) * 0.2;
       }
     }
 
-    for (const [id, mesh] of this.enemyMeshes) {
+    for (const [id, visual] of this.enemyVisuals) {
       if (seen.has(id)) continue;
-      this.scene.remove(mesh);
-      mesh.geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
-      this.enemyMeshes.delete(id);
+      this.scene.remove(visual.group);
+      visual.group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          (obj.material as THREE.Material).dispose();
+        }
+      });
+      this.enemyVisuals.delete(id);
     }
   }
 

@@ -1,0 +1,142 @@
+// 1인칭 뷰모델 — 오른손+권총, 왼팔 브레이서(패링). 전부 프리미티브 + 단색.
+// 게임 로직 금지: 이벤트/상태를 받아 애니메이션만 한다.
+// 오염 시각 단계(economy.md §3)가 생기면 이 파일에서 머티리얼/모델을 단계별로 바꾼다.
+
+import * as THREE from 'three';
+
+// 시각 상수 (튜닝값 아님)
+const SKIN = 0xb08a63;
+const SLEEVE = 0x2a2a30;
+const GUN_DARK = 0x3a3a40;
+const GRIP = 0x2b2320;
+const BRACER = 0x555c66;
+
+const RECOIL_MS = 130;
+const PARRY_SWING_MS = 200;
+
+// 패링 결과별 브레이서 발광색 — 텔레그래프 3색 규약과 겹치는 청색은 '패링 가능'의
+// 연장선이라 의도적으로 공유한다
+const PARRY_GLOW: Record<string, number> = {
+  perfect: 0x4a9eff,
+  normal: 0x2a5f99,
+  fail: 0x553333,
+};
+
+function box(w: number, h: number, d: number, color: number): THREE.Mesh {
+  return new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshLambertMaterial({ color }),
+  );
+}
+
+export class HandModel {
+  readonly group = new THREE.Group();
+  private readonly rightArm = new THREE.Group();
+  private readonly leftArm = new THREE.Group();
+  private readonly bracerMaterial: THREE.MeshLambertMaterial;
+
+  private recoilUntil = 0;
+  private parryUntil = 0;
+  private parryGlow = 0x000000;
+
+  constructor() {
+    // ---- 오른팔 + 권총 ----
+    const forearm = box(0.045, 0.045, 0.16, SLEEVE);
+    forearm.position.set(0.015, -0.035, 0.08);
+    forearm.rotation.x = 0.35;
+    this.rightArm.add(forearm);
+
+    const hand = box(0.055, 0.052, 0.065, SKIN);
+    hand.position.set(0, -0.015, -0.01);
+    this.rightArm.add(hand);
+
+    const slide = box(0.03, 0.038, 0.17, GUN_DARK);
+    slide.position.set(0, 0.035, -0.07);
+    this.rightArm.add(slide);
+
+    const grip = box(0.026, 0.07, 0.038, GRIP);
+    grip.position.set(0, -0.022, -0.005);
+    grip.rotation.x = -0.25;
+    this.rightArm.add(grip);
+
+    this.rightArm.position.copy(REST_RIGHT.pos);
+    this.rightArm.rotation.set(REST_RIGHT.rotX, 0, 0);
+    this.group.add(this.rightArm);
+
+    // ---- 왼팔 브레이서 (평소엔 화면 밖, 패링 시 올라온다) ----
+    const lForearm = box(0.048, 0.048, 0.19, SLEEVE);
+    lForearm.position.set(0, 0, 0.015);
+    this.leftArm.add(lForearm);
+
+    const lFist = box(0.06, 0.056, 0.06, SKIN);
+    lFist.position.set(0, 0.004, -0.11);
+    this.leftArm.add(lFist);
+
+    this.bracerMaterial = new THREE.MeshLambertMaterial({ color: BRACER });
+    const bracer = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.09, 0.21), this.bracerMaterial);
+    bracer.position.set(-0.038, 0.008, 0);
+    this.leftArm.add(bracer);
+
+    this.leftArm.position.copy(REST_LEFT.pos);
+    this.leftArm.rotation.set(0, 0, REST_LEFT.rotZ);
+    this.group.add(this.leftArm);
+  }
+
+  triggerRecoil(): void {
+    this.recoilUntil = performance.now() + RECOIL_MS;
+  }
+
+  triggerParry(result: string): void {
+    this.parryUntil = performance.now() + PARRY_SWING_MS;
+    this.parryGlow = PARRY_GLOW[result] ?? PARRY_GLOW['fail']!;
+  }
+
+  /** 매 프레임 호출. 상태 기반 포즈 + 이벤트 기반 킥을 합성한다 */
+  update(state: { reloading: boolean; stunned: boolean }): void {
+    const now = performance.now();
+
+    // 오른팔 목표 포즈
+    let targetY = REST_RIGHT.pos.y;
+    let targetRotX = REST_RIGHT.rotX;
+    if (state.stunned) {
+      targetY -= 0.1;
+      targetRotX -= 0.55;
+    } else if (state.reloading) {
+      targetY -= 0.13;
+      targetRotX -= 0.8;
+    }
+
+    // 반동 킥
+    let kickZ = 0;
+    if (now < this.recoilUntil) {
+      const k = (this.recoilUntil - now) / RECOIL_MS;
+      kickZ = 0.055 * k;
+      targetRotX += 0.3 * k;
+    }
+
+    this.rightArm.position.y += (targetY - this.rightArm.position.y) * 0.25;
+    this.rightArm.position.z = REST_RIGHT.pos.z + kickZ;
+    this.rightArm.rotation.x += (targetRotX - this.rightArm.rotation.x) * 0.35;
+
+    // 왼팔 패링 스윙 — sin 곡선으로 올라왔다 내려간다
+    let swing = 0;
+    if (now < this.parryUntil) {
+      const phase = 1 - (this.parryUntil - now) / PARRY_SWING_MS;
+      swing = Math.sin(phase * Math.PI);
+    }
+    this.leftArm.position.lerpVectors(REST_LEFT.pos, GUARD_LEFT.pos, swing);
+    this.leftArm.rotation.z = REST_LEFT.rotZ + (GUARD_LEFT.rotZ - REST_LEFT.rotZ) * swing;
+    this.leftArm.rotation.x = GUARD_LEFT.rotX * swing;
+    if (swing > 0) {
+      this.bracerMaterial.emissive.set(this.parryGlow);
+      this.bracerMaterial.emissiveIntensity = swing;
+    } else {
+      this.bracerMaterial.emissive.set(0x000000);
+    }
+  }
+}
+
+// 포즈 정의 (카메라 로컬 좌표)
+const REST_RIGHT = { pos: new THREE.Vector3(0.16, -0.14, -0.5), rotX: 0.06 };
+const REST_LEFT = { pos: new THREE.Vector3(-0.34, -0.5, -0.55), rotZ: 0.5 };
+const GUARD_LEFT = { pos: new THREE.Vector3(-0.03, -0.07, -0.5), rotZ: 1.3, rotX: 0.25 };
