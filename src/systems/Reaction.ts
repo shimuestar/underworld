@@ -17,10 +17,15 @@ export function tick(world: World, _dt: number): void {
   if (p.iframeTicks > 0) p.iframeTicks--;
   if (p.reactionBufferTicks > 0) p.reactionBufferTicks--;
 
-  // 방어 (우클릭 홀드) — 누르는 동안 즉시 발동. 경직/대시 중에는 불가.
+  // 방어 (우클릭 홀드) — 탭 임계를 넘긴 뒤에만 발동. 짧은 탭(=패링 시도) 중에는
+  // 방어가 켜지지 않아 브레이서가 두 번 올라가지 않는다. 경직/대시 중 불가.
   // 피해 처리는 Enemies/Projectiles가 playerBlocks()로 판정 (정면 한정, 칩 데미지 관통)
-  p.blocking = world.input.reactionHeld && p.stunTicks <= 0 && p.dodgeTicks <= 0;
   if (world.input.reactionHeld) p.reactionHeldTicks++;
+  p.blocking =
+    world.input.reactionHeld &&
+    p.reactionHeldTicks > reaction.tapThresholdTicks &&
+    p.stunTicks <= 0 &&
+    p.dodgeTicks <= 0;
 
   if (p.stunTicks > 0) {
     p.stunTicks--;
