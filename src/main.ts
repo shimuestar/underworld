@@ -7,6 +7,7 @@ import { World } from './core/World';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnEnemies } from './level/Spawner';
+import { Minimap } from './render/Minimap';
 import { Stage } from './render/Stage';
 import * as PlayerMove from './systems/PlayerMove';
 import * as Enemies from './systems/Enemies';
@@ -61,6 +62,10 @@ const world = new World(events, {
 });
 
 const stage = new Stage(app);
+const minimap = new Minimap(level);
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyM') minimap.toggle();
+});
 stage.setLevel(
   buildLevelGroup(level, {
     color: balance.lighting.torchColor,
@@ -207,6 +212,7 @@ function render(alpha: number): void {
   stage.setMuzzleFlash(world.weapon.muzzleFlash > 0);
   stage.syncEnemies(world.enemies, alpha);
   stage.updateHands({ reloading: world.weapon.reloading > 0, stunned: p.stunTicks > 0 });
+  minimap.update(p, world.enemies, alpha);
 
   const w = world.weapon;
   const aliveCount = world.enemies.filter((e) => e.alive).length;
@@ -218,7 +224,7 @@ function render(alpha: number): void {
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked
       ? ''
-      : '[클릭] 마우스 잠금  WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)  R 장전  F 랜턴  B 배터리');
+      : '[클릭] 마우스 잠금  WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)  R 장전  F 랜턴  B 배터리  M 미니맵');
 
   stage.render();
 }
