@@ -38,18 +38,30 @@ const SPEAR_TIP = 0x9aa2ad;
 const HEAD_DARKEN = 0.72;
 
 // 근접 무기 규격 (시각 — 실제 사거리는 entities.json attackRange가 결정)
+// style: smash = 치켜들었다 내리침 / thrust = 수평 견착 후 내지름
 const MELEE_WEAPONS: Record<
   string,
-  { length: number; width: number; color: number; tip?: boolean; headSize?: number }
+  {
+    length: number;
+    width: number;
+    color: number;
+    style: 'smash' | 'thrust';
+    tip?: boolean;
+    headSize?: number;
+  }
 > = {
-  goblin_runner: { length: 1.0, width: 0.11, color: 0x6b5233 },
-  goblin_spear: { length: 2.0, width: 0.07, color: 0x5c4a33, tip: true },
-  goblin_chieftain: { length: 2.0, width: 0.26, color: 0x4a3826, headSize: 0.5 },
+  goblin_runner: { length: 1.0, width: 0.11, color: 0x6b5233, style: 'smash' },
+  goblin_spear: { length: 2.0, width: 0.07, color: 0x5c4a33, style: 'thrust', tip: true },
+  goblin_chieftain: { length: 2.0, width: 0.26, color: 0x4a3826, style: 'smash', headSize: 0.5 },
 };
-/** 팔 휴식/치켜듦/내리침 각도 */
+/** smash 팔 각도: 휴식/치켜듦/내리침 */
 const ARM_REST = 0.55;
 const ARM_RAISED = -2.0;
 const ARM_SMASH = 1.3;
+/** thrust: 수평 견착 각도, 당김/내지름 거리 */
+const THRUST_LEVEL = 0.05;
+const THRUST_PULL = 0.6;
+const THRUST_LUNGE = -1.0;
 
 interface EnemyVisual {
   group: THREE.Group;
@@ -523,7 +535,7 @@ export class Stage {
         clubHead.position.z = -weaponSpec.length + 0.15;
         arm.add(clubHead);
       }
-      arm.rotation.x = ARM_REST;
+      arm.rotation.x = weaponSpec.style === 'thrust' ? THRUST_LEVEL : ARM_REST;
       visual.arm = arm;
       torso.add(arm);
     }
@@ -625,19 +637,32 @@ export class Stage {
       visual.torso.rotation.x += (leanTarget - visual.torso.rotation.x) * snap;
       visual.torso.position.z += (lungeTarget - visual.torso.position.z) * snap;
 
-      // 무기 팔 — 치켜듦(windup 진행도) → 내리침(판정 창~타격)
+      // 무기 팔 — smash: 치켜들었다 내리침 / thrust: 뒤로 당겼다 내지름
       if (visual.arm) {
-        let armTarget = ARM_REST;
-        if (isMelee) {
-          if (inWindup) {
-            armTarget = ARM_REST + (ARM_RAISED - ARM_REST) * windupProgress;
-            if (trembling) armTarget += Math.sin(now / 12) * 0.08;
-          } else if (striking) {
-            armTarget = ARM_SMASH;
+        const style = MELEE_WEAPONS[enemy.type]?.style ?? 'smash';
+        let armRotTarget: number;
+        let armZTarget = 0;
+        if (style === 'thrust') {
+          armRotTarget = THRUST_LEVEL;
+          if (isMelee && inWindup) {
+            armZTarget = THRUST_PULL * windupProgress; // 뒤로 당김
+            armRotTarget = THRUST_LEVEL - 0.08 * windupProgress;
+            if (trembling) armZTarget += Math.sin(now / 12) * 0.05;
+          } else if (isMelee && striking) {
+            armZTarget = THRUST_LUNGE; // 내지름
+          }
+        } else {
+          armRotTarget = ARM_REST;
+          if (isMelee && inWindup) {
+            armRotTarget = ARM_REST + (ARM_RAISED - ARM_REST) * windupProgress;
+            if (trembling) armRotTarget += Math.sin(now / 12) * 0.08;
+          } else if (isMelee && striking) {
+            armRotTarget = ARM_SMASH;
           }
         }
         const armSnap = striking ? 0.6 : 0.25;
-        visual.arm.rotation.x += (armTarget - visual.arm.rotation.x) * armSnap;
+        visual.arm.rotation.x += (armRotTarget - visual.arm.rotation.x) * armSnap;
+        visual.arm.position.z += (armZTarget - visual.arm.position.z) * armSnap;
       }
 
       // 시전 충전 구체 — windup 진행에 따라 커진다
