@@ -21,7 +21,8 @@ export function tick(world: World, _dt: number): void {
 
   if (p.dodgeTicks > 0) {
     p.dodgeTicks--;
-    const step = reaction.dodgeDistance / reaction.dodgeDashTicks;
+    const step =
+      (reaction.dodgeDistance * world.modifiers.dodgeDistanceMul) / reaction.dodgeDashTicks;
     world.level.slideMove(p, balance.player.radius, p.dodgeDirX * step, p.dodgeDirZ * step);
     return; // 대시 중 추가 반응 불가
   }
@@ -105,6 +106,6 @@ export function tick(world: World, _dt: number): void {
   p.dodgeDirX = dirX / len;
   p.dodgeDirZ = dirZ / len;
   p.dodgeTicks = reaction.dodgeDashTicks;
-  p.iframeTicks = reaction.dodgeIFrameTicks;
+  p.iframeTicks = world.modifiers.dodgeIFrameTicks; // sig_dash 부착 시 연장
   world.events.emit('dodge_step', {});
 }

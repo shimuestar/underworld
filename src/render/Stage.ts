@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import type { EnemyState } from '../core/World';
+import type { EnemyState, ProjectileState } from '../core/World';
 import { HandModel } from './HandModel';
 
 // 적 타입별 몸통 색 (시각 팔레트 — 튜닝값 아님)
@@ -17,6 +17,8 @@ const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
 // 텔레그래프 이외 상태 표시색 (텔레그래프 3색과 겹치지 않게 — 색이 곧 문법)
 const STAGGER_COLOR = 0xcc9922; // 스태거 = 처형 가능 표시
 const WINDUP_TINT = 0x0e2440; // 예비 동작의 옅은 예고 (본 섬광은 종료 4t 전)
+const BURN_TINT = 0x8f3300; // 화상 중
+const FIREBALL_COLOR = 0xff7733;
 
 // 트레이서 시각 상수 (튜닝값 아님 — 순수 연출)
 const TRACER_COLOR = 0xffe9b8;
@@ -56,8 +58,11 @@ export class Stage {
   private readonly muzzleLight: THREE.PointLight;
   private readonly eyeHeight = balance.player.eyeHeight;
   private readonly enemyVisuals = new Map<number, EnemyVisual>();
+  private readonly projectileVisuals = new Map<number, THREE.Group>();
   private readonly tracers: Tracer[] = [];
   private readonly hands = new HandModel();
+  private ambientLight: THREE.AmbientLight | null = null;
+  private levelAmbient = 0;
 
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -130,7 +135,19 @@ export class Stage {
 
   setLevel(group: THREE.Group, ambientIntensity: number): void {
     this.scene.add(group);
-    this.scene.add(new THREE.AmbientLight(0xffffff, ambientIntensity));
+    this.levelAmbient = ambientIntensity;
+    this.ambientLight = new THREE.AmbientLight(0xffffff, ambientIntensity);
+    this.scene.add(this.ambientLight);
+  }
+
+  /** 암시야 각인 — ambient 가산. boost 0 = 레벨 기본값 */
+  setAmbientBoost(boost: number): void {
+    if (this.ambientLight) this.ambientLight.intensity = this.levelAmbient + boost * 0.22;
+  }
+
+  /** 왼팔 각인 페널티 — 랜턴 밝기 배율 */
+  setLanternIntensityMul(mul: number): void {
+    this.lantern.intensity = balance.lantern.intensity * mul;
   }
 
   /** 보간된 플레이어 상태를 카메라에 반영 */
@@ -311,6 +328,7 @@ export class Stage {
       if (flashing) emissive = new THREE.Color(balance.telegraph.colorParryable).getHex();
       else if (enemy.ai === 'windup') emissive = WINDUP_TINT;
       else if (enemy.ai === 'staggered') emissive = STAGGER_COLOR;
+      else if (enemy.burnTicks > 0) emissive = BURN_TINT;
       for (const material of visual.flashMaterials) material.emissive.set(emissive);
 
       // 창 찌르기 — windup에 당겼다가 판정 창~impact에 내지른다
@@ -340,6 +358,43 @@ export class Stage {
         }
       });
       this.enemyVisuals.delete(id);
+    }
+  }
+
+  /** 투사체(화염구) — 발광 구 + 점광원. 어둠 속을 날며 주변을 밝힌다 */
+  syncProjectiles(projectiles: ProjectileState[], alpha: number): void {
+    const seen = new Set<number>();
+    for (const proj of projectiles) {
+      seen.add(proj.id);
+      let group = this.projectileVisuals.get(proj.id);
+      if (!group) {
+        group = new THREE.Group();
+        group.add(
+          new THREE.Mesh(
+            new THREE.SphereGeometry(proj.radius, 8, 8),
+            new THREE.MeshBasicMaterial({ color: FIREBALL_COLOR }),
+          ),
+        );
+        group.add(new THREE.PointLight(FIREBALL_COLOR, 2.2, 9, 0));
+        this.projectileVisuals.set(proj.id, group);
+        this.scene.add(group);
+      }
+      group.position.set(
+        proj.prevX + (proj.x - proj.prevX) * alpha,
+        proj.prevY + (proj.y - proj.prevY) * alpha,
+        proj.prevZ + (proj.z - proj.prevZ) * alpha,
+      );
+    }
+    for (const [id, group] of this.projectileVisuals) {
+      if (seen.has(id)) continue;
+      this.scene.remove(group);
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          (obj.material as THREE.Material).dispose();
+        }
+      });
+      this.projectileVisuals.delete(id);
     }
   }
 

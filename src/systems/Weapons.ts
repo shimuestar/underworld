@@ -31,8 +31,7 @@ export function tick(world: World, _dt: number): void {
   }
 
   if (world.input.reload && w.mag < pistol.magSize && w.reserve > 0) {
-    w.reloading = pistol.reloadTicks;
-    world.events.emit('reload_started');
+    startReload(world);
     return;
   }
 
@@ -40,18 +39,22 @@ export function tick(world: World, _dt: number): void {
 
   if (w.mag === 0) {
     // 빈 탄창 — 예비탄이 있으면 자동 장전, 없으면 불발
-    if (w.reserve > 0) {
-      w.reloading = pistol.reloadTicks;
-      world.events.emit('reload_started');
-    } else {
-      world.events.emit('weapon_empty');
-    }
+    if (w.reserve > 0) startReload(world);
+    else world.events.emit('weapon_empty');
     return;
   }
 
   if (w.cooldown > 0) return;
 
   fire(world);
+}
+
+function startReload(world: World): void {
+  // 오른팔 각인 페널티 — 재장전 시간 배율 (M5 완료 조건: 부착하면 느려진 게 체감돼야 한다)
+  world.weapon.reloading = Math.round(
+    balance.weapons.pistol.reloadTicks * world.modifiers.reloadTimeMul,
+  );
+  world.events.emit('reload_started', { ticks: world.weapon.reloading });
 }
 
 function fire(world: World): void {

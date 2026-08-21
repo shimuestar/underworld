@@ -12,8 +12,12 @@ import { Stage } from './render/Stage';
 import * as PlayerMove from './systems/PlayerMove';
 import * as Enemies from './systems/Enemies';
 import * as Weapons from './systems/Weapons';
+import * as Projectiles from './systems/Projectiles';
 import * as Mana from './systems/Mana';
+import * as Sigils from './systems/Sigils';
 import * as Lantern from './systems/Lantern';
+import { SigilUI } from './render/SigilUI';
+import { sigilDef } from './core/SigilData';
 import levelJson from '../data/levels/z01_f1.json';
 
 const app = document.getElementById('app');
@@ -59,12 +63,26 @@ const world = new World(events, {
     muzzleFlash: 0,
   },
   mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
+  sigils: {
+    inventory: [],
+    equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
+  },
+  modifiers: Sigils.defaultModifiers(),
+  corruption: { applied: 0, pending: 0 },
   enemies: spawnEnemies(levelJson.entities, level),
   level,
 });
 
 const stage = new Stage(app);
 const minimap = new Minimap(level);
+const sigilUI = new SigilUI(world);
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Tab') {
+    e.preventDefault();
+    world.uiOpen = sigilUI.toggle();
+    if (world.uiOpen) document.exitPointerLock();
+  }
+});
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM') minimap.toggle();
   // 연습용 창병 소환 — 패링 튜닝 편의 (슬라이스 검증 시 제거)
@@ -121,6 +139,13 @@ for (const name of [
   'mana_lost',
   'combat_entered',
   'combat_exited',
+  'cast_spell',
+  'cast_failed',
+  'spell_impact',
+  'spell_kill',
+  'sigil_acquired',
+  'sigil_attached',
+  'sigil_detached',
 ]) {
   events.on(name, (payload) => console.log(`[events] ${name}`, payload));
 }
@@ -138,6 +163,8 @@ events.on('parry_attempt', (payload) => {
 events.on('melee_kill', () => audio.play('execute'));
 events.on('shot_blocked', () => audio.play('shot_blocked'));
 events.on('dodge_step', () => audio.play('dodge'));
+events.on('cast_spell', () => audio.play('cast_fire'));
+events.on('spell_impact', () => audio.play('spell_impact'));
 
 // ---- 패링 화면 탈색 (mix-blend-mode 오버레이) ----
 function screenFlash(strength: number, durationMs: number): void {
@@ -186,15 +213,17 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Enter' && world.dead) location.reload();
 });
 
-// 틱 순서: Input → PlayerMove → Enemies → Reaction → Weapons → Mana → Lantern
-// (docs/architecture.md §2). Reaction이 Enemies 뒤에 오는 이유: 적의 공격 상태가
-// 확정된 뒤 판정해야 한다.
+// 틱 순서: Input → PlayerMove → Enemies → Reaction → Weapons → Projectiles → Mana →
+// Lantern (docs/architecture.md §2). Reaction이 Enemies 뒤에 오는 이유: 적의 공격
+// 상태가 확정된 뒤 판정해야 한다.
 Mana.init(world);
+Sigils.init(world);
 const systems = [
   PlayerMove.tick,
   Enemies.tick,
   Reaction.tick,
   Weapons.tick,
+  Projectiles.tick,
   Mana.tick,
   Lantern.tick,
 ];
@@ -213,7 +242,7 @@ function simulate(dt: number): void {
     return;
   }
 
-  if (!world.dead) {
+  if (!world.dead && !world.uiOpen) {
     for (const system of systems) system(world, dt);
   }
   world.tick++;
@@ -242,8 +271,11 @@ function render(alpha: number): void {
     p.pitch,
   );
   stage.setLanternOn(world.lantern.on);
+  stage.setLanternIntensityMul(world.modifiers.lanternIntensityMul);
+  stage.setAmbientBoost(world.modifiers.ambientVisionBoost);
   stage.setMuzzleFlash(world.weapon.muzzleFlash > 0);
   stage.syncEnemies(world.enemies, alpha);
+  stage.syncProjectiles(world.projectiles, alpha);
   stage.updateHands({ reloading: world.weapon.reloading > 0, stunned: p.stunTicks > 0 });
   minimap.update(p, world.enemies, alpha);
 
@@ -257,12 +289,13 @@ function render(alpha: number): void {
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
     `HP ${p.health}   9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}\n` +
     `mana ${manaBar} ${mana.value.toFixed(0)}/${balance.mana.max}  chain ×${chainMult}${!mana.inCombat && mana.outOfCombatTicks >= balance.mana.combatExitTicks && mana.value > 0 ? '  [휘발중]' : ''}\n` +
+    `spell ${world.sigils.equipped.rightArm ? sigilDef(world.sigils.equipped.rightArm).name : '(오른팔 각인 없음)'}${world.spell.cooldown > 0 ? ' [쿨]' : ''}   각인 ${world.sigils.inventory.length}개 소지\n` +
     `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked
       ? ''
       : '[클릭] 마우스 잠금  WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)\n' +
-        'R 장전  F 랜턴  B 배터리  M 미니맵  P 연습용 창병 소환');
+        'Q 마법 시전  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  P 연습용 창병 소환');
 
   stage.render();
 }

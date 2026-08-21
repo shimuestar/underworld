@@ -29,6 +29,8 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
     alive: true,
     ai: 'idle',
     timer: 0,
+    burnTicks: 0,
+    burnDamagePerTick: 0,
   };
 }
 
@@ -44,22 +46,14 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
     }
     const [row, col] = placement.cell;
     if (row === undefined || col === undefined) continue;
-    const def = enemyDef(placement.type);
-    const x = (col + 0.5) * level.cellSize;
-    const z = (row + 0.5) * level.cellSize;
-    enemies.push({
-      id: nextId++,
-      type: placement.type,
-      x,
-      z,
-      prevX: x,
-      prevZ: z,
-      yaw: 0,
-      health: def.health,
-      alive: true,
-      ai: 'idle',
-      timer: 0,
-    });
+    enemies.push(
+      spawnEnemyAt(
+        placement.type,
+        (col + 0.5) * level.cellSize,
+        (row + 0.5) * level.cellSize,
+        nextId++,
+      ),
+    );
   }
 
   return enemies;

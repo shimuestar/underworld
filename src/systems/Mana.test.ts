@@ -7,6 +7,7 @@ import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Mana from './Mana';
+import * as Sigils from './Sigils';
 
 const DT = 1 / 60;
 
@@ -30,6 +31,12 @@ function makeWorld(): World {
     lantern: { on: false, battery: 100, spares: 0 },
     weapon: { mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0 },
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
+    sigils: {
+      inventory: [],
+      equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
+    },
+    modifiers: Sigils.defaultModifiers(),
+    corruption: { applied: 0, pending: 0 },
     enemies: [],
     level,
   });
@@ -41,6 +48,7 @@ function chaseEnemy(): EnemyState {
   return {
     id: 1, type: 'goblin_runner', x: 10, z: 6, prevX: 10, prevZ: 6, yaw: 0,
     health: 30, alive: true, ai: 'chase', timer: 0,
+    burnTicks: 0, burnDamagePerTick: 0,
   };
 }
 

@@ -20,6 +20,8 @@ export interface InputSnapshot {
   reload: boolean;
   /** 이번 틱에 반응 버튼(우클릭)이 눌렸는가 (엣지) */
   reactionPressed: boolean;
+  /** 이번 틱에 시전 키(Q)가 눌렸는가 (엣지) */
+  castPressed: boolean;
 }
 
 export class Input {
@@ -31,6 +33,7 @@ export class Input {
   private fireClicks = 0;
   private reloads = 0;
   private reactionClicks = 0;
+  private casts = 0;
 
   constructor(private readonly lockTarget: HTMLElement) {
     lockTarget.addEventListener('click', () => {
@@ -43,6 +46,7 @@ export class Input {
       if (e.code === 'KeyF') this.lanternToggles++;
       if (e.code === 'KeyB') this.batterySwaps++;
       if (e.code === 'KeyR') this.reloads++;
+      if (e.code === 'KeyQ') this.casts++;
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
@@ -79,6 +83,7 @@ export class Input {
       firePressed: this.fireClicks > 0,
       reload: this.reloads > 0,
       reactionPressed: this.reactionClicks > 0,
+      castPressed: this.casts > 0,
     };
     this.dx = 0;
     this.dy = 0;
@@ -87,6 +92,7 @@ export class Input {
     this.fireClicks = 0;
     this.reloads = 0;
     this.reactionClicks = 0;
+    this.casts = 0;
     return snapshot;
   }
 
@@ -102,6 +108,7 @@ export class Input {
       firePressed: false,
       reload: false,
       reactionPressed: false,
+      castPressed: false,
     };
   }
 }

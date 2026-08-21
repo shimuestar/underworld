@@ -23,6 +23,8 @@ export interface EnemyDef {
   /** 정면 방패 — 전방 투사체 무효 (goblin_spear) */
   frontalShieldBlocksProjectiles?: boolean;
   shieldArcDeg?: number;
+  /** 처형 시 드랍하는 각인 id 목록 */
+  drops?: string[];
 }
 
 export function enemyDef(type: string): EnemyDef {

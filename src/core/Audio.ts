@@ -9,7 +9,9 @@ export type SoundName =
   | 'parry_fail'
   | 'execute'
   | 'shot_blocked'
-  | 'dodge';
+  | 'dodge'
+  | 'cast_fire'
+  | 'spell_impact';
 
 const MASTER_GAIN = 0.25;
 
@@ -56,6 +58,15 @@ export class GameAudio {
         break;
       case 'dodge':
         this.noise(0.12, 0.35, 800);
+        break;
+      case 'cast_fire':
+        // 화염 방출 — 저음 스윕 + 노이즈
+        this.tone(320, 0.3, 'sawtooth', 0.5, 0, 140);
+        this.noise(0.25, 0.5, 700);
+        break;
+      case 'spell_impact':
+        this.noise(0.16, 0.7, 1000);
+        this.tone(180, 0.2, 'square', 0.5, 0, 90);
         break;
     }
   }

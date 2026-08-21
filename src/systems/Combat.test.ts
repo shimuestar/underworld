@@ -9,6 +9,7 @@ import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Enemies from './Enemies';
 import * as Reaction from './Reaction';
+import * as Sigils from './Sigils';
 
 const DT = 1 / 60;
 
@@ -33,6 +34,12 @@ function makeWorld(): World {
     lantern: { on: true, battery: 100, spares: 0 },
     weapon: { mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0 },
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
+    sigils: {
+      inventory: [],
+      equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
+    },
+    modifiers: Sigils.defaultModifiers(),
+    corruption: { applied: 0, pending: 0 },
     enemies: [],
     level,
   });
@@ -44,6 +51,7 @@ function makeSpear(x: number, z: number): EnemyState {
     x, z, prevX: x, prevZ: z, yaw: 0,
     health: enemyDef('goblin_spear').health,
     alive: true, ai: 'chase', timer: 0,
+    burnTicks: 0, burnDamagePerTick: 0,
   };
 }
 

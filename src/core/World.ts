@@ -3,6 +3,7 @@
 
 import type { Events } from './Events';
 import type { InputSnapshot } from './Input';
+import type { SigilSlot } from './SigilData';
 import type { Level } from '../level/GridLoader';
 
 export interface PlayerState {
@@ -27,6 +28,55 @@ export interface PlayerState {
   iframeTicks: number;
   /** 히트스톱 중 눌린 반응 입력의 버퍼 잔여 틱 */
   reactionBufferTicks: number;
+}
+
+export interface SigilState {
+  /** 소지 중(효과 없음). 부착해야 발동 — economy.md §4 */
+  inventory: string[];
+  equipped: Record<SigilSlot, string | null>;
+}
+
+/** 부착된 각인·부위 페널티에서 매번 재계산되는 파생 수치. Sigils가 갱신한다 */
+export interface Modifiers {
+  reloadTimeMul: number;
+  lanternIntensityMul: number;
+  aimSpreadMul: number;
+  /** 피격 시 소실되는 마나 비율 (heart 페널티: 1.0 = 전량) */
+  manaLostOnHit: number;
+  flashbangSelfDamage: boolean;
+  dodgeDistanceMul: number;
+  dodgeIFrameTicks: number;
+  /** 암시야 — 렌더 ambient 가산 계수 */
+  ambientVisionBoost: number;
+}
+
+export interface CorruptionState {
+  /** 몸에 반영된 값 (제단 정산 후) */
+  applied: number;
+  /** 아직 정산되지 않은 누적분 */
+  pending: number;
+}
+
+export interface ProjectileState {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  prevX: number;
+  prevY: number;
+  prevZ: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  lifeTicks: number;
+  damage: number;
+  burnTicks: number;
+  burnDamagePerTick: number;
+  radius: number;
+}
+
+export interface SpellState {
+  cooldown: number;
 }
 
 export interface ManaState {
@@ -83,6 +133,9 @@ export interface EnemyState {
   ai: EnemyAiState;
   /** 현재 ai 상태의 남은 틱 */
   timer: number;
+  /** 화상 잔여 틱 (Projectiles가 피해 적용) */
+  burnTicks: number;
+  burnDamagePerTick: number;
 }
 
 export class World {
@@ -95,6 +148,9 @@ export class World {
   /** 플레이어 사망 시 true. 시뮬레이션이 멈춘다. */
   dead = false;
 
+  /** 각인 UI 등이 열려 있으면 true — 시뮬레이션 일시정지 */
+  uiOpen = false;
+
   /** 이번 틱의 입력 스냅샷. 매 틱 시작 시 main이 갱신한다. */
   input: InputSnapshot;
 
@@ -102,6 +158,11 @@ export class World {
   lantern: LanternState;
   weapon: WeaponState;
   mana: ManaState;
+  sigils: SigilState;
+  modifiers: Modifiers;
+  corruption: CorruptionState;
+  projectiles: ProjectileState[] = [];
+  spell: SpellState = { cooldown: 0 };
   enemies: EnemyState[];
   level: Level;
 
@@ -113,6 +174,9 @@ export class World {
       lantern: LanternState;
       weapon: WeaponState;
       mana: ManaState;
+      sigils: SigilState;
+      modifiers: Modifiers;
+      corruption: CorruptionState;
       enemies: EnemyState[];
       level: Level;
     },
@@ -122,6 +186,9 @@ export class World {
     this.lantern = init.lantern;
     this.weapon = init.weapon;
     this.mana = init.mana;
+    this.sigils = init.sigils;
+    this.modifiers = init.modifiers;
+    this.corruption = init.corruption;
     this.enemies = init.enemies;
     this.level = init.level;
   }
