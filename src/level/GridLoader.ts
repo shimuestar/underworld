@@ -171,6 +171,8 @@ const COLOR_FLOOR = 0x3a3a44;
 const COLOR_CEILING = 0x2e2e36;
 const COLOR_ALTAR = 0xd8c9a0;
 const COLOR_ALTAR_LIGHT = 0xe0d0a0;
+const COLOR_LEVER = 0xc9a227;
+const COLOR_EXIT = 0x3fae5a;
 const GLYPH_RUNES = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
 
 export interface TorchParams {
@@ -246,6 +248,56 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       const light = new THREE.PointLight(COLOR_ALTAR_LIGHT, 1.1, 8, 0);
       light.position.set(x, 2.6, z);
       group.add(light);
+    }
+  }
+
+  // 레버·출구 — 미니맵 색과 동일한 시각물 (지도와 실물 일치)
+  for (let row = 0; row < level.rows; row++) {
+    for (let col = 0; col < level.cols; col++) {
+      const ch = level.charAt(col, row);
+      const x = (col + 0.5) * cs;
+      const z = (row + 0.5) * cs;
+
+      if (ch === 'L') {
+        // 레버 — 받침 + 기울어진 노란 손잡이 (작동은 미구현)
+        const base = new THREE.Mesh(
+          new THREE.BoxGeometry(0.5, 0.5, 0.5),
+          new THREE.MeshLambertMaterial({ color: 0x4a4a52 }),
+        );
+        base.position.set(x, 0.25, z);
+        group.add(base);
+        const handle = new THREE.Mesh(
+          new THREE.BoxGeometry(0.09, 0.9, 0.09),
+          new THREE.MeshLambertMaterial({
+            color: COLOR_LEVER,
+            emissive: COLOR_LEVER,
+            emissiveIntensity: 0.25,
+          }),
+        );
+        handle.position.set(x, 0.85, z);
+        handle.rotation.z = 0.5;
+        group.add(handle);
+      }
+
+      if (ch === 'X') {
+        // 출구 — 바닥 발광 판 + 초록 광원
+        const pad = new THREE.Mesh(
+          new THREE.PlaneGeometry(cs * 0.8, cs * 0.8),
+          new THREE.MeshLambertMaterial({
+            color: COLOR_EXIT,
+            emissive: COLOR_EXIT,
+            emissiveIntensity: 0.5,
+            transparent: true,
+            opacity: 0.85,
+          }),
+        );
+        pad.rotation.x = -Math.PI / 2;
+        pad.position.set(x, 0.02, z);
+        group.add(pad);
+        const light = new THREE.PointLight(COLOR_EXIT, 0.9, 7, 0);
+        light.position.set(x, 1.5, z);
+        group.add(light);
+      }
     }
   }
 

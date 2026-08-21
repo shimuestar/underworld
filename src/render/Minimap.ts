@@ -7,11 +7,12 @@ import type { Level } from '../level/GridLoader';
 
 // 시각 상수 (튜닝값 아님)
 const PX_PER_UNIT = 3;
+// 월드 시각물과 같은 색을 쓴다 — 지도와 실물이 일치해야 한다
 const COLORS: Record<string, string> = {
   '#': '#565663',
   D: '#6b4a2f',
   C: '#4a5a68',
-  A: '#a855f7',
+  A: '#d8c9a0',
   X: '#3fae5a',
   L: '#c9a227',
 };
@@ -64,11 +65,31 @@ export class Minimap {
       'background:rgba(0,0,0,0.6);pointer-events:none;image-rendering:pixelated;';
     document.body.appendChild(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
+
+    // 범례 — 미니맵 바로 아래
+    this.legend = document.createElement('div');
+    this.legend.style.cssText =
+      `position:fixed;top:${h + 14}px;right:8px;width:${w}px;` +
+      'font:10px/1.6 monospace;color:#8a8f9a;text-align:right;pointer-events:none;user-select:none;';
+    this.legend.innerHTML =
+      '<span style="color:#d8c9a0">■</span>제단 ' +
+      '<span style="color:#3fae5a">■</span>출구 ' +
+      '<span style="color:#c9a227">■</span>레버 ' +
+      '<span style="color:#6b4a2f">■</span>잠긴 문 ' +
+      '<span style="color:#4a5a68">■</span>균열벽<br>' +
+      '<span style="color:#ff8c3b">●</span>횃불 ' +
+      '<span style="color:#9fe870">▲</span>나 ' +
+      '<span style="color:#e04444">●</span>적 ' +
+      '<span style="color:#cc9922">●</span>처형 가능';
+    document.body.appendChild(this.legend);
   }
+
+  private readonly legend: HTMLDivElement;
 
   toggle(): void {
     this.visible = !this.visible;
     this.canvas.style.display = this.visible ? 'block' : 'none';
+    this.legend.style.display = this.visible ? 'block' : 'none';
   }
 
   update(player: PlayerState, enemies: EnemyState[], alpha: number): void {
