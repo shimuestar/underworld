@@ -4,6 +4,12 @@
 
 export type SoundName =
   | 'telegraph_blue'
+  | 'telegraph_red'
+  | 'telegraph_purple'
+  | 'deflect'
+  | 'barrier_blocked'
+  | 'boss_phase'
+  | 'zone_clear'
   | 'parry_perfect'
   | 'parry_normal'
   | 'parry_fail'
@@ -43,6 +49,37 @@ export class GameAudio {
         // 금속성 고음 2연타 — 청색(패링 가능) 예고
         this.tone(1760, 0.09, 'triangle', 0.9);
         this.tone(2637, 0.12, 'triangle', 0.7, 0.05);
+        break;
+      case 'telegraph_red':
+        // 저주파 웅웅 — 적색(회피 전용) 예고
+        this.tone(65, 0.5, 'sawtooth', 0.9);
+        this.tone(62, 0.5, 'sawtooth', 0.7, 0.02);
+        break;
+      case 'telegraph_purple':
+        // 마법 상승음 — 보라(반사 가능) 예고
+        this.tone(440, 0.5, 'sine', 0.7, 0, 1320);
+        this.tone(660, 0.4, 'triangle', 0.4, 0.1, 1760);
+        break;
+      case 'deflect':
+        // 반사 성공 — 밝은 상승 스윕
+        this.tone(880, 0.22, 'sine', 0.8, 0, 2637);
+        this.noise(0.05, 0.4, 3500);
+        break;
+      case 'barrier_blocked':
+        // 방어막/장갑 튕김 — 마법적 둔탁음
+        this.tone(320, 0.16, 'sine', 0.7, 0, 180);
+        this.tone(1400, 0.06, 'triangle', 0.35);
+        break;
+      case 'boss_phase':
+        // 페이즈 전환 — 무거운 북
+        this.tone(70, 0.5, 'sine', 1.0, 0, 40);
+        this.noise(0.3, 0.6, 300);
+        break;
+      case 'zone_clear':
+        // 구역 클리어 — 3음 화음 상행
+        this.tone(523, 0.5, 'sine', 0.7);
+        this.tone(659, 0.5, 'sine', 0.7, 0.12);
+        this.tone(784, 0.8, 'sine', 0.7, 0.24);
         break;
       case 'parry_perfect':
         // 밝은 종소리 + 노이즈 스파크

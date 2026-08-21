@@ -26,22 +26,29 @@
     "warden": {
       "zone": 2, "slice": true,
       "health": 90, "speed": 2.4, "damage": 26,
+      "radius": 0.6, "height": 2.0,
+      "aggroRange": 18, "attackRange": 16, "kiteMinRange": 6,
       "behavior": "caster_kite",
       "magicBarrier": { "blocksMagic": true, "blocksMelee": true, "piercedBy": ["pistol"] },
-      "attack": { "type": "projectile", "windupTicks": 46, "parryable": false, "deflectable": true, "telegraph": "purple" },
+      "attack": { "type": "projectile", "windupTicks": 46, "recoverTicks": 70, "impactRangeMul": 1, "parryable": false, "deflectable": true, "telegraph": "purple", "projectileSpeed": 14, "projectileRadius": 0.3 },
       "counters": { "pistol": "best", "rifle": "poor", "grenade": "poor", "flash": "poor", "melee": "none", "magic": "none", "deflect": "good" },
-      "drops": ["sig_curse"]
+      "drops": ["sig_curse"], "dropsOnDeath": true
     },
     "goblin_chieftain": {
       "zone": 1, "slice": true, "boss": true,
       "health": 420, "speed": 4.0, "damage": 30,
+      "radius": 0.8, "height": 2.4,
+      "aggroRange": 18, "attackRange": 2.6,
       "behavior": "boss_two_phase",
+      "attack": { "type": "smash", "windupTicks": 40, "recoverTicks": 45, "impactRangeMul": 1.25, "parryable": true, "telegraph": "blue" },
+      "armoredAttack": { "type": "smash", "windupTicks": 30, "recoverTicks": 40, "impactRangeMul": 1.3, "parryable": false, "telegraph": "red" },
+      "parriesToStagger": 3, "executeDamage": 60, "armorHealth": 120,
       "phases": [
         { "name": "melee", "parryable": true, "telegraph": "blue", "note": "패링 구간. 3연속 패링 시 스태거" },
         { "name": "armored", "requiresBallistic": true, "note": "장갑 부위를 실탄으로 파괴해야 페이즈 복귀" }
       ],
       "counters": { "pistol": "good", "rifle": "best", "grenade": "good", "flash": "good", "melee": "good", "magic": "poor", "deflect": "none" },
-      "drops": ["sig_darkvision"]
+      "drops": ["sig_darkvision"], "dropsOnDeath": true
     },
 
     "orc_warrior":    { "zone": 2, "slice": false, "health": 140, "counters": { "melee": "best" } },

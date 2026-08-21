@@ -34,6 +34,7 @@ export class Level {
   readonly torches: number[][];
   readonly spawn: { x: number; z: number };
   readonly altarPos: { x: number; z: number } | null;
+  readonly exitPos: { x: number; z: number } | null;
   readonly glyphs: GlyphDef[];
   readonly rows: number;
   readonly cols: number;
@@ -57,6 +58,11 @@ export class Level {
     const altar = this.findChar('A');
     this.altarPos = altar
       ? { x: (altar.col + 0.5) * this.cellSize, z: (altar.row + 0.5) * this.cellSize }
+      : null;
+
+    const exit = this.findChar('X');
+    this.exitPos = exit
+      ? { x: (exit.col + 0.5) * this.cellSize, z: (exit.row + 0.5) * this.cellSize }
       : null;
 
     this.glyphs = def.glyphs ?? [];

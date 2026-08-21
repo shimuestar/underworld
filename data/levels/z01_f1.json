@@ -31,7 +31,8 @@
     { "type": "goblin_spear",  "cell": [7, 11] },
     { "type": "warden",        "cell": [9, 3] },
     { "type": "goblin_runner", "cell": [11, 4] },
-    { "type": "goblin_runner", "cell": [11, 6] }
+    { "type": "goblin_runner", "cell": [11, 6] },
+    { "type": "goblin_chieftain", "cell": [11, 9], "note": "출구를 지키는 1구역 보스" }
   ],
   "triggers": [
     { "type": "ambush", "cell": [1, 3], "spawns": "amb01",

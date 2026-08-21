@@ -71,6 +71,8 @@ export interface CorruptionState {
 
 export interface ProjectileState {
   id: number;
+  /** player: 적 명중 판정 / enemy: 플레이어 명중 판정 */
+  owner: 'player' | 'enemy';
   x: number;
   y: number;
   z: number;
@@ -85,6 +87,10 @@ export interface ProjectileState {
   burnTicks: number;
   burnDamagePerTick: number;
   radius: number;
+  /** 반사된 투사체 — 방어막을 무시한다 */
+  deflected?: boolean;
+  /** 시전자 (반사 시 되돌아갈 대상) */
+  casterId?: number;
 }
 
 export interface SpellState {
@@ -156,6 +162,10 @@ export interface EnemyState {
   /** 화상 잔여 틱 (Projectiles가 피해 적용) */
   burnTicks: number;
   burnDamagePerTick: number;
+  /** 보스 (boss_two_phase) 전용 */
+  phase?: 'melee' | 'armored';
+  armorHealth?: number;
+  parryStreak?: number;
 }
 
 export class World {
@@ -198,6 +208,11 @@ export class World {
 
   /** 오염 25 임계 — 벽의 문자 해독 */
   canReadGlyphs = false;
+
+  /** 구역 클리어 — 시뮬레이션 정지 */
+  cleared = false;
+  /** 출구 접근 중 잠김 안내 중복 방지 */
+  exitLockedNotified = false;
 
   combatStats: CombatStats = {
     meleeKills: 0,

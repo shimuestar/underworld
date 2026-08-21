@@ -17,7 +17,9 @@ import * as Mana from './systems/Mana';
 import * as Sigils from './systems/Sigils';
 import * as Corruption from './systems/Corruption';
 import * as Altar from './systems/Altar';
+import * as Exit from './systems/Exit';
 import * as Lantern from './systems/Lantern';
+import { enemyDef } from './core/Entities';
 import { SigilUI } from './render/SigilUI';
 import { sigilDef } from './core/SigilData';
 import levelJson from '../data/levels/z01_f1.json';
@@ -165,6 +167,15 @@ for (const name of [
   'respawned',
   'corruption_applied',
   'corruption_threshold',
+  'enemy_cast',
+  'deflect',
+  'barrier_blocked',
+  'armor_hit',
+  'boss_phase',
+  'boss_staggered',
+  'boss_execute',
+  'exit_locked',
+  'zone_cleared',
 ]) {
   events.on(name, (payload) => console.log(`[events] ${name}`, payload));
 }
@@ -172,7 +183,16 @@ for (const name of [
 // ---- 오디오 (합성음, 에셋 없음) ----
 const audio = new GameAudio();
 app.addEventListener('click', () => audio.unlock());
-events.on('enemy_windup', () => audio.play('telegraph_blue'));
+events.on('enemy_windup', (payload) => {
+  const telegraph = (payload as { telegraph?: string }).telegraph;
+  audio.play(
+    telegraph === 'red'
+      ? 'telegraph_red'
+      : telegraph === 'purple'
+        ? 'telegraph_purple'
+        : 'telegraph_blue',
+  );
+});
 events.on('parry_attempt', (payload) => {
   const result = (payload as { result: string }).result;
   if (result === 'perfect') audio.play('parry_perfect');
@@ -309,6 +329,34 @@ events.on('corruption_applied', (payload) => {
   const info = payload as { from: number; to: number };
   showReaction(`오염 정산: ${info.from} → ${info.to}`, 3000);
 });
+// ---- M7: 상성·보스 피드백 ----
+events.on('deflect', () => {
+  audio.play('deflect');
+  showReaction('반사!');
+});
+events.on('barrier_blocked', (payload) => {
+  const info = payload as { enemyId: number; kind: string };
+  audio.play('barrier_blocked');
+  stage.flashBarrier(info.enemyId);
+  showReaction(info.kind === 'armor' ? '장갑 — 실탄만 통한다' : '방어막 — 9mm만 뚫는다');
+});
+events.on('shot_blocked', () => showReaction('방패 — 정면은 막힌다'));
+events.on('boss_staggered', () => showReaction('보스 스태거 — 지금 처형 타격!'));
+events.on('boss_phase', (payload) => {
+  const phase = (payload as { phase: string }).phase;
+  audio.play('boss_phase');
+  showReaction(phase === 'armored' ? '장갑 페이즈 — 실탄으로 파괴하라' : '장갑 파괴 — 패링 구간', 3000);
+});
+events.on('exit_locked', () => showReaction('출구가 봉인되어 있다 — 족장이 살아 있다', 3000));
+events.on('zone_cleared', () => {
+  audio.play('zone_clear');
+  deathHint!.textContent = '';
+  const clearOverlay = deathOverlay!;
+  clearOverlay.querySelector('div')!.textContent = '1구역 클리어';
+  (clearOverlay as HTMLElement).style.background = 'rgba(10, 40, 20, 0.6)';
+  clearOverlay.classList.add('visible');
+});
+
 events.on('corruption_threshold', (payload) => {
   const threshold = (payload as { threshold: number }).threshold;
   audio.play('corruption_up');
@@ -336,6 +384,7 @@ const systems = [
   Projectiles.tick,
   Mana.tick,
   Altar.tick,
+  Exit.tick,
   Lantern.tick,
 ];
 
@@ -353,7 +402,7 @@ function simulate(dt: number): void {
     return;
   }
 
-  if (!world.dead && !world.uiOpen) {
+  if (!world.dead && !world.uiOpen && !world.cleared) {
     for (const system of systems) system(world, dt);
   }
   world.tick++;
@@ -418,6 +467,20 @@ function render(alpha: number): void {
   const w = world.weapon;
   const aliveCount = world.enemies.filter((e) => e.alive).length;
   if (performance.now() > reactionLabelUntil) reactionLabel = '';
+
+  // 보스 체력 바 (어그로 상태일 때만)
+  const boss = world.enemies.find((e) => e.alive && enemyDef(e.type).boss && e.ai !== 'idle');
+  let bossLine = '';
+  if (boss) {
+    const def = enemyDef(boss.type);
+    const frac = Math.max(0, boss.health / def.health);
+    const bar = '█'.repeat(Math.round(frac * 24)).padEnd(24, '░');
+    const phaseLabel =
+      boss.phase === 'armored'
+        ? `장갑 ${Math.max(0, boss.armorHealth ?? 0)}`
+        : `패링 ${boss.parryStreak ?? 0}/${def.parriesToStagger}`;
+    bossLine = `족장 ${bar} ${Math.max(0, Math.round(boss.health))}/${def.health}  [${phaseLabel}]\n`;
+  }
   const mana = world.mana;
   const chainMult = balance.chain.multipliers[Math.min(mana.chainIndex, balance.chain.multipliers.length - 1)]!;
   const manaBar = '█'.repeat(Math.round((mana.value / balance.mana.max) * 20)).padEnd(20, '░');
@@ -428,6 +491,7 @@ function render(alpha: number): void {
     `spell ${spellHudText()}   각인 ${world.sigils.inventory.length}개 소지\n` +
     `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}${world.altarBonusMul > 1 ? `  탄약 배율 ×${world.altarBonusMul.toFixed(2)}` : ''}\n` +
     `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
+    bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     'WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)\n' +

@@ -12,8 +12,13 @@ import { HandModel } from './HandModel';
 const ENEMY_COLORS: Record<string, number> = {
   goblin_runner: 0x4a8f3c,
   goblin_spear: 0x3c7a8f,
+  warden: 0x5a4470,
+  goblin_chieftain: 0x8f5a30,
 };
 const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
+const BARRIER_COLOR = 0x9db8e8;
+const ARMOR_COLOR = 0x777d88;
+const ENEMY_BOLT_COLOR = 0xa855f7; // 마법 투사체 색 규약 (balance.telegraph.colorProjectile)
 
 // 텔레그래프 이외 상태 표시색 (텔레그래프 3색과 겹치지 않게 — 색이 곧 문법)
 const STAGGER_COLOR = 0xcc9922; // 스태거 = 처형 가능 표시
@@ -40,6 +45,12 @@ interface EnemyVisual {
   shieldMaterial?: THREE.MeshLambertMaterial;
   spear?: THREE.Object3D;
   shieldFlashUntil: number;
+  /** warden 방어막 셸 */
+  barrier?: THREE.Mesh;
+  barrierMaterial?: THREE.MeshLambertMaterial;
+  barrierFlashUntil: number;
+  /** 보스 장갑판 (armored 페이즈에만 표시) */
+  armorPlates?: THREE.Mesh;
 }
 const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 그린다 (근접부 왜곡 방지)
 const TRACER_WIDTH = 0.022;
@@ -147,6 +158,12 @@ export class Stage {
   flashShield(enemyId: number): void {
     const visual = this.enemyVisuals.get(enemyId);
     if (visual) visual.shieldFlashUntil = performance.now() + 120;
+  }
+
+  /** 방어막/장갑 튕김 번쩍 (7.2 피드백) */
+  flashBarrier(enemyId: number): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    if (visual) visual.barrierFlashUntil = performance.now() + 160;
   }
 
   updateHands(state: { reloading: boolean; stunned: boolean }): void {
@@ -300,7 +317,32 @@ export class Stage {
     head.position.set(0, def.height - headSize / 2, -def.radius * 0.2);
     group.add(head);
 
-    const visual: EnemyVisual = { group, flashMaterials, shieldFlashUntil: 0 };
+    const visual: EnemyVisual = { group, flashMaterials, shieldFlashUntil: 0, barrierFlashUntil: 0 };
+
+    if (def.magicBarrier) {
+      visual.barrierMaterial = new THREE.MeshLambertMaterial({
+        color: BARRIER_COLOR,
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+      });
+      visual.barrier = new THREE.Mesh(
+        new THREE.SphereGeometry(def.radius + 0.7, 12, 10),
+        visual.barrierMaterial,
+      );
+      visual.barrier.position.y = def.height * 0.55;
+      group.add(visual.barrier);
+    }
+
+    if (def.boss) {
+      visual.armorPlates = new THREE.Mesh(
+        new THREE.BoxGeometry(def.radius * 2.4, def.height * 0.9, def.radius * 2.4),
+        new THREE.MeshLambertMaterial({ color: ARMOR_COLOR }),
+      );
+      visual.armorPlates.position.y = def.height * 0.5;
+      visual.armorPlates.visible = false;
+      group.add(visual.armorPlates);
+    }
 
     if (def.frontalShieldBlocksProjectiles) {
       visual.shieldMaterial = new THREE.MeshLambertMaterial({ color: SHIELD_COLOR });
@@ -354,18 +396,45 @@ export class Stage {
       );
       visual.group.rotation.y = enemy.yaw;
 
-      // 텔레그래프 — 청색 섬광은 windup 종료 visualLeadTicks 전부터 판정 창 내내.
+      // 텔레그래프 — 섬광은 windup 종료 visualLeadTicks 전부터 판정 창 내내.
+      // 색은 공격 유형 규약: 청=패링 가능, 적=회피 전용, 보라=마법 투사체.
       // 그 전 windup은 옅은 예고 틴트. 스태거는 처형 가능 표시(황색).
+      const def2 = enemyDef(enemy.type);
+      const attack =
+        enemy.phase === 'armored' && def2.armoredAttack ? def2.armoredAttack : def2.attack;
+      const telegraphColor =
+        attack.telegraph === 'red'
+          ? balance.telegraph.colorUnparryable
+          : attack.telegraph === 'purple'
+            ? balance.telegraph.colorProjectile
+            : balance.telegraph.colorParryable;
       const flashing =
         (enemy.ai === 'windup' && enemy.timer <= balance.telegraph.visualLeadTicks) ||
         enemy.ai === 'active_perfect' ||
         enemy.ai === 'active_normal';
       let emissive = 0x000000;
-      if (flashing) emissive = new THREE.Color(balance.telegraph.colorParryable).getHex();
+      if (flashing) emissive = new THREE.Color(telegraphColor).getHex();
       else if (enemy.ai === 'windup') emissive = WINDUP_TINT;
       else if (enemy.ai === 'staggered') emissive = STAGGER_COLOR;
       else if (enemy.burnTicks > 0) emissive = BURN_TINT;
       for (const material of visual.flashMaterials) material.emissive.set(emissive);
+
+      // warden 방어막 — 튕김 시 번쩍
+      if (visual.barrier && visual.barrierMaterial) {
+        const flashOn = now < visual.barrierFlashUntil;
+        visual.barrierMaterial.opacity = flashOn ? 0.55 : 0.18;
+        visual.barrierMaterial.emissive.set(flashOn ? BARRIER_COLOR : 0x000000);
+      }
+
+      // 보스 장갑판 — armored 페이즈에만
+      if (visual.armorPlates) {
+        visual.armorPlates.visible = enemy.phase === 'armored' && (enemy.armorHealth ?? 0) > 0;
+        if (now < visual.barrierFlashUntil) {
+          (visual.armorPlates.material as THREE.MeshLambertMaterial).emissive.set(0x444444);
+        } else {
+          (visual.armorPlates.material as THREE.MeshLambertMaterial).emissive.set(0x000000);
+        }
+      }
 
       // 창 찌르기 — windup에 당겼다가 판정 창~impact에 내지른다
       if (visual.spear) {
@@ -404,14 +473,16 @@ export class Stage {
       seen.add(proj.id);
       let group = this.projectileVisuals.get(proj.id);
       if (!group) {
+        // 적 마법 투사체는 보라(반사 가능 규약), 플레이어 화염구는 주황
+        const color = proj.owner === 'enemy' ? ENEMY_BOLT_COLOR : FIREBALL_COLOR;
         group = new THREE.Group();
         group.add(
           new THREE.Mesh(
             new THREE.SphereGeometry(proj.radius, 8, 8),
-            new THREE.MeshBasicMaterial({ color: FIREBALL_COLOR }),
+            new THREE.MeshBasicMaterial({ color }),
           ),
         );
-        group.add(new THREE.PointLight(FIREBALL_COLOR, 2.2, 9, 0));
+        group.add(new THREE.PointLight(color, 2.2, 9, 0));
         this.projectileVisuals.set(proj.id, group);
         this.scene.add(group);
       }

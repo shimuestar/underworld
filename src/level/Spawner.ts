@@ -12,12 +12,12 @@ export interface EntityPlacement {
 }
 
 /** 현재 구현된 적 타입만 스폰한다. 새 적을 구현하면 여기에 추가. */
-const IMPLEMENTED = new Set(['goblin_runner', 'goblin_spear']);
+const IMPLEMENTED = new Set(['goblin_runner', 'goblin_spear', 'warden', 'goblin_chieftain']);
 
 /** 임의 위치에 적 하나 생성 (연습 소환 등) */
 export function spawnEnemyAt(type: string, x: number, z: number, id: number): EnemyState {
   const def = enemyDef(type);
-  return {
+  const enemy: EnemyState = {
     id,
     type,
     x,
@@ -32,6 +32,12 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
     burnTicks: 0,
     burnDamagePerTick: 0,
   };
+  if (def.boss) {
+    enemy.phase = 'melee';
+    enemy.armorHealth = 0;
+    enemy.parryStreak = 0;
+  }
+  return enemy;
 }
 
 export function spawnEnemies(placements: EntityPlacement[], level: Level): EnemyState[] {

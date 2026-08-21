@@ -134,6 +134,18 @@ function fire(world: World): void {
 
   if (!hit) return;
 
+  // 보스 장갑 페이즈 — 실탄은 장갑을 깎는다. 장갑 파괴 시 melee 페이즈 복귀
+  if (hit.enemy.phase === 'armored' && (hit.enemy.armorHealth ?? 0) > 0) {
+    hit.enemy.armorHealth = (hit.enemy.armorHealth ?? 0) - pistol.damage;
+    world.events.emit('armor_hit', { enemyId: hit.enemy.id, armor: hit.enemy.armorHealth });
+    if (hit.enemy.armorHealth <= 0) {
+      hit.enemy.armorHealth = 0;
+      hit.enemy.phase = 'melee';
+      world.events.emit('boss_phase', { enemyId: hit.enemy.id, phase: 'melee' });
+    }
+    return;
+  }
+
   hit.enemy.health -= pistol.damage;
   if (hit.enemy.health <= 0) {
     hit.enemy.alive = false;

@@ -61,6 +61,20 @@ export function init(world: World): void {
       execution ? 'execute' : 'melee');
   });
 
+  // 보스 처형 타격 (비살상) — 처형과 동일한 마나
+  events.on('boss_execute', () => gain(world, balance.mana.gain.execute, 'execute'));
+
+  // 반사 — 마나 획득 + 연쇄 상승 (incrementOn)
+  events.on('deflect', () => {
+    gain(world, balance.mana.gain.deflect, 'deflect');
+    if (balance.chain.incrementOn.includes('deflect')) {
+      world.mana.chainIndex = Math.min(
+        world.mana.chainIndex + 1,
+        balance.chain.multipliers.length - 1,
+      );
+    }
+  });
+
   events.on('player_damaged', () => {
     resetChain(world, 'damaged');
     // 심장 각인 페널티 — 피격 시 마나 소실 (combat.md §5: Mana.ts에서 처리)

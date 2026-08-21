@@ -22,7 +22,15 @@ export function defaultModifiers(): Modifiers {
 
 let nextGroundItemId = 1;
 
-/** 처형 드랍 구독. 시작 시 1회 호출 */
+function dropAll(world: World, enemyType: string, x: number, z: number): void {
+  for (const id of enemyDef(enemyType).drops ?? []) {
+    world.groundItems.push({ id: nextGroundItemId++, sigilId: id, x, z });
+    world.events.emit('sigil_dropped', { id });
+  }
+}
+
+/** 드랍 구독. 시작 시 1회 호출.
+ *  일반 적: 처형 시에만 드랍. 처형 불가능한 적(warden)·보스: 사망 시 드랍(dropsOnDeath) */
 export function init(world: World): void {
   world.events.on('melee_kill', (payload) => {
     const { enemyType, execution, x, z } = payload as {
@@ -32,15 +40,14 @@ export function init(world: World): void {
       z?: number;
     };
     if (!execution) return;
-    for (const id of enemyDef(enemyType).drops ?? []) {
-      world.groundItems.push({
-        id: nextGroundItemId++,
-        sigilId: id,
-        x: x ?? world.player.x,
-        z: z ?? world.player.z,
-      });
-      world.events.emit('sigil_dropped', { id });
-    }
+    if (enemyDef(enemyType).dropsOnDeath) return; // enemy_died 쪽에서 처리 (중복 방지)
+    dropAll(world, enemyType, x ?? world.player.x, z ?? world.player.z);
+  });
+
+  world.events.on('enemy_died', (payload) => {
+    const { enemyType, x, z } = payload as { enemyType: string; x: number; z: number };
+    if (!enemyDef(enemyType).dropsOnDeath) return;
+    dropAll(world, enemyType, x, z);
   });
 }
 

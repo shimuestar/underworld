@@ -3,12 +3,22 @@
 //   idle → chase → windup → active_perfect(6t) → active_normal(12t) → impact → recover → chase
 //                                                                  (패링 시 staggered / recover)
 //
-// windup 진입 시 enemy_windup(오디오 신호), 종료 visualLeadTicks 전에 telegraph_flash(섬광).
-// 판정 창(active_*) 길이는 balance.reaction의 전역 값, 나머지 틱 수치는 entities.json.
+// 패링 불가 공격(적색·보스 armored)은 판정 창 없이 windup → impact.
+// 원거리 캐스터(warden)는 windup 종료 시 투사체를 발사하고 recover로 간다.
+// 보스(boss_two_phase)는 melee(청색·패링 가능) ↔ armored(적색·실탄으로 장갑 파괴) 교대.
+// windup 진입 시 enemy_windup(오디오), 종료 visualLeadTicks 전에 telegraph_flash(섬광).
 
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
+import { enemyDef, type EnemyAttackDef, type EnemyDef } from '../core/Entities';
 import type { EnemyState, World } from '../core/World';
+
+let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
+
+/** 현재 페이즈의 공격 정의 (보스 armored면 armoredAttack) */
+export function currentAttack(def: EnemyDef, enemy: EnemyState): EnemyAttackDef {
+  if (enemy.phase === 'armored' && def.armoredAttack) return def.armoredAttack;
+  return def.attack;
+}
 
 export function tick(world: World, dt: number): void {
   for (const enemy of world.enemies) {
@@ -27,6 +37,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   const distX = p.x - enemy.x;
   const distZ = p.z - enemy.z;
   const dist = Math.hypot(distX, distZ);
+  const attack = currentAttack(def, enemy);
 
   switch (enemy.ai) {
     case 'idle': {
@@ -38,16 +49,27 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     }
 
     case 'chase': {
-      // 추격 중에는 항상 플레이어를 바라본다 (정면 방패 판정 기준)
       enemy.yaw = Math.atan2(-distX, -distZ);
+
+      if (def.behavior === 'caster_kite') {
+        // 너무 가까우면 물러나고, 시야가 트이면 시전
+        if (dist < (def.kiteMinRange ?? 0) && dist > 0) {
+          const step = def.speed * dt;
+          world.level.slideMove(enemy, def.radius, (-distX / dist) * step, (-distZ / dist) * step);
+        } else if (
+          dist <= def.attackRange &&
+          world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
+        ) {
+          startWindup(world, enemy, attack);
+        } else if (dist > 0) {
+          const step = def.speed * dt;
+          world.level.slideMove(enemy, def.radius, (distX / dist) * step, (distZ / dist) * step);
+        }
+        break;
+      }
+
       if (dist <= def.attackRange) {
-        enemy.ai = 'windup';
-        enemy.timer = def.attack.windupTicks;
-        world.events.emit('enemy_windup', {
-          enemyId: enemy.id,
-          enemyType: enemy.type,
-          telegraph: def.attack.telegraph ?? 'blue',
-        });
+        startWindup(world, enemy, attack);
         break;
       }
       if (dist > 0) {
@@ -62,9 +84,19 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (enemy.timer === balance.telegraph.visualLeadTicks) {
         world.events.emit('telegraph_flash', { enemyId: enemy.id, enemyType: enemy.type });
       }
-      if (enemy.timer <= 0) {
+      if (enemy.timer > 0) break;
+
+      if (attack.type === 'projectile') {
+        // 시전 완료 — 마법 투사체 발사
+        fireProjectile(world, enemy, attack);
+        enemy.ai = 'recover';
+        enemy.timer = attack.recoverTicks;
+      } else if (attack.parryable) {
         enemy.ai = 'active_perfect';
         enemy.timer = balance.reaction.windowPerfectTicks;
+      } else {
+        // 패링 불가 — 판정 창 없이 즉시 타격
+        enemy.ai = 'impact';
       }
       break;
     }
@@ -85,8 +117,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     }
 
     case 'impact': {
-      if (dist <= def.attackRange * def.attack.impactRangeMul && p.iframeTicks <= 0) {
+      if (dist <= def.attackRange * attack.impactRangeMul && p.iframeTicks <= 0) {
         p.health -= def.damage;
+        if (enemy.parryStreak !== undefined) enemy.parryStreak = 0; // 연속 패링 끊김
         world.events.emit('player_damaged', { amount: def.damage, health: p.health });
         if (p.health <= 0) {
           p.health = 0;
@@ -95,7 +128,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         }
       }
       enemy.ai = 'recover';
-      enemy.timer = def.attack.recoverTicks;
+      enemy.timer = attack.recoverTicks;
       break;
     }
 
@@ -108,10 +141,60 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     case 'staggered': {
       enemy.timer--;
       if (enemy.timer <= 0) {
+        if (def.boss && enemy.phase === 'melee') {
+          // 보스 — 스태거가 끝나면 장갑 페이즈로 (실탄 구간)
+          enemy.phase = 'armored';
+          enemy.armorHealth = def.armorHealth ?? 0;
+          world.events.emit('boss_phase', { enemyId: enemy.id, phase: 'armored' });
+        }
         enemy.ai = 'recover';
-        enemy.timer = def.attack.recoverTicks;
+        enemy.timer = attack.recoverTicks;
       }
       break;
     }
   }
+}
+
+function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
+  enemy.ai = 'windup';
+  enemy.timer = attack.windupTicks;
+  world.events.emit('enemy_windup', {
+    enemyId: enemy.id,
+    enemyType: enemy.type,
+    telegraph: attack.telegraph ?? 'blue',
+  });
+}
+
+function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
+  const def = enemyDef(enemy.type);
+  const p = world.player;
+  const originY = def.height * 0.7;
+  const targetY = p.y + balance.player.eyeHeight * 0.8;
+  const dx = p.x - enemy.x;
+  const dy = targetY - originY;
+  const dz = p.z - enemy.z;
+  const len = Math.hypot(dx, dy, dz);
+  if (len === 0) return;
+  const speed = attack.projectileSpeed ?? 12;
+
+  world.projectiles.push({
+    id: nextProjectileId++,
+    owner: 'enemy',
+    x: enemy.x,
+    y: originY,
+    z: enemy.z,
+    prevX: enemy.x,
+    prevY: originY,
+    prevZ: enemy.z,
+    vx: (dx / len) * speed,
+    vy: (dy / len) * speed,
+    vz: (dz / len) * speed,
+    lifeTicks: 240,
+    damage: def.damage,
+    burnTicks: 0,
+    burnDamagePerTick: 0,
+    radius: attack.projectileRadius ?? 0.3,
+    casterId: enemy.id,
+  });
+  world.events.emit('enemy_cast', { enemyId: enemy.id, enemyType: enemy.type });
 }
