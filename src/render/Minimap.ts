@@ -61,7 +61,6 @@ export class Minimap {
       '<span style="color:#c9a227">■</span>레버 ' +
       '<span style="color:#6b4a2f">■</span>잠긴 문 ' +
       '<span style="color:#4a5a68">■</span>균열벽<br>' +
-      '<span style="color:#ff8c3b">●</span>횃불 ' +
       '<span style="color:#9fe870">▲</span>나 ' +
       '<span style="color:#e04444">●</span>적 ' +
       '<span style="color:#cc9922">●</span>처형 가능';
@@ -81,14 +80,6 @@ export class Minimap {
         bctx.fillStyle = COLORS[ch] ?? FLOOR;
         bctx.fillRect(col * this.cellPx, row * this.cellPx, this.cellPx, this.cellPx);
       }
-    }
-    bctx.fillStyle = '#ff8c3b';
-    for (const cell of level.torches) {
-      const [row, col] = cell;
-      if (row === undefined || col === undefined) continue;
-      bctx.beginPath();
-      bctx.arc((col + 0.5) * this.cellPx, (row + 0.5) * this.cellPx, 2, 0, Math.PI * 2);
-      bctx.fill();
     }
   }
 
