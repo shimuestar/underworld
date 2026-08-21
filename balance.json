@@ -1,0 +1,171 @@
+{
+  "_comment": "모든 튜닝값. 코드에 하드코딩 금지. 틱 단위는 60Hz 기준 정수.",
+
+  "loop": {
+    "tickRate": 60,
+    "maxFrameClampSec": 0.25
+  },
+
+  "player": {
+    "healthMax": 100,
+    "moveSpeed": 6.0,
+    "sprintSpeed": 9.0,
+    "eyeHeight": 1.6,
+    "radius": 0.4,
+    "height": 1.8
+  },
+
+  "reaction": {
+    "windowPerfectTicks": 6,
+    "windowNormalTicks": 12,
+    "windowDeflectTicks": 8,
+    "failStunTicks": 20,
+    "hitstopPerfectTicks": 4,
+    "hitstopNormalTicks": 2,
+    "dodgeIFrameTicks": 8,
+    "dodgeDistance": 3.5,
+    "inputBufferTicks": 4
+  },
+
+  "chain": {
+    "multipliers": [1.0, 1.4, 1.8, 2.5],
+    "incrementOn": ["parry_perfect", "deflect"],
+    "resetOn": ["damaged", "parry_fail", "cast_spell"]
+  },
+
+  "mana": {
+    "max": 100,
+    "gain": {
+      "parryPerfect": 22,
+      "parryNormal": 11,
+      "deflect": 15,
+      "execute": 25,
+      "melee": 6,
+      "bayonetMelee": 3.6,
+      "weaponKill": 0
+    },
+    "combatExitTicks": 90,
+    "decayPerTick": 1.2,
+    "heartSigilBonus": 0.6
+  },
+
+  "spellCost": {
+    "small": 22,
+    "medium": 66,
+    "large": 160
+  },
+
+  "weapons": {
+    "pistol": {
+      "ammoMax": 60,
+      "damage": 34,
+      "fireIntervalTicks": 14,
+      "reloadTicks": 66,
+      "magSize": 12,
+      "pierceBarrier": true,
+      "muzzleFlash": { "intensity": 3.0, "radiusMul": 0.5, "ticks": 2 }
+    },
+    "rifle": {
+      "ammoMax": 180,
+      "damage": 16,
+      "fireIntervalTicks": 5,
+      "reloadTicks": 96,
+      "magSize": 30,
+      "pierceBarrier": false,
+      "muzzleFlash": { "intensity": 2.4, "radiusMul": 0.5, "ticks": 2 }
+    },
+    "grenade": {
+      "ammoMax": 4,
+      "damage": 120,
+      "radius": 5.0,
+      "fuseTicks": 100,
+      "breaksCrackWall": true
+    },
+    "flashbang": {
+      "ammoMax": 3,
+      "blindTicks": 180,
+      "radius": 8.0,
+      "forcesLurkerReveal": true
+    }
+  },
+
+  "corruptedAmmo": {
+    "damageMul": 0.6,
+    "spreadMul": 2.0,
+    "pierceBarrier": false,
+    "corruptionPer30Rounds": 1
+  },
+
+  "lantern": {
+    "batteryMax": 100,
+    "drainPerTick": 0.028,
+    "spareCells": 2,
+    "intensity": 1.6,
+    "radius": 14.0,
+    "angleDeg": 42,
+    "attractsCasterRangeMul": 1.8
+  },
+
+  "altar": {
+    "refillToMax": true,
+    "aggressionBonus": {
+      "meleeRatioWeight": 0.5,
+      "perfectParryWeight": 0.3,
+      "perfectParryCap": 10,
+      "noDamageRatioWeight": 0.2,
+      "maxMultiplier": 1.4
+    }
+  },
+
+  "corruption": {
+    "max": 100,
+    "thresholds": [25, 50, 75, 90],
+    "visualStages": 8,
+    "utilitySpellCost": 2,
+    "altarRefillCost": 1,
+    "slotCost": {
+      "eye": 8,
+      "spine": 10,
+      "leftArm": 12,
+      "rightArm": 13,
+      "heart": 15
+    },
+    "effects": {
+      "t50_meleeDamageMul": 1.25,
+      "t50_weaponHandlingMul": 0.85,
+      "t90_dropChanceOnReload": 0.08,
+      "t90_spellCostMul": 0.7
+    }
+  },
+
+  "sigil": {
+    "scarRatio": 0.5,
+    "slotPenalty": {
+      "eye": { "flashbangSelfDamage": true },
+      "rightArm": { "reloadSpeedMul": 0.65 },
+      "leftArm": { "lanternIntensityMul": 0.5, "grenadeRangeMul": 0.7 },
+      "heart": { "manaLostOnHit": 1.0 },
+      "spine": { "aimSpreadMul": 1.4 }
+    }
+  },
+
+  "telegraph": {
+    "colorParryable": "#4A9EFF",
+    "colorUnparryable": "#FF3B3B",
+    "colorProjectile": "#A855F7",
+    "audioLeadTicks": 12,
+    "visualLeadTicks": 4
+  },
+
+  "metrics": {
+    "targets": {
+      "ammoLeftRatioAtAltar": 0.20,
+      "corruptedAmmoUsageRatio": 0.30,
+      "parryAttemptsPerEncounter": 3,
+      "perfectParryRatio": 0.20,
+      "manaWasteRatio": 0.30,
+      "chainTier3ReachRatio": 0.20,
+      "altarBypassRatio": 0.05
+    }
+  }
+}

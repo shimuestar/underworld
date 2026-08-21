@@ -1,0 +1,61 @@
+{
+  "_comment": "적 로스터. counters 배열이 곧 상성표. slice=true 인 항목만 1구역 슬라이스 범위.",
+
+  "enemies": {
+    "goblin_runner": {
+      "zone": 1, "slice": true,
+      "health": 30, "speed": 7.5, "damage": 12,
+      "behavior": "charge",
+      "attack": { "type": "contact", "windupTicks": 18, "parryable": true },
+      "counters": { "pistol": "poor", "rifle": "good", "grenade": "good", "flash": "poor", "melee": "best", "magic": "best", "deflect": "none" },
+      "drops": []
+    },
+    "goblin_spear": {
+      "zone": 1, "slice": true,
+      "health": 55, "speed": 3.2, "damage": 22,
+      "behavior": "guard_advance",
+      "frontalShieldBlocksProjectiles": true,
+      "attack": { "type": "thrust", "windupTicks": 34, "parryable": true, "telegraph": "blue" },
+      "counters": { "pistol": "poor", "rifle": "poor", "grenade": "good", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
+      "drops": ["sig_fireball"]
+    },
+    "warden": {
+      "zone": 2, "slice": true,
+      "health": 90, "speed": 2.4, "damage": 26,
+      "behavior": "caster_kite",
+      "magicBarrier": { "blocksMagic": true, "blocksMelee": true, "piercedBy": ["pistol"] },
+      "attack": { "type": "projectile", "windupTicks": 46, "parryable": false, "deflectable": true, "telegraph": "purple" },
+      "counters": { "pistol": "best", "rifle": "poor", "grenade": "poor", "flash": "poor", "melee": "none", "magic": "none", "deflect": "good" },
+      "drops": ["sig_curse"]
+    },
+    "goblin_chieftain": {
+      "zone": 1, "slice": true, "boss": true,
+      "health": 420, "speed": 4.0, "damage": 30,
+      "behavior": "boss_two_phase",
+      "phases": [
+        { "name": "melee", "parryable": true, "telegraph": "blue", "note": "패링 구간. 3연속 패링 시 스태거" },
+        { "name": "armored", "requiresBallistic": true, "note": "장갑 부위를 실탄으로 파괴해야 페이즈 복귀" }
+      ],
+      "counters": { "pistol": "good", "rifle": "best", "grenade": "good", "flash": "good", "melee": "good", "magic": "poor", "deflect": "none" },
+      "drops": ["sig_darkvision"]
+    },
+
+    "orc_warrior":    { "zone": 2, "slice": false, "health": 140, "counters": { "melee": "best" } },
+    "orc_berserker":  { "zone": 2, "slice": false, "health": 120, "counters": { "rifle": "best", "melee": "poor" } },
+    "orc_sentinel":   { "zone": 2, "slice": false, "health": 160, "counters": { "pistol": "best" } },
+    "brood_sac":      { "zone": 2, "slice": false, "health": 60,  "counters": { "rifle": "best", "melee": "none" } },
+    "stone_golem":    { "zone": 3, "slice": false, "health": 300, "counters": { "grenade": "best", "pistol": "none", "magic": "none" } },
+    "lurker":         { "zone": 3, "slice": false, "health": 70,  "counters": { "flash": "best", "pistol": "none", "rifle": "none" } },
+    "echo":           { "zone": 4, "slice": false, "health": 110, "counters": { "deflect": "best", "pistol": "none", "rifle": "none", "magic": "none" } },
+    "librarian":      { "zone": 4, "slice": false, "health": 95,  "counters": { "deflect": "best" } },
+    "swarm_worm":     { "zone": 4, "slice": false, "health": 15,  "counters": { "magic": "best", "pistol": "none" } },
+    "hybrid_elite":   { "zone": 5, "slice": false, "health": 260, "counters": { "_note": "페이즈별 전환" } }
+  },
+
+  "counterScale": {
+    "best": "유일하거나 압도적 해답",
+    "good": "유효",
+    "poor": "비효율. 자원 낭비",
+    "none": "무효. 피해 0 또는 튕김"
+  }
+}

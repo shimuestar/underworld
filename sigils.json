@@ -1,0 +1,34 @@
+{
+  "_comment": "각인 24종. 부위당 슬롯 1개, 최대 동시 부착 5개. slice=true 만 1구역 범위.",
+
+  "sigils": [
+    { "id": "sig_darkvision",  "name": "암시야",     "slot": "eye",      "tier": "passive", "zone": 1, "slice": true,  "effects": { "ambientVisionBoost": 1.0 } },
+    { "id": "sig_weakpoint",   "name": "약점 투시",   "slot": "eye",      "tier": "passive", "zone": 2, "slice": false, "effects": { "showBreakPoints": 1 } },
+    { "id": "sig_trapsense",   "name": "함정 감지",   "slot": "eye",      "tier": "passive", "zone": 2, "slice": false, "effects": { "revealTrapsRadius": 12 } },
+    { "id": "sig_lifesight",   "name": "잔명 시야",   "slot": "eye",      "tier": "passive", "zone": 4, "slice": false, "effects": { "showHealthBars": 1 } },
+
+    { "id": "sig_fireball",    "name": "화염구",      "slot": "rightArm", "tier": "small",   "zone": 1, "slice": true,  "effects": { "damage": 45, "burnTicks": 180 } },
+    { "id": "sig_lightning",   "name": "관통 뇌창",   "slot": "rightArm", "tier": "medium",  "zone": 2, "slice": false, "effects": { "damage": 90, "pierce": 5 } },
+    { "id": "sig_acid",        "name": "산성 분사",   "slot": "rightArm", "tier": "small",   "zone": 3, "slice": false, "effects": { "armorShred": 0.4 } },
+    { "id": "sig_homing",      "name": "유도 파편",   "slot": "rightArm", "tier": "medium",  "zone": 4, "slice": false, "effects": { "projectiles": 6, "damage": 28 } },
+    { "id": "sig_swiftcast",   "name": "시전 가속",   "slot": "rightArm", "tier": "passive", "zone": 4, "slice": false, "effects": { "castSpeedMul": 0.7 } },
+    { "id": "sig_execution",   "name": "처형 강화",   "slot": "rightArm", "tier": "passive", "zone": 3, "slice": false, "effects": { "executeManaMul": 1.5 } },
+
+    { "id": "sig_reflect",     "name": "반사막",      "slot": "leftArm",  "tier": "passive", "zone": 4, "slice": false, "effects": { "deflectWindowTicks": 12 } },
+    { "id": "sig_absorb",      "name": "흡수 방벽",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": false, "effects": { "absorbAmount": 80, "toManaRatio": 0.5 } },
+    { "id": "sig_frost",       "name": "서리 폭발",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": false, "effects": { "radius": 7, "slowMul": 0.4 } },
+    { "id": "sig_gravity",     "name": "중력장",      "slot": "leftArm",  "tier": "large",   "zone": 5, "slice": false, "effects": { "radius": 9, "liftTicks": 120 } },
+    { "id": "sig_curse",       "name": "저주 부여",   "slot": "leftArm",  "tier": "small",   "zone": 4, "slice": false, "effects": { "damageTakenMul": 1.4 } },
+
+    { "id": "sig_manaheart",   "name": "마력 심장",   "slot": "heart",    "tier": "passive", "zone": 3, "slice": false, "effects": { "manaMaxMul": 1.6 } },
+    { "id": "sig_overload",    "name": "과부하",      "slot": "heart",    "tier": "passive", "zone": 5, "slice": false, "effects": { "freeLargeCastPerEncounter": 1 } },
+    { "id": "sig_drain",       "name": "생명 흡수",   "slot": "heart",    "tier": "passive", "zone": 2, "slice": false, "effects": { "healOnMeleeKill": 8 } },
+    { "id": "sig_frenzy",      "name": "광란",        "slot": "heart",    "tier": "passive", "zone": 3, "slice": false, "effects": { "lowHpThreshold": 0.3, "damageMul": 1.5 } },
+
+    { "id": "sig_dash",        "name": "돌진 회피",   "slot": "spine",    "tier": "passive", "zone": 1, "slice": true,  "effects": { "dodgeDistanceMul": 1.8, "iFrameTicks": 12 } },
+    { "id": "sig_moment",      "name": "찰나",        "slot": "spine",    "tier": "passive", "zone": 4, "slice": false, "effects": { "slowMoOnPerfectTicks": 24, "timeScale": 0.35 } },
+    { "id": "sig_shadowstep",  "name": "그림자 이동", "slot": "spine",    "tier": "medium",  "zone": 5, "slice": false, "effects": { "range": 20 } },
+    { "id": "sig_unchained",   "name": "연쇄 해방",   "slot": "spine",    "tier": "passive", "zone": 5, "slice": false, "effects": { "chainCapRemoved": 1, "perTierBonus": 0.4 } },
+    { "id": "sig_nofall",      "name": "낙하 무효",   "slot": "spine",    "tier": "passive", "zone": 3, "slice": false, "effects": { "fallDamageMul": 0 } }
+  ]
+}
