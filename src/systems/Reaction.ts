@@ -6,8 +6,7 @@
 //       스태거 중 처형은 즉사가 아니라 executeDamage 타격.
 
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
-import { currentAttack } from './Enemies';
+import { currentAttack, enemyDef } from '../core/Entities';
 import type { EnemyState, ProjectileState, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {

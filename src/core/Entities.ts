@@ -50,6 +50,16 @@ export interface EnemyDef {
   armorHealth?: number;
 }
 
+/** 현재 공격 정의 — 원거리 모드면 rangedAttack, 보스 armored면 armoredAttack */
+export function currentAttack(
+  def: EnemyDef,
+  enemy: { phase?: string; attackMode?: string },
+): EnemyAttackDef {
+  if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
+  if (enemy.phase === 'armored' && def.armoredAttack) return def.armoredAttack;
+  return def.attack;
+}
+
 export function enemyDef(type: string): EnemyDef {
   const def = (entitiesJson.enemies as Record<string, unknown>)[type];
   if (!def) throw new Error(`entities.json에 없는 적 타입: ${type}`);

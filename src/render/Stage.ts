@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
+import { currentAttack, enemyDef } from '../core/Entities';
 import { glyphTexture } from '../level/GridLoader';
 import type { EnemyState, GroundItemState, ProjectileState } from '../core/World';
 import { HandModel } from './HandModel';
@@ -40,6 +40,8 @@ const HEAD_DARKEN = 0.72;
 
 interface EnemyVisual {
   group: THREE.Group;
+  /** 몸통+머리 서브그룹 — 공격 모션(기울임/내지름)의 피벗 (발 기준) */
+  torso: THREE.Group;
   /** 텔레그래프 발광을 적용할 머티리얼들 (몸통/머리/창끝) */
   flashMaterials: THREE.MeshLambertMaterial[];
   shield?: THREE.Mesh;
@@ -52,6 +54,16 @@ interface EnemyVisual {
   barrierFlashUntil: number;
   /** 보스 장갑판 (armored 페이즈에만 표시) */
   armorPlates?: THREE.Mesh;
+  /** 근접 공격 판정 반경 링 (바닥) */
+  rangeRing: THREE.Mesh;
+  rangeRingMaterial: THREE.MeshBasicMaterial;
+  /** 원거리 시전 조준선 (월드 공간 — scene 직속) */
+  aimLine: THREE.Mesh;
+  aimLineMaterial: THREE.MeshBasicMaterial;
+  /** 시전 충전 구체 (warden) */
+  chargeOrb?: THREE.Mesh;
+  /** 활 (archer) */
+  bow?: THREE.Mesh;
   /** 머리 위 이름표 + HP 바 */
   plate: THREE.Sprite;
   plateTexture: THREE.CanvasTexture;
@@ -369,6 +381,10 @@ export class Stage {
     const group = new THREE.Group();
     const flashMaterials: THREE.MeshLambertMaterial[] = [];
 
+    // 몸통 서브그룹 — 발(y=0)을 피벗으로 기울여 공격 모션을 만든다
+    const torso = new THREE.Group();
+    group.add(torso);
+
     const bodyMat = new THREE.MeshLambertMaterial({ color: baseColor });
     flashMaterials.push(bodyMat);
     const body = new THREE.Mesh(
@@ -376,7 +392,7 @@ export class Stage {
       bodyMat,
     );
     body.position.y = (def.height * 0.78) / 2;
-    group.add(body);
+    torso.add(body);
 
     const headMat = new THREE.MeshLambertMaterial({
       color: new THREE.Color(baseColor).multiplyScalar(HEAD_DARKEN),
@@ -385,7 +401,7 @@ export class Stage {
     const headSize = def.radius * 0.9;
     const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), headMat);
     head.position.set(0, def.height - headSize / 2, -def.radius * 0.2);
-    group.add(head);
+    torso.add(head);
 
     // 이름표 + HP 바 (빌보드 스프라이트, 어그로 후에만 표시)
     const plateCanvas = document.createElement('canvas');
@@ -401,8 +417,32 @@ export class Stage {
     plate.visible = false;
     group.add(plate);
 
+    // 근접 공격 판정 반경 링 (단위 반지름 1 — scale로 실제 반경 적용)
+    const rangeRingMaterial = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const rangeRing = new THREE.Mesh(new THREE.RingGeometry(0.88, 1, 40), rangeRingMaterial);
+    rangeRing.rotation.x = -Math.PI / 2;
+    rangeRing.position.y = 0.05;
+    rangeRing.visible = false;
+    group.add(rangeRing);
+
+    // 원거리 시전 조준선 — 월드 공간이라 scene에 직접 추가 (제거 시 별도 정리)
+    const aimLineMaterial = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    const aimLine = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 1), aimLineMaterial);
+    aimLine.visible = false;
+    this.scene.add(aimLine);
+
     const visual: EnemyVisual = {
       group,
+      torso,
       flashMaterials,
       shieldFlashUntil: 0,
       barrierFlashUntil: 0,
@@ -410,7 +450,36 @@ export class Stage {
       plateTexture,
       plateCanvas,
       plateKey: '',
+      rangeRing,
+      rangeRingMaterial,
+      aimLine,
+      aimLineMaterial,
     };
+
+    // 시전 충전 구체 (마법 투사체 캐스터)
+    if (def.attack.type === 'projectile' && def.attack.deflectable) {
+      visual.chargeOrb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.28, 10, 10),
+        new THREE.MeshBasicMaterial({
+          color: ENEMY_BOLT_COLOR,
+          transparent: true,
+          opacity: 0.9,
+        }),
+      );
+      visual.chargeOrb.position.set(0.45, def.height * 0.62, -def.radius - 0.35);
+      visual.chargeOrb.visible = false;
+      torso.add(visual.chargeOrb);
+    }
+
+    // 활 (궁수)
+    if (type === 'goblin_archer') {
+      visual.bow = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 1.15, 0.08),
+        new THREE.MeshLambertMaterial({ color: 0x5c4426 }),
+      );
+      visual.bow.position.set(0.15, def.height * 0.58, -def.radius - 0.25);
+      torso.add(visual.bow);
+    }
 
     if (def.magicBarrier) {
       visual.barrierMaterial = new THREE.MeshLambertMaterial({
@@ -434,7 +503,7 @@ export class Stage {
       );
       visual.armorPlates.position.y = def.height * 0.5;
       visual.armorPlates.visible = false;
-      group.add(visual.armorPlates);
+      torso.add(visual.armorPlates); // 몸통과 함께 기울어진다
     }
 
     if (def.frontalShieldBlocksProjectiles) {
@@ -493,8 +562,7 @@ export class Stage {
       // 색은 공격 유형 규약: 청=패링 가능, 적=회피 전용, 보라=마법 투사체.
       // 그 전 windup은 옅은 예고 틴트. 스태거는 처형 가능 표시(황색).
       const def2 = enemyDef(enemy.type);
-      const attack =
-        enemy.phase === 'armored' && def2.armoredAttack ? def2.armoredAttack : def2.attack;
+      const attack = currentAttack(def2, enemy);
       const telegraphColor =
         attack.telegraph === 'red'
           ? balance.telegraph.colorUnparryable
@@ -554,6 +622,61 @@ export class Stage {
         visual.spear.position.z += (targetZ - visual.spear.position.z) * 0.35;
       }
 
+      // 공격 모션 — windup에 뒤로 젖혔다가(진행도만큼) 타격 구간에 앞으로 내지른다
+      const inWindup = enemy.ai === 'windup';
+      const striking =
+        enemy.ai === 'active_perfect' || enemy.ai === 'active_normal' || enemy.ai === 'impact';
+      const windupProgress = inWindup ? 1 - enemy.timer / attack.windupTicks : 0;
+      const isMelee = attack.type !== 'projectile';
+      const leanTarget = striking ? 0.45 : inWindup ? -0.32 * windupProgress : 0;
+      const lungeTarget = striking && isMelee ? -0.45 : 0;
+      visual.torso.rotation.x += (leanTarget - visual.torso.rotation.x) * 0.35;
+      visual.torso.position.z += (lungeTarget - visual.torso.position.z) * 0.35;
+
+      // 근접 공격 판정 반경 링 — windup 동안 차오르고 판정 창에 선명해진다
+      if (isMelee && (inWindup || striking)) {
+        const radius = def2.attackRange * attack.impactRangeMul;
+        visual.rangeRing.visible = true;
+        visual.rangeRing.scale.set(radius, radius, 1);
+        visual.rangeRingMaterial.color.set(telegraphColor);
+        visual.rangeRingMaterial.opacity = striking ? 0.8 : 0.12 + 0.5 * windupProgress;
+      } else {
+        visual.rangeRing.visible = false;
+      }
+
+      // 원거리 시전 조준선 — 시전 중 나(카메라)를 향해 그려진다
+      if (!isMelee && inWindup) {
+        const from = new THREE.Vector3(
+          visual.group.position.x,
+          def2.height * 0.6,
+          visual.group.position.z,
+        );
+        const to = this.camera.position.clone();
+        to.y -= 0.2;
+        const length = from.distanceTo(to);
+        visual.aimLine.visible = true;
+        visual.aimLine.scale.set(1, 1, length);
+        visual.aimLine.position.copy(from).add(to).multiplyScalar(0.5);
+        visual.aimLine.lookAt(to);
+        visual.aimLineMaterial.color.set(telegraphColor);
+        visual.aimLineMaterial.opacity = 0.08 + 0.38 * windupProgress;
+      } else {
+        visual.aimLine.visible = false;
+      }
+
+      // 시전 충전 구체 — windup 진행에 따라 커진다
+      if (visual.chargeOrb) {
+        visual.chargeOrb.visible = inWindup;
+        const s = 0.15 + windupProgress * 0.95;
+        visual.chargeOrb.scale.set(s, s, s);
+      }
+
+      // 활 시위 당기기 — windup에 활이 젖혀진다
+      if (visual.bow) {
+        const bowTilt = inWindup ? -0.35 * windupProgress : 0;
+        visual.bow.rotation.x += (bowTilt - visual.bow.rotation.x) * 0.3;
+      }
+
       // 방패 — 피격 시 흰 번쩍, 스태거 중엔 내려가서 열린다
       if (visual.shield && visual.shieldMaterial) {
         visual.shieldMaterial.emissive.set(now < visual.shieldFlashUntil ? 0xffffff : 0x000000);
@@ -574,6 +697,9 @@ export class Stage {
       });
       visual.plateTexture.dispose();
       visual.plate.material.dispose();
+      this.scene.remove(visual.aimLine); // scene 직속이라 별도 정리
+      visual.aimLine.geometry.dispose();
+      visual.aimLineMaterial.dispose();
       this.enemyVisuals.delete(id);
     }
   }

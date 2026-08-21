@@ -9,17 +9,10 @@
 // windup 진입 시 enemy_windup(오디오), 종료 visualLeadTicks 전에 telegraph_flash(섬광).
 
 import { balance } from '../core/Balance';
-import { enemyDef, type EnemyAttackDef, type EnemyDef } from '../core/Entities';
+import { currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import type { EnemyState, World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
-
-/** 현재 공격 정의 — 원거리 모드면 rangedAttack, 보스 armored면 armoredAttack */
-export function currentAttack(def: EnemyDef, enemy: EnemyState): EnemyAttackDef {
-  if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
-  if (enemy.phase === 'armored' && def.armoredAttack) return def.armoredAttack;
-  return def.attack;
-}
 
 export function tick(world: World, dt: number): void {
   for (const enemy of world.enemies) {
