@@ -16,7 +16,8 @@ export type SoundName =
   | 'pickup'
   | 'gunshot'
   | 'hit_flesh'
-  | 'hit_wall';
+  | 'hit_wall'
+  | 'enemy_death';
 
 const MASTER_GAIN = 0.25;
 
@@ -96,6 +97,12 @@ export class GameAudio {
         // 벽 명중 — 높은 돌 튕김
         this.noise(0.05, 0.4, 2600, 0.035);
         this.tone(1180, 0.07, 'triangle', 0.35, 0.035, 700);
+        break;
+      case 'enemy_death':
+        // 고블린 단말마 — 하강 그르렁 + 무너지는 노이즈
+        this.tone(340, 0.32, 'sawtooth', 0.6, 0, 85);
+        this.tone(510, 0.18, 'square', 0.3, 0.04, 160);
+        this.noise(0.28, 0.45, 750, 0.08);
         break;
     }
   }

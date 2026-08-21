@@ -123,6 +123,11 @@ function moveProjectiles(world: World, dt: number): void {
           hitEnemy.alive = false;
           // 마법 처치도 마나 0 — 마나는 패링/처형 경로로만 (combat.md §5)
           world.events.emit('spell_kill', { enemyType: hitEnemy.type });
+          world.events.emit('enemy_died', {
+            enemyType: hitEnemy.type,
+            x: hitEnemy.x,
+            z: hitEnemy.z,
+          });
         }
       }
       world.projectiles.splice(i, 1);
@@ -143,6 +148,7 @@ function applyBurns(world: World): void {
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('spell_kill', { enemyType: enemy.type, burn: true });
+      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
     }
   }
 }

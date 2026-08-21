@@ -78,6 +78,7 @@ export function tick(world: World, _dt: number): void {
       x: enemy.x,
       z: enemy.z,
     });
+    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
     return;
   }
 

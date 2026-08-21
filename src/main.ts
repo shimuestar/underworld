@@ -131,6 +131,7 @@ for (const name of [
   'reload_finished',
   'weapon_empty',
   'weapon_kill',
+  'enemy_died',
   'enemy_damaged',
   'enemy_alerted',
   'enemy_windup',
@@ -173,6 +174,11 @@ events.on('dodge_step', () => audio.play('dodge'));
 events.on('cast_spell', () => audio.play('cast_fire'));
 events.on('spell_impact', () => audio.play('spell_impact'));
 events.on('sigil_acquired', () => audio.play('pickup'));
+events.on('enemy_died', (payload) => {
+  const dead = payload as { enemyType: string; x: number; z: number };
+  audio.play('enemy_death');
+  stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType);
+});
 events.on('cast_failed', (payload) => {
   audio.play('cast_fizzle');
   const info = payload as { reason: string; cost?: number; current?: number };

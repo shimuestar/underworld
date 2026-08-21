@@ -43,6 +43,22 @@ interface EnemyVisual {
 const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 그린다 (근접부 왜곡 방지)
 const TRACER_WIDTH = 0.022;
 
+// 사망 파편 (시각 상수)
+const DEATH_PARTICLE_COUNT = 14;
+const DEATH_PARTICLE_LIFE_MS = 650;
+const DEATH_GRAVITY = 14;
+
+interface Particle {
+  mesh: THREE.Mesh;
+  ox: number;
+  oy: number;
+  oz: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  bornMs: number;
+}
+
 interface Tracer {
   group: THREE.Group;
   beam: THREE.Mesh;
@@ -62,6 +78,7 @@ export class Stage {
   private readonly projectileVisuals = new Map<number, THREE.Group>();
   private readonly groundItemVisuals = new Map<number, THREE.Group>();
   private readonly tracers: Tracer[] = [];
+  private readonly particles: Particle[] = [];
   private readonly hands = new HandModel();
   private ambientLight: THREE.AmbientLight | null = null;
   private levelAmbient = 0;
@@ -400,6 +417,58 @@ export class Stage {
     }
   }
 
+  /** 적 사망 파편 폭발 — 몸통 색 조각들이 튀어 흩어진다 */
+  spawnDeathBurst(x: number, z: number, enemyType: string): void {
+    const def = enemyDef(enemyType);
+    const color = ENEMY_COLORS[enemyType] ?? ENEMY_COLOR_FALLBACK;
+    const now = performance.now();
+    for (let i = 0; i < DEATH_PARTICLE_COUNT; i++) {
+      const size = 0.08 + Math.random() * 0.12;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size, size),
+        new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 }),
+      );
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.5 + Math.random() * 3.5;
+      const particle: Particle = {
+        mesh,
+        ox: x,
+        oy: def.height * (0.3 + Math.random() * 0.6),
+        oz: z,
+        vx: Math.cos(angle) * speed,
+        vy: 2 + Math.random() * 4,
+        vz: Math.sin(angle) * speed,
+        bornMs: now,
+      };
+      mesh.position.set(particle.ox, particle.oy, particle.oz);
+      mesh.rotation.set(Math.random() * 3, Math.random() * 3, 0);
+      this.particles.push(particle);
+      this.scene.add(mesh);
+    }
+  }
+
+  private updateParticles(): void {
+    const now = performance.now();
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i]!;
+      const age = (now - p.bornMs) / 1000;
+      const lifeFrac = (now - p.bornMs) / DEATH_PARTICLE_LIFE_MS;
+      if (lifeFrac >= 1) {
+        this.scene.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        (p.mesh.material as THREE.Material).dispose();
+        this.particles.splice(i, 1);
+        continue;
+      }
+      p.mesh.position.set(
+        p.ox + p.vx * age,
+        Math.max(0.04, p.oy + p.vy * age - 0.5 * DEATH_GRAVITY * age * age),
+        p.oz + p.vz * age,
+      );
+      (p.mesh.material as THREE.MeshLambertMaterial).opacity = 1 - lifeFrac * lifeFrac;
+    }
+  }
+
   /** 바닥 각인 — 떠서 회전하는 금색 팔면체 + 점광원 */
   syncGroundItems(items: GroundItemState[]): void {
     const now = performance.now();
@@ -449,6 +518,7 @@ export class Stage {
 
   render(): void {
     this.updateTracers();
+    this.updateParticles();
     this.renderer.render(this.scene, this.camera);
   }
 }
