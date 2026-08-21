@@ -60,6 +60,7 @@ const world = new World(events, {
     dodgeDirZ: 0,
     iframeTicks: 0,
     reactionBufferTicks: 0,
+    blocking: false,
   },
   lantern: {
     on: true,
@@ -123,8 +124,28 @@ window.addEventListener('keydown', (e) => {
     if (world.uiOpen) document.exitPointerLock();
   }
 });
+let restartConfirmUntil = 0;
+
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM') minimap.toggle();
+  // F3 두 번 — 중간 다시 하기 (제단 등록 시 제단에서, 아니면 처음부터)
+  if (e.code === 'F3') {
+    e.preventDefault();
+    if (performance.now() < restartConfirmUntil) {
+      if (world.respawn) {
+        world.dead = false;
+        respawnAtAltar();
+      } else {
+        location.reload();
+      }
+    } else {
+      restartConfirmUntil = performance.now() + 2000;
+      showReaction(
+        world.respawn ? 'F3 한 번 더 — 제단에서 다시 시작' : 'F3 한 번 더 — 처음부터 다시 시작',
+        2000,
+      );
+    }
+  }
   // 테스트용 마나 풀충전 — 마법 튜닝 편의 (슬라이스 검증 시 제거)
   if (e.code === 'KeyO' && !world.dead) {
     world.mana.value = balance.mana.max;
@@ -245,8 +266,11 @@ events.on('headshot', () => {
   showReaction('헤드샷!', 700);
 });
 
-// ---- 피격 연출 — 붉은 비네트 + 피격음 ----
-events.on('player_damaged', () => {
+events.on('block_hit', () => audio.play('block_hit'));
+
+// ---- 피격 연출 — 붉은 비네트 + 피격음 (방어 성공 시엔 방어음만) ----
+events.on('player_damaged', (payload) => {
+  if ((payload as { blocked?: boolean }).blocked) return;
   audio.play('player_hurt');
   hurtOverlay!.style.transition = 'none';
   hurtOverlay!.style.opacity = '1';
@@ -514,7 +538,11 @@ function render(alpha: number): void {
   stage.syncEnemies(world.enemies, alpha);
   stage.syncProjectiles(world.projectiles, alpha);
   stage.syncGroundItems(world.groundItems);
-  stage.updateHands({ reloading: world.weapon.reloading > 0, stunned: p.stunTicks > 0 });
+  stage.updateHands({
+    reloading: world.weapon.reloading > 0,
+    stunned: p.stunTicks > 0,
+    blocking: p.blocking,
+  });
   stage.setCorruptionStage(Math.floor(world.corruption.applied / 12.5));
   minimap.update(p, world.enemies, alpha);
 
@@ -571,7 +599,7 @@ function render(alpha: number): void {
   const manaBar = '█'.repeat(Math.round((mana.value / balance.mana.max) * 20)).padEnd(20, '░');
   hud!.textContent =
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
-    `HP ${p.health}   9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}\n` +
+    `HP ${Math.max(0, Math.round(p.health))}   9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}${p.blocking ? '  [방어]' : ''}\n` +
     `mana ${manaBar} ${mana.value.toFixed(0)}/${balance.mana.max}  chain ×${chainMult}${!mana.inCombat && mana.outOfCombatTicks >= balance.mana.combatExitTicks && mana.value > 0 ? '  [휘발중]' : ''}\n` +
     `spell ${spellHudText()}   각인 ${world.sigils.inventory.length}개 소지\n` +
     `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}${world.altarBonusMul > 1 ? `  탄약 배율 ×${world.altarBonusMul.toFixed(2)}` : ''}\n` +
@@ -579,8 +607,8 @@ function render(alpha: number): void {
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
-    'WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)\n' +
-    'Q 마법 시전  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  P 창병(테스트)  O 마나(테스트)';
+    'WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)  C 방어(홀드)\n' +
+    'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O 테스트';
 
   stage.render();
 }

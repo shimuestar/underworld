@@ -28,6 +28,8 @@ export interface PlayerState {
   iframeTicks: number;
   /** 히트스톱 중 눌린 반응 입력의 버퍼 잔여 틱 */
   reactionBufferTicks: number;
+  /** 방어 중 (C 홀드) — 정면 피해 경감, 이동·사격 제한 */
+  blocking: boolean;
 }
 
 export interface SigilState {
@@ -172,6 +174,25 @@ export interface EnemyState {
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
   attackMode?: 'melee' | 'ranged';
+}
+
+/** (sourceX, sourceZ)에서 오는 공격을 방어 중인가 — 정면 arcDeg 안일 때만 */
+export function playerBlocks(
+  world: World,
+  sourceX: number,
+  sourceZ: number,
+  arcDeg: number,
+): boolean {
+  const p = world.player;
+  if (!p.blocking) return false;
+  const toX = sourceX - p.x;
+  const toZ = sourceZ - p.z;
+  const len = Math.hypot(toX, toZ);
+  if (len === 0) return true;
+  const facingX = -Math.sin(p.yaw);
+  const facingZ = -Math.cos(p.yaw);
+  const dot = (facingX * toX + facingZ * toZ) / len;
+  return dot >= Math.cos(((arcDeg / 2) * Math.PI) / 180);
 }
 
 export class World {

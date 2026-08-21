@@ -29,7 +29,7 @@ function makeWorld(): World {
       yaw: 0, pitch: 0,
       health: balance.player.healthMax,
       stunTicks: 0, dodgeTicks: 0, dodgeDirX: 0, dodgeDirZ: 0,
-      iframeTicks: 0, reactionBufferTicks: 0,
+      iframeTicks: 0, reactionBufferTicks: 0, blocking: false,
     },
     lantern: { on: true, battery: 100, spares: 0 },
     weapon: { mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0 },
@@ -86,6 +86,28 @@ describe('공격 상태 머신 타이밍 (goblin_spear: windup 34t)', () => {
       balance.player.healthMax - enemyDef('goblin_spear').damage,
     );
     expect(world.enemies[0]!.ai).toBe('recover');
+  });
+
+  it('방어(C 홀드): 정면 공격은 칩 데미지만, 후방은 온전히 맞는다', () => {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(12, 10)); // 플레이어 동쪽
+    world.player.yaw = -Math.PI / 2; // 동쪽(적)을 바라봄 → 정면 방어
+    world.player.blocking = true;
+    tickUntil(world, 'impact');
+    Enemies.tick(world, DT);
+    const spearDamage = enemyDef('goblin_spear').damage;
+    expect(world.player.health).toBeCloseTo(
+      balance.player.healthMax - spearDamage * balance.block.chipDamageRatio,
+    );
+
+    // 후방 공격 — 방어해도 그대로 맞는다
+    const world2 = makeWorld();
+    world2.enemies.push(makeSpear(12, 10));
+    world2.player.yaw = Math.PI / 2; // 반대편(서쪽)을 바라봄
+    world2.player.blocking = true;
+    tickUntil(world2, 'impact');
+    Enemies.tick(world2, DT);
+    expect(world2.player.health).toBe(balance.player.healthMax - spearDamage);
   });
 
   it('회피 무적 중에는 impact가 빗나간다', () => {

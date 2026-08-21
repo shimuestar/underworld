@@ -31,7 +31,8 @@ export type SoundName =
   | 'lever_pull'
   | 'bow_twang'
   | 'headshot'
-  | 'player_hurt';
+  | 'player_hurt'
+  | 'block_hit';
 
 const MASTER_GAIN = 0.25;
 
@@ -187,6 +188,12 @@ export class GameAudio {
         this.tone(110, 1.2, 'sine', 0.7);
         this.tone(165, 1.0, 'sine', 0.45, 0.1);
         this.tone(220, 0.8, 'sine', 0.3, 0.25);
+        break;
+      case 'block_hit':
+        // 브레이서 방어 — 묵직한 금속 튕김 (피격음보다 단단한 느낌)
+        this.tone(420, 0.1, 'square', 0.8, 0, 260);
+        this.tone(1240, 0.07, 'triangle', 0.5);
+        this.noise(0.06, 0.5, 2400);
         break;
       case 'player_hurt':
         // 피격 — 둔탁한 충격 + 낮은 신음조

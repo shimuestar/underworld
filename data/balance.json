@@ -35,6 +35,12 @@
     "inputBufferTicks": 4
   },
 
+  "block": {
+    "chipDamageRatio": 0.3,
+    "speedMul": 0.35,
+    "arcDeg": 120
+  },
+
   "chain": {
     "multipliers": [1.0, 1.4, 1.8, 2.5],
     "incrementOn": ["parry_perfect", "deflect"],

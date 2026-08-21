@@ -10,7 +10,7 @@
 
 import { balance } from '../core/Balance';
 import { currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
-import type { EnemyState, World } from '../core/World';
+import { playerBlocks, type EnemyState, type World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -123,9 +123,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
 
     case 'impact': {
       if (dist <= def.attackRange * attack.impactRangeMul && p.iframeTicks <= 0) {
-        p.health -= def.damage;
+        // 방어(정면) — 칩 데미지만 관통. 피해가 있으므로 연쇄는 여전히 리셋된다
+        const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
+        const damage = blocked ? def.damage * balance.block.chipDamageRatio : def.damage;
+        p.health -= damage;
         if (enemy.parryStreak !== undefined) enemy.parryStreak = 0; // 연속 패링 끊김
-        world.events.emit('player_damaged', { amount: def.damage, health: p.health });
+        if (blocked) world.events.emit('block_hit', { amount: damage });
+        world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
         if (p.health <= 0) {
           p.health = 0;
           world.dead = true;

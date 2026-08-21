@@ -6,14 +6,19 @@ import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef } from '../core/SigilData';
-import type { World } from '../core/World';
+import { playerBlocks, type World } from '../core/World';
 
 let nextProjectileId = 1;
 
 export function tick(world: World, dt: number): void {
   if (world.spell.cooldown > 0) world.spell.cooldown--;
 
-  if (world.input.castPressed && world.player.stunTicks <= 0 && world.player.dodgeTicks <= 0) {
+  if (
+    world.input.castPressed &&
+    world.player.stunTicks <= 0 &&
+    world.player.dodgeTicks <= 0 &&
+    !world.player.blocking
+  ) {
     tryCast(world);
   }
 
@@ -139,8 +144,12 @@ function moveProjectiles(world: World, dt: number): void {
       if (hitPlayer) {
         const p = world.player;
         if (p.iframeTicks <= 0) {
-          p.health -= proj.damage;
-          world.events.emit('player_damaged', { amount: proj.damage, health: p.health });
+          // 방어(정면) — 투사체도 칩 데미지만 관통
+          const blocked = playerBlocks(world, proj.x, proj.z, balance.block.arcDeg);
+          const damage = blocked ? proj.damage * balance.block.chipDamageRatio : proj.damage;
+          p.health -= damage;
+          if (blocked) world.events.emit('block_hit', { amount: damage });
+          world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
           if (p.health <= 0) {
             p.health = 0;
             world.dead = true;

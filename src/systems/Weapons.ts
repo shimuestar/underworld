@@ -15,8 +15,8 @@ export function tick(world: World, _dt: number): void {
   if (w.muzzleFlash > 0) w.muzzleFlash--;
   if (w.cooldown > 0) w.cooldown--;
 
-  // 경직/회피 대시 중에는 사격·장전 불가
-  if (world.player.stunTicks > 0 || world.player.dodgeTicks > 0) return;
+  // 경직/회피 대시/방어 중에는 사격·장전 불가
+  if (world.player.stunTicks > 0 || world.player.dodgeTicks > 0 || world.player.blocking) return;
 
   if (w.reloading > 0) {
     w.reloading--;

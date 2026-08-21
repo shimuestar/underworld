@@ -31,6 +31,7 @@ export function tick(world: World, dt: number): void {
   wx /= len;
   wz /= len;
 
-  const speed = input.sprint ? balance.player.sprintSpeed : balance.player.moveSpeed;
+  let speed = input.sprint ? balance.player.sprintSpeed : balance.player.moveSpeed;
+  if (p.blocking) speed *= balance.block.speedMul; // 방어 중 감속 페널티
   world.level.slideMove(p, balance.player.radius, wx * speed * dt, wz * speed * dt);
 }

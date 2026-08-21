@@ -250,7 +250,7 @@ export class Stage {
     if (visual) visual.barrierFlashUntil = performance.now() + 160;
   }
 
-  updateHands(state: { reloading: boolean; stunned: boolean }): void {
+  updateHands(state: { reloading: boolean; stunned: boolean; blocking?: boolean }): void {
     this.hands.update(state);
   }
 

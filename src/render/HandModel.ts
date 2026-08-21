@@ -48,6 +48,7 @@ export class HandModel {
   private recoilUntil = 0;
   private parryUntil = 0;
   private parryGlow = 0x000000;
+  private blockBlend = 0;
   private readonly skinMaterials: THREE.MeshLambertMaterial[] = [];
   private corruptionStage = -1;
 
@@ -114,7 +115,7 @@ export class HandModel {
   }
 
   /** 매 프레임 호출. 상태 기반 포즈 + 이벤트 기반 킥을 합성한다 */
-  update(state: { reloading: boolean; stunned: boolean }): void {
+  update(state: { reloading: boolean; stunned: boolean; blocking?: boolean }): void {
     const now = performance.now();
 
     // 오른팔 목표 포즈
@@ -140,7 +141,8 @@ export class HandModel {
     this.rightArm.position.z = REST_RIGHT.pos.z + kickZ;
     this.rightArm.rotation.x += (targetRotX - this.rightArm.rotation.x) * 0.35;
 
-    // 왼팔 패링 스윙 — 빠르게 올려 가로로 막고(28%), 잠깐 유지(27%), 천천히 내린다
+    // 왼팔 패링 스윙 — 빠르게 올려 가로로 막고(28%), 잠깐 유지(27%), 천천히 내린다.
+    // 방어 홀드(C) 중에는 가드 자세를 유지한다
     let swing = 0;
     if (now < this.parryUntil) {
       const t = 1 - (this.parryUntil - now) / PARRY_SWING_MS;
@@ -148,6 +150,8 @@ export class HandModel {
       else if (t < 0.55) swing = 1;
       else swing = 1 - easeInCubic((t - 0.55) / 0.45);
     }
+    this.blockBlend += ((state.blocking ? 1 : 0) - this.blockBlend) * 0.3;
+    swing = Math.max(swing, this.blockBlend);
     this.leftArm.position.lerpVectors(REST_LEFT.pos, GUARD_LEFT.pos, swing);
     this.leftArm.rotation.x = REST_LEFT.rotX + (GUARD_LEFT.rotX - REST_LEFT.rotX) * swing;
     this.leftArm.rotation.y = REST_LEFT.rotY + (GUARD_LEFT.rotY - REST_LEFT.rotY) * swing;

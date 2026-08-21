@@ -24,6 +24,8 @@ export interface InputSnapshot {
   castPressed: boolean;
   /** 이번 틱에 상호작용 키(E)가 눌렸는가 (엣지) */
   interactPressed: boolean;
+  /** 방어 키(C)를 누르고 있는가 (홀드) */
+  blockHeld: boolean;
 }
 
 export class Input {
@@ -89,6 +91,7 @@ export class Input {
       reactionPressed: this.reactionClicks > 0,
       castPressed: this.casts > 0,
       interactPressed: this.interacts > 0,
+      blockHeld: this.keys.has('KeyC'),
     };
     this.dx = 0;
     this.dy = 0;
@@ -116,6 +119,7 @@ export class Input {
       reactionPressed: false,
       castPressed: false,
       interactPressed: false,
+      blockHeld: false,
     };
   }
 }
