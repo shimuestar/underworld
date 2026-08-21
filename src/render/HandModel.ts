@@ -12,7 +12,14 @@ const GRIP = 0x2b2320;
 const BRACER = 0x555c66;
 
 const RECOIL_MS = 130;
-const PARRY_SWING_MS = 200;
+const PARRY_SWING_MS = 340;
+
+function easeOutCubic(x: number): number {
+  return 1 - Math.pow(1 - x, 3);
+}
+function easeInCubic(x: number): number {
+  return x * x * x;
+}
 
 // 패링 결과별 브레이서 발광색 — 텔레그래프 3색 규약과 겹치는 청색은 '패링 가능'의
 // 연장선이라 의도적으로 공유한다
@@ -78,7 +85,7 @@ export class HandModel {
     this.leftArm.add(bracer);
 
     this.leftArm.position.copy(REST_LEFT.pos);
-    this.leftArm.rotation.set(0, 0, REST_LEFT.rotZ);
+    this.leftArm.rotation.set(REST_LEFT.rotX, REST_LEFT.rotY, REST_LEFT.rotZ);
     this.group.add(this.leftArm);
   }
 
@@ -118,15 +125,18 @@ export class HandModel {
     this.rightArm.position.z = REST_RIGHT.pos.z + kickZ;
     this.rightArm.rotation.x += (targetRotX - this.rightArm.rotation.x) * 0.35;
 
-    // 왼팔 패링 스윙 — sin 곡선으로 올라왔다 내려간다
+    // 왼팔 패링 스윙 — 빠르게 올려 가로로 막고(28%), 잠깐 유지(27%), 천천히 내린다
     let swing = 0;
     if (now < this.parryUntil) {
-      const phase = 1 - (this.parryUntil - now) / PARRY_SWING_MS;
-      swing = Math.sin(phase * Math.PI);
+      const t = 1 - (this.parryUntil - now) / PARRY_SWING_MS;
+      if (t < 0.28) swing = easeOutCubic(t / 0.28);
+      else if (t < 0.55) swing = 1;
+      else swing = 1 - easeInCubic((t - 0.55) / 0.45);
     }
     this.leftArm.position.lerpVectors(REST_LEFT.pos, GUARD_LEFT.pos, swing);
+    this.leftArm.rotation.x = REST_LEFT.rotX + (GUARD_LEFT.rotX - REST_LEFT.rotX) * swing;
+    this.leftArm.rotation.y = REST_LEFT.rotY + (GUARD_LEFT.rotY - REST_LEFT.rotY) * swing;
     this.leftArm.rotation.z = REST_LEFT.rotZ + (GUARD_LEFT.rotZ - REST_LEFT.rotZ) * swing;
-    this.leftArm.rotation.x = GUARD_LEFT.rotX * swing;
     if (swing > 0) {
       this.bracerMaterial.emissive.set(this.parryGlow);
       this.bracerMaterial.emissiveIntensity = swing;
@@ -138,5 +148,6 @@ export class HandModel {
 
 // 포즈 정의 (카메라 로컬 좌표)
 const REST_RIGHT = { pos: new THREE.Vector3(0.16, -0.14, -0.5), rotX: 0.06 };
-const REST_LEFT = { pos: new THREE.Vector3(-0.34, -0.5, -0.55), rotZ: 0.5 };
-const GUARD_LEFT = { pos: new THREE.Vector3(-0.03, -0.07, -0.5), rotZ: 1.3, rotX: 0.25 };
+// 대기: 화면 왼쪽 아래 밖. 가드: 팔뚝이 화면을 가로로 가로막는다 (rotY로 눕힘, 주먹이 오른쪽)
+const REST_LEFT = { pos: new THREE.Vector3(-0.42, -0.58, -0.5), rotX: 0.35, rotY: -0.15, rotZ: 0.45 };
+const GUARD_LEFT = { pos: new THREE.Vector3(0.02, -0.09, -0.44), rotX: 0.12, rotY: -1.3, rotZ: -0.3 };
