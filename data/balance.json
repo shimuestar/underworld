@@ -72,6 +72,13 @@
   },
 
   "weapons": {
+    "hammer": {
+      "damage": 55,
+      "range": 2.6,
+      "arcDeg": 100,
+      "cooldownTicks": 42,
+      "noiseRadius": 5.0
+    },
     "pistol": {
       "ammoMax": 60,
       "damage": 34,
@@ -99,10 +106,17 @@
     },
     "grenade": {
       "ammoMax": 4,
+      "startCount": 3,
       "damage": 120,
       "radius": 5.0,
       "fuseTicks": 100,
-      "breaksCrackWall": true
+      "breaksCrackWall": true,
+      "throwSpeed": 16.0,
+      "throwUpBias": 4.5,
+      "gravity": 22.0,
+      "damageFalloffMin": 0.25,
+      "cooldownTicks": 45,
+      "noiseRadius": 20.0
     },
     "flashbang": {
       "ammoMax": 3,

@@ -71,6 +71,47 @@
       #altar-prompt.visible {
         display: block;
       }
+      /* 하단 중앙 상태 표시 — HP + 무기 슬롯 */
+      #status {
+        position: fixed;
+        bottom: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 340px;
+        pointer-events: none;
+        user-select: none;
+        font: 13px/1.5 monospace;
+        text-align: center;
+      }
+      #status-hp {
+        height: 14px;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid #444;
+        margin-bottom: 6px;
+      }
+      #status-hp-fill {
+        height: 100%;
+        width: 100%;
+        background: #3fae5a;
+        transition: width 120ms linear;
+      }
+      #status-weapons {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+      }
+      .weapon-slot {
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid #3a3a44;
+        color: #8a8f9a;
+        padding: 3px 10px;
+        white-space: pre;
+      }
+      .weapon-slot.active {
+        border-color: #9fe870;
+        color: #cfe8b0;
+        background: rgba(30, 45, 20, 0.65);
+      }
       /* 피격 — 붉은 비네트 */
       #hurt {
         position: fixed;
@@ -105,6 +146,14 @@
       <div id="death-hint" style="font-size: 14px">Enter 키로 재시작</div>
     </div>
     <div id="altar-prompt"></div>
+    <div id="status">
+      <div id="status-hp"><div id="status-hp-fill"></div></div>
+      <div id="status-weapons">
+        <span class="weapon-slot" id="slot-hammer">1 해머</span>
+        <span class="weapon-slot" id="slot-grenade">2 수류탄</span>
+        <span class="weapon-slot active" id="slot-pistol">3 권총</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

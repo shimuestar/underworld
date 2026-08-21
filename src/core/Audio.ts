@@ -32,7 +32,12 @@ export type SoundName =
   | 'bow_twang'
   | 'headshot'
   | 'player_hurt'
-  | 'block_hit';
+  | 'block_hit'
+  | 'weapon_switch'
+  | 'hammer_swing'
+  | 'melee_hit'
+  | 'grenade_throw'
+  | 'explosion';
 
 const MASTER_GAIN = 0.25;
 
@@ -188,6 +193,29 @@ export class GameAudio {
         this.tone(110, 1.2, 'sine', 0.7);
         this.tone(165, 1.0, 'sine', 0.45, 0.1);
         this.tone(220, 0.8, 'sine', 0.3, 0.25);
+        break;
+      case 'weapon_switch':
+        this.tone(700, 0.04, 'square', 0.4);
+        this.tone(500, 0.05, 'square', 0.35, 0.05);
+        break;
+      case 'hammer_swing':
+        // 무거운 휘두름 바람
+        this.noise(0.18, 0.6, 600);
+        this.tone(120, 0.15, 'sine', 0.5, 0.05, 60);
+        break;
+      case 'melee_hit':
+        // 해머 적중 — 묵직한 충격
+        this.tone(80, 0.2, 'sine', 1.2, 0, 40);
+        this.noise(0.1, 0.9, 1000);
+        break;
+      case 'grenade_throw':
+        this.noise(0.12, 0.35, 1200);
+        break;
+      case 'explosion':
+        // 폭발 — 깊은 붐 + 파열
+        this.tone(60, 0.7, 'sine', 1.6, 0, 28);
+        this.noise(0.5, 1.3, 900);
+        this.noise(0.9, 0.5, 300, 0.1);
         break;
       case 'block_hit':
         // 브레이서 방어 — 묵직한 금속 튕김 (피격음보다 단단한 느낌)

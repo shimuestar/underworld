@@ -235,6 +235,18 @@ export class Stage {
     this.hands.triggerRecoil();
   }
 
+  setHandWeapon(kind: 'hammer' | 'grenade' | 'pistol'): void {
+    this.hands.setWeapon(kind);
+  }
+
+  triggerHammerSwing(): void {
+    this.hands.triggerHammerSwing();
+  }
+
+  triggerGrenadeThrow(): void {
+    this.hands.triggerGrenadeThrow();
+  }
+
   triggerParry(result: string): void {
     this.hands.triggerParry(result);
   }
@@ -290,11 +302,69 @@ export class Stage {
 
   /** 문 개방 — 해당 문 메시 제거 */
   openDoor(row: number, col: number): void {
-    const door = this.scene.getObjectByName(`door-${row}-${col}`);
-    if (door instanceof THREE.Mesh) {
-      door.parent?.remove(door);
-      door.geometry.dispose();
-      (door.material as THREE.Material).dispose();
+    this.removeNamedCell(`door-${row}-${col}`);
+  }
+
+  /** 균열 벽 파괴 */
+  breakCrack(row: number, col: number): void {
+    this.removeNamedCell(`crack-${row}-${col}`);
+  }
+
+  private removeNamedCell(name: string): void {
+    const mesh = this.scene.getObjectByName(name);
+    if (mesh instanceof THREE.Mesh) {
+      mesh.parent?.remove(mesh);
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
+  }
+
+  /** 수류탄 폭발 — 섬광 + 팽창 구 + 파편 */
+  spawnExplosion(x: number, y: number, z: number, radius: number): void {
+    const now = performance.now();
+    const flash = new THREE.PointLight(0xffb040, 6, radius * 3, 0);
+    flash.position.set(x, Math.max(0.5, y), z);
+    this.scene.add(flash);
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 12, 10),
+      new THREE.MeshBasicMaterial({
+        color: 0xff8830,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+      }),
+    );
+    shell.position.copy(flash.position);
+    this.scene.add(shell);
+    this.explosions.push({ light: flash, shell, bornMs: now, radius });
+    // 파편 재활용 — 폭심에서 사방으로
+    this.spawnDeathBurst(x, z, 'goblin_chieftain');
+  }
+
+  private readonly explosions: {
+    light: THREE.PointLight;
+    shell: THREE.Mesh;
+    bornMs: number;
+    radius: number;
+  }[] = [];
+
+  private updateExplosions(): void {
+    const now = performance.now();
+    for (let i = this.explosions.length - 1; i >= 0; i--) {
+      const ex = this.explosions[i]!;
+      const age = (now - ex.bornMs) / 380;
+      if (age >= 1) {
+        this.scene.remove(ex.light);
+        this.scene.remove(ex.shell);
+        ex.shell.geometry.dispose();
+        (ex.shell.material as THREE.Material).dispose();
+        this.explosions.splice(i, 1);
+        continue;
+      }
+      const s = 0.4 + age * ex.radius;
+      ex.shell.scale.set(s, s, s);
+      (ex.shell.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - age);
+      ex.light.intensity = 6 * (1 - age);
     }
   }
 
@@ -710,7 +780,15 @@ export class Stage {
       let group = this.projectileVisuals.get(proj.id);
       if (!group) {
         group = new THREE.Group();
-        if (proj.kind === 'rock') {
+        if (proj.kind === 'grenade') {
+          // 수류탄 — 작은 암록색 구
+          group.add(
+            new THREE.Mesh(
+              new THREE.SphereGeometry(proj.radius, 8, 8),
+              new THREE.MeshLambertMaterial({ color: 0x3d4a2e, emissive: 0x141a10 }),
+            ),
+          );
+        } else if (proj.kind === 'rock') {
           // 바위 — 크고 어두운 덩어리, 무발광
           group.add(
             new THREE.Mesh(
@@ -872,6 +950,7 @@ export class Stage {
   render(): void {
     this.updateTracers();
     this.updateParticles();
+    this.updateExplosions();
     this.renderer.render(this.scene, this.camera);
   }
 }

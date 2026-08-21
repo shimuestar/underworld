@@ -78,9 +78,12 @@ function moveProjectiles(world: World, dt: number): void {
 
     proj.lifeTicks--;
     if (proj.lifeTicks <= 0) {
+      if (proj.kind === 'grenade') explodeGrenade(world, proj); // 신관 만료
       world.projectiles.splice(i, 1);
       continue;
     }
+
+    if (proj.kind === 'grenade') proj.vy -= balance.weapons.grenade.gravity * dt; // 포물선
 
     const stepX = proj.vx * dt;
     const stepY = proj.vy * dt;
@@ -133,6 +136,15 @@ function moveProjectiles(world: World, dt: number): void {
     }
 
     if (hitT <= stepLen) {
+      // 수류탄 — 무엇에 닿든 그 자리에서 폭발
+      if (proj.kind === 'grenade') {
+        proj.x += dirX * hitT;
+        proj.y += dirY * hitT;
+        proj.z += dirZ * hitT;
+        explodeGrenade(world, proj);
+        world.projectiles.splice(i, 1);
+        continue;
+      }
       // 착탄
       world.events.emit('spell_impact', {
         x: proj.x + dirX * hitT,
@@ -195,6 +207,80 @@ function applyProjectileHit(
     // 마법 처치도 마나 0 — 마나는 패링/처형 경로로만 (combat.md §5)
     world.events.emit('spell_kill', { enemyType: enemy.type });
     world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+  }
+}
+
+/** 수류탄 폭발 — 반경 내 전원(플레이어 포함) 거리 감쇠 피해 + 균열 벽 파괴 */
+function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]): void {
+  const grenade = balance.weapons.grenade;
+  world.events.emit('explosion', { x: proj.x, y: proj.y, z: proj.z, radius: grenade.radius });
+
+  const damageAt = (dist: number): number =>
+    grenade.damage *
+    (1 - (1 - grenade.damageFalloffMin) * Math.min(1, dist / grenade.radius));
+
+  for (const enemy of world.enemies) {
+    if (!enemy.alive) continue;
+    const dist = Math.hypot(enemy.x - proj.x, enemy.z - proj.z);
+    if (dist > grenade.radius) continue;
+    const damage = damageAt(dist);
+    if (enemy.ai === 'idle') enemy.ai = 'chase';
+    // 폭발은 물리 피해 — 보스 장갑은 깎고, 방어막은 무시한다
+    if (enemy.phase === 'armored' && (enemy.armorHealth ?? 0) > 0) {
+      enemy.armorHealth = Math.max(0, (enemy.armorHealth ?? 0) - damage);
+      if (enemy.armorHealth <= 0) {
+        enemy.phase = 'melee';
+        world.events.emit('boss_phase', { enemyId: enemy.id, phase: 'melee' });
+      }
+      continue;
+    }
+    enemy.health -= damage;
+    if (enemy.health <= 0) {
+      enemy.alive = false;
+      world.events.emit('weapon_kill', { weapon: 'grenade', enemyType: enemy.type });
+      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    }
+  }
+
+  // 자가 피해 — 가까이서 던지면 나도 다친다
+  const p = world.player;
+  const playerDist = Math.hypot(p.x - proj.x, p.z - proj.z);
+  if (playerDist <= grenade.radius && p.iframeTicks <= 0) {
+    const damage = damageAt(playerDist);
+    p.health -= damage;
+    world.events.emit('player_damaged', { amount: damage, health: p.health });
+    if (p.health <= 0) {
+      p.health = 0;
+      world.dead = true;
+      world.events.emit('player_died', { tick: world.tick });
+    }
+  }
+
+  // 균열 벽(C) 파괴
+  if (grenade.breaksCrackWall) {
+    const level = world.level;
+    const cs = level.cellSize;
+    const cellRadius = Math.ceil(grenade.radius / cs);
+    const centerCol = Math.floor(proj.x / cs);
+    const centerRow = Math.floor(proj.z / cs);
+    for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
+      for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
+        if (level.charAt(col, row) !== 'C') continue;
+        const cx = (col + 0.5) * cs;
+        const cz = (row + 0.5) * cs;
+        if (Math.hypot(cx - proj.x, cz - proj.z) > grenade.radius + cs * 0.5) continue;
+        level.openCell(col, row);
+        world.events.emit('crack_wall_broken', { row, col });
+      }
+    }
+  }
+
+  // 소음 — 폭발음은 멀리 퍼진다
+  for (const enemy of world.enemies) {
+    if (!enemy.alive || enemy.ai !== 'idle') continue;
+    if (Math.hypot(enemy.x - proj.x, enemy.z - proj.z) > grenade.noiseRadius) continue;
+    enemy.ai = 'chase';
+    world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, noise: true });
   }
 }
 

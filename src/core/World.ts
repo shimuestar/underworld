@@ -96,7 +96,7 @@ export interface ProjectileState {
   /** 반응 버튼으로 반사 가능한가 (마법탄 true, 화살 false) */
   deflectable?: boolean;
   /** 렌더 형태 */
-  kind?: 'fireball' | 'magic' | 'arrow' | 'rock';
+  kind?: 'fireball' | 'magic' | 'arrow' | 'rock' | 'grenade';
 }
 
 export interface SpellState {
@@ -126,7 +126,11 @@ export interface LanternState {
   spares: number;
 }
 
+export type WeaponKind = 'hammer' | 'grenade' | 'pistol';
+
 export interface WeaponState {
+  /** 선택된 무기 (1=hammer, 2=grenade, 3=pistol) */
+  active: WeaponKind;
   /** 탄창 잔탄 */
   mag: number;
   /** 예비 탄약 (상한 balance.weapons.*.ammoMax) */
@@ -137,6 +141,10 @@ export interface WeaponState {
   reloading: number;
   /** 총구 화염 잔여 틱 (렌더가 읽는다) */
   muzzleFlash: number;
+  /** 수류탄 소지 수 (소모성) */
+  grenades: number;
+  /** 해머/수류탄 공용 스윙 쿨다운 */
+  meleeCooldown: number;
 }
 
 // 근접 적 공격 상태 머신 — docs/systems/combat.md §2.

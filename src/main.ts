@@ -68,11 +68,14 @@ const world = new World(events, {
     spares: balance.lantern.spareCells,
   },
   weapon: {
+    active: 'pistol',
     mag: balance.weapons.pistol.magSize,
     reserve: balance.weapons.pistol.ammoMax,
     cooldown: 0,
     reloading: 0,
     muzzleFlash: 0,
+    grenades: balance.weapons.grenade.startCount,
+    meleeCooldown: 0,
   },
   mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
   sigils: {
@@ -203,6 +206,12 @@ for (const name of [
   'melee_kill',
   'dodge_step',
   'shot_blocked',
+  'weapon_switched',
+  'hammer_swing',
+  'melee_hit',
+  'grenade_thrown',
+  'explosion',
+  'crack_wall_broken',
   'mana_gained',
   'mana_lost',
   'combat_entered',
@@ -267,6 +276,33 @@ events.on('headshot', () => {
 });
 
 events.on('block_hit', () => audio.play('block_hit'));
+
+// ---- 무기 3종 (1 해머 / 2 수류탄 / 3 권총) ----
+events.on('weapon_switched', (payload) => {
+  const kind = (payload as { weapon: 'hammer' | 'grenade' | 'pistol' }).weapon;
+  audio.play('weapon_switch');
+  stage.setHandWeapon(kind);
+});
+events.on('hammer_swing', () => {
+  audio.play('hammer_swing');
+  stage.triggerHammerSwing();
+});
+events.on('melee_hit', () => audio.play('melee_hit'));
+events.on('grenade_thrown', () => {
+  audio.play('grenade_throw');
+  stage.triggerGrenadeThrow();
+});
+events.on('explosion', (payload) => {
+  const info = payload as { x: number; y: number; z: number; radius: number };
+  audio.play('explosion');
+  stage.spawnExplosion(info.x, info.y, info.z, info.radius);
+});
+events.on('crack_wall_broken', (payload) => {
+  const cell = payload as { row: number; col: number };
+  stage.breakCrack(cell.row, cell.col);
+  minimap.rebuildBase();
+  showReaction('균열 벽이 무너져 내렸다!', 3000);
+});
 
 // ---- 피격 연출 — 붉은 비네트 + 피격음 (방어 성공 시엔 방어음만) ----
 events.on('player_damaged', (payload) => {
@@ -355,6 +391,8 @@ function respawnAtAltar(): void {
   world.weapon.cooldown = 0;
   world.weapon.reloading = 0;
   world.weapon.muzzleFlash = 0;
+  world.weapon.grenades = balance.weapons.grenade.ammoMax; // 보급 상한
+  world.weapon.meleeCooldown = 0;
   world.mana.value = 0;
   world.mana.chainIndex = 0;
   world.mana.outOfCombatTicks = 0;
@@ -546,6 +584,22 @@ function render(alpha: number): void {
   stage.setCorruptionStage(Math.floor(world.corruption.applied / 12.5));
   minimap.update(p, world.enemies, alpha);
 
+  // 하단 중앙 상태 표시 — HP 바 + 무기 슬롯
+  const wpn = world.weapon;
+  const hpFrac = Math.max(0, p.health) / balance.player.healthMax;
+  const hpFill = document.getElementById('status-hp-fill')!;
+  hpFill.style.width = `${hpFrac * 100}%`;
+  hpFill.style.background = hpFrac > 0.5 ? '#3fae5a' : hpFrac > 0.25 ? '#c9a227' : '#e04444';
+  document.getElementById('slot-hammer')!.className =
+    `weapon-slot${wpn.active === 'hammer' ? ' active' : ''}`;
+  document.getElementById('slot-grenade')!.className =
+    `weapon-slot${wpn.active === 'grenade' ? ' active' : ''}`;
+  document.getElementById('slot-pistol')!.className =
+    `weapon-slot${wpn.active === 'pistol' ? ' active' : ''}`;
+  document.getElementById('slot-grenade')!.textContent = `2 수류탄 ×${wpn.grenades}`;
+  document.getElementById('slot-pistol')!.textContent =
+    `3 권총 ${wpn.mag}/${wpn.reserve}${wpn.reloading > 0 ? ' …' : ''}`;
+
   // 디버그 오버레이 (F1) — 0.5초마다 갱신
   if (debugOverlay.visible && now - debugOverlayLastUpdate > 500) {
     debugOverlayLastUpdate = now;
@@ -607,7 +661,7 @@ function render(alpha: number): void {
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
-    'WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)  C 방어(홀드)\n' +
+    'WASD 이동  Shift 질주  좌클릭 공격  우클릭 반응(패링/회피)  C 방어  1/2/3 무기\n' +
     'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O 테스트';
 
   stage.render();

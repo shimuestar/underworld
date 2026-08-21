@@ -214,17 +214,18 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
     for (let col = 0; col < level.cols; col++) {
       const ch = level.charAt(col, row);
       if (!SOLID_CHARS.has(ch)) continue;
-      if (ch === 'D') {
-        const door = new THREE.Mesh(
+      if (ch === 'D' || ch === 'C') {
+        // 문·균열 벽은 열리거나 파괴될 수 있으므로 개별 메시
+        const mesh = new THREE.Mesh(
           new THREE.BoxGeometry(cs, level.ceiling, cs),
-          new THREE.MeshLambertMaterial({ color: COLOR_DOOR }),
+          new THREE.MeshLambertMaterial({ color: ch === 'D' ? COLOR_DOOR : COLOR_CRACK }),
         );
-        door.position.set((col + 0.5) * cs, level.ceiling / 2, (row + 0.5) * cs);
-        door.name = `door-${row}-${col}`;
-        group.add(door);
+        mesh.position.set((col + 0.5) * cs, level.ceiling / 2, (row + 0.5) * cs);
+        mesh.name = `${ch === 'D' ? 'door' : 'crack'}-${row}-${col}`;
+        group.add(mesh);
         continue;
       }
-      const color = ch === 'C' ? COLOR_CRACK : COLOR_WALL;
+      const color = COLOR_WALL;
       const box = new THREE.BoxGeometry(cs, level.ceiling, cs);
       box.translate((col + 0.5) * cs, level.ceiling / 2, (row + 0.5) * cs);
       let list = byColor.get(color);

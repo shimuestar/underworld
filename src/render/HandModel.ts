@@ -49,6 +49,11 @@ export class HandModel {
   private parryUntil = 0;
   private parryGlow = 0x000000;
   private blockBlend = 0;
+  private readonly gunParts: THREE.Mesh[] = [];
+  private readonly hammerParts: THREE.Mesh[] = [];
+  private readonly grenadeParts: THREE.Mesh[] = [];
+  private swingUntil = 0;
+  private throwUntil = 0;
   private readonly skinMaterials: THREE.MeshLambertMaterial[] = [];
   private corruptionStage = -1;
 
@@ -66,12 +71,34 @@ export class HandModel {
 
     const slide = box(0.03, 0.038, 0.17, GUN_DARK);
     slide.position.set(0, 0.035, -0.07);
+    this.gunParts.push(slide);
     this.rightArm.add(slide);
 
     const grip = box(0.026, 0.07, 0.038, GRIP);
     grip.position.set(0, -0.022, -0.005);
     grip.rotation.x = -0.25;
+    this.gunParts.push(grip);
     this.rightArm.add(grip);
+
+    // 해머 (슬롯 1)
+    const hammerShaft = box(0.035, 0.035, 0.5, 0x5c4a33);
+    hammerShaft.position.set(0, 0.03, -0.2);
+    const hammerHead = box(0.15, 0.1, 0.2, 0x7a7d84);
+    hammerHead.position.set(0, 0.03, -0.46);
+    this.hammerParts.push(hammerShaft, hammerHead);
+    this.rightArm.add(hammerShaft);
+    this.rightArm.add(hammerHead);
+
+    // 수류탄 (슬롯 2)
+    const grenadeBall = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 8, 8),
+      new THREE.MeshLambertMaterial({ color: 0x3d4a2e }),
+    );
+    grenadeBall.position.set(0, 0.02, -0.06);
+    this.grenadeParts.push(grenadeBall);
+    this.rightArm.add(grenadeBall);
+
+    this.setWeapon('pistol');
 
     this.rightArm.position.copy(REST_RIGHT.pos);
     this.rightArm.rotation.set(REST_RIGHT.rotX, 0, 0);
@@ -99,6 +126,21 @@ export class HandModel {
 
   triggerRecoil(): void {
     this.recoilUntil = performance.now() + RECOIL_MS;
+  }
+
+  /** 무기 전환 — 오른손에 들린 모델 교체 */
+  setWeapon(kind: 'hammer' | 'grenade' | 'pistol'): void {
+    for (const mesh of this.gunParts) mesh.visible = kind === 'pistol';
+    for (const mesh of this.hammerParts) mesh.visible = kind === 'hammer';
+    for (const mesh of this.grenadeParts) mesh.visible = kind === 'grenade';
+  }
+
+  triggerHammerSwing(): void {
+    this.swingUntil = performance.now() + 300;
+  }
+
+  triggerGrenadeThrow(): void {
+    this.throwUntil = performance.now() + 240;
   }
 
   triggerParry(result: string): void {
@@ -135,6 +177,19 @@ export class HandModel {
       const k = (this.recoilUntil - now) / RECOIL_MS;
       kickZ = 0.055 * k;
       targetRotX += 0.3 * k;
+    }
+
+    // 해머 스윙 — 치켜들었다(45%) 내리찍기(55%)
+    if (now < this.swingUntil) {
+      const t = 1 - (this.swingUntil - now) / 300;
+      targetRotX +=
+        t < 0.45 ? -1.4 * easeOutCubic(t / 0.45) : -1.4 + 2.4 * easeInCubic((t - 0.45) / 0.55);
+    }
+    // 수류탄 투척 — 앞으로 밀기
+    if (now < this.throwUntil) {
+      const t = 1 - (this.throwUntil - now) / 240;
+      kickZ -= 0.2 * Math.sin(t * Math.PI);
+      targetRotX -= 0.5 * Math.sin(t * Math.PI);
     }
 
     this.rightArm.position.y += (targetY - this.rightArm.position.y) * 0.25;

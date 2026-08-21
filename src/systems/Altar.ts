@@ -85,6 +85,7 @@ export function enter(world: World, altar: { x: number; z: number }): void {
   world.weapon.reserve = Math.round(pistol.ammoMax * mul);
   world.weapon.mag = pistol.magSize;
   world.weapon.reloading = 0;
+  world.weapon.grenades = Math.round(balance.weapons.grenade.ammoMax * mul);
 
   // 세이브/리스폰 지점 등록
   world.respawn = { x: altar.x, z: altar.z };

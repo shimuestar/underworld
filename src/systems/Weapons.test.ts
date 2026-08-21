@@ -9,6 +9,7 @@ import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
+import * as Projectiles from './Projectiles';
 import * as Sigils from './Sigils';
 import * as Weapons from './Weapons';
 
@@ -34,7 +35,7 @@ function makeWorld(): World {
       iframeTicks: 0, reactionBufferTicks: 0, blocking: false,
     },
     lantern: { on: true, battery: 100, spares: 0 },
-    weapon: { mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0 },
+    weapon: { active: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0 },
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
@@ -69,6 +70,86 @@ function fireAt(dist: number, targetY: number): void {
   Weapons.tick(world, DT);
   world.input = Input.emptySnapshot();
 }
+
+describe('해머 (슬롯 1)', () => {
+  function swing(): void {
+    world.weapon.active = 'hammer';
+    world.weapon.meleeCooldown = 0;
+    world.input = { ...Input.emptySnapshot(), firePressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+  }
+
+  it('전방 부채꼴 적중 — 처치 시 melee_kill(비처형) → 마나 지급 경로', () => {
+    const hammer = balance.weapons.hammer;
+    const enemy = spawnEnemyAt('goblin_runner', 6 + hammer.range - 0.2, 6, 1);
+    world.enemies.push(enemy);
+    const kills: unknown[] = [];
+    world.events.on('melee_kill', (payload) => kills.push(payload));
+
+    swing();
+    expect(enemy.alive).toBe(false); // 55 > 30
+    expect(kills[0]).toMatchObject({ enemyType: 'goblin_runner', execution: false });
+  });
+
+  it('후방·사거리 밖은 맞지 않는다', () => {
+    const behind = spawnEnemyAt('goblin_runner', 4, 6, 1); // 등 뒤 (+X를 보는 중)
+    const far = spawnEnemyAt('goblin_runner', 6 + 5, 6, 2); // 사거리 밖
+    world.enemies.push(behind, far);
+    swing();
+    expect(behind.alive).toBe(true);
+    expect(far.alive).toBe(true);
+  });
+
+  it('warden 방어막은 근접 무효 — barrier_blocked', () => {
+    const warden = spawnEnemyAt('warden', 6 + 2, 6, 1);
+    world.enemies.push(warden);
+    const blocked: unknown[] = [];
+    world.events.on('barrier_blocked', (payload) => blocked.push(payload));
+    swing();
+    expect(warden.health).toBe(90);
+    expect(blocked[0]).toMatchObject({ kind: 'melee' });
+  });
+});
+
+describe('수류탄 (슬롯 2)', () => {
+  function throwGrenade(): void {
+    world.weapon.active = 'grenade';
+    world.weapon.meleeCooldown = 0;
+    world.input = { ...Input.emptySnapshot(), firePressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+  }
+
+  it('소모성 — 던지면 개수가 줄고, 0이면 불발', () => {
+    throwGrenade();
+    expect(world.weapon.grenades).toBe(2);
+    expect(world.projectiles.some((p) => p.kind === 'grenade')).toBe(true);
+
+    world.weapon.grenades = 0;
+    const empty: unknown[] = [];
+    world.events.on('weapon_empty', () => empty.push(1));
+    throwGrenade();
+    expect(empty).toHaveLength(1);
+  });
+
+  it('폭발 — 반경 내 적 피해(거리 감쇠), 신관 만료 시에도 폭발', () => {
+    const grenade = balance.weapons.grenade;
+    const near = spawnEnemyAt('goblin_runner', 6 + 10, 6, 1);
+    near.health = 1000;
+    world.enemies.push(near);
+
+    world.player.pitch = 0.3; // 위로 던져 포물선
+    throwGrenade();
+    const explosions: unknown[] = [];
+    world.events.on('explosion', (payload) => explosions.push(payload));
+    for (let i = 0; i <= grenade.fuseTicks && world.projectiles.length > 0; i++) {
+      Projectiles.tick(world, DT);
+    }
+    expect(explosions).toHaveLength(1);
+    expect(near.health).toBeLessThan(1000); // 반경 내 피해
+  });
+});
 
 describe('부위 판정 (근거리, 감쇠 없음)', () => {
   it('머리(높이 ≥82%): ×1.5', () => {

@@ -8,14 +8,29 @@ import { enemyDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import type { World } from '../core/World';
 
+const WEAPON_SLOTS: Record<number, 'hammer' | 'grenade' | 'pistol'> = {
+  1: 'hammer',
+  2: 'grenade',
+  3: 'pistol',
+};
+
 export function tick(world: World, _dt: number): void {
   const w = world.weapon;
   const pistol = balance.weapons.pistol;
 
   if (w.muzzleFlash > 0) w.muzzleFlash--;
   if (w.cooldown > 0) w.cooldown--;
+  if (w.meleeCooldown > 0) w.meleeCooldown--;
 
-  // 경직/회피 대시/방어 중에는 사격·장전 불가
+  // 무기 전환 (1/2/3) — 장전은 취소된다
+  const select = WEAPON_SLOTS[world.input.weaponSelect];
+  if (select && select !== w.active) {
+    w.active = select;
+    w.reloading = 0;
+    world.events.emit('weapon_switched', { weapon: select });
+  }
+
+  // 경직/회피 대시/방어 중에는 공격·장전 불가
   if (world.player.stunTicks > 0 || world.player.dodgeTicks > 0 || world.player.blocking) return;
 
   if (w.reloading > 0) {
@@ -30,6 +45,17 @@ export function tick(world: World, _dt: number): void {
     return; // 장전 중에는 발사/재장전 입력 무시
   }
 
+  if (w.active === 'hammer') {
+    if (world.input.firePressed && w.meleeCooldown <= 0) swingHammer(world);
+    return;
+  }
+
+  if (w.active === 'grenade') {
+    if (world.input.firePressed && w.meleeCooldown <= 0) throwGrenade(world);
+    return;
+  }
+
+  // ---- 권총 ----
   if (world.input.reload && w.mag < pistol.magSize && w.reserve > 0) {
     startReload(world);
     return;
@@ -47,6 +73,90 @@ export function tick(world: World, _dt: number): void {
   if (w.cooldown > 0) return;
 
   fire(world);
+}
+
+/** 해머 — 전방 부채꼴 내리치기. 근접 처치는 마나를 준다 (총과의 결정적 차이) */
+function swingHammer(world: World): void {
+  const hammer = balance.weapons.hammer;
+  const p = world.player;
+  world.weapon.meleeCooldown = hammer.cooldownTicks;
+  world.events.emit('hammer_swing', {});
+  alertNearby(world, p.x, p.z, hammer.noiseRadius);
+
+  const facingX = -Math.sin(p.yaw);
+  const facingZ = -Math.cos(p.yaw);
+  const arcCos = Math.cos(((hammer.arcDeg / 2) * Math.PI) / 180);
+
+  for (const enemy of world.enemies) {
+    if (!enemy.alive) continue;
+    const def = enemyDef(enemy.type);
+    const toX = enemy.x - p.x;
+    const toZ = enemy.z - p.z;
+    const dist = Math.hypot(toX, toZ);
+    if (dist > hammer.range + def.radius || dist === 0) continue;
+    if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
+
+    // 상성 — warden 방어막은 근접 무효, 보스 장갑은 실탄 전용
+    if (enemyDef(enemy.type).magicBarrier?.blocksMelee && enemy.ai !== 'staggered') {
+      world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'melee' });
+      continue;
+    }
+    if (enemy.phase === 'armored' && (enemy.armorHealth ?? 0) > 0) {
+      world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'armor' });
+      continue;
+    }
+
+    enemy.health -= hammer.damage;
+    if (enemy.ai === 'idle') enemy.ai = 'chase';
+    world.events.emit('melee_hit', { enemyId: enemy.id, damage: hammer.damage });
+    if (enemy.health <= 0) {
+      enemy.alive = false;
+      // 근접 처치 — Mana가 melee_kill(비처형)을 구독해 마나를 지급한다
+      world.events.emit('melee_kill', {
+        enemyType: enemy.type,
+        execution: false,
+        x: enemy.x,
+        z: enemy.z,
+      });
+      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    }
+  }
+}
+
+/** 수류탄 — 포물선 투척. 폭발은 Projectiles가 처리 */
+function throwGrenade(world: World): void {
+  const w = world.weapon;
+  if (w.grenades <= 0) {
+    world.events.emit('weapon_empty');
+    return;
+  }
+  const grenade = balance.weapons.grenade;
+  const p = world.player;
+  w.grenades--;
+  w.meleeCooldown = grenade.cooldownTicks;
+
+  const cosPitch = Math.cos(p.pitch);
+  const dx = -Math.sin(p.yaw) * cosPitch;
+  const dy = Math.sin(p.pitch);
+  const dz = -Math.cos(p.yaw) * cosPitch;
+  const oy = p.y + balance.player.eyeHeight;
+
+  world.projectiles.push({
+    id: 200000 + world.tick, // 수류탄 id 대역
+    owner: 'player',
+    kind: 'grenade',
+    x: p.x, y: oy, z: p.z,
+    prevX: p.x, prevY: oy, prevZ: p.z,
+    vx: dx * grenade.throwSpeed,
+    vy: dy * grenade.throwSpeed + grenade.throwUpBias,
+    vz: dz * grenade.throwSpeed,
+    lifeTicks: grenade.fuseTicks,
+    damage: grenade.damage,
+    burnTicks: 0,
+    burnDamagePerTick: 0,
+    radius: 0.22,
+  });
+  world.events.emit('grenade_thrown', { remaining: w.grenades });
 }
 
 /** 소음 전파 — 반경 내 대기(idle) 적들이 추격을 시작한다 */

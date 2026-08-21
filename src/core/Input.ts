@@ -26,6 +26,8 @@ export interface InputSnapshot {
   interactPressed: boolean;
   /** 방어 키(C)를 누르고 있는가 (홀드) */
   blockHeld: boolean;
+  /** 이번 틱에 선택한 무기 슬롯 (0=없음, 1=해머, 2=수류탄, 3=권총) */
+  weaponSelect: number;
 }
 
 export class Input {
@@ -39,6 +41,7 @@ export class Input {
   private reactionClicks = 0;
   private casts = 0;
   private interacts = 0;
+  private weaponSelect = 0;
 
   constructor(private readonly lockTarget: HTMLElement) {
     lockTarget.addEventListener('click', () => {
@@ -53,6 +56,9 @@ export class Input {
       if (e.code === 'KeyR') this.reloads++;
       if (e.code === 'KeyQ') this.casts++;
       if (e.code === 'KeyE') this.interacts++;
+      if (e.code === 'Digit1') this.weaponSelect = 1;
+      if (e.code === 'Digit2') this.weaponSelect = 2;
+      if (e.code === 'Digit3') this.weaponSelect = 3;
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
@@ -92,6 +98,7 @@ export class Input {
       castPressed: this.casts > 0,
       interactPressed: this.interacts > 0,
       blockHeld: this.keys.has('KeyC'),
+      weaponSelect: this.weaponSelect,
     };
     this.dx = 0;
     this.dy = 0;
@@ -102,6 +109,7 @@ export class Input {
     this.reactionClicks = 0;
     this.casts = 0;
     this.interacts = 0;
+    this.weaponSelect = 0;
     return snapshot;
   }
 
@@ -120,6 +128,7 @@ export class Input {
       castPressed: false,
       interactPressed: false,
       blockHeld: false,
+      weaponSelect: 0,
     };
   }
 }
