@@ -11,6 +11,7 @@ export type SoundName =
   | 'shot_blocked'
   | 'dodge'
   | 'cast_fire'
+  | 'cast_fizzle'
   | 'spell_impact'
   | 'pickup';
 
@@ -64,6 +65,10 @@ export class GameAudio {
         // 화염 방출 — 저음 스윕 + 노이즈
         this.tone(320, 0.3, 'sawtooth', 0.5, 0, 140);
         this.noise(0.25, 0.5, 700);
+        break;
+      case 'cast_fizzle':
+        // 마나 부족 — 힘없는 하강음
+        this.tone(240, 0.18, 'triangle', 0.5, 0, 90);
         break;
       case 'spell_impact':
         this.noise(0.16, 0.7, 1000);

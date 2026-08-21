@@ -167,6 +167,16 @@ events.on('dodge_step', () => audio.play('dodge'));
 events.on('cast_spell', () => audio.play('cast_fire'));
 events.on('spell_impact', () => audio.play('spell_impact'));
 events.on('sigil_acquired', () => audio.play('pickup'));
+events.on('cast_failed', (payload) => {
+  audio.play('cast_fizzle');
+  const info = payload as { reason: string; cost?: number; current?: number };
+  showReaction(
+    info.reason === 'no_mana'
+      ? `마나 부족 — ${info.cost} 필요 (패링·처형으로 모아야 한다)`
+      : '오른팔에 각인이 없다 — Tab으로 부착',
+    2000,
+  );
+});
 
 // ---- 패링 화면 탈색 (mix-blend-mode 오버레이) ----
 function screenFlash(strength: number, durationMs: number): void {
@@ -256,6 +266,17 @@ function simulate(dt: number): void {
   tpsWindowTicks++;
 }
 
+function spellHudText(): string {
+  const id = world.sigils.equipped.rightArm;
+  if (!id) return '(오른팔 각인 없음)';
+  const def = sigilDef(id);
+  const cost = balance.spellCost[def.tier as keyof typeof balance.spellCost] ?? 0;
+  let suffix = '';
+  if (world.spell.cooldown > 0) suffix = ' [쿨]';
+  else if (world.mana.value < cost) suffix = ' [마나 부족]';
+  return `${def.name} ${cost}마나${suffix}`;
+}
+
 // HUD용 실측 TPS
 let tpsWindowStart = performance.now();
 let tpsWindowTicks = 0;
@@ -297,7 +318,7 @@ function render(alpha: number): void {
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
     `HP ${p.health}   9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}\n` +
     `mana ${manaBar} ${mana.value.toFixed(0)}/${balance.mana.max}  chain ×${chainMult}${!mana.inCombat && mana.outOfCombatTicks >= balance.mana.combatExitTicks && mana.value > 0 ? '  [휘발중]' : ''}\n` +
-    `spell ${world.sigils.equipped.rightArm ? sigilDef(world.sigils.equipped.rightArm).name : '(오른팔 각인 없음)'}${world.spell.cooldown > 0 ? ' [쿨]' : ''}   각인 ${world.sigils.inventory.length}개 소지\n` +
+    `spell ${spellHudText()}   각인 ${world.sigils.inventory.length}개 소지\n` +
     `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
