@@ -27,7 +27,10 @@ function gain(world: World, amount: number, source: string): void {
 
 function resetChain(world: World, trigger: string): void {
   if (!balance.chain.resetOn.includes(trigger)) return;
-  world.mana.chainIndex = 0;
+  if (world.mana.chainIndex !== 0) {
+    world.mana.chainIndex = 0;
+    world.events.emit('chain_changed', { chain: 0 });
+  }
 }
 
 /** 이벤트 구독 등록. 시작 시 1회 호출 */
@@ -43,6 +46,7 @@ export function init(world: World): void {
           world.mana.chainIndex + 1,
           balance.chain.multipliers.length - 1,
         );
+        world.events.emit('chain_changed', { chain: world.mana.chainIndex });
       }
     } else if (result === 'normal') {
       gain(world, balance.mana.gain.parryNormal, 'parry_normal'); // 배율 유지, 상승 없음
@@ -72,6 +76,7 @@ export function init(world: World): void {
         world.mana.chainIndex + 1,
         balance.chain.multipliers.length - 1,
       );
+      world.events.emit('chain_changed', { chain: world.mana.chainIndex });
     }
   });
 

@@ -1,6 +1,8 @@
 import { GameAudio } from './core/Audio';
 import { balance } from './core/Balance';
 import { Events } from './core/Events';
+import { Metrics } from './core/Metrics';
+import { DebugOverlay } from './render/DebugOverlay';
 import { Input } from './core/Input';
 import { Loop } from './core/Loop';
 import { World } from './core/World';
@@ -34,6 +36,7 @@ if (!app || !hud || !deathOverlay || !deathHint || !flashOverlay || !altarPrompt
   throw new Error('index.html에 필요한 오버레이 요소가 없다');
 
 const events = new Events();
+const metrics = new Metrics(events); // 다른 구독보다 먼저 — 이벤트만 구독한다
 const level = new Level(levelJson);
 const input = new Input(app);
 
@@ -82,6 +85,34 @@ const world = new World(events, {
 
 const stage = new Stage(app);
 const minimap = new Minimap(level);
+const debugOverlay = new DebugOverlay();
+
+function downloadMetrics(): void {
+  const data = JSON.stringify(metrics.snapshot(world), null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `underworld-metrics-${Date.now()}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'F1') {
+    e.preventDefault();
+    debugOverlay.toggle();
+  }
+  if (e.code === 'F2') {
+    e.preventDefault();
+    downloadMetrics();
+    console.log('[metrics] 덤프 다운로드', metrics.snapshot(world));
+  }
+});
+
+// 세션 경계에서 콘솔에 스냅샷 자동 출력
+events.on('player_died', () => console.log('[metrics] 사망 시점 스냅샷', metrics.snapshot(world)));
+events.on('zone_cleared', () => console.log('[metrics] 클리어 스냅샷', metrics.snapshot(world)));
 const sigilUI = new SigilUI(world);
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Tab') {
@@ -420,6 +451,8 @@ function spellHudText(): string {
   return `${def.name} ${cost}마나${suffix}`;
 }
 
+let debugOverlayLastUpdate = 0;
+
 // HUD용 실측 TPS
 let tpsWindowStart = performance.now();
 let tpsWindowTicks = 0;
@@ -451,6 +484,12 @@ function render(alpha: number): void {
   stage.updateHands({ reloading: world.weapon.reloading > 0, stunned: p.stunTicks > 0 });
   stage.setCorruptionStage(Math.floor(world.corruption.applied / 12.5));
   minimap.update(p, world.enemies, alpha);
+
+  // 디버그 오버레이 (F1) — 0.5초마다 갱신
+  if (debugOverlay.visible && now - debugOverlayLastUpdate > 500) {
+    debugOverlayLastUpdate = now;
+    debugOverlay.update(metrics.snapshot(world));
+  }
 
   // 제단 프롬프트 — 잔탄율을 보여줘 손해를 인지할 기회를 준다 (economy.md §2)
   const showPrompt = world.nearAltar && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
@@ -495,7 +534,7 @@ function render(alpha: number): void {
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     'WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)\n' +
-    'Q 마법 시전  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  P 연습용 창병  O 마나 충전(테스트)';
+    'Q 마법 시전  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  P 창병(테스트)  O 마나(테스트)';
 
   stage.render();
 }
