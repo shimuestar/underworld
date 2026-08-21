@@ -37,6 +37,7 @@ function makeWorld(): World {
     sigils: {
       inventory: [],
       equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
+      scars: { eye: 0, rightArm: 0, leftArm: 0, heart: 0, spine: 0 },
     },
     modifiers: Sigils.defaultModifiers(),
     corruption: { applied: 0, pending: 0 },

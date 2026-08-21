@@ -4,6 +4,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
+export interface GlyphDef {
+  cell: number[];
+  dir: string; // 'N' | 'S' | 'E' | 'W' — 문자가 붙는 벽면
+  text: string;
+}
+
 export interface LevelDef {
   id: string;
   name: string;
@@ -11,6 +17,7 @@ export interface LevelDef {
   ceiling: number;
   grid: string[];
   lighting: { ambient: number; torches: number[][] };
+  glyphs?: GlyphDef[];
 }
 
 /** 이동을 막는 셀. 잠긴 문(D)과 균열 벽(C)은 열리기 전까지 벽 취급. */
@@ -26,6 +33,8 @@ export class Level {
   readonly ambient: number;
   readonly torches: number[][];
   readonly spawn: { x: number; z: number };
+  readonly altarPos: { x: number; z: number } | null;
+  readonly glyphs: GlyphDef[];
   readonly rows: number;
   readonly cols: number;
 
@@ -44,6 +53,13 @@ export class Level {
       x: (spawn.col + 0.5) * this.cellSize,
       z: (spawn.row + 0.5) * this.cellSize,
     };
+
+    const altar = this.findChar('A');
+    this.altarPos = altar
+      ? { x: (altar.col + 0.5) * this.cellSize, z: (altar.row + 0.5) * this.cellSize }
+      : null;
+
+    this.glyphs = def.glyphs ?? [];
   }
 
   charAt(col: number, row: number): string {
@@ -147,6 +163,9 @@ const COLOR_DOOR = 0x6b4a2f;
 const COLOR_CRACK = 0x4a5a68;
 const COLOR_FLOOR = 0x3a3a44;
 const COLOR_CEILING = 0x2e2e36;
+const COLOR_ALTAR = 0xd8c9a0;
+const COLOR_ALTAR_LIGHT = 0xe0d0a0;
+const GLYPH_RUNES = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
 
 export interface TorchParams {
   color: string;
@@ -196,6 +215,40 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   ceiling.position.set(width / 2, level.ceiling, depth / 2);
   group.add(ceiling);
 
+  // 제단 — 기둥 + 온화한 광원
+  for (let row = 0; row < level.rows; row++) {
+    for (let col = 0; col < level.cols; col++) {
+      if (level.charAt(col, row) !== 'A') continue;
+      const x = (col + 0.5) * cs;
+      const z = (row + 0.5) * cs;
+      const pillar = new THREE.Mesh(
+        new THREE.BoxGeometry(1.1, 2.1, 1.1),
+        new THREE.MeshLambertMaterial({
+          color: COLOR_ALTAR,
+          emissive: COLOR_ALTAR,
+          emissiveIntensity: 0.18,
+        }),
+      );
+      pillar.position.set(x, 1.05, z);
+      group.add(pillar);
+      const cap = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 0.18, 1.5),
+        new THREE.MeshLambertMaterial({ color: COLOR_ALTAR }),
+      );
+      cap.position.set(x, 2.2, z);
+      group.add(cap);
+      const light = new THREE.PointLight(COLOR_ALTAR_LIGHT, 1.1, 8, 0);
+      light.position.set(x, 2.6, z);
+      group.add(light);
+    }
+  }
+
+  // 벽 문자 — 오염 25 전에는 룬 문자열(해독 불가), 이후 원문 (Stage가 교체)
+  for (const glyph of level.glyphs) {
+    const mesh = buildGlyphMesh(glyph, level, false);
+    if (mesh) group.add(mesh);
+  }
+
   // 횃불 — 위치는 레벨 데이터([row, col]), 광원 파라미터는 balance
   for (const cell of level.torches) {
     const [row, col] = cell;
@@ -226,4 +279,72 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   }
 
   return group;
+}
+
+/** 벽 문자 텍스처 — readable이면 원문, 아니면 원문에서 파생된 룬 문자열 */
+export function glyphTexture(text: string, readable: boolean): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, 512, 128);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (readable) {
+    ctx.font = '44px monospace';
+    ctx.fillStyle = '#b8e0c0';
+    ctx.fillText(text, 256, 64);
+  } else {
+    const garbled = [...text]
+      .map((ch) => (ch === ' ' ? ' ' : GLYPH_RUNES[ch.charCodeAt(0) % GLYPH_RUNES.length]))
+      .join('');
+    ctx.font = '46px serif';
+    ctx.fillStyle = '#6a4444';
+    ctx.fillText(garbled, 256, 64);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  return texture;
+}
+
+function buildGlyphMesh(glyph: GlyphDef, level: Level, readable: boolean): THREE.Mesh | null {
+  const [row, col] = glyph.cell;
+  if (row === undefined || col === undefined) return null;
+  const cs = level.cellSize;
+  const cx = (col + 0.5) * cs;
+  const cz = (row + 0.5) * cs;
+  const inset = 0.07;
+
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(3, 0.75),
+    new THREE.MeshBasicMaterial({
+      map: glyphTexture(glyph.text, readable),
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+    }),
+  );
+  mesh.name = 'glyph';
+  mesh.userData['glyphText'] = glyph.text;
+
+  const y = 2.9; // 제단 기둥(2.2)보다 높게 — 가려지지 않도록
+  switch (glyph.dir) {
+    case 'N': // 셀 북쪽 벽면, 남쪽(셀 안)을 향한다
+      mesh.position.set(cx, y, row * cs + inset);
+      break;
+    case 'S':
+      mesh.position.set(cx, y, (row + 1) * cs - inset);
+      mesh.rotation.y = Math.PI;
+      break;
+    case 'W':
+      mesh.position.set(col * cs + inset, y, cz);
+      mesh.rotation.y = Math.PI / 2;
+      break;
+    case 'E':
+      mesh.position.set((col + 1) * cs - inset, y, cz);
+      mesh.rotation.y = -Math.PI / 2;
+      break;
+    default:
+      return null;
+  }
+  return mesh;
 }

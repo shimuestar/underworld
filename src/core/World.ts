@@ -34,6 +34,18 @@ export interface SigilState {
   /** 소지 중(효과 없음). 부착해야 발동 — economy.md §4 */
   inventory: string[];
   equipped: Record<SigilSlot, string | null>;
+  /** 흉터 — 해제해도 잔존하는 페널티 비율 (0 또는 scarRatio, 누적 최댓값) */
+  scars: Record<SigilSlot, number>;
+}
+
+/** 제단 공격성 보너스용 구간 전투 통계. 제단 진입 시 리셋 */
+export interface CombatStats {
+  meleeKills: number;
+  totalKills: number;
+  perfectParries: number;
+  encounters: number;
+  cleanEncounters: number;
+  damagedThisEncounter: boolean;
 }
 
 /** 부착된 각인·부위 페널티에서 매번 재계산되는 파생 수치. Sigils가 갱신한다 */
@@ -172,6 +184,29 @@ export class World {
   projectiles: ProjectileState[] = [];
   spell: SpellState = { cooldown: 0 };
   groundItems: GroundItemState[] = [];
+
+  /** 마지막으로 진입한 제단 (리스폰 지점). 없으면 사망 시 완전 재시작 */
+  respawn: { x: number; z: number } | null = null;
+
+  /** 제단 반경 안 (프롬프트 표시용, Altar가 갱신) */
+  nearAltar = false;
+  /** 이번 접근에서 이미 진입했는가 (우회 판정용) */
+  altarEnteredThisApproach = false;
+
+  /** 현 구역 탄약 상한 배율 (제단 공격성 보너스) */
+  altarBonusMul = 1;
+
+  /** 오염 25 임계 — 벽의 문자 해독 */
+  canReadGlyphs = false;
+
+  combatStats: CombatStats = {
+    meleeKills: 0,
+    totalKills: 0,
+    perfectParries: 0,
+    encounters: 0,
+    cleanEncounters: 0,
+    damagedThisEncounter: false,
+  };
   enemies: EnemyState[];
   level: Level;
 

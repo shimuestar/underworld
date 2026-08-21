@@ -29,6 +29,9 @@ const PARRY_GLOW: Record<string, number> = {
   fail: 0x553333,
 };
 
+// 오염 시각 단계별 피부색 (economy.md §3 — 슬라이스는 0~2단계)
+const SKIN_BY_STAGE = [0xb08a63, 0x96866a, 0x7a8068];
+
 function box(w: number, h: number, d: number, color: number): THREE.Mesh {
   return new THREE.Mesh(
     new THREE.BoxGeometry(w, h, d),
@@ -45,6 +48,8 @@ export class HandModel {
   private recoilUntil = 0;
   private parryUntil = 0;
   private parryGlow = 0x000000;
+  private readonly skinMaterials: THREE.MeshLambertMaterial[] = [];
+  private corruptionStage = -1;
 
   constructor() {
     // ---- 오른팔 + 권총 ----
@@ -55,6 +60,7 @@ export class HandModel {
 
     const hand = box(0.055, 0.052, 0.065, SKIN);
     hand.position.set(0, -0.015, -0.01);
+    this.skinMaterials.push(hand.material as THREE.MeshLambertMaterial);
     this.rightArm.add(hand);
 
     const slide = box(0.03, 0.038, 0.17, GUN_DARK);
@@ -77,6 +83,7 @@ export class HandModel {
 
     const lFist = box(0.06, 0.056, 0.06, SKIN);
     lFist.position.set(0, 0.004, -0.11);
+    this.skinMaterials.push(lFist.material as THREE.MeshLambertMaterial);
     this.leftArm.add(lFist);
 
     this.bracerMaterial = new THREE.MeshLambertMaterial({ color: BRACER });
@@ -96,6 +103,14 @@ export class HandModel {
   triggerParry(result: string): void {
     this.parryUntil = performance.now() + PARRY_SWING_MS;
     this.parryGlow = PARRY_GLOW[result] ?? PARRY_GLOW['fail']!;
+  }
+
+  /** 오염 시각 단계 — 피부색 변화 (구조 교체는 3/5/7단계, 슬라이스 밖) */
+  setCorruptionStage(stage: number): void {
+    const clamped = Math.max(0, Math.min(SKIN_BY_STAGE.length - 1, stage));
+    if (clamped === this.corruptionStage) return;
+    this.corruptionStage = clamped;
+    for (const material of this.skinMaterials) material.color.set(SKIN_BY_STAGE[clamped]!);
   }
 
   /** 매 프레임 호출. 상태 기반 포즈 + 이벤트 기반 킥을 합성한다 */

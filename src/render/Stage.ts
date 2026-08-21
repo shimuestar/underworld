@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
+import { glyphTexture } from '../level/GridLoader';
 import type { EnemyState, GroundItemState, ProjectileState } from '../core/World';
 import { HandModel } from './HandModel';
 
@@ -167,6 +168,22 @@ export class Stage {
   /** 왼팔 각인 페널티 — 랜턴 밝기 배율 */
   setLanternIntensityMul(mul: number): void {
     this.lantern.intensity = balance.lantern.intensity * mul;
+  }
+
+  /** 오염 25 임계 — 벽 문자를 원문으로 교체 */
+  setGlyphsReadable(readable: boolean): void {
+    this.scene.traverse((obj) => {
+      if (obj.name !== 'glyph' || !(obj instanceof THREE.Mesh)) return;
+      const material = obj.material as THREE.MeshBasicMaterial;
+      material.map?.dispose();
+      material.map = glyphTexture(obj.userData['glyphText'] as string, readable);
+      material.needsUpdate = true;
+    });
+  }
+
+  /** 오염 시각 단계를 뷰모델에 전달 */
+  setCorruptionStage(stage: number): void {
+    this.hands.setCorruptionStage(stage);
   }
 
   /** 보간된 플레이어 상태를 카메라에 반영 */

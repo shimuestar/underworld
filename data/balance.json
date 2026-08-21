@@ -126,6 +126,7 @@
   },
 
   "altar": {
+    "radius": 2.4,
     "refillToMax": true,
     "aggressionBonus": {
       "meleeRatioWeight": 0.5,

@@ -24,6 +24,8 @@ const PENALTY_HINTS: Record<SigilSlot, string> = {
 export class SigilUI {
   private readonly root: HTMLDivElement;
   open = false;
+  /** 제단에서 열렸는가 — 해제(교체)는 제단에서만 가능 */
+  private altarMode = false;
 
   constructor(private readonly world: World) {
     this.root = document.createElement('div');
@@ -34,10 +36,21 @@ export class SigilUI {
     document.body.appendChild(this.root);
   }
 
-  toggle(): boolean {
-    this.open = !this.open;
-    this.root.style.display = this.open ? 'flex' : 'none';
-    if (this.open) this.rebuild();
+  show(altarMode: boolean): void {
+    this.altarMode = altarMode;
+    this.open = true;
+    this.root.style.display = 'flex';
+    this.rebuild();
+  }
+
+  hide(): void {
+    this.open = false;
+    this.root.style.display = 'none';
+  }
+
+  toggle(altarMode = false): boolean {
+    if (this.open) this.hide();
+    else this.show(altarMode);
     return this.open;
   }
 
@@ -48,7 +61,9 @@ export class SigilUI {
       'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;min-width:520px;';
 
     const title = document.createElement('div');
-    title.textContent = `각인  (오염 대기 +${world.corruption.pending})`;
+    title.textContent = this.altarMode
+      ? `제단 — 각인 교체  (오염 ${world.corruption.applied}/100)`
+      : `각인  (오염 대기 +${world.corruption.pending})`;
     title.style.cssText = 'color:#9fe870;margin-bottom:12px;font-size:15px;';
     panel.appendChild(title);
 
@@ -62,18 +77,25 @@ export class SigilUI {
       row.appendChild(label);
 
       const equipped = world.sigils.equipped[slot];
+      const scar = world.sigils.scars[slot];
       const value = document.createElement('span');
       if (equipped) {
         const def = sigilDef(equipped);
-        value.textContent = `[${def.name}] — 클릭해서 해제`;
-        value.style.cssText = 'color:#e8c76a;cursor:pointer;';
-        value.onclick = () => {
-          Sigils.detach(world, slot);
-          this.rebuild();
-        };
+        if (this.altarMode) {
+          value.textContent = `[${def.name}] — 클릭해서 해제 (흉터: 페널티 절반 영구 잔존)`;
+          value.style.cssText = 'color:#e8c76a;cursor:pointer;';
+          value.onclick = () => {
+            Sigils.detach(world, slot);
+            this.rebuild();
+          };
+        } else {
+          value.textContent = `[${def.name}] — 해제는 제단에서만`;
+          value.style.color = '#8a8f9a';
+        }
       } else {
-        value.textContent = `(비어 있음 · 페널티: ${PENALTY_HINTS[slot]})`;
-        value.style.color = '#555c66';
+        value.textContent =
+          `(비어 있음 · 페널티: ${PENALTY_HINTS[slot]})` + (scar > 0 ? '  ⚠흉터' : '');
+        value.style.color = scar > 0 ? '#8a6a6a' : '#555c66';
       }
       row.appendChild(value);
       panel.appendChild(row);

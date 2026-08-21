@@ -15,6 +15,8 @@ import * as Weapons from './systems/Weapons';
 import * as Projectiles from './systems/Projectiles';
 import * as Mana from './systems/Mana';
 import * as Sigils from './systems/Sigils';
+import * as Corruption from './systems/Corruption';
+import * as Altar from './systems/Altar';
 import * as Lantern from './systems/Lantern';
 import { SigilUI } from './render/SigilUI';
 import { sigilDef } from './core/SigilData';
@@ -23,9 +25,11 @@ import levelJson from '../data/levels/z01_f1.json';
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
 const deathOverlay = document.getElementById('death');
+const deathHint = document.getElementById('death-hint');
 const flashOverlay = document.getElementById('flash');
-if (!app || !hud || !deathOverlay || !flashOverlay)
-  throw new Error('index.html에 #app / #hud / #death / #flash가 없다');
+const altarPrompt = document.getElementById('altar-prompt');
+if (!app || !hud || !deathOverlay || !deathHint || !flashOverlay || !altarPrompt)
+  throw new Error('index.html에 필요한 오버레이 요소가 없다');
 
 const events = new Events();
 const level = new Level(levelJson);
@@ -66,6 +70,7 @@ const world = new World(events, {
   sigils: {
     inventory: [],
     equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
+    scars: { eye: 0, rightArm: 0, leftArm: 0, heart: 0, spine: 0 },
   },
   modifiers: Sigils.defaultModifiers(),
   corruption: { applied: 0, pending: 0 },
@@ -154,6 +159,12 @@ for (const name of [
   'sigil_acquired',
   'sigil_attached',
   'sigil_detached',
+  'altar_entered',
+  'altar_bypassed',
+  'respawn_registered',
+  'respawned',
+  'corruption_applied',
+  'corruption_threshold',
 ]) {
   events.on(name, (payload) => console.log(`[events] ${name}`, payload));
 }
@@ -225,7 +236,41 @@ events.on('sigil_acquired', (payload) => {
   showReaction(`각인 획득: ${sigilDef(id).name} — Tab으로 부착`, 3500);
 });
 
-events.on('player_died', () => deathOverlay.classList.add('visible'));
+events.on('player_died', () => {
+  deathHint!.textContent = world.respawn ? 'Enter — 제단에서 부활' : 'Enter 키로 재시작';
+  deathOverlay.classList.add('visible');
+});
+
+/** 제단 리스폰 — 위치·체력 복원, 탄약 상한, 마나 0, 각인·오염 유지, 구간 진행도 초기화 */
+function respawnAtAltar(): void {
+  const p = world.player;
+  const point = world.respawn!;
+  p.x = point.x;
+  p.z = point.z;
+  p.prevX = point.x;
+  p.prevZ = point.z;
+  p.health = balance.player.healthMax;
+  p.stunTicks = 0;
+  p.dodgeTicks = 0;
+  p.iframeTicks = 0;
+  p.reactionBufferTicks = 0;
+  world.weapon.mag = balance.weapons.pistol.magSize;
+  world.weapon.reserve = balance.weapons.pistol.ammoMax;
+  world.weapon.cooldown = 0;
+  world.weapon.reloading = 0;
+  world.weapon.muzzleFlash = 0;
+  world.mana.value = 0;
+  world.mana.chainIndex = 0;
+  world.mana.outOfCombatTicks = 0;
+  world.mana.inCombat = false;
+  world.enemies = spawnEnemies(levelJson.entities, level); // 구간 진행도 초기화
+  world.projectiles.length = 0;
+  world.groundItems.length = 0;
+  world.freezeTicks = 0;
+  world.dead = false;
+  deathOverlay!.classList.remove('visible');
+  events.emit('respawned', { x: point.x, z: point.z });
+}
 
 events.on('shot_fired', (payload) => {
   const shot = payload as { ex: number; ey: number; ez: number; hitEnemy: boolean };
@@ -242,7 +287,37 @@ events.on('shot_blocked', (payload) => {
   stage.flashShield((payload as { enemyId: number }).enemyId);
 });
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Enter' && world.dead) location.reload();
+  if (e.code === 'Enter' && world.dead) {
+    if (world.respawn) respawnAtAltar();
+    else location.reload();
+  }
+});
+
+// ---- 제단 ----
+events.on('altar_entered', (payload) => {
+  const info = payload as { multiplier: number; pendingCorruption: number };
+  audio.play('altar_enter');
+  showReaction(
+    `제단 — 탄약 상한 보급 (배율 ×${info.multiplier.toFixed(2)})`,
+    3000,
+  );
+  sigilUI.show(true); // 각인 교체 UI (제단 모드: 해제 가능)
+  world.uiOpen = true;
+  document.exitPointerLock();
+});
+events.on('corruption_applied', (payload) => {
+  const info = payload as { from: number; to: number };
+  showReaction(`오염 정산: ${info.from} → ${info.to}`, 3000);
+});
+events.on('corruption_threshold', (payload) => {
+  const threshold = (payload as { threshold: number }).threshold;
+  audio.play('corruption_up');
+  if (threshold === 25) {
+    stage.setGlyphsReadable(true);
+    showReaction('벽의 문자가 읽히기 시작한다…', 5000);
+  } else {
+    showReaction(`오염 임계 ${threshold} 도달`, 4000);
+  }
 });
 
 // 틱 순서: Input → PlayerMove → Enemies → Reaction → Weapons → Projectiles → Mana →
@@ -250,6 +325,8 @@ window.addEventListener('keydown', (e) => {
 // 상태가 확정된 뒤 판정해야 한다.
 Mana.init(world);
 Sigils.init(world);
+Corruption.init(world);
+Altar.init(world);
 const systems = [
   PlayerMove.tick,
   Enemies.tick,
@@ -258,6 +335,7 @@ const systems = [
   Weapons.tick,
   Projectiles.tick,
   Mana.tick,
+  Altar.tick,
   Lantern.tick,
 ];
 
@@ -322,7 +400,20 @@ function render(alpha: number): void {
   stage.syncProjectiles(world.projectiles, alpha);
   stage.syncGroundItems(world.groundItems);
   stage.updateHands({ reloading: world.weapon.reloading > 0, stunned: p.stunTicks > 0 });
+  stage.setCorruptionStage(Math.floor(world.corruption.applied / 12.5));
   minimap.update(p, world.enemies, alpha);
+
+  // 제단 프롬프트 — 잔탄율을 보여줘 손해를 인지할 기회를 준다 (economy.md §2)
+  const showPrompt = world.nearAltar && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
+  altarPrompt!.classList.toggle('visible', showPrompt);
+  if (showPrompt) {
+    const w2 = world.weapon;
+    const capNow = balance.weapons.pistol.magSize + balance.weapons.pistol.ammoMax;
+    altarPrompt!.textContent =
+      `제단 — E 진입\n` +
+      `9mm ${w2.mag + w2.reserve}/${capNow} 보유 중 · 들어가면 상한까지 재보급 (잔탄 무관)\n` +
+      `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
+  }
 
   const w = world.weapon;
   const aliveCount = world.enemies.filter((e) => e.alive).length;
@@ -335,6 +426,7 @@ function render(alpha: number): void {
     `HP ${p.health}   9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}\n` +
     `mana ${manaBar} ${mana.value.toFixed(0)}/${balance.mana.max}  chain ×${chainMult}${!mana.inCombat && mana.outOfCombatTicks >= balance.mana.combatExitTicks && mana.value > 0 ? '  [휘발중]' : ''}\n` +
     `spell ${spellHudText()}   각인 ${world.sigils.inventory.length}개 소지\n` +
+    `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}${world.altarBonusMul > 1 ? `  탄약 배율 ×${world.altarBonusMul.toFixed(2)}` : ''}\n` +
     `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +

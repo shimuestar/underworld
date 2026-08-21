@@ -76,46 +76,51 @@ export function attach(world: World, sigilId: string): boolean {
   return true;
 }
 
-/** 부위의 각인을 떼어 인벤토리로. (흉터 잔존은 M6.3에서 추가) */
+/** 부위의 각인을 떼어 인벤토리로. 흉터 — 페널티의 scarRatio만큼 영구 잔존 */
 export function detach(world: World, slot: SigilSlot): boolean {
   const id = world.sigils.equipped[slot];
   if (!id) return false;
   world.sigils.equipped[slot] = null;
   world.sigils.inventory.push(id);
+  // 누적 최댓값 — 같은 부위 반복 부착/해제로 흉터가 무한히 쌓이지 않는다
+  world.sigils.scars[slot] = Math.max(world.sigils.scars[slot], balance.sigil.scarRatio);
   recompute(world);
   world.events.emit('sigil_detached', { id, slot });
   return true;
 }
 
-/** 부착 상태에서 Modifiers 전체 재계산 */
+/** 부착 상태 + 흉터에서 Modifiers 전체 재계산 */
 export function recompute(world: World): void {
   const mods = defaultModifiers();
   const penalty = balance.sigil.slotPenalty;
 
   for (const slot of SIGIL_SLOTS) {
     const id = world.sigils.equipped[slot];
-    if (!id) continue;
-
-    // 부위 페널티 — 어떤 각인이든 그 부위를 쓰면 발생
-    switch (slot) {
-      case 'rightArm':
-        mods.reloadTimeMul = 1 / penalty.rightArm.reloadSpeedMul;
-        break;
-      case 'leftArm':
-        mods.lanternIntensityMul = penalty.leftArm.lanternIntensityMul;
-        break;
-      case 'spine':
-        mods.aimSpreadMul = penalty.spine.aimSpreadMul;
-        break;
-      case 'heart':
-        mods.manaLostOnHit = penalty.heart.manaLostOnHit;
-        break;
-      case 'eye':
-        mods.flashbangSelfDamage = penalty.eye.flashbangSelfDamage;
-        break;
+    // 페널티 강도: 부착 중 1.0, 해제 후 흉터만 남으면 scarRatio (0이면 없음)
+    const strength = id ? 1 : world.sigils.scars[slot];
+    if (strength > 0) {
+      switch (slot) {
+        case 'rightArm':
+          mods.reloadTimeMul = 1 + (1 / penalty.rightArm.reloadSpeedMul - 1) * strength;
+          break;
+        case 'leftArm':
+          mods.lanternIntensityMul = 1 - (1 - penalty.leftArm.lanternIntensityMul) * strength;
+          break;
+        case 'spine':
+          mods.aimSpreadMul = 1 + (penalty.spine.aimSpreadMul - 1) * strength;
+          break;
+        case 'heart':
+          mods.manaLostOnHit = penalty.heart.manaLostOnHit * strength;
+          break;
+        case 'eye':
+          // 불리언 페널티는 절반이 불가 — 부착 중에만 발동
+          mods.flashbangSelfDamage = id !== null && penalty.eye.flashbangSelfDamage;
+          break;
+      }
     }
 
-    // 각인 효과
+    if (!id) continue;
+    // 각인 효과 (효과는 흉터와 무관 — 부착 중에만)
     const effects = sigilDef(id).effects;
     if (effects['dodgeDistanceMul']) mods.dodgeDistanceMul = effects['dodgeDistanceMul'];
     if (effects['iFrameTicks']) mods.dodgeIFrameTicks = effects['iFrameTicks'];

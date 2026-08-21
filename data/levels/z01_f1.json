@@ -43,5 +43,10 @@
   ],
   "altar": { "cell": [7, 7], "bypassRoute": [[9, 1], [11, 1]],
     "note": "제단은 우회 가능해야 한다. bypassRoute가 실제로 출구까지 연결되는지 검증할 것" },
-  "lighting": { "ambient": 0.04, "torches": [[3, 3], [9, 9]] }
+  "lighting": { "ambient": 0.04, "torches": [[3, 3], [9, 9]] },
+  "glyphs": [
+    { "cell": [1, 1], "dir": "N", "text": "빛은 굶주림을 부른다" },
+    { "cell": [7, 7], "dir": "N", "text": "제단은 잔탄을 세지 않는다" },
+    { "cell": [9, 1], "dir": "W", "text": "우회는 자유, 굶주림도 자유" }
+  ]
 }

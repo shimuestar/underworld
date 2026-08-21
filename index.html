@@ -53,6 +53,24 @@
       #death.visible {
         display: flex;
       }
+      #altar-prompt {
+        position: fixed;
+        bottom: 12%;
+        left: 50%;
+        transform: translateX(-50%);
+        display: none;
+        background: rgba(20, 18, 10, 0.82);
+        border: 1px solid #6a5f3a;
+        color: #e8c76a;
+        font: 14px/1.7 monospace;
+        padding: 10px 18px;
+        white-space: pre;
+        text-align: center;
+        pointer-events: none;
+      }
+      #altar-prompt.visible {
+        display: block;
+      }
       /* 패링 탈색 — mix-blend-mode 오버레이 (docs/architecture.md §6) */
       #flash {
         position: fixed;
@@ -71,8 +89,9 @@
     <div id="crosshair"></div>
     <div id="death">
       <div>사망</div>
-      <div style="font-size: 14px">Enter 키로 재시작</div>
+      <div id="death-hint" style="font-size: 14px">Enter 키로 재시작</div>
     </div>
+    <div id="altar-prompt"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -35,6 +35,7 @@ function makeWorld(): World {
     sigils: {
       inventory: [],
       equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
+      scars: { eye: 0, rightArm: 0, leftArm: 0, heart: 0, spine: 0 },
     },
     modifiers: Sigils.defaultModifiers(),
     corruption: { applied: 0, pending: 0 },
@@ -96,11 +97,12 @@ describe('각인 드랍과 부착', () => {
     expect(Sigils.attach(world, 'sig_fireball')).toBe(false);
   });
 
-  it('해제: 페널티 제거, 인벤토리 복귀', () => {
+  it('해제: 인벤토리 복귀, 페널티는 흉터로 절반 잔존 (M6.3)', () => {
     world.sigils.inventory.push('sig_fireball');
     Sigils.attach(world, 'sig_fireball');
+    const full = world.modifiers.reloadTimeMul;
     Sigils.detach(world, 'rightArm');
-    expect(world.modifiers.reloadTimeMul).toBe(1);
+    expect(world.modifiers.reloadTimeMul).toBeCloseTo(1 + (full - 1) * balance.sigil.scarRatio);
     expect(world.sigils.inventory).toContain('sig_fireball');
   });
 

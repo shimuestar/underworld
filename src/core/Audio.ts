@@ -19,7 +19,9 @@ export type SoundName =
   | 'hit_wall'
   | 'enemy_death'
   | 'reload_start'
-  | 'reload_end';
+  | 'reload_end'
+  | 'altar_enter'
+  | 'corruption_up';
 
 const MASTER_GAIN = 0.25;
 
@@ -117,6 +119,17 @@ export class GameAudio {
         this.tone(500, 0.05, 'square', 0.45);
         this.noise(0.05, 0.35, 2000, 0.06);
         this.tone(880, 0.05, 'square', 0.5, 0.09);
+        break;
+      case 'altar_enter':
+        // 깊은 공명 화음
+        this.tone(110, 1.2, 'sine', 0.7);
+        this.tone(165, 1.0, 'sine', 0.45, 0.1);
+        this.tone(220, 0.8, 'sine', 0.3, 0.25);
+        break;
+      case 'corruption_up':
+        // 불길한 상승 — 오염 임계
+        this.tone(90, 1.1, 'sawtooth', 0.5, 0, 320);
+        this.noise(0.9, 0.25, 400, 0.15);
         break;
     }
   }
