@@ -326,11 +326,14 @@ function respawnAtAltar(): void {
 }
 
 events.on('shot_fired', (payload) => {
-  const shot = payload as { ex: number; ey: number; ez: number; hitEnemy: boolean };
+  const shot = payload as {
+    ex: number; ey: number; ez: number; hitEnemy: boolean; blocked?: boolean;
+  };
   stage.spawnTracer(shot.ex, shot.ey, shot.ez);
   stage.triggerRecoil();
   audio.play('gunshot');
-  audio.play(shot.hitEnemy ? 'hit_flesh' : 'hit_wall');
+  // 방패에 막힌 샷은 shot_blocked의 금속 클랭이 담당 — 벽 착탄음으로 덮지 않는다
+  if (!shot.blocked) audio.play(shot.hitEnemy ? 'hit_flesh' : 'hit_wall');
 });
 events.on('parry_attempt', (payload) => {
   stage.triggerParry((payload as { result: string }).result);

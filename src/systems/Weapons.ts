@@ -115,6 +115,7 @@ function fire(world: World): void {
           sx: p.x, sy: oy, sz: p.z,
           ex: p.x + dx * hit.t, ey: oy + dy * hit.t, ez: p.z + dz * hit.t,
           hitEnemy: false,
+          blocked: true, // 착탄음 대신 shot_blocked의 방패 클랭이 재생된다
         });
         return;
       }

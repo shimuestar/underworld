@@ -34,10 +34,21 @@ const MASTER_GAIN = 0.25;
 
 export class GameAudio {
   private ctx: AudioContext | null = null;
+  private out: AudioNode | null = null;
 
   /** 사용자 제스처(클릭) 시점에 호출 — 오디오 컨텍스트 생성/재개 */
   unlock(): void {
-    if (!this.ctx) this.ctx = new AudioContext();
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+      // 마스터 컴프레서 — 소리가 겹칠 때 뭉개지지 않고 펀치가 살도록
+      const compressor = this.ctx.createDynamicsCompressor();
+      compressor.threshold.value = -18;
+      compressor.ratio.value = 6;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.25;
+      compressor.connect(this.ctx.destination);
+      this.out = compressor;
+    }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
 
@@ -105,8 +116,12 @@ export class GameAudio {
         this.tone(220, 0.25, 'sawtooth', 0.6, 0, 80);
         break;
       case 'shot_blocked':
-        // 짧은 금속 튕김
-        this.tone(988, 0.05, 'square', 0.5);
+        // 방패 막힘 — 크고 명확한 금속 클랭 (비화성 배음 + 밝은 스파크)
+        this.tone(620, 0.22, 'square', 0.9);
+        this.tone(987, 0.2, 'triangle', 0.8);
+        this.tone(1480, 0.16, 'triangle', 0.6);
+        this.tone(2210, 0.12, 'triangle', 0.4);
+        this.noise(0.05, 0.6, 6000);
         break;
       case 'dodge':
         this.noise(0.12, 0.35, 800);
@@ -145,12 +160,12 @@ export class GameAudio {
         this.tone(1180, 0.07, 'triangle', 0.35, 0.035, 700);
         break;
       case 'enemy_death':
-        // 처치 — 저역 펀치 + 크런치 트랜지언트를 앞세워 타격감, 그르렁은 짧은 꼬리로
-        this.tone(90, 0.16, 'sine', 1.3, 0, 38); // 서브베이스 펀치
-        this.noise(0.09, 1.1, 2200); // 즉각 크런치
-        this.tone(160, 0.1, 'square', 0.7, 0, 70); // 몸통 타격
-        this.tone(320, 0.2, 'sawtooth', 0.5, 0.05, 75); // 단말마 (짧게)
-        this.noise(0.24, 0.4, 480, 0.07); // 무너지는 잔향
+        // 처치 — 총성(0ms) 크랙이 지나간 뒤 별도의 '쿵'이 들리도록 50ms 지연 레이어링
+        this.tone(85, 0.24, 'sine', 1.5, 0.05, 36); // 서브베이스 펀치
+        this.noise(0.1, 1.2, 1400, 0.05); // 크런치
+        this.tone(500, 0.14, 'square', 0.9, 0.08, 90); // 하강 킬 톰
+        this.tone(300, 0.28, 'sawtooth', 0.55, 0.11, 70); // 단말마
+        this.noise(0.3, 0.5, 420, 0.15); // 무너지는 잔향
         break;
       case 'reload_start':
         // 탄창 분리 — 딸깍 + 낮은 슬라이드
@@ -202,7 +217,7 @@ export class GameAudio {
     if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, t0 + durSec);
     g.gain.setValueAtTime(gain * MASTER_GAIN, t0);
     g.gain.exponentialRampToValueAtTime(0.001, t0 + durSec);
-    osc.connect(g).connect(ctx.destination);
+    osc.connect(g).connect(this.out ?? ctx.destination);
     osc.start(t0);
     osc.stop(t0 + durSec);
   }
@@ -222,7 +237,7 @@ export class GameAudio {
     const g = ctx.createGain();
     g.gain.setValueAtTime(gain * MASTER_GAIN, t0);
     g.gain.exponentialRampToValueAtTime(0.001, t0 + durSec);
-    src.connect(filter).connect(g).connect(ctx.destination);
+    src.connect(filter).connect(g).connect(this.out ?? ctx.destination);
     src.start(t0);
   }
 }
