@@ -1,6 +1,6 @@
 // 미니맵 — 2D 캔버스 오버레이. 게임 로직 금지, World 상태를 읽어 그리기만 한다.
 // 정적 레벨 레이어는 생성 시 1회, 플레이어/적은 매 프레임.
-// 어그로 전(idle) 적은 표시하지 않는다 — 매복 긴장을 지키기 위해.
+// 어그로 전(idle) 적은 흐린 점 — 프로토타입 단계의 탐색 편의. 슬라이스 검증 시 숨길 것.
 
 import type { EnemyState, PlayerState } from '../core/World';
 import type { Level } from '../level/GridLoader';
@@ -18,6 +18,7 @@ const COLORS: Record<string, string> = {
 const FLOOR = 'rgba(30,30,36,0.85)';
 const PLAYER = '#9fe870';
 const ENEMY = '#e04444';
+const ENEMY_IDLE = 'rgba(224,68,68,0.35)';
 const ENEMY_STAGGERED = '#cc9922';
 
 export class Minimap {
@@ -77,12 +78,13 @@ export class Minimap {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.drawImage(this.base, 0, 0);
 
-    // 적 — 어그로 상태만. 스태거는 처형 가능 색
+    // 적 — 어그로 상태는 선명하게, idle은 흐리게. 스태거는 처형 가능 색
     for (const enemy of enemies) {
-      if (!enemy.alive || enemy.ai === 'idle') continue;
+      if (!enemy.alive) continue;
       const ex = (enemy.prevX + (enemy.x - enemy.prevX) * alpha) * s;
       const ez = (enemy.prevZ + (enemy.z - enemy.prevZ) * alpha) * s;
-      ctx.fillStyle = enemy.ai === 'staggered' ? ENEMY_STAGGERED : ENEMY;
+      ctx.fillStyle =
+        enemy.ai === 'staggered' ? ENEMY_STAGGERED : enemy.ai === 'idle' ? ENEMY_IDLE : ENEMY;
       ctx.beginPath();
       ctx.arc(ex, ez, 3, 0, Math.PI * 2);
       ctx.fill();

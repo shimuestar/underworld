@@ -6,7 +6,7 @@ import { Loop } from './core/Loop';
 import { World } from './core/World';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
-import { spawnEnemies } from './level/Spawner';
+import { spawnEnemies, spawnEnemyAt } from './level/Spawner';
 import { Minimap } from './render/Minimap';
 import { Stage } from './render/Stage';
 import * as PlayerMove from './systems/PlayerMove';
@@ -67,6 +67,24 @@ const stage = new Stage(app);
 const minimap = new Minimap(level);
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM') minimap.toggle();
+  // 연습용 창병 소환 — 패링 튜닝 편의 (슬라이스 검증 시 제거)
+  if (e.code === 'KeyP' && !world.dead) {
+    const p = world.player;
+    // 전방 벽까지 거리를 재고 그 앞에, 막혀 있으면 뒤쪽에 소환
+    for (const sign of [1, -1]) {
+      const fx = -Math.sin(p.yaw) * sign;
+      const fz = -Math.cos(p.yaw) * sign;
+      const wallT = level.wallRayT(p.x, p.z, fx, fz);
+      const dist = Math.min(6, wallT - 0.8);
+      if (dist < 2.5) continue; // 너무 가까우면 반대쪽 시도
+      const x = p.x + fx * dist;
+      const z = p.z + fz * dist;
+      const id = Math.max(0, ...world.enemies.map((en) => en.id)) + 1;
+      world.enemies.push(spawnEnemyAt('goblin_spear', x, z, id));
+      console.log(`[debug] 연습용 창병 소환 (${x.toFixed(1)}, ${z.toFixed(1)})`);
+      break;
+    }
+  }
 });
 stage.setLevel(
   buildLevelGroup(level, {
@@ -243,7 +261,8 @@ function render(alpha: number): void {
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked
       ? ''
-      : '[클릭] 마우스 잠금  WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)  R 장전  F 랜턴  B 배터리  M 미니맵');
+      : '[클릭] 마우스 잠금  WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)\n' +
+        'R 장전  F 랜턴  B 배터리  M 미니맵  P 연습용 창병 소환');
 
   stage.render();
 }

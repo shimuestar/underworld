@@ -14,6 +14,24 @@ export interface EntityPlacement {
 /** 현재 구현된 적 타입만 스폰한다. 새 적을 구현하면 여기에 추가. */
 const IMPLEMENTED = new Set(['goblin_runner', 'goblin_spear']);
 
+/** 임의 위치에 적 하나 생성 (연습 소환 등) */
+export function spawnEnemyAt(type: string, x: number, z: number, id: number): EnemyState {
+  const def = enemyDef(type);
+  return {
+    id,
+    type,
+    x,
+    z,
+    prevX: x,
+    prevZ: z,
+    yaw: 0,
+    health: def.health,
+    alive: true,
+    ai: 'idle',
+    timer: 0,
+  };
+}
+
 export function spawnEnemies(placements: EntityPlacement[], level: Level): EnemyState[] {
   const enemies: EnemyState[] = [];
   let nextId = 1;
