@@ -82,6 +82,11 @@ for (const name of [
 }
 
 events.on('player_died', () => deathOverlay.classList.add('visible'));
+
+events.on('shot_fired', (payload) => {
+  const shot = payload as { ex: number; ey: number; ez: number };
+  stage.spawnTracer(shot.ex, shot.ey, shot.ez);
+});
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Enter' && world.dead) location.reload();
 });

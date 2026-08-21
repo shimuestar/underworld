@@ -75,6 +75,7 @@ function fire(world: World): void {
 
   // 가장 가까운 적 히트박스
   let hit: { enemy: (typeof world.enemies)[number]; t: number } | null = null;
+  let hitT = wallT;
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
     const def = enemyDef(enemy.type);
@@ -88,6 +89,19 @@ function fire(world: World): void {
     });
     if (t !== null && t < wallT && (!hit || t < hit.t)) hit = { enemy, t };
   }
+
+  if (hit) hitT = hit.t;
+
+  // 렌더용 궤적 (시작점 = 눈 위치, 끝점 = 착탄점)
+  world.events.emit('shot_fired', {
+    sx: p.x,
+    sy: oy,
+    sz: p.z,
+    ex: p.x + dx * hitT,
+    ey: oy + dy * hitT,
+    ez: p.z + dz * hitT,
+    hitEnemy: hit !== null,
+  });
 
   if (!hit) return;
 

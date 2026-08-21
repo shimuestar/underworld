@@ -68,7 +68,8 @@
       "reloadTicks": 66,
       "magSize": 12,
       "pierceBarrier": true,
-      "muzzleFlash": { "intensity": 3.0, "radiusMul": 0.5, "ticks": 2 }
+      "muzzleFlash": { "intensity": 3.0, "radiusMul": 0.5, "ticks": 2 },
+      "tracerTicks": 8
     },
     "rifle": {
       "ammoMax": 180,
