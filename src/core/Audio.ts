@@ -145,10 +145,12 @@ export class GameAudio {
         this.tone(1180, 0.07, 'triangle', 0.35, 0.035, 700);
         break;
       case 'enemy_death':
-        // 고블린 단말마 — 하강 그르렁 + 무너지는 노이즈
-        this.tone(340, 0.32, 'sawtooth', 0.6, 0, 85);
-        this.tone(510, 0.18, 'square', 0.3, 0.04, 160);
-        this.noise(0.28, 0.45, 750, 0.08);
+        // 처치 — 저역 펀치 + 크런치 트랜지언트를 앞세워 타격감, 그르렁은 짧은 꼬리로
+        this.tone(90, 0.16, 'sine', 1.3, 0, 38); // 서브베이스 펀치
+        this.noise(0.09, 1.1, 2200); // 즉각 크런치
+        this.tone(160, 0.1, 'square', 0.7, 0, 70); // 몸통 타격
+        this.tone(320, 0.2, 'sawtooth', 0.5, 0.05, 75); // 단말마 (짧게)
+        this.noise(0.24, 0.4, 480, 0.07); // 무너지는 잔향
         break;
       case 'reload_start':
         // 탄창 분리 — 딸깍 + 낮은 슬라이드
