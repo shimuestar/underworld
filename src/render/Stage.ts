@@ -1,14 +1,25 @@
 // Three.js 렌더 셋업 전용. 게임 로직 금지.
-// M0: 빈 씬 + 바닥 평면 하나. 레벨 지오메트리는 level/GridLoader가 담당할 예정.
+// World 상태(플레이어 위치/시선, 랜턴)를 읽어 씬에 반영만 한다.
 
 import * as THREE from 'three';
+
+export interface LanternParams {
+  intensity: number;
+  radius: number;
+  angleDeg: number;
+  penumbra: number;
+}
 
 export class Stage {
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
   private readonly renderer: THREE.WebGLRenderer;
+  private readonly lantern: THREE.SpotLight;
+  private readonly eyeHeight: number;
 
-  constructor(container: HTMLElement, eyeHeight: number) {
+  constructor(container: HTMLElement, eyeHeight: number, lanternParams: LanternParams) {
+    this.eyeHeight = eyeHeight;
+
     this.renderer = new THREE.WebGLRenderer({ antialias: false });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -23,23 +34,41 @@ export class Stage {
       0.1,
       200,
     );
-    this.camera.position.set(0, eyeHeight, 8);
+    this.camera.rotation.order = 'YXZ';
+    this.scene.add(this.camera);
 
-    // 임시 조명 — 레벨 조명(ambient/torches)은 레벨 JSON에서 로드할 예정
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.15));
-    const key = new THREE.DirectionalLight(0xffffff, 0.6);
-    key.position.set(4, 10, 6);
-    this.scene.add(key);
-
-    // 바닥 평면 (그리드 셀 4u 기준 10x10 셀 크기)
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(40, 40),
-      new THREE.MeshLambertMaterial({ color: 0x3a3a44 }),
+    // 랜턴 스포트라이트 — 카메라에 부착해 시선을 따라간다.
+    // decay 0: distance 컷오프 감쇠만 사용 (balance intensity 스케일 유지)
+    this.lantern = new THREE.SpotLight(
+      0xffffff,
+      lanternParams.intensity,
+      lanternParams.radius,
+      (lanternParams.angleDeg * Math.PI) / 180,
+      lanternParams.penumbra,
+      0,
     );
-    floor.rotation.x = -Math.PI / 2;
-    this.scene.add(floor);
+    this.lantern.position.set(0, 0, 0);
+    this.lantern.target.position.set(0, 0, -1);
+    this.camera.add(this.lantern);
+    this.camera.add(this.lantern.target);
 
     window.addEventListener('resize', this.onResize);
+  }
+
+  setLevel(group: THREE.Group, ambientIntensity: number): void {
+    this.scene.add(group);
+    this.scene.add(new THREE.AmbientLight(0xffffff, ambientIntensity));
+  }
+
+  /** 보간된 플레이어 상태를 카메라에 반영 */
+  updateCamera(x: number, y: number, z: number, yaw: number, pitch: number): void {
+    this.camera.position.set(x, y + this.eyeHeight, z);
+    this.camera.rotation.y = yaw;
+    this.camera.rotation.x = pitch;
+  }
+
+  setLanternOn(on: boolean): void {
+    this.lantern.visible = on;
   }
 
   private onResize = (): void => {

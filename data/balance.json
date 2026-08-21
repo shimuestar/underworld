@@ -6,6 +6,11 @@
     "maxFrameClampSec": 0.25
   },
 
+  "input": {
+    "mouseSensitivity": 0.0023,
+    "pitchMaxDeg": 89
+  },
+
   "player": {
     "healthMax": 100,
     "moveSpeed": 6.0,
@@ -103,7 +108,15 @@
     "intensity": 1.6,
     "radius": 14.0,
     "angleDeg": 42,
+    "penumbra": 0.35,
     "attractsCasterRangeMul": 1.8
+  },
+
+  "lighting": {
+    "torchColor": "#FF8C3B",
+    "torchIntensity": 2.2,
+    "torchDistance": 9.0,
+    "torchHeight": 2.6
   },
 
   "altar": {

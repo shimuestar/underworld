@@ -1,33 +1,74 @@
 import { balance } from './core/Balance';
 import { Events } from './core/Events';
+import { Input } from './core/Input';
 import { Loop } from './core/Loop';
 import { World } from './core/World';
+import { Level, buildLevelGroup } from './level/GridLoader';
 import { Stage } from './render/Stage';
+import * as PlayerMove from './systems/PlayerMove';
+import * as Lantern from './systems/Lantern';
+import levelJson from '../data/levels/z01_f1.json';
 
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
 if (!app || !hud) throw new Error('index.html에 #app / #hud가 없다');
 
 const events = new Events();
-const world = new World(events);
-const stage = new Stage(app, balance.player.eyeHeight);
+const level = new Level(levelJson);
+const input = new Input(app);
 
-// M0.3 — 이벤트 발행/구독 확인
-events.on('loop_started', (payload) => {
-  console.log('[events] loop_started', payload);
+const world = new World(events, {
+  input: Input.emptySnapshot(),
+  player: {
+    x: level.spawn.x,
+    y: 0,
+    z: level.spawn.z,
+    prevX: level.spawn.x,
+    prevY: 0,
+    prevZ: level.spawn.z,
+    yaw: 0,
+    pitch: 0,
+  },
+  lantern: {
+    on: true,
+    battery: balance.lantern.batteryMax,
+    spares: balance.lantern.spareCells,
+  },
+  level,
 });
 
-// HUD용 실측 TPS — 완료 조건 "초당 정확히 60" 검증용
-let tpsWindowStart = performance.now();
-let tpsWindowTicks = 0;
-let measuredTps = 0;
+const stage = new Stage(app, balance.player.eyeHeight, balance.lantern);
+stage.setLevel(
+  buildLevelGroup(level, {
+    color: balance.lighting.torchColor,
+    intensity: balance.lighting.torchIntensity,
+    distance: balance.lighting.torchDistance,
+    height: balance.lighting.torchHeight,
+  }),
+  level.ambient,
+);
 
-function simulate(_dt: number): void {
+// 이벤트 → 콘솔 (Metrics는 M8에서 이 자리를 대체한다)
+for (const name of ['loop_started', 'lantern_toggled', 'lantern_died', 'battery_swapped']) {
+  events.on(name, (payload) => console.log(`[events] ${name}`, payload));
+}
+
+// 틱 순서: Input → PlayerMove → Lantern (docs/architecture.md §2)
+const systems = [PlayerMove.tick, Lantern.tick];
+
+function simulate(dt: number): void {
+  world.input = input.sample();
+  for (const system of systems) system(world, dt);
   world.tick++;
   tpsWindowTicks++;
 }
 
-function render(_alpha: number): void {
+// HUD용 실측 TPS
+let tpsWindowStart = performance.now();
+let tpsWindowTicks = 0;
+let measuredTps = 0;
+
+function render(alpha: number): void {
   const now = performance.now();
   if (now - tpsWindowStart >= 1000) {
     measuredTps = tpsWindowTicks / ((now - tpsWindowStart) / 1000);
@@ -35,9 +76,21 @@ function render(_alpha: number): void {
     tpsWindowTicks = 0;
   }
 
+  const p = world.player;
+  stage.updateCamera(
+    p.prevX + (p.x - p.prevX) * alpha,
+    p.prevY + (p.y - p.prevY) * alpha,
+    p.prevZ + (p.z - p.prevZ) * alpha,
+    p.yaw,
+    p.pitch,
+  );
+  stage.setLanternOn(world.lantern.on);
+
   hud!.textContent =
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
-    `tickRate(balance) ${balance.loop.tickRate}`;
+    `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
+    `pos (${p.x.toFixed(1)}, ${p.z.toFixed(1)})\n` +
+    (input.pointerLocked ? '' : '[클릭] 마우스 잠금  WASD 이동  Shift 질주  F 랜턴  R 배터리 교체');
 
   stage.render();
 }
@@ -47,5 +100,10 @@ const loop = new Loop(balance.loop.tickRate, balance.loop.maxFrameClampSec, {
   render,
 });
 
+// 개발 빌드 전용 디버그 핸들 (헤드리스 테스트/콘솔 조작용)
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__world = world;
+}
+
 loop.start();
-events.emit('loop_started', { tickRate: balance.loop.tickRate });
+events.emit('loop_started', { tickRate: balance.loop.tickRate, level: level.spawn });
