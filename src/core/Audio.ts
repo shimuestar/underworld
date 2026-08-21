@@ -17,7 +17,9 @@ export type SoundName =
   | 'gunshot'
   | 'hit_flesh'
   | 'hit_wall'
-  | 'enemy_death';
+  | 'enemy_death'
+  | 'reload_start'
+  | 'reload_end';
 
 const MASTER_GAIN = 0.25;
 
@@ -103,6 +105,18 @@ export class GameAudio {
         this.tone(340, 0.32, 'sawtooth', 0.6, 0, 85);
         this.tone(510, 0.18, 'square', 0.3, 0.04, 160);
         this.noise(0.28, 0.45, 750, 0.08);
+        break;
+      case 'reload_start':
+        // 탄창 분리 — 딸깍 + 낮은 슬라이드
+        this.tone(620, 0.04, 'square', 0.4);
+        this.noise(0.09, 0.3, 1200, 0.05);
+        this.tone(300, 0.06, 'square', 0.3, 0.12, 220);
+        break;
+      case 'reload_end':
+        // 새 탄창 삽입 + 슬라이드 후퇴/전진 스냅
+        this.tone(500, 0.05, 'square', 0.45);
+        this.noise(0.05, 0.35, 2000, 0.06);
+        this.tone(880, 0.05, 'square', 0.5, 0.09);
         break;
     }
   }

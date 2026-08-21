@@ -174,6 +174,8 @@ events.on('dodge_step', () => audio.play('dodge'));
 events.on('cast_spell', () => audio.play('cast_fire'));
 events.on('spell_impact', () => audio.play('spell_impact'));
 events.on('sigil_acquired', () => audio.play('pickup'));
+events.on('reload_started', () => audio.play('reload_start'));
+events.on('reload_finished', () => audio.play('reload_end'));
 events.on('enemy_died', (payload) => {
   const dead = payload as { enemyType: string; x: number; z: number };
   audio.play('enemy_death');
