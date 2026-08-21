@@ -32,7 +32,8 @@
       "magicBarrier": { "blocksMagic": true, "blocksMelee": true, "piercedBy": ["pistol"] },
       "attack": { "type": "projectile", "windupTicks": 46, "recoverTicks": 70, "impactRangeMul": 1, "parryable": false, "deflectable": true, "telegraph": "purple", "projectileSpeed": 14, "projectileRadius": 0.3 },
       "counters": { "pistol": "best", "rifle": "poor", "grenade": "poor", "flash": "poor", "melee": "none", "magic": "none", "deflect": "good" },
-      "drops": ["sig_curse"], "dropsOnDeath": true
+      "_dropsNote": "sig_curse(4구역)는 슬라이스 밖이라 sig_dash로 교체. 왼팔 마법 시스템 구현 시 복원 검토",
+      "drops": ["sig_dash"], "dropsOnDeath": true
     },
     "goblin_chieftain": {
       "zone": 1, "slice": true, "boss": true,
