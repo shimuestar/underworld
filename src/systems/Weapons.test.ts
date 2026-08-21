@@ -32,7 +32,7 @@ function makeWorld(): World {
       x: 6, y: 0, z: 6, prevX: 6, prevY: 0, prevZ: 6,
       yaw: -Math.PI / 2, pitch: 0, health: 100, // +X를 바라봄
       stunTicks: 0, dodgeTicks: 0, dodgeDirX: 0, dodgeDirZ: 0,
-      iframeTicks: 0, reactionBufferTicks: 0, blocking: false,
+      iframeTicks: 0, reactionBufferTicks: 0, blocking: false, reactionHeldTicks: 0,
     },
     lantern: { on: true, battery: 100, spares: 0 },
     weapon: { active: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0, grenadeCharge: 0 },

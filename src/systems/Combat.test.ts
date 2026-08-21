@@ -29,7 +29,7 @@ function makeWorld(): World {
       yaw: 0, pitch: 0,
       health: balance.player.healthMax,
       stunTicks: 0, dodgeTicks: 0, dodgeDirX: 0, dodgeDirZ: 0,
-      iframeTicks: 0, reactionBufferTicks: 0, blocking: false,
+      iframeTicks: 0, reactionBufferTicks: 0, blocking: false, reactionHeldTicks: 0,
     },
     lantern: { on: true, battery: 100, spares: 0 },
     weapon: { active: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0, grenadeCharge: 0 },
@@ -66,7 +66,7 @@ function tickUntil(world: World, target: string, maxTicks = 300): number {
 }
 
 function pressReaction(world: World): void {
-  world.input = { ...Input.emptySnapshot(), reactionPressed: true };
+  world.input = { ...Input.emptySnapshot(), reactionReleased: true };
   Reaction.tick(world, DT);
   world.input = Input.emptySnapshot();
 }

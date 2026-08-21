@@ -22,12 +22,14 @@ export interface InputSnapshot {
   reload: boolean;
   /** 이번 틱에 반응 버튼(우클릭)이 눌렸는가 (엣지) */
   reactionPressed: boolean;
+  /** 반응 버튼(우클릭)을 누르고 있는가 (홀드 = 방패 방어) */
+  reactionHeld: boolean;
+  /** 이번 틱에 반응 버튼을 뗐는가 (엣지 — 짧은 탭이었으면 패링 판정) */
+  reactionReleased: boolean;
   /** 이번 틱에 시전 키(Q)가 눌렸는가 (엣지) */
   castPressed: boolean;
   /** 이번 틱에 상호작용 키(E)가 눌렸는가 (엣지) */
   interactPressed: boolean;
-  /** 방어 키(C)를 누르고 있는가 (홀드) */
-  blockHeld: boolean;
   /** 이번 틱에 선택한 무기 슬롯 (0=없음, 1=해머, 2=수류탄, 3=권총) */
   weaponSelect: number;
 }
@@ -42,6 +44,8 @@ export class Input {
   private fireDown = false;
   private reloads = 0;
   private reactionClicks = 0;
+  private reactionDown = false;
+  private reactionReleases = 0;
   private casts = 0;
   private interacts = 0;
   private weaponSelect = 0;
@@ -79,13 +83,21 @@ export class Input {
         this.fireClicks++;
         this.fireDown = true;
       }
-      if (e.button === 2) this.reactionClicks++;
+      if (e.button === 2) {
+        this.reactionClicks++;
+        this.reactionDown = true;
+      }
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.fireDown = false;
+      if (e.button === 2 && this.reactionDown) {
+        this.reactionDown = false;
+        this.reactionReleases++;
+      }
     });
     window.addEventListener('blur', () => {
       this.fireDown = false;
+      this.reactionDown = false;
     });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
   }
@@ -108,9 +120,10 @@ export class Input {
       fireHeld: this.fireDown,
       reload: this.reloads > 0,
       reactionPressed: this.reactionClicks > 0,
+      reactionHeld: this.reactionDown,
+      reactionReleased: this.reactionReleases > 0,
       castPressed: this.casts > 0,
       interactPressed: this.interacts > 0,
-      blockHeld: this.keys.has('KeyC'),
       weaponSelect: this.weaponSelect,
     };
     this.dx = 0;
@@ -120,6 +133,7 @@ export class Input {
     this.fireClicks = 0;
     this.reloads = 0;
     this.reactionClicks = 0;
+    this.reactionReleases = 0;
     this.casts = 0;
     this.interacts = 0;
     this.weaponSelect = 0;
@@ -139,9 +153,10 @@ export class Input {
       fireHeld: false,
       reload: false,
       reactionPressed: false,
+      reactionHeld: false,
+      reactionReleased: false,
       castPressed: false,
       interactPressed: false,
-      blockHeld: false,
       weaponSelect: 0,
     };
   }

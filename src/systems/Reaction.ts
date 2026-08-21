@@ -17,12 +17,14 @@ export function tick(world: World, _dt: number): void {
   if (p.iframeTicks > 0) p.iframeTicks--;
   if (p.reactionBufferTicks > 0) p.reactionBufferTicks--;
 
-  // 방어 (C 홀드) — 경직/대시 중에는 불가. 피해 처리는 Enemies/Projectiles가
-  // playerBlocks()로 판정 (정면 한정, 칩 데미지 관통)
-  p.blocking = world.input.blockHeld && p.stunTicks <= 0 && p.dodgeTicks <= 0;
+  // 방어 (우클릭 홀드) — 누르는 동안 즉시 발동. 경직/대시 중에는 불가.
+  // 피해 처리는 Enemies/Projectiles가 playerBlocks()로 판정 (정면 한정, 칩 데미지 관통)
+  p.blocking = world.input.reactionHeld && p.stunTicks <= 0 && p.dodgeTicks <= 0;
+  if (world.input.reactionHeld) p.reactionHeldTicks++;
 
   if (p.stunTicks > 0) {
     p.stunTicks--;
+    if (world.input.reactionReleased) p.reactionHeldTicks = 0;
     return; // 경직 중에는 반응 불가 (입력은 버려진다)
   }
 
@@ -34,9 +36,14 @@ export function tick(world: World, _dt: number): void {
     return; // 대시 중 추가 반응 불가
   }
 
-  const pressed = world.input.reactionPressed || p.reactionBufferTicks > 0;
-  if (!pressed) return;
+  // 패링 판정은 버튼을 "뗄 때" — 짧은 탭(tapThreshold 이내)이었을 때만.
+  // 길게 눌렀다 떼는 것은 방어 해제일 뿐, 공짜 패링이 되지 않는다.
+  const released = world.input.reactionReleased || p.reactionBufferTicks > 0;
+  if (!released) return;
+  const wasTap = p.reactionHeldTicks <= reaction.tapThresholdTicks;
+  p.reactionHeldTicks = 0;
   p.reactionBufferTicks = 0;
+  if (!wasTap) return;
 
   // 반경 내 적을 우선순위로 분류 (같은 우선순위면 가장 가까운 적)
   let parryTarget: { enemy: EnemyState; dist: number } | null = null;

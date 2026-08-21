@@ -28,8 +28,10 @@ export interface PlayerState {
   iframeTicks: number;
   /** 히트스톱 중 눌린 반응 입력의 버퍼 잔여 틱 */
   reactionBufferTicks: number;
-  /** 방어 중 (C 홀드) — 정면 피해 경감, 이동·사격 제한 */
+  /** 방어 중 (우클릭 홀드) — 정면 피해 경감, 이동·사격 제한 */
   blocking: boolean;
+  /** 우클릭을 누르고 있는 누적 틱 — tapThreshold 이내에 떼면 패링 */
+  reactionHeldTicks: number;
 }
 
 export interface SigilState {
