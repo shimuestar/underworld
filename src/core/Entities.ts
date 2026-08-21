@@ -12,6 +12,9 @@ export interface EnemyAttackDef {
   deflectable?: boolean;
   projectileSpeed?: number;
   projectileRadius?: number;
+  projectileKind?: string;
+  /** 원거리 공격 사용 최소 거리 (이보다 가까우면 근접) */
+  minRange?: number;
 }
 
 export interface EnemyDef {
@@ -40,6 +43,8 @@ export interface EnemyDef {
   /** 보스 (boss_two_phase) */
   boss?: boolean;
   armoredAttack?: EnemyAttackDef;
+  /** 원거리 보조 공격 (족장 바위 투척 등) */
+  rangedAttack?: EnemyAttackDef;
   parriesToStagger?: number;
   executeDamage?: number;
   armorHealth?: number;

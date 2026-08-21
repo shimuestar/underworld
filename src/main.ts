@@ -32,8 +32,9 @@ const hud = document.getElementById('hud');
 const deathOverlay = document.getElementById('death');
 const deathHint = document.getElementById('death-hint');
 const flashOverlay = document.getElementById('flash');
+const hurtOverlay = document.getElementById('hurt');
 const altarPrompt = document.getElementById('altar-prompt');
-if (!app || !hud || !deathOverlay || !deathHint || !flashOverlay || !altarPrompt)
+if (!app || !hud || !deathOverlay || !deathHint || !flashOverlay || !hurtOverlay || !altarPrompt)
   throw new Error('index.html에 필요한 오버레이 요소가 없다');
 
 const events = new Events();
@@ -242,6 +243,17 @@ events.on('enemy_cast', (payload) => {
 events.on('headshot', () => {
   audio.play('headshot');
   showReaction('헤드샷!', 700);
+});
+
+// ---- 피격 연출 — 붉은 비네트 + 피격음 ----
+events.on('player_damaged', () => {
+  audio.play('player_hurt');
+  hurtOverlay!.style.transition = 'none';
+  hurtOverlay!.style.opacity = '1';
+  requestAnimationFrame(() => {
+    hurtOverlay!.style.transition = 'opacity 450ms ease-out';
+    hurtOverlay!.style.opacity = '0';
+  });
 });
 events.on('spell_impact', () => audio.play('spell_impact'));
 events.on('sigil_acquired', () => audio.play('pickup'));

@@ -586,7 +586,15 @@ export class Stage {
       let group = this.projectileVisuals.get(proj.id);
       if (!group) {
         group = new THREE.Group();
-        if (proj.kind === 'arrow') {
+        if (proj.kind === 'rock') {
+          // 바위 — 크고 어두운 덩어리, 무발광
+          group.add(
+            new THREE.Mesh(
+              new THREE.DodecahedronGeometry(proj.radius),
+              new THREE.MeshLambertMaterial({ color: 0x6a5a4a, emissive: 0x191410 }),
+            ),
+          );
+        } else if (proj.kind === 'arrow') {
           // 화살 — 나무 화살대 + 회색 촉. 발광하지 않아 어둠 속에서 위협적
           const shaft = new THREE.Mesh(
             new THREE.BoxGeometry(0.05, 0.05, 0.75),

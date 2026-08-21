@@ -30,7 +30,8 @@ export type SoundName =
   | 'corruption_up'
   | 'lever_pull'
   | 'bow_twang'
-  | 'headshot';
+  | 'headshot'
+  | 'player_hurt';
 
 const MASTER_GAIN = 0.25;
 
@@ -186,6 +187,12 @@ export class GameAudio {
         this.tone(110, 1.2, 'sine', 0.7);
         this.tone(165, 1.0, 'sine', 0.45, 0.1);
         this.tone(220, 0.8, 'sine', 0.3, 0.25);
+        break;
+      case 'player_hurt':
+        // 피격 — 둔탁한 충격 + 낮은 신음조
+        this.noise(0.08, 0.9, 900);
+        this.tone(140, 0.16, 'square', 0.8, 0, 70);
+        this.tone(260, 0.22, 'sawtooth', 0.5, 0.04, 110);
         break;
       case 'headshot':
         // 헤드샷 확인음 — 짧고 높은 스냅 (착탄 지연에 맞춤)

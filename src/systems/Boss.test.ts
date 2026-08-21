@@ -228,6 +228,32 @@ describe('goblin_chieftain (1구역 보스)', () => {
   });
 });
 
+describe('goblin_chieftain 원거리 공격', () => {
+  it('원거리(minRange 이상)에서는 바위 투척 — 반사 불가 투사체', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 18, 6, 1); // dist 12 ≥ minRange 7
+    boss.ai = 'chase';
+    world.enemies.push(boss);
+
+    tickEnemiesUntil(() => boss.ai === 'windup');
+    expect(boss.attackMode).toBe('ranged');
+    tickEnemiesUntil(() => boss.ai === 'recover');
+    expect(world.projectiles).toHaveLength(1);
+    const rock = world.projectiles[0]!;
+    expect(rock.kind).toBe('rock');
+    expect(rock.deflectable).toBe(false);
+    expect(rock.damage).toBe(enemyDef('goblin_chieftain').damage);
+  });
+
+  it('근접 거리에서는 기존 스매시 (melee 모드)', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 8.4, 6, 1); // dist 2.4 < minRange
+    boss.ai = 'chase';
+    world.enemies.push(boss);
+    tickEnemiesUntil(() => boss.ai === 'windup');
+    expect(boss.attackMode).toBe('melee');
+    expect(world.projectiles).toHaveLength(0);
+  });
+});
+
 describe('출구 (7.4)', () => {
   it('보스 생존 시 잠김, 처치 후 밟으면 zone_cleared', () => {
     const boss = spawnEnemyAt('goblin_chieftain', 8, 6, 1);

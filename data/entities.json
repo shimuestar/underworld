@@ -58,6 +58,7 @@
       "behavior": "boss_two_phase",
       "attack": { "type": "smash", "windupTicks": 40, "recoverTicks": 45, "impactRangeMul": 1.25, "parryable": true, "telegraph": "blue" },
       "armoredAttack": { "type": "smash", "windupTicks": 30, "recoverTicks": 40, "impactRangeMul": 1.3, "parryable": false, "telegraph": "red" },
+      "rangedAttack": { "type": "projectile", "windupTicks": 36, "recoverTicks": 55, "impactRangeMul": 1, "parryable": false, "deflectable": false, "telegraph": "red", "projectileSpeed": 18, "projectileRadius": 0.45, "projectileKind": "rock", "minRange": 7 },
       "parriesToStagger": 3, "executeDamage": 60, "armorHealth": 120,
       "phases": [
         { "name": "melee", "parryable": true, "telegraph": "blue", "note": "패링 구간. 3연속 패링 시 스태거" },

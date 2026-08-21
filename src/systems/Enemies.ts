@@ -14,8 +14,9 @@ import type { EnemyState, World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
-/** 현재 페이즈의 공격 정의 (보스 armored면 armoredAttack) */
+/** 현재 공격 정의 — 원거리 모드면 rangedAttack, 보스 armored면 armoredAttack */
 export function currentAttack(def: EnemyDef, enemy: EnemyState): EnemyAttackDef {
+  if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
   if (enemy.phase === 'armored' && def.armoredAttack) return def.armoredAttack;
   return def.attack;
 }
@@ -69,7 +70,18 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
 
       if (dist <= def.attackRange) {
-        startWindup(world, enemy, attack);
+        enemy.attackMode = 'melee';
+        startWindup(world, enemy, currentAttack(def, enemy));
+        break;
+      }
+      // 원거리 보조 공격 (족장 바위 투척) — 근접 거리 밖 + 시야 확보 시
+      if (
+        def.rangedAttack &&
+        dist >= (def.rangedAttack.minRange ?? 0) &&
+        world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
+      ) {
+        enemy.attackMode = 'ranged';
+        startWindup(world, enemy, def.rangedAttack);
         break;
       }
       if (dist > 0) {
@@ -196,7 +208,9 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
     radius: attack.projectileRadius ?? 0.3,
     casterId: enemy.id,
     deflectable: attack.deflectable ?? false,
-    kind: (attack.deflectable ?? false) ? 'magic' : 'arrow',
+    kind:
+      (attack.projectileKind as 'rock' | undefined) ??
+      ((attack.deflectable ?? false) ? 'magic' : 'arrow'),
   });
   world.events.emit('enemy_cast', { enemyId: enemy.id, enemyType: enemy.type });
 }

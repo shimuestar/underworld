@@ -94,7 +94,7 @@ export interface ProjectileState {
   /** 반응 버튼으로 반사 가능한가 (마법탄 true, 화살 false) */
   deflectable?: boolean;
   /** 렌더 형태 */
-  kind?: 'fireball' | 'magic' | 'arrow';
+  kind?: 'fireball' | 'magic' | 'arrow' | 'rock';
 }
 
 export interface SpellState {
@@ -170,6 +170,8 @@ export interface EnemyState {
   phase?: 'melee' | 'armored';
   armorHealth?: number;
   parryStreak?: number;
+  /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
+  attackMode?: 'melee' | 'ranged';
 }
 
 export class World {
