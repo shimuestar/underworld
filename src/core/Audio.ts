@@ -206,9 +206,11 @@ export class GameAudio {
         this.noise(0.07, 0.8, 1500, 0.11);
         break;
       case 'melee_hit':
-        // 해머 적중 — 묵직한 충격
-        this.tone(80, 0.2, 'sine', 1.2, 0, 40);
-        this.noise(0.1, 0.9, 1000);
+        // 해머 적중 — 내리찍는 모션(스윙 후반)에 맞춰 둔탁한 3겹 충격
+        this.tone(65, 0.26, 'sine', 1.7, 0.06, 28); // 서브베이스 펀치
+        this.tone(150, 0.12, 'square', 0.9, 0.06, 55); // 몸통 스맥
+        this.noise(0.09, 1.3, 1100, 0.06); // 뼈 크런치
+        this.noise(0.22, 0.45, 350, 0.12); // 둔중한 잔향
         break;
       case 'grenade_throw':
         this.noise(0.12, 0.35, 1200);
