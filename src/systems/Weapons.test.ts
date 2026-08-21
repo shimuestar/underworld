@@ -9,6 +9,7 @@ import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
+import * as Enemies from './Enemies';
 import * as Projectiles from './Projectiles';
 import * as Sigils from './Sigils';
 import * as Weapons from './Weapons';
@@ -80,15 +81,32 @@ describe('해머 (슬롯 1)', () => {
     world.input = Input.emptySnapshot();
   }
 
-  it('전방 부채꼴 적중 — 처치 시 melee_kill(비처형) → 마나 지급 경로', () => {
+  it('전방 부채꼴 적중 — 권총의 60% 피해 + 뒤로 넉백', () => {
     const hammer = balance.weapons.hammer;
     const enemy = spawnEnemyAt('goblin_runner', 6 + hammer.range - 0.2, 6, 1);
+    world.enemies.push(enemy);
+    const startX = enemy.x;
+
+    swing();
+    expect(enemy.health).toBe(30 - hammer.damage); // 20 — 러너 2방
+    expect(enemy.alive).toBe(true);
+
+    // 넉백 — 타격 방향(+X)으로 밀려난다
+    world.input = Input.emptySnapshot();
+    for (let i = 0; i < hammer.knockbackTicks; i++) Enemies.tick(world, DT);
+    expect(enemy.x).toBeCloseTo(startX + hammer.knockback, 1);
+  });
+
+  it('처치 시 melee_kill(비처형) → 마나 지급 경로', () => {
+    const hammer = balance.weapons.hammer;
+    const enemy = spawnEnemyAt('goblin_runner', 6 + hammer.range - 0.2, 6, 1);
+    enemy.health = hammer.damage; // 한 방 거리
     world.enemies.push(enemy);
     const kills: unknown[] = [];
     world.events.on('melee_kill', (payload) => kills.push(payload));
 
     swing();
-    expect(enemy.alive).toBe(false); // 55 > 30
+    expect(enemy.alive).toBe(false);
     expect(kills[0]).toMatchObject({ enemyType: 'goblin_runner', execution: false });
   });
 

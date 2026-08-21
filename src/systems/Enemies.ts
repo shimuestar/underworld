@@ -28,6 +28,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   enemy.prevX = enemy.x;
   enemy.prevZ = enemy.z;
 
+  // 넉백 — 밀려나는 동안은 휘청여서 다른 행동을 못 한다 (벽에는 막힘)
+  if ((enemy.kbTicks ?? 0) > 0) {
+    enemy.kbTicks = (enemy.kbTicks ?? 0) - 1;
+    world.level.slideMove(enemy, def.radius, enemy.kbX ?? 0, enemy.kbZ ?? 0);
+    return;
+  }
+
   const distX = p.x - enemy.x;
   const distZ = p.z - enemy.z;
   const dist = Math.hypot(distX, distZ);

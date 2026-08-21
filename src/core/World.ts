@@ -186,6 +186,10 @@ export interface EnemyState {
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
   attackMode?: 'melee' | 'ranged';
+  /** 넉백 잔여 틱 + 틱당 밀림량 (해머 등) */
+  kbTicks?: number;
+  kbX?: number;
+  kbZ?: number;
 }
 
 /** (sourceX, sourceZ)에서 오는 공격을 방어 중인가 — 정면 arcDeg 안일 때만 */

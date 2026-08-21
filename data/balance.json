@@ -74,11 +74,14 @@
 
   "weapons": {
     "hammer": {
-      "damage": 55,
+      "_damageNote": "권총(34)의 약 60%",
+      "damage": 20,
       "range": 2.6,
       "arcDeg": 100,
       "cooldownTicks": 24,
-      "noiseRadius": 5.0
+      "noiseRadius": 5.0,
+      "knockback": 2.4,
+      "knockbackTicks": 6
     },
     "pistol": {
       "ammoMax": 60,

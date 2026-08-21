@@ -124,6 +124,12 @@ function swingHammer(world: World): void {
 
     enemy.health -= hammer.damage;
     if (enemy.ai === 'idle') enemy.ai = 'chase';
+    // 넉백 — 타격 방향으로 밀려난다 (보스는 밀리지 않는다)
+    if (!enemyDef(enemy.type).boss) {
+      enemy.kbTicks = hammer.knockbackTicks;
+      enemy.kbX = (toX / dist) * (hammer.knockback / hammer.knockbackTicks);
+      enemy.kbZ = (toZ / dist) * (hammer.knockback / hammer.knockbackTicks);
+    }
     world.events.emit('melee_hit', { enemyId: enemy.id, damage: hammer.damage });
     if (enemy.health <= 0) {
       enemy.alive = false;
