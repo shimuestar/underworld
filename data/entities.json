@@ -3,6 +3,7 @@
 
   "enemies": {
     "goblin_runner": {
+      "name": "고블린 러너",
       "zone": 1, "slice": true,
       "health": 30, "speed": 7.5, "damage": 12,
       "radius": 0.5, "height": 1.6,
@@ -13,6 +14,7 @@
       "drops": []
     },
     "goblin_spear": {
+      "name": "고블린 창병",
       "zone": 1, "slice": true,
       "health": 55, "speed": 3.2, "damage": 22,
       "radius": 0.5, "height": 1.8,
@@ -24,6 +26,7 @@
       "drops": ["sig_fireball"]
     },
     "warden": {
+      "name": "수호주술사",
       "zone": 2, "slice": true,
       "health": 90, "speed": 2.4, "damage": 26,
       "radius": 0.6, "height": 2.0,
@@ -36,6 +39,7 @@
       "drops": ["sig_dash"], "dropsOnDeath": true
     },
     "goblin_chieftain": {
+      "name": "고블린 족장",
       "zone": 1, "slice": true, "boss": true,
       "health": 420, "speed": 4.0, "damage": 30,
       "radius": 0.8, "height": 2.4,

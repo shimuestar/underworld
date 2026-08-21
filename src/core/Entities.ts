@@ -15,6 +15,8 @@ export interface EnemyAttackDef {
 }
 
 export interface EnemyDef {
+  /** 표시 이름 (이름표) */
+  name?: string;
   health: number;
   speed: number;
   damage: number;

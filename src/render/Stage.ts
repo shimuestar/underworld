@@ -51,6 +51,52 @@ interface EnemyVisual {
   barrierFlashUntil: number;
   /** 보스 장갑판 (armored 페이즈에만 표시) */
   armorPlates?: THREE.Mesh;
+  /** 머리 위 이름표 + HP 바 */
+  plate: THREE.Sprite;
+  plateTexture: THREE.CanvasTexture;
+  plateCanvas: HTMLCanvasElement;
+  /** 마지막으로 그린 상태 키 — 변화 시에만 다시 그린다 */
+  plateKey: string;
+}
+
+const PLATE_W = 256;
+const PLATE_H = 72;
+
+function drawPlate(
+  canvas: HTMLCanvasElement,
+  name: string,
+  healthFrac: number,
+  armorFrac: number | null,
+): void {
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, PLATE_W, PLATE_H);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 24px monospace';
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillText(name, 129, 19);
+  ctx.fillStyle = '#e8e8ee';
+  ctx.fillText(name, 128, 18);
+
+  // HP 바
+  const barX = 28;
+  const barW = 200;
+  const barY = 40;
+  const barH = 16;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+  const frac = Math.max(0, Math.min(1, healthFrac));
+  ctx.fillStyle = frac > 0.5 ? '#3fae5a' : frac > 0.25 ? '#c9a227' : '#e04444';
+  ctx.fillRect(barX, barY, barW * frac, barH);
+
+  // 보스 장갑 바 (armored 페이즈)
+  if (armorFrac !== null) {
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(barX - 2, barY + barH + 4, barW + 4, 10);
+    ctx.fillStyle = '#9aa2ad';
+    ctx.fillRect(barX, barY + barH + 6, barW * Math.max(0, Math.min(1, armorFrac)), 6);
+  }
 }
 const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 그린다 (근접부 왜곡 방지)
 const TRACER_WIDTH = 0.022;
@@ -333,7 +379,30 @@ export class Stage {
     head.position.set(0, def.height - headSize / 2, -def.radius * 0.2);
     group.add(head);
 
-    const visual: EnemyVisual = { group, flashMaterials, shieldFlashUntil: 0, barrierFlashUntil: 0 };
+    // 이름표 + HP 바 (빌보드 스프라이트, 어그로 후에만 표시)
+    const plateCanvas = document.createElement('canvas');
+    plateCanvas.width = PLATE_W;
+    plateCanvas.height = PLATE_H;
+    const plateTexture = new THREE.CanvasTexture(plateCanvas);
+    const plate = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: plateTexture, transparent: true, depthWrite: false }),
+    );
+    const plateScale = def.boss ? 2.6 : 1.9;
+    plate.scale.set(plateScale, plateScale * (PLATE_H / PLATE_W), 1);
+    plate.position.y = def.height + (def.boss ? 0.7 : 0.5);
+    plate.visible = false;
+    group.add(plate);
+
+    const visual: EnemyVisual = {
+      group,
+      flashMaterials,
+      shieldFlashUntil: 0,
+      barrierFlashUntil: 0,
+      plate,
+      plateTexture,
+      plateCanvas,
+      plateKey: '',
+    };
 
     if (def.magicBarrier) {
       visual.barrierMaterial = new THREE.MeshLambertMaterial({
@@ -435,6 +504,23 @@ export class Stage {
       else if (enemy.burnTicks > 0) emissive = BURN_TINT;
       for (const material of visual.flashMaterials) material.emissive.set(emissive);
 
+      // 이름표 — 어그로 후에만. 체력/장갑이 바뀔 때만 다시 그린다
+      visual.plate.visible = enemy.ai !== 'idle';
+      if (visual.plate.visible) {
+        const armored = enemy.phase === 'armored' && (enemy.armorHealth ?? 0) > 0;
+        const key = `${Math.ceil(enemy.health)}|${armored ? Math.ceil(enemy.armorHealth ?? 0) : '-'}`;
+        if (key !== visual.plateKey) {
+          visual.plateKey = key;
+          drawPlate(
+            visual.plateCanvas,
+            def2.name ?? enemy.type,
+            enemy.health / def2.health,
+            armored ? (enemy.armorHealth ?? 0) / (def2.armorHealth ?? 1) : null,
+          );
+          visual.plateTexture.needsUpdate = true;
+        }
+      }
+
       // warden 방어막 — 튕김 시 번쩍
       if (visual.barrier && visual.barrierMaterial) {
         const flashOn = now < visual.barrierFlashUntil;
@@ -478,6 +564,8 @@ export class Stage {
           (obj.material as THREE.Material).dispose();
         }
       });
+      visual.plateTexture.dispose();
+      visual.plate.material.dispose();
       this.enemyVisuals.delete(id);
     }
   }
