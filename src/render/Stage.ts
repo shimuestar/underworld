@@ -54,12 +54,6 @@ interface EnemyVisual {
   barrierFlashUntil: number;
   /** 보스 장갑판 (armored 페이즈에만 표시) */
   armorPlates?: THREE.Mesh;
-  /** 근접 공격 판정 반경 링 (바닥) */
-  rangeRing: THREE.Mesh;
-  rangeRingMaterial: THREE.MeshBasicMaterial;
-  /** 원거리 시전 조준선 (월드 공간 — scene 직속) */
-  aimLine: THREE.Mesh;
-  aimLineMaterial: THREE.MeshBasicMaterial;
   /** 시전 충전 구체 (warden) */
   chargeOrb?: THREE.Mesh;
   /** 활 (archer) */
@@ -417,29 +411,6 @@ export class Stage {
     plate.visible = false;
     group.add(plate);
 
-    // 근접 공격 판정 반경 링 (단위 반지름 1 — scale로 실제 반경 적용)
-    const rangeRingMaterial = new THREE.MeshBasicMaterial({
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    const rangeRing = new THREE.Mesh(new THREE.RingGeometry(0.88, 1, 40), rangeRingMaterial);
-    rangeRing.rotation.x = -Math.PI / 2;
-    rangeRing.position.y = 0.05;
-    rangeRing.visible = false;
-    group.add(rangeRing);
-
-    // 원거리 시전 조준선 — 월드 공간이라 scene에 직접 추가 (제거 시 별도 정리)
-    const aimLineMaterial = new THREE.MeshBasicMaterial({
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-    });
-    const aimLine = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 1), aimLineMaterial);
-    aimLine.visible = false;
-    this.scene.add(aimLine);
-
     const visual: EnemyVisual = {
       group,
       torso,
@@ -450,10 +421,6 @@ export class Stage {
       plateTexture,
       plateCanvas,
       plateKey: '',
-      rangeRing,
-      rangeRingMaterial,
-      aimLine,
-      aimLineMaterial,
     };
 
     // 시전 충전 구체 (마법 투사체 캐스터)
@@ -622,47 +589,21 @@ export class Stage {
         visual.spear.position.z += (targetZ - visual.spear.position.z) * 0.35;
       }
 
-      // 공격 모션 — windup에 뒤로 젖혔다가(진행도만큼) 타격 구간에 앞으로 내지른다
+      // 공격 모션 — windup에 깊게 젖혔다가 타격 구간에 격하게 내지른다.
+      // 섬광 구간(마지막 visualLeadTicks)에는 몸이 부르르 떨린다 — "지금 온다"
       const inWindup = enemy.ai === 'windup';
       const striking =
         enemy.ai === 'active_perfect' || enemy.ai === 'active_normal' || enemy.ai === 'impact';
       const windupProgress = inWindup ? 1 - enemy.timer / attack.windupTicks : 0;
       const isMelee = attack.type !== 'projectile';
-      const leanTarget = striking ? 0.45 : inWindup ? -0.32 * windupProgress : 0;
-      const lungeTarget = striking && isMelee ? -0.45 : 0;
-      visual.torso.rotation.x += (leanTarget - visual.torso.rotation.x) * 0.35;
-      visual.torso.position.z += (lungeTarget - visual.torso.position.z) * 0.35;
-
-      // 근접 공격 판정 반경 링 — windup 동안 차오르고 판정 창에 선명해진다
-      if (isMelee && (inWindup || striking)) {
-        const radius = def2.attackRange * attack.impactRangeMul;
-        visual.rangeRing.visible = true;
-        visual.rangeRing.scale.set(radius, radius, 1);
-        visual.rangeRingMaterial.color.set(telegraphColor);
-        visual.rangeRingMaterial.opacity = striking ? 0.8 : 0.12 + 0.5 * windupProgress;
-      } else {
-        visual.rangeRing.visible = false;
+      let leanTarget = striking ? 0.62 : inWindup ? -0.5 * windupProgress : 0;
+      if (inWindup && enemy.timer <= balance.telegraph.visualLeadTicks) {
+        leanTarget += Math.sin(now / 14) * 0.06; // 떨림
       }
-
-      // 원거리 시전 조준선 — 시전 중 나(카메라)를 향해 그려진다
-      if (!isMelee && inWindup) {
-        const from = new THREE.Vector3(
-          visual.group.position.x,
-          def2.height * 0.6,
-          visual.group.position.z,
-        );
-        const to = this.camera.position.clone();
-        to.y -= 0.2;
-        const length = from.distanceTo(to);
-        visual.aimLine.visible = true;
-        visual.aimLine.scale.set(1, 1, length);
-        visual.aimLine.position.copy(from).add(to).multiplyScalar(0.5);
-        visual.aimLine.lookAt(to);
-        visual.aimLineMaterial.color.set(telegraphColor);
-        visual.aimLineMaterial.opacity = 0.08 + 0.38 * windupProgress;
-      } else {
-        visual.aimLine.visible = false;
-      }
+      const lungeTarget = striking && isMelee ? -0.7 : 0;
+      const snap = striking ? 0.55 : 0.3; // 타격은 빠르게, 복귀는 부드럽게
+      visual.torso.rotation.x += (leanTarget - visual.torso.rotation.x) * snap;
+      visual.torso.position.z += (lungeTarget - visual.torso.position.z) * snap;
 
       // 시전 충전 구체 — windup 진행에 따라 커진다
       if (visual.chargeOrb) {
@@ -697,9 +638,6 @@ export class Stage {
       });
       visual.plateTexture.dispose();
       visual.plate.material.dispose();
-      this.scene.remove(visual.aimLine); // scene 직속이라 별도 정리
-      visual.aimLine.geometry.dispose();
-      visual.aimLineMaterial.dispose();
       this.enemyVisuals.delete(id);
     }
   }
