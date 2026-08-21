@@ -29,7 +29,8 @@ export type SoundName =
   | 'altar_enter'
   | 'corruption_up'
   | 'lever_pull'
-  | 'bow_twang';
+  | 'bow_twang'
+  | 'headshot';
 
 const MASTER_GAIN = 0.25;
 
@@ -185,6 +186,11 @@ export class GameAudio {
         this.tone(110, 1.2, 'sine', 0.7);
         this.tone(165, 1.0, 'sine', 0.45, 0.1);
         this.tone(220, 0.8, 'sine', 0.3, 0.25);
+        break;
+      case 'headshot':
+        // 헤드샷 확인음 — 짧고 높은 스냅 (착탄 지연에 맞춤)
+        this.tone(2800, 0.06, 'square', 0.6, 0.035);
+        this.tone(1400, 0.09, 'triangle', 0.5, 0.05);
         break;
       case 'bow_twang':
         // 활시위 튕김 + 화살 바람 소리

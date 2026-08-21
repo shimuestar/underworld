@@ -74,7 +74,12 @@
       "magSize": 12,
       "pierceBarrier": true,
       "muzzleFlash": { "intensity": 3.0, "radiusMul": 0.5, "ticks": 2 },
-      "tracerTicks": 8
+      "tracerTicks": 8,
+      "falloff": { "startDist": 10.0, "endDist": 30.0, "minMul": 0.6 },
+      "hitZones": {
+        "headMul": 1.5, "bodyMul": 0.8, "limbMul": 0.6,
+        "headFrac": 0.82, "bodyFrac": 0.45
+      }
     },
     "rifle": {
       "ammoMax": 180,

@@ -135,9 +135,36 @@ function fire(world: World): void {
 
   if (!hit) return;
 
+  // 부위 판정 (명중 높이) + 거리 감쇠
+  const def = enemyDef(hit.enemy.type);
+  const zones = pistol.hitZones;
+  const heightFrac = (oy + dy * hit.t) / def.height;
+  let zone: 'head' | 'body' | 'limb';
+  let zoneMul: number;
+  if (heightFrac >= zones.headFrac) {
+    zone = 'head';
+    zoneMul = zones.headMul;
+  } else if (heightFrac >= zones.bodyFrac) {
+    zone = 'body';
+    zoneMul = zones.bodyMul;
+  } else {
+    zone = 'limb';
+    zoneMul = zones.limbMul;
+  }
+  const falloff = pistol.falloff;
+  const falloffMul =
+    hit.t <= falloff.startDist
+      ? 1
+      : hit.t >= falloff.endDist
+        ? falloff.minMul
+        : 1 - (1 - falloff.minMul) * ((hit.t - falloff.startDist) / (falloff.endDist - falloff.startDist));
+  const damage = pistol.damage * zoneMul * falloffMul;
+
+  if (zone === 'head') world.events.emit('headshot', { enemyId: hit.enemy.id });
+
   // 보스 장갑 페이즈 — 실탄은 장갑을 깎는다. 장갑 파괴 시 melee 페이즈 복귀
   if (hit.enemy.phase === 'armored' && (hit.enemy.armorHealth ?? 0) > 0) {
-    hit.enemy.armorHealth = (hit.enemy.armorHealth ?? 0) - pistol.damage;
+    hit.enemy.armorHealth = (hit.enemy.armorHealth ?? 0) - damage;
     world.events.emit('armor_hit', { enemyId: hit.enemy.id, armor: hit.enemy.armorHealth });
     if (hit.enemy.armorHealth <= 0) {
       hit.enemy.armorHealth = 0;
@@ -147,11 +174,11 @@ function fire(world: World): void {
     return;
   }
 
-  hit.enemy.health -= pistol.damage;
+  hit.enemy.health -= damage;
   if (hit.enemy.health <= 0) {
     hit.enemy.alive = false;
     // 총기 처치는 마나 0 — 여기서 마나 이벤트를 발행하지 않는다 (하드 룰)
-    world.events.emit('weapon_kill', { weapon: 'pistol', enemyType: hit.enemy.type });
+    world.events.emit('weapon_kill', { weapon: 'pistol', enemyType: hit.enemy.type, zone });
     world.events.emit('enemy_died', {
       enemyType: hit.enemy.type,
       x: hit.enemy.x,
@@ -162,6 +189,8 @@ function fire(world: World): void {
       enemyId: hit.enemy.id,
       enemyType: hit.enemy.type,
       health: hit.enemy.health,
+      zone,
+      damage,
     });
   }
 }

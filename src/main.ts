@@ -239,6 +239,10 @@ events.on('cast_spell', () => audio.play('cast_fire'));
 events.on('enemy_cast', (payload) => {
   if ((payload as { enemyType: string }).enemyType === 'goblin_archer') audio.play('bow_twang');
 });
+events.on('headshot', () => {
+  audio.play('headshot');
+  showReaction('헤드샷!', 700);
+});
 events.on('spell_impact', () => audio.play('spell_impact'));
 events.on('sigil_acquired', () => audio.play('pickup'));
 events.on('reload_started', () => audio.play('reload_start'));

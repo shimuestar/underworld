@@ -134,13 +134,17 @@ describe('warden (수호주술사)', () => {
     expect(blocked[0]).toMatchObject({ kind: 'magic' });
   });
 
-  it('9mm는 방어막을 관통해 피해를 준다', () => {
+  it('9mm는 방어막을 관통해 피해를 준다 (근거리 몸통 = damage × bodyMul)', () => {
     const warden = spawnEnemyAt('warden', 12, 6, 1);
     world.enemies.push(warden);
     world.input = { ...Input.emptySnapshot(), firePressed: true };
     Weapons.tick(world, DT);
     world.input = Input.emptySnapshot();
-    expect(warden.health).toBe(enemyDef('warden').health - balance.weapons.pistol.damage);
+    // 수평 사격 → 눈높이 1.6 / warden 키 2.0 = 0.8 → 몸통 판정
+    expect(warden.health).toBeCloseTo(
+      enemyDef('warden').health -
+        balance.weapons.pistol.damage * balance.weapons.pistol.hitZones.bodyMul,
+    );
   });
 });
 
@@ -201,10 +205,10 @@ describe('goblin_chieftain (1구역 보스)', () => {
     expect(blocked[0]).toMatchObject({ kind: 'armor' });
     expect(boss.health).toBe(def.health);
 
-    // 실탄으로 장갑 파괴 (34×4=136 > 120)
+    // 실탄으로 장갑 파괴 — 몸통 판정 27.2/발 × 5발 = 136 > 120
     const phases: unknown[] = [];
     world.events.on('boss_phase', (payload) => phases.push(payload));
-    for (let shot = 0; shot < 4; shot++) {
+    for (let shot = 0; shot < 5; shot++) {
       world.weapon.cooldown = 0;
       world.input = { ...Input.emptySnapshot(), firePressed: true };
       Weapons.tick(world, DT);
