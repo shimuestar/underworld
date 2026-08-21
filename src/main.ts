@@ -184,9 +184,9 @@ events.on('parry_attempt', (payload) => {
 // ---- HUD 반응 결과 표시 ----
 let reactionLabel = '';
 let reactionLabelUntil = 0;
-function showReaction(text: string): void {
+function showReaction(text: string, durationMs = 1000): void {
   reactionLabel = text;
-  reactionLabelUntil = performance.now() + 1000;
+  reactionLabelUntil = performance.now() + durationMs;
 }
 events.on('parry_attempt', (payload) => {
   const result = (payload as { result: string }).result;
@@ -194,6 +194,10 @@ events.on('parry_attempt', (payload) => {
 });
 events.on('melee_kill', () => showReaction('처형'));
 events.on('dodge_step', () => showReaction('회피'));
+events.on('sigil_acquired', (payload) => {
+  const id = (payload as { id: string }).id;
+  showReaction(`각인 획득: ${sigilDef(id).name} — Tab으로 부착`, 3500);
+});
 
 events.on('player_died', () => deathOverlay.classList.add('visible'));
 
