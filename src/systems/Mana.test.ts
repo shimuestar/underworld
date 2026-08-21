@@ -155,9 +155,29 @@ describe('전투 종료 휘발', () => {
     expect(world.mana.value).toBeLessThan(50);
   });
 
-  it('0 밑으로 내려가지 않는다', () => {
-    world.mana.value = 2;
-    for (let i = 0; i < balance.mana.combatExitTicks + 10; i++) Mana.tick(world, DT);
-    expect(world.mana.value).toBe(0);
+  it('휘발은 기본 충전 상한(regenCap)에서 멈춘다', () => {
+    world.mana.value = 50;
+    for (let i = 0; i < 2000; i++) Mana.tick(world, DT);
+    expect(world.mana.value).toBeCloseTo(balance.mana.regenCap);
+  });
+});
+
+describe('기본 충전', () => {
+  it('상한 아래에서는 시간 경과로 자동 회복된다 (전투 여부 무관)', () => {
+    world.mana.value = 0;
+    for (let i = 0; i < 300; i++) Mana.tick(world, DT);
+    expect(world.mana.value).toBeCloseTo(300 * balance.mana.regenPerTick);
+
+    world.enemies.push(chaseEnemy()); // 전투 중에도 회복
+    const before = world.mana.value;
+    for (let i = 0; i < 60; i++) Mana.tick(world, DT);
+    expect(world.mana.value).toBeCloseTo(before + 60 * balance.mana.regenPerTick);
+  });
+
+  it('자동 회복은 regenCap을 넘지 않는다', () => {
+    world.mana.value = balance.mana.regenCap - 0.01;
+    world.enemies.push(chaseEnemy()); // 휘발 없이 회복만 보기
+    for (let i = 0; i < 600; i++) Mana.tick(world, DT);
+    expect(world.mana.value).toBe(balance.mana.regenCap);
   });
 });

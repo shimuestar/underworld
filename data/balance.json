@@ -54,6 +54,8 @@
     },
     "combatExitTicks": 90,
     "decayPerTick": 1.2,
+    "regenPerTick": 0.02,
+    "regenCap": 30,
     "heartSigilBonus": 0.6
   },
 
