@@ -49,6 +49,20 @@ export function tick(world: World, _dt: number): void {
   fire(world);
 }
 
+/** 소음 전파 — 반경 내 대기(idle) 적들이 추격을 시작한다 */
+function alertNearby(world: World, x: number, z: number, radius: number): void {
+  for (const enemy of world.enemies) {
+    if (!enemy.alive || enemy.ai !== 'idle') continue;
+    if (Math.hypot(enemy.x - x, enemy.z - z) > radius) continue;
+    enemy.ai = 'chase';
+    world.events.emit('enemy_alerted', {
+      enemyId: enemy.id,
+      enemyType: enemy.type,
+      noise: true,
+    });
+  }
+}
+
 function startReload(world: World): void {
   // 오른팔 각인 페널티 — 재장전 시간 배율 (M5 완료 조건: 부착하면 느려진 게 체감돼야 한다)
   world.weapon.reloading = Math.round(
@@ -97,6 +111,19 @@ function fire(world: World): void {
   }
 
   if (hit) hitT = hit.t;
+
+  // 소음 전파 — 총성(사수 위치)과 착탄 지점 주변의 대기 중인 적들이 나를 인지한다.
+  // 맞은 적은 거리와 무관하게 무조건 인지.
+  alertNearby(world, p.x, p.z, pistol.noiseRadius);
+  alertNearby(world, p.x + dx * hitT, p.z + dz * hitT, pistol.noiseRadius);
+  if (hit && hit.enemy.ai === 'idle') {
+    hit.enemy.ai = 'chase';
+    world.events.emit('enemy_alerted', {
+      enemyId: hit.enemy.id,
+      enemyType: hit.enemy.type,
+      noise: true,
+    });
+  }
 
   // 정면 방패 — 전방 호 안에서 맞은 투사체는 무효 (스태거 중에는 방패 무력화)
   if (hit) {
@@ -151,13 +178,18 @@ function fire(world: World): void {
     zone = 'limb';
     zoneMul = zones.limbMul;
   }
+  // 거리 감쇠 — startDist까지 100%, endDist에서 minMul, farDist 이상은 farMul(사실상 무효)
   const falloff = pistol.falloff;
-  const falloffMul =
-    hit.t <= falloff.startDist
-      ? 1
-      : hit.t >= falloff.endDist
-        ? falloff.minMul
-        : 1 - (1 - falloff.minMul) * ((hit.t - falloff.startDist) / (falloff.endDist - falloff.startDist));
+  let falloffMul: number;
+  if (hit.t <= falloff.startDist) falloffMul = 1;
+  else if (hit.t <= falloff.endDist)
+    falloffMul =
+      1 - (1 - falloff.minMul) * ((hit.t - falloff.startDist) / (falloff.endDist - falloff.startDist));
+  else if (hit.t <= falloff.farDist)
+    falloffMul =
+      falloff.minMul -
+      (falloff.minMul - falloff.farMul) * ((hit.t - falloff.endDist) / (falloff.farDist - falloff.endDist));
+  else falloffMul = falloff.farMul;
   const damage = pistol.damage * zoneMul * falloffMul;
 
   if (zone === 'head') world.events.emit('headshot', { enemyId: hit.enemy.id });
