@@ -62,9 +62,13 @@ export class GameAudio {
         this.tone(660, 0.4, 'triangle', 0.4, 0.1, 1760);
         break;
       case 'deflect':
-        // 반사 성공 — 밝은 상승 스윕
-        this.tone(880, 0.22, 'sine', 0.8, 0, 2637);
-        this.noise(0.05, 0.4, 3500);
+        // 반사 성공 — 즉각적인 금속 팅 + 상승 스윕 + 종소리 화음 꼬리 (보상감)
+        this.tone(2637, 0.08, 'triangle', 0.9); // 팅
+        this.tone(880, 0.18, 'sine', 0.7, 0.02, 2637); // 상승
+        this.tone(1568, 0.45, 'sine', 0.65, 0.09); // 종 (G6)
+        this.tone(2349, 0.4, 'sine', 0.45, 0.12); // 종 (D7)
+        this.tone(3136, 0.35, 'sine', 0.3, 0.15); // 종 (G7)
+        this.noise(0.07, 0.45, 5000, 0.02); // 반짝임
         break;
       case 'barrier_blocked':
         // 방어막/장갑 튕김 — 마법적 둔탁음
