@@ -572,7 +572,19 @@ function render(alpha: number): void {
     p.yaw,
     p.pitch,
   );
-  stage.setLanternOn(world.lantern.on);
+  // 배터리 임박 경고 — 잔여 flickerWarnSec부터 깜빡임. 처음엔 드물게(1~2회),
+  // 방전에 가까워질수록 빠르게 가속하다 꺼진다
+  let lanternVisible = world.lantern.on;
+  if (lanternVisible) {
+    const warnBattery =
+      balance.lantern.drainPerTick * balance.lantern.flickerWarnSec * balance.loop.tickRate;
+    if (world.lantern.battery <= warnBattery) {
+      const dyingProgress = 1 - world.lantern.battery / warnBattery; // 0 → 1
+      const blinkFreq = 0.75 + 6 * Math.pow(Math.max(0, (dyingProgress - 0.35) / 0.65), 1.6);
+      lanternVisible = ((now / 1000) * blinkFreq) % 1 > 0.22; // 22% 꺼짐 듀티
+    }
+  }
+  stage.setLanternOn(lanternVisible);
   stage.setLanternIntensityMul(world.modifiers.lanternIntensityMul);
   stage.setAmbientBoost(world.modifiers.ambientVisionBoost);
   stage.setMuzzleFlash(world.weapon.muzzleFlash > 0);

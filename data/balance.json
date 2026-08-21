@@ -149,6 +149,7 @@
     "penumbra": 0.45,
     "spillIntensity": 0.4,
     "spillRadius": 5.0,
+    "flickerWarnSec": 5,
     "attractsCasterRangeMul": 1.8
   },
 
