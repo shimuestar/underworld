@@ -14,6 +14,10 @@ export interface InputSnapshot {
   lanternToggle: boolean;
   /** 이번 틱에 배터리 교체 키가 눌렸는가 (엣지) */
   batterySwap: boolean;
+  /** 이번 틱에 발사 클릭이 있었는가 (엣지, 세미오토) */
+  firePressed: boolean;
+  /** 이번 틱에 재장전 키가 눌렸는가 (엣지) */
+  reload: boolean;
 }
 
 export class Input {
@@ -22,6 +26,8 @@ export class Input {
   private dy = 0;
   private lanternToggles = 0;
   private batterySwaps = 0;
+  private fireClicks = 0;
+  private reloads = 0;
 
   constructor(private readonly lockTarget: HTMLElement) {
     lockTarget.addEventListener('click', () => {
@@ -32,7 +38,8 @@ export class Input {
       if (e.repeat) return;
       this.keys.add(e.code);
       if (e.code === 'KeyF') this.lanternToggles++;
-      if (e.code === 'KeyR') this.batterySwaps++;
+      if (e.code === 'KeyB') this.batterySwaps++;
+      if (e.code === 'KeyR') this.reloads++;
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
@@ -41,6 +48,11 @@ export class Input {
       if (!this.pointerLocked) return;
       this.dx += e.movementX;
       this.dy += e.movementY;
+    });
+
+    // 포인터 락을 얻는 그 클릭은 발사로 치지 않는다 (mousedown 시점엔 아직 미잠금)
+    window.addEventListener('mousedown', (e) => {
+      if (e.button === 0 && this.pointerLocked) this.fireClicks++;
     });
   }
 
@@ -58,11 +70,15 @@ export class Input {
       lookDY: this.dy,
       lanternToggle: this.lanternToggles > 0,
       batterySwap: this.batterySwaps > 0,
+      firePressed: this.fireClicks > 0,
+      reload: this.reloads > 0,
     };
     this.dx = 0;
     this.dy = 0;
     this.lanternToggles = 0;
     this.batterySwaps = 0;
+    this.fireClicks = 0;
+    this.reloads = 0;
     return snapshot;
   }
 
@@ -75,6 +91,8 @@ export class Input {
       lookDY: 0,
       lanternToggle: false,
       batterySwap: false,
+      firePressed: false,
+      reload: false,
     };
   }
 }

@@ -5,8 +5,10 @@
     "goblin_runner": {
       "zone": 1, "slice": true,
       "health": 30, "speed": 7.5, "damage": 12,
+      "radius": 0.5, "height": 1.6,
+      "aggroRange": 16, "attackRange": 1.4,
       "behavior": "charge",
-      "attack": { "type": "contact", "windupTicks": 18, "parryable": true },
+      "attack": { "type": "contact", "windupTicks": 18, "recoverTicks": 30, "impactRangeMul": 1.3, "parryable": true },
       "counters": { "pistol": "poor", "rifle": "good", "grenade": "good", "flash": "poor", "melee": "best", "magic": "best", "deflect": "none" },
       "drops": []
     },

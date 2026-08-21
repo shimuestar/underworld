@@ -4,14 +4,18 @@ import { Input } from './core/Input';
 import { Loop } from './core/Loop';
 import { World } from './core/World';
 import { Level, buildLevelGroup } from './level/GridLoader';
+import { spawnEnemies } from './level/Spawner';
 import { Stage } from './render/Stage';
 import * as PlayerMove from './systems/PlayerMove';
+import * as Enemies from './systems/Enemies';
+import * as Weapons from './systems/Weapons';
 import * as Lantern from './systems/Lantern';
 import levelJson from '../data/levels/z01_f1.json';
 
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
-if (!app || !hud) throw new Error('index.html에 #app / #hud가 없다');
+const deathOverlay = document.getElementById('death');
+if (!app || !hud || !deathOverlay) throw new Error('index.html에 #app / #hud / #death가 없다');
 
 const events = new Events();
 const level = new Level(levelJson);
@@ -28,16 +32,25 @@ const world = new World(events, {
     prevZ: level.spawn.z,
     yaw: 0,
     pitch: 0,
+    health: balance.player.healthMax,
   },
   lantern: {
     on: true,
     battery: balance.lantern.batteryMax,
     spares: balance.lantern.spareCells,
   },
+  weapon: {
+    mag: balance.weapons.pistol.magSize,
+    reserve: balance.weapons.pistol.ammoMax,
+    cooldown: 0,
+    reloading: 0,
+    muzzleFlash: 0,
+  },
+  enemies: spawnEnemies(levelJson.entities, level),
   level,
 });
 
-const stage = new Stage(app, balance.player.eyeHeight, balance.lantern);
+const stage = new Stage(app);
 stage.setLevel(
   buildLevelGroup(level, {
     color: balance.lighting.torchColor,
@@ -49,16 +62,38 @@ stage.setLevel(
 );
 
 // 이벤트 → 콘솔 (Metrics는 M8에서 이 자리를 대체한다)
-for (const name of ['loop_started', 'lantern_toggled', 'lantern_died', 'battery_swapped']) {
+for (const name of [
+  'loop_started',
+  'lantern_toggled',
+  'lantern_died',
+  'battery_swapped',
+  'ammo_spent',
+  'reload_started',
+  'reload_finished',
+  'weapon_empty',
+  'weapon_kill',
+  'enemy_damaged',
+  'enemy_alerted',
+  'enemy_windup',
+  'player_damaged',
+  'player_died',
+]) {
   events.on(name, (payload) => console.log(`[events] ${name}`, payload));
 }
 
-// 틱 순서: Input → PlayerMove → Lantern (docs/architecture.md §2)
-const systems = [PlayerMove.tick, Lantern.tick];
+events.on('player_died', () => deathOverlay.classList.add('visible'));
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Enter' && world.dead) location.reload();
+});
+
+// 틱 순서: Input → PlayerMove → Enemies → Weapons → Lantern (docs/architecture.md §2)
+const systems = [PlayerMove.tick, Enemies.tick, Weapons.tick, Lantern.tick];
 
 function simulate(dt: number): void {
   world.input = input.sample();
-  for (const system of systems) system(world, dt);
+  if (!world.dead) {
+    for (const system of systems) system(world, dt);
+  }
   world.tick++;
   tpsWindowTicks++;
 }
@@ -85,12 +120,19 @@ function render(alpha: number): void {
     p.pitch,
   );
   stage.setLanternOn(world.lantern.on);
+  stage.setMuzzleFlash(world.weapon.muzzleFlash > 0);
+  stage.syncEnemies(world.enemies, alpha);
 
+  const w = world.weapon;
+  const aliveCount = world.enemies.filter((e) => e.alive).length;
   hud!.textContent =
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
+    `HP ${p.health}   9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}\n` +
     `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
-    `pos (${p.x.toFixed(1)}, ${p.z.toFixed(1)})\n` +
-    (input.pointerLocked ? '' : '[클릭] 마우스 잠금  WASD 이동  Shift 질주  F 랜턴  R 배터리 교체');
+    `enemies ${aliveCount}\n` +
+    (input.pointerLocked
+      ? ''
+      : '[클릭] 마우스 잠금  WASD 이동  Shift 질주  좌클릭 발사  R 장전  F 랜턴  B 배터리');
 
   stage.render();
 }
@@ -103,7 +145,8 @@ const loop = new Loop(balance.loop.tickRate, balance.loop.maxFrameClampSec, {
 // 개발 빌드 전용 디버그 핸들 (헤드리스 테스트/콘솔 조작용)
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__world = world;
+  (window as unknown as Record<string, unknown>).__input = input;
 }
 
 loop.start();
-events.emit('loop_started', { tickRate: balance.loop.tickRate, level: level.spawn });
+events.emit('loop_started', { tickRate: balance.loop.tickRate, level: levelJson.id });

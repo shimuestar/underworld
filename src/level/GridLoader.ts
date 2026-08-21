@@ -16,6 +16,9 @@ export interface LevelDef {
 /** 이동을 막는 셀. 잠긴 문(D)과 균열 벽(C)은 열리기 전까지 벽 취급. */
 const SOLID_CHARS = new Set(['#', 'D', 'C']);
 
+/** 벽 면에서 살짝 띄우는 수치 오차 방지용 여유 (튜닝값 아님) */
+const SKIN = 1e-3;
+
 export class Level {
   readonly cellSize: number;
   readonly ceiling: number;
@@ -50,6 +53,82 @@ export class Level {
   /** 그리드 밖은 전부 벽 취급. */
   solidAt(col: number, row: number): boolean {
     return SOLID_CHARS.has(this.charAt(col, row));
+  }
+
+  /**
+   * 2D 그리드 DDA 레이캐스트. (ox,oz)에서 방향 (dx,dz)로 나아가 처음 벽에 닿는
+   * 레이 파라미터 t를 반환한다. 방향이 정규화된 3D 레이의 XZ 성분이면 t는 3D 거리 단위.
+   * 그리드 밖은 벽 취급이므로 반드시 유한한 t를 반환한다.
+   */
+  wallRayT(ox: number, oz: number, dx: number, dz: number): number {
+    const cs = this.cellSize;
+    let col = Math.floor(ox / cs);
+    let row = Math.floor(oz / cs);
+
+    const stepCol = dx > 0 ? 1 : -1;
+    const stepRow = dz > 0 ? 1 : -1;
+    const tDeltaX = dx !== 0 ? cs / Math.abs(dx) : Infinity;
+    const tDeltaZ = dz !== 0 ? cs / Math.abs(dz) : Infinity;
+    let tMaxX =
+      dx !== 0 ? (dx > 0 ? (col + 1) * cs - ox : ox - col * cs) / Math.abs(dx) : Infinity;
+    let tMaxZ =
+      dz !== 0 ? (dz > 0 ? (row + 1) * cs - oz : oz - row * cs) / Math.abs(dz) : Infinity;
+
+    let t = 0;
+    const maxSteps = this.cols + this.rows + 2;
+    for (let i = 0; i <= maxSteps; i++) {
+      if (this.solidAt(col, row)) return t;
+      if (tMaxX < tMaxZ) {
+        t = tMaxX;
+        tMaxX += tDeltaX;
+        col += stepCol;
+      } else {
+        t = tMaxZ;
+        tMaxZ += tDeltaZ;
+        row += stepRow;
+      }
+    }
+    return t;
+  }
+
+  /** (ax,az)에서 (bx,bz)까지 벽에 막히지 않고 보이는가 (XZ 평면) */
+  hasLineOfSight(ax: number, az: number, bx: number, bz: number): boolean {
+    const dx = bx - ax;
+    const dz = bz - az;
+    const dist = Math.hypot(dx, dz);
+    if (dist === 0) return true;
+    return this.wallRayT(ax, az, dx / dist, dz / dist) >= dist;
+  }
+
+  /** 축 분리 스윕 AABB 이동 (X 해결 → Z 해결). 벽 슬라이딩을 얻는다. */
+  slideMove(body: { x: number; z: number }, radius: number, dx: number, dz: number): void {
+    this.moveAxis(body, radius, dx, 0);
+    this.moveAxis(body, radius, 0, dz);
+  }
+
+  private moveAxis(body: { x: number; z: number }, radius: number, dx: number, dz: number): void {
+    const cs = this.cellSize;
+    let nx = body.x + dx;
+    let nz = body.z + dz;
+
+    // 시작~목적지 전체 스윕 범위를 검사한다 — 목적지만 보면 큰 이동에서 터널링
+    const minCol = Math.floor((Math.min(body.x, nx) - radius) / cs);
+    const maxCol = Math.floor((Math.max(body.x, nx) + radius) / cs);
+    const minRow = Math.floor((Math.min(body.z, nz) - radius) / cs);
+    const maxRow = Math.floor((Math.max(body.z, nz) + radius) / cs);
+
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let col = minCol; col <= maxCol; col++) {
+        if (!this.solidAt(col, row)) continue;
+        if (dx > 0) nx = Math.min(nx, col * cs - radius - SKIN);
+        else if (dx < 0) nx = Math.max(nx, (col + 1) * cs + radius + SKIN);
+        if (dz > 0) nz = Math.min(nz, row * cs - radius - SKIN);
+        else if (dz < 0) nz = Math.max(nz, (row + 1) * cs + radius + SKIN);
+      }
+    }
+
+    body.x = nx;
+    body.z = nz;
   }
 
   private findChar(ch: string): { col: number; row: number } | null {
