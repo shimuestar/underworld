@@ -32,6 +32,7 @@ function makeWorld(): World {
     },
     lantern: { on: true, battery: 100, spares: 0 },
     weapon: { mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0 },
+    mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     enemies: [],
     level,
   });

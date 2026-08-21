@@ -12,6 +12,7 @@ import { Stage } from './render/Stage';
 import * as PlayerMove from './systems/PlayerMove';
 import * as Enemies from './systems/Enemies';
 import * as Weapons from './systems/Weapons';
+import * as Mana from './systems/Mana';
 import * as Lantern from './systems/Lantern';
 import levelJson from '../data/levels/z01_f1.json';
 
@@ -57,6 +58,7 @@ const world = new World(events, {
     reloading: 0,
     muzzleFlash: 0,
   },
+  mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
   enemies: spawnEnemies(levelJson.entities, level),
   level,
 });
@@ -97,6 +99,10 @@ for (const name of [
   'melee_kill',
   'dodge_step',
   'shot_blocked',
+  'mana_gained',
+  'mana_lost',
+  'combat_entered',
+  'combat_exited',
 ]) {
   events.on(name, (payload) => console.log(`[events] ${name}`, payload));
 }
@@ -162,9 +168,18 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Enter' && world.dead) location.reload();
 });
 
-// 틱 순서: Input → PlayerMove → Enemies → Reaction → Weapons → Lantern (docs/architecture.md §2)
-// Reaction이 Enemies 뒤에 오는 이유: 적의 공격 상태가 확정된 뒤 판정해야 한다.
-const systems = [PlayerMove.tick, Enemies.tick, Reaction.tick, Weapons.tick, Lantern.tick];
+// 틱 순서: Input → PlayerMove → Enemies → Reaction → Weapons → Mana → Lantern
+// (docs/architecture.md §2). Reaction이 Enemies 뒤에 오는 이유: 적의 공격 상태가
+// 확정된 뒤 판정해야 한다.
+Mana.init(world);
+const systems = [
+  PlayerMove.tick,
+  Enemies.tick,
+  Reaction.tick,
+  Weapons.tick,
+  Mana.tick,
+  Lantern.tick,
+];
 
 function simulate(dt: number): void {
   world.input = input.sample();
@@ -217,9 +232,13 @@ function render(alpha: number): void {
   const w = world.weapon;
   const aliveCount = world.enemies.filter((e) => e.alive).length;
   if (performance.now() > reactionLabelUntil) reactionLabel = '';
+  const mana = world.mana;
+  const chainMult = balance.chain.multipliers[Math.min(mana.chainIndex, balance.chain.multipliers.length - 1)]!;
+  const manaBar = '█'.repeat(Math.round((mana.value / balance.mana.max) * 20)).padEnd(20, '░');
   hud!.textContent =
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
     `HP ${p.health}   9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}\n` +
+    `mana ${manaBar} ${mana.value.toFixed(0)}/${balance.mana.max}  chain ×${chainMult}${!mana.inCombat && mana.outOfCombatTicks >= balance.mana.combatExitTicks && mana.value > 0 ? '  [휘발중]' : ''}\n` +
     `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked

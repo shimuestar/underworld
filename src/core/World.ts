@@ -29,6 +29,15 @@ export interface PlayerState {
   reactionBufferTicks: number;
 }
 
+export interface ManaState {
+  value: number;
+  /** 연쇄 단계 (balance.chain.multipliers 인덱스, 상한은 배열 끝) */
+  chainIndex: number;
+  /** 활성 적이 0이 된 뒤 경과한 틱 (combatExitTicks 초과 시 휘발 시작) */
+  outOfCombatTicks: number;
+  inCombat: boolean;
+}
+
 export interface LanternState {
   on: boolean;
   battery: number;
@@ -92,6 +101,7 @@ export class World {
   player: PlayerState;
   lantern: LanternState;
   weapon: WeaponState;
+  mana: ManaState;
   enemies: EnemyState[];
   level: Level;
 
@@ -102,6 +112,7 @@ export class World {
       player: PlayerState;
       lantern: LanternState;
       weapon: WeaponState;
+      mana: ManaState;
       enemies: EnemyState[];
       level: Level;
     },
@@ -110,6 +121,7 @@ export class World {
     this.player = init.player;
     this.lantern = init.lantern;
     this.weapon = init.weapon;
+    this.mana = init.mana;
     this.enemies = init.enemies;
     this.level = init.level;
   }
