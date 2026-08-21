@@ -236,6 +236,9 @@ events.on('melee_kill', () => audio.play('execute'));
 events.on('shot_blocked', () => audio.play('shot_blocked'));
 events.on('dodge_step', () => audio.play('dodge'));
 events.on('cast_spell', () => audio.play('cast_fire'));
+events.on('enemy_cast', (payload) => {
+  if ((payload as { enemyType: string }).enemyType === 'goblin_archer') audio.play('bow_twang');
+});
 events.on('spell_impact', () => audio.play('spell_impact'));
 events.on('sigil_acquired', () => audio.play('pickup'));
 events.on('reload_started', () => audio.play('reload_start'));

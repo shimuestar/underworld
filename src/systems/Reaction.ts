@@ -56,10 +56,10 @@ export function tick(world: World, _dt: number): void {
     }
   }
 
-  // 반사 대상 — 반경 내 접근 중인 적 투사체
+  // 반사 대상 — 반경 내 접근 중인 적 투사체. 화살(deflectable=false)은 반사 불가 → 회피로
   let deflectTarget: { proj: ProjectileState; dist: number } | null = null;
   for (const proj of world.projectiles) {
-    if (proj.owner !== 'enemy') continue;
+    if (proj.owner !== 'enemy' || !proj.deflectable) continue;
     const dist = Math.hypot(p.x - proj.x, p.z - proj.z);
     if (dist > reaction.radius) continue;
     if (!deflectTarget || dist < deflectTarget.dist) deflectTarget = { proj, dist };

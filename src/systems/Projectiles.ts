@@ -58,6 +58,7 @@ function tryCast(world: World): void {
     burnTicks: effects['burnTicks'] ?? 0,
     burnDamagePerTick: effects['burnDamagePerTick'] ?? 0,
     radius: effects['radius'] ?? 0.3,
+    kind: 'fireball',
   });
   world.events.emit('cast_spell', { sigil: sigilId, cost });
 }

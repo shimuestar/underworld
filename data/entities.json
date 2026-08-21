@@ -25,6 +25,17 @@
       "counters": { "pistol": "poor", "rifle": "poor", "grenade": "good", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
       "drops": ["sig_fireball"]
     },
+    "goblin_archer": {
+      "name": "고블린 궁수",
+      "zone": 1, "slice": true,
+      "health": 25, "speed": 3.0, "damage": 15,
+      "radius": 0.5, "height": 1.7,
+      "aggroRange": 20, "attackRange": 18, "kiteMinRange": 8,
+      "behavior": "caster_kite",
+      "attack": { "type": "projectile", "windupTicks": 30, "recoverTicks": 55, "impactRangeMul": 1, "parryable": false, "deflectable": false, "telegraph": "red", "projectileSpeed": 22, "projectileRadius": 0.15 },
+      "counters": { "pistol": "good", "rifle": "good", "grenade": "poor", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
+      "drops": []
+    },
     "warden": {
       "name": "수호주술사",
       "zone": 2, "slice": true,

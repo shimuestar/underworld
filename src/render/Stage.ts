@@ -12,6 +12,7 @@ import { HandModel } from './HandModel';
 const ENEMY_COLORS: Record<string, number> = {
   goblin_runner: 0x4a8f3c,
   goblin_spear: 0x3c7a8f,
+  goblin_archer: 0x8a8a3a,
   warden: 0x5a4470,
   goblin_chieftain: 0x8f5a30,
 };
@@ -570,31 +571,52 @@ export class Stage {
     }
   }
 
-  /** 투사체(화염구) — 발광 구 + 점광원. 어둠 속을 날며 주변을 밝힌다 */
+  /** 투사체 — 화염구/마법탄은 발광 구+점광원, 화살은 어두운 화살대 (빛 없음) */
   syncProjectiles(projectiles: ProjectileState[], alpha: number): void {
     const seen = new Set<number>();
     for (const proj of projectiles) {
       seen.add(proj.id);
       let group = this.projectileVisuals.get(proj.id);
       if (!group) {
-        // 적 마법 투사체는 보라(반사 가능 규약), 플레이어 화염구는 주황
-        const color = proj.owner === 'enemy' ? ENEMY_BOLT_COLOR : FIREBALL_COLOR;
         group = new THREE.Group();
-        group.add(
-          new THREE.Mesh(
-            new THREE.SphereGeometry(proj.radius, 8, 8),
-            new THREE.MeshBasicMaterial({ color }),
-          ),
-        );
-        group.add(new THREE.PointLight(color, 2.2, 9, 0));
+        if (proj.kind === 'arrow') {
+          // 화살 — 나무 화살대 + 회색 촉. 발광하지 않아 어둠 속에서 위협적
+          const shaft = new THREE.Mesh(
+            new THREE.BoxGeometry(0.05, 0.05, 0.75),
+            new THREE.MeshLambertMaterial({ color: 0x6b5233 }),
+          );
+          group.add(shaft);
+          const head = new THREE.Mesh(
+            new THREE.BoxGeometry(0.09, 0.09, 0.14),
+            new THREE.MeshLambertMaterial({
+              color: 0xb9c0c9,
+              emissive: 0x3a3f46,
+            }),
+          );
+          head.position.z = -0.42;
+          group.add(head);
+        } else {
+          // 적 마법탄은 보라(반사 가능 규약), 플레이어 화염구는 주황
+          const color = proj.owner === 'enemy' ? ENEMY_BOLT_COLOR : FIREBALL_COLOR;
+          group.add(
+            new THREE.Mesh(
+              new THREE.SphereGeometry(proj.radius, 8, 8),
+              new THREE.MeshBasicMaterial({ color }),
+            ),
+          );
+          group.add(new THREE.PointLight(color, 2.2, 9, 0));
+        }
         this.projectileVisuals.set(proj.id, group);
         this.scene.add(group);
       }
-      group.position.set(
-        proj.prevX + (proj.x - proj.prevX) * alpha,
-        proj.prevY + (proj.y - proj.prevY) * alpha,
-        proj.prevZ + (proj.z - proj.prevZ) * alpha,
-      );
+      const px = proj.prevX + (proj.x - proj.prevX) * alpha;
+      const py = proj.prevY + (proj.y - proj.prevY) * alpha;
+      const pz = proj.prevZ + (proj.z - proj.prevZ) * alpha;
+      group.position.set(px, py, pz);
+      if (proj.kind === 'arrow') {
+        // 화살대를 비행 방향으로 정렬 (로컬 -Z가 진행 방향)
+        group.lookAt(px - proj.vx, py - proj.vy, pz - proj.vz);
+      }
     }
     for (const [id, group] of this.projectileVisuals) {
       if (seen.has(id)) continue;

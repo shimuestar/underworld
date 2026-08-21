@@ -28,7 +28,8 @@ export type SoundName =
   | 'reload_end'
   | 'altar_enter'
   | 'corruption_up'
-  | 'lever_pull';
+  | 'lever_pull'
+  | 'bow_twang';
 
 const MASTER_GAIN = 0.25;
 
@@ -184,6 +185,11 @@ export class GameAudio {
         this.tone(110, 1.2, 'sine', 0.7);
         this.tone(165, 1.0, 'sine', 0.45, 0.1);
         this.tone(220, 0.8, 'sine', 0.3, 0.25);
+        break;
+      case 'bow_twang':
+        // 활시위 튕김 + 화살 바람 소리
+        this.tone(220, 0.06, 'square', 0.7, 0, 140);
+        this.noise(0.18, 0.5, 1600, 0.02);
         break;
       case 'lever_pull':
         // 육중한 기계 딸깍 + 멀리서 돌 문이 갈리는 소리

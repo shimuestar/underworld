@@ -195,6 +195,8 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
     burnDamagePerTick: 0,
     radius: attack.projectileRadius ?? 0.3,
     casterId: enemy.id,
+    deflectable: attack.deflectable ?? false,
+    kind: (attack.deflectable ?? false) ? 'magic' : 'arrow',
   });
   world.events.emit('enemy_cast', { enemyId: enemy.id, enemyType: enemy.type });
 }

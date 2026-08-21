@@ -91,6 +91,10 @@ export interface ProjectileState {
   deflected?: boolean;
   /** 시전자 (반사 시 되돌아갈 대상) */
   casterId?: number;
+  /** 반응 버튼으로 반사 가능한가 (마법탄 true, 화살 false) */
+  deflectable?: boolean;
+  /** 렌더 형태 */
+  kind?: 'fireball' | 'magic' | 'arrow';
 }
 
 export interface SpellState {
