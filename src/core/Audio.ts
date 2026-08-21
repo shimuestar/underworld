@@ -199,9 +199,11 @@ export class GameAudio {
         this.tone(500, 0.05, 'square', 0.35, 0.05);
         break;
       case 'hammer_swing':
-        // 무거운 휘두름 바람
-        this.noise(0.18, 0.6, 600);
-        this.tone(120, 0.15, 'sine', 0.5, 0.05, 60);
+        // 휘두름 바람 + 끝에 육중한 내리침 임팩트
+        this.noise(0.14, 0.7, 700);
+        this.tone(120, 0.12, 'sine', 0.5, 0.03, 60);
+        this.tone(75, 0.16, 'sine', 1.3, 0.11, 38); // 내리침 쿵
+        this.noise(0.07, 0.8, 1500, 0.11);
         break;
       case 'melee_hit':
         // 해머 적중 — 묵직한 충격

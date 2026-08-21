@@ -136,7 +136,7 @@ export class HandModel {
   }
 
   triggerHammerSwing(): void {
-    this.swingUntil = performance.now() + 300;
+    this.swingUntil = performance.now() + 210;
   }
 
   triggerGrenadeThrow(): void {
@@ -157,7 +157,12 @@ export class HandModel {
   }
 
   /** 매 프레임 호출. 상태 기반 포즈 + 이벤트 기반 킥을 합성한다 */
-  update(state: { reloading: boolean; stunned: boolean; blocking?: boolean }): void {
+  update(state: {
+    reloading: boolean;
+    stunned: boolean;
+    blocking?: boolean;
+    chargeFrac?: number;
+  }): void {
     const now = performance.now();
 
     // 오른팔 목표 포즈
@@ -179,13 +184,15 @@ export class HandModel {
       targetRotX += 0.3 * k;
     }
 
-    // 해머 스윙 — 치켜들었다(45%) 내리찍기(55%)
+    // 해머 스윙 — 치켜들었다(40%) 내리찍기(60%)
     if (now < this.swingUntil) {
-      const t = 1 - (this.swingUntil - now) / 300;
+      const t = 1 - (this.swingUntil - now) / 210;
       targetRotX +=
-        t < 0.45 ? -1.4 * easeOutCubic(t / 0.45) : -1.4 + 2.4 * easeInCubic((t - 0.45) / 0.55);
+        t < 0.4 ? -1.4 * easeOutCubic(t / 0.4) : -1.4 + 2.4 * easeInCubic((t - 0.4) / 0.6);
     }
-    // 수류탄 투척 — 앞으로 밀기
+    // 수류탄 — 차징 중엔 뒤로 당기고, 투척 시 앞으로 밀기
+    kickZ += 0.14 * (state.chargeFrac ?? 0);
+    targetRotX -= 0.35 * (state.chargeFrac ?? 0);
     if (now < this.throwUntil) {
       const t = 1 - (this.throwUntil - now) / 240;
       kickZ -= 0.2 * Math.sin(t * Math.PI);

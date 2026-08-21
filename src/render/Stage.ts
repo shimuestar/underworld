@@ -262,7 +262,12 @@ export class Stage {
     if (visual) visual.barrierFlashUntil = performance.now() + 160;
   }
 
-  updateHands(state: { reloading: boolean; stunned: boolean; blocking?: boolean }): void {
+  updateHands(state: {
+    reloading: boolean;
+    stunned: boolean;
+    blocking?: boolean;
+    chargeFrac?: number;
+  }): void {
     this.hands.update(state);
   }
 
@@ -316,6 +321,34 @@ export class Stage {
       mesh.parent?.remove(mesh);
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
+    }
+  }
+
+  /** 수류탄 차징 궤적 미리보기 — 점선. null이면 숨김 */
+  private readonly arcDots: THREE.Mesh[] = [];
+  updateThrowArc(points: { x: number; y: number; z: number }[] | null): void {
+    const count = points?.length ?? 0;
+    while (this.arcDots.length < count) {
+      const dot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055, 6, 6),
+        new THREE.MeshBasicMaterial({
+          color: 0xffe9a0,
+          transparent: true,
+          opacity: 0.75,
+          depthWrite: false,
+        }),
+      );
+      this.arcDots.push(dot);
+      this.scene.add(dot);
+    }
+    for (let i = 0; i < this.arcDots.length; i++) {
+      const dot = this.arcDots[i]!;
+      if (points && i < points.length) {
+        dot.visible = true;
+        dot.position.set(points[i]!.x, points[i]!.y, points[i]!.z);
+      } else {
+        dot.visible = false;
+      }
     }
   }
 

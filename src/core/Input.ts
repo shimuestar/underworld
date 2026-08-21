@@ -16,6 +16,8 @@ export interface InputSnapshot {
   batterySwap: boolean;
   /** 이번 틱에 발사 클릭이 있었는가 (엣지, 세미오토) */
   firePressed: boolean;
+  /** 발사 버튼(좌클릭)을 누르고 있는가 (홀드 — 수류탄 차징) */
+  fireHeld: boolean;
   /** 이번 틱에 재장전 키가 눌렸는가 (엣지) */
   reload: boolean;
   /** 이번 틱에 반응 버튼(우클릭)이 눌렸는가 (엣지) */
@@ -37,6 +39,7 @@ export class Input {
   private lanternToggles = 0;
   private batterySwaps = 0;
   private fireClicks = 0;
+  private fireDown = false;
   private reloads = 0;
   private reactionClicks = 0;
   private casts = 0;
@@ -72,8 +75,17 @@ export class Input {
     // 포인터 락을 얻는 그 클릭은 발사로 치지 않는다 (mousedown 시점엔 아직 미잠금)
     window.addEventListener('mousedown', (e) => {
       if (!this.pointerLocked) return;
-      if (e.button === 0) this.fireClicks++;
+      if (e.button === 0) {
+        this.fireClicks++;
+        this.fireDown = true;
+      }
       if (e.button === 2) this.reactionClicks++;
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.fireDown = false;
+    });
+    window.addEventListener('blur', () => {
+      this.fireDown = false;
     });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
   }
@@ -93,6 +105,7 @@ export class Input {
       lanternToggle: this.lanternToggles > 0,
       batterySwap: this.batterySwaps > 0,
       firePressed: this.fireClicks > 0,
+      fireHeld: this.fireDown,
       reload: this.reloads > 0,
       reactionPressed: this.reactionClicks > 0,
       castPressed: this.casts > 0,
@@ -123,6 +136,7 @@ export class Input {
       lanternToggle: false,
       batterySwap: false,
       firePressed: false,
+      fireHeld: false,
       reload: false,
       reactionPressed: false,
       castPressed: false,

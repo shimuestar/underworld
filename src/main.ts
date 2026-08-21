@@ -11,6 +11,7 @@ import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnEnemies, spawnEnemyAt } from './level/Spawner';
 import { Minimap } from './render/Minimap';
 import { Stage } from './render/Stage';
+import { grenadeThrowSpeed } from './systems/Weapons';
 import * as PlayerMove from './systems/PlayerMove';
 import * as Enemies from './systems/Enemies';
 import * as Weapons from './systems/Weapons';
@@ -76,6 +77,7 @@ const world = new World(events, {
     muzzleFlash: 0,
     grenades: balance.weapons.grenade.startCount,
     meleeCooldown: 0,
+    grenadeCharge: 0,
   },
   mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
   sigils: {
@@ -576,11 +578,44 @@ function render(alpha: number): void {
   stage.syncEnemies(world.enemies, alpha);
   stage.syncProjectiles(world.projectiles, alpha);
   stage.syncGroundItems(world.groundItems);
+  const chargeFrac =
+    world.weapon.active === 'grenade' && world.weapon.grenadeCharge > 0
+      ? world.weapon.grenadeCharge / balance.weapons.grenade.maxChargeTicks
+      : 0;
   stage.updateHands({
     reloading: world.weapon.reloading > 0,
     stunned: p.stunTicks > 0,
     blocking: p.blocking,
+    chargeFrac,
   });
+
+  // 수류탄 차징 궤적 미리보기 — 실제 투척 물리와 동일한 시뮬레이션
+  if (chargeFrac > 0) {
+    const grenade = balance.weapons.grenade;
+    const speed = grenadeThrowSpeed(chargeFrac);
+    const cosPitch = Math.cos(p.pitch);
+    let sx = p.x;
+    let sy = p.y + balance.player.eyeHeight;
+    let sz = p.z;
+    let vx = -Math.sin(p.yaw) * cosPitch * speed;
+    let vy = Math.sin(p.pitch) * speed + grenade.throwUpBias;
+    let vz = -Math.cos(p.yaw) * cosPitch * speed;
+    const step = 2 / 60; // 2틱 간격 샘플
+    const points: { x: number; y: number; z: number }[] = [];
+    for (let i = 0; i < 40; i++) {
+      vy -= grenade.gravity * step;
+      sx += vx * step;
+      sy += vy * step;
+      sz += vz * step;
+      if (sy <= 0.05) break;
+      const cs = world.level.cellSize;
+      if (world.level.solidAt(Math.floor(sx / cs), Math.floor(sz / cs))) break;
+      points.push({ x: sx, y: sy, z: sz });
+    }
+    stage.updateThrowArc(points);
+  } else {
+    stage.updateThrowArc(null);
+  }
   stage.setCorruptionStage(Math.floor(world.corruption.applied / 12.5));
   minimap.update(p, world.enemies, alpha);
 

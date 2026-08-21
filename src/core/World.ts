@@ -145,6 +145,8 @@ export interface WeaponState {
   grenades: number;
   /** 해머/수류탄 공용 스윙 쿨다운 */
   meleeCooldown: number;
+  /** 수류탄 차징 누적 틱 (홀드 중) */
+  grenadeCharge: number;
 }
 
 // 근접 적 공격 상태 머신 — docs/systems/combat.md §2.

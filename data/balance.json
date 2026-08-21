@@ -76,7 +76,7 @@
       "damage": 55,
       "range": 2.6,
       "arcDeg": 100,
-      "cooldownTicks": 42,
+      "cooldownTicks": 24,
       "noiseRadius": 5.0
     },
     "pistol": {
@@ -111,7 +111,9 @@
       "radius": 5.0,
       "fuseTicks": 100,
       "breaksCrackWall": true,
-      "throwSpeed": 16.0,
+      "throwSpeedMin": 9.0,
+      "throwSpeedMax": 26.0,
+      "maxChargeTicks": 60,
       "throwUpBias": 4.5,
       "gravity": 22.0,
       "damageFalloffMin": 0.25,

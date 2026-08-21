@@ -51,7 +51,23 @@ export function tick(world: World, _dt: number): void {
   }
 
   if (w.active === 'grenade') {
-    if (world.input.firePressed && w.meleeCooldown <= 0) throwGrenade(world);
+    // 홀드 차징 — 누르는 동안 힘을 모으고, 놓으면 던진다
+    if (w.grenades <= 0) {
+      if (world.input.firePressed) world.events.emit('weapon_empty');
+      w.grenadeCharge = 0;
+      return;
+    }
+    if (w.meleeCooldown > 0) {
+      w.grenadeCharge = 0;
+      return;
+    }
+    const grenade = balance.weapons.grenade;
+    if (world.input.fireHeld) {
+      w.grenadeCharge = Math.min(w.grenadeCharge + 1, grenade.maxChargeTicks);
+    } else if (w.grenadeCharge > 0) {
+      throwGrenade(world, w.grenadeCharge / grenade.maxChargeTicks);
+      w.grenadeCharge = 0;
+    }
     return;
   }
 
@@ -123,18 +139,24 @@ function swingHammer(world: World): void {
   }
 }
 
-/** 수류탄 — 포물선 투척. 폭발은 Projectiles가 처리 */
-function throwGrenade(world: World): void {
+/** 수류탄 투척 속도 — 차징 비율(0~1)에 따라 min~max 선형 */
+export function grenadeThrowSpeed(chargeFrac: number): number {
+  const grenade = balance.weapons.grenade;
+  return (
+    grenade.throwSpeedMin +
+    (grenade.throwSpeedMax - grenade.throwSpeedMin) * Math.min(1, Math.max(0, chargeFrac))
+  );
+}
+
+/** 수류탄 — 포물선 투척 (차징 비율만큼 멀리). 폭발은 Projectiles가 처리 */
+function throwGrenade(world: World, chargeFrac: number): void {
   const w = world.weapon;
-  if (w.grenades <= 0) {
-    world.events.emit('weapon_empty');
-    return;
-  }
   const grenade = balance.weapons.grenade;
   const p = world.player;
   w.grenades--;
   w.meleeCooldown = grenade.cooldownTicks;
 
+  const speed = grenadeThrowSpeed(chargeFrac);
   const cosPitch = Math.cos(p.pitch);
   const dx = -Math.sin(p.yaw) * cosPitch;
   const dy = Math.sin(p.pitch);
@@ -147,16 +169,16 @@ function throwGrenade(world: World): void {
     kind: 'grenade',
     x: p.x, y: oy, z: p.z,
     prevX: p.x, prevY: oy, prevZ: p.z,
-    vx: dx * grenade.throwSpeed,
-    vy: dy * grenade.throwSpeed + grenade.throwUpBias,
-    vz: dz * grenade.throwSpeed,
+    vx: dx * speed,
+    vy: dy * speed + grenade.throwUpBias,
+    vz: dz * speed,
     lifeTicks: grenade.fuseTicks,
     damage: grenade.damage,
     burnTicks: 0,
     burnDamagePerTick: 0,
     radius: 0.22,
   });
-  world.events.emit('grenade_thrown', { remaining: w.grenades });
+  world.events.emit('grenade_thrown', { remaining: w.grenades, chargeFrac });
 }
 
 /** 소음 전파 — 반경 내 대기(idle) 적들이 추격을 시작한다 */

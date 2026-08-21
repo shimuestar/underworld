@@ -29,7 +29,7 @@ function makeWorld(): World {
       iframeTicks: 0, reactionBufferTicks: 0, blocking: false,
     },
     lantern: { on: false, battery: 100, spares: 0 },
-    weapon: { active: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0 },
+    weapon: { active: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0, grenadeCharge: 0 },
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
