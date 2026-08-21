@@ -20,6 +20,7 @@ import * as Sigils from './systems/Sigils';
 import * as Corruption from './systems/Corruption';
 import * as Altar from './systems/Altar';
 import * as Exit from './systems/Exit';
+import * as Lever from './systems/Lever';
 import * as Lantern from './systems/Lantern';
 import { enemyDef } from './core/Entities';
 import { SigilUI } from './render/SigilUI';
@@ -207,6 +208,7 @@ for (const name of [
   'boss_execute',
   'exit_locked',
   'zone_cleared',
+  'lever_pulled',
 ]) {
   events.on(name, (payload) => console.log(`[events] ${name}`, payload));
 }
@@ -379,6 +381,14 @@ events.on('boss_phase', (payload) => {
   showReaction(phase === 'armored' ? '장갑 페이즈 — 실탄으로 파괴하라' : '장갑 파괴 — 패링 구간', 3000);
 });
 events.on('exit_locked', () => showReaction('출구가 봉인되어 있다 — 족장이 살아 있다', 3000));
+events.on('lever_pulled', (payload) => {
+  const info = payload as { lever: { row: number; col: number }; door: { row: number; col: number } };
+  audio.play('lever_pull');
+  stage.pullLever(info.lever.row, info.lever.col);
+  stage.openDoor(info.door.row, info.door.col);
+  minimap.rebuildBase();
+  showReaction('어딘가에서 돌 문이 갈리며 열렸다', 3500);
+});
 events.on('zone_cleared', () => {
   audio.play('zone_clear');
   deathHint!.textContent = '';
@@ -415,6 +425,7 @@ const systems = [
   Projectiles.tick,
   Mana.tick,
   Altar.tick,
+  Lever.tick,
   Exit.tick,
   Lantern.tick,
 ];
@@ -491,16 +502,29 @@ function render(alpha: number): void {
     debugOverlay.update(metrics.snapshot(world));
   }
 
-  // 제단 프롬프트 — 잔탄율을 보여줘 손해를 인지할 기회를 준다 (economy.md §2)
-  const showPrompt = world.nearAltar && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
-  altarPrompt!.classList.toggle('visible', showPrompt);
-  if (showPrompt) {
+  // 제단/레버 프롬프트 — 상호작용 가능한 것 안내
+  const nearLever = world.level.levers.some((lever) => {
+    const [row, col] = lever.cell;
+    if (row === undefined || col === undefined) return false;
+    if (world.pulledLevers.has(`${row}-${col}`)) return false;
+    const cs = world.level.cellSize;
+    return (
+      Math.hypot(p.x - (col + 0.5) * cs, p.z - (row + 0.5) * cs) <=
+      balance.interaction.leverRadius
+    );
+  });
+  const showAltarPrompt =
+    world.nearAltar && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
+  altarPrompt!.classList.toggle('visible', showAltarPrompt || (nearLever && !world.dead));
+  if (showAltarPrompt) {
     const w2 = world.weapon;
     const capNow = balance.weapons.pistol.magSize + balance.weapons.pistol.ammoMax;
     altarPrompt!.textContent =
       `제단 — E 진입\n` +
       `9mm ${w2.mag + w2.reserve}/${capNow} 보유 중 · 들어가면 상한까지 재보급 (잔탄 무관)\n` +
       `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
+  } else if (nearLever) {
+    altarPrompt!.textContent = 'E — 레버를 당긴다';
   }
 
   const w = world.weapon;

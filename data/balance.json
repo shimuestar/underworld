@@ -125,6 +125,10 @@
     "torchHeight": 2.6
   },
 
+  "interaction": {
+    "leverRadius": 1.8
+  },
+
   "altar": {
     "radius": 2.4,
     "refillToMax": true,

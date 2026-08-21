@@ -29,7 +29,7 @@ export class Minimap {
   private readonly cellPx: number;
   visible = true;
 
-  constructor(level: Level) {
+  constructor(private readonly level: Level) {
     this.cellPx = level.cellSize * PX_PER_UNIT;
     const w = level.cols * this.cellPx;
     const h = level.rows * this.cellPx;
@@ -38,23 +38,7 @@ export class Minimap {
     this.base = document.createElement('canvas');
     this.base.width = w;
     this.base.height = h;
-    const bctx = this.base.getContext('2d')!;
-    for (let row = 0; row < level.rows; row++) {
-      for (let col = 0; col < level.cols; col++) {
-        const ch = level.charAt(col, row);
-        bctx.fillStyle = COLORS[ch] ?? FLOOR;
-        bctx.fillRect(col * this.cellPx, row * this.cellPx, this.cellPx, this.cellPx);
-      }
-    }
-    // 횃불 점
-    bctx.fillStyle = '#ff8c3b';
-    for (const cell of level.torches) {
-      const [row, col] = cell;
-      if (row === undefined || col === undefined) continue;
-      bctx.beginPath();
-      bctx.arc((col + 0.5) * this.cellPx, (row + 0.5) * this.cellPx, 2, 0, Math.PI * 2);
-      bctx.fill();
-    }
+    this.rebuildBase();
 
     // 표시용 캔버스
     this.canvas = document.createElement('canvas');
@@ -85,6 +69,28 @@ export class Minimap {
   }
 
   private readonly legend: HTMLDivElement;
+
+  /** 정적 레이어 재생성 — 문 개방 등 그리드가 바뀌었을 때 호출 */
+  rebuildBase(): void {
+    const level = this.level;
+    const bctx = this.base.getContext('2d')!;
+    bctx.clearRect(0, 0, this.base.width, this.base.height);
+    for (let row = 0; row < level.rows; row++) {
+      for (let col = 0; col < level.cols; col++) {
+        const ch = level.charAt(col, row);
+        bctx.fillStyle = COLORS[ch] ?? FLOOR;
+        bctx.fillRect(col * this.cellPx, row * this.cellPx, this.cellPx, this.cellPx);
+      }
+    }
+    bctx.fillStyle = '#ff8c3b';
+    for (const cell of level.torches) {
+      const [row, col] = cell;
+      if (row === undefined || col === undefined) continue;
+      bctx.beginPath();
+      bctx.arc((col + 0.5) * this.cellPx, (row + 0.5) * this.cellPx, 2, 0, Math.PI * 2);
+      bctx.fill();
+    }
+  }
 
   toggle(): void {
     this.visible = !this.visible;

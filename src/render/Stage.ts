@@ -203,6 +203,22 @@ export class Stage {
     this.hands.setCorruptionStage(stage);
   }
 
+  /** 문 개방 — 해당 문 메시 제거 */
+  openDoor(row: number, col: number): void {
+    const door = this.scene.getObjectByName(`door-${row}-${col}`);
+    if (door instanceof THREE.Mesh) {
+      door.parent?.remove(door);
+      door.geometry.dispose();
+      (door.material as THREE.Material).dispose();
+    }
+  }
+
+  /** 레버 당김 — 손잡이 반대쪽으로 기울임 */
+  pullLever(row: number, col: number): void {
+    const handle = this.scene.getObjectByName(`lever-${row}-${col}`);
+    if (handle) handle.rotation.z = -0.5;
+  }
+
   /** 보간된 플레이어 상태를 카메라에 반영 */
   updateCamera(x: number, y: number, z: number, yaw: number, pitch: number): void {
     this.camera.position.set(x, y + this.eyeHeight, z);

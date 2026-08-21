@@ -10,6 +10,14 @@ export interface GlyphDef {
   text: string;
 }
 
+export interface TriggerDef {
+  type: string;
+  cell: number[];
+  opens?: number[];
+  spawns?: string;
+  note?: string;
+}
+
 export interface LevelDef {
   id: string;
   name: string;
@@ -18,6 +26,7 @@ export interface LevelDef {
   grid: string[];
   lighting: { ambient: number; torches: number[][] };
   glyphs?: GlyphDef[];
+  triggers?: TriggerDef[];
 }
 
 /** 이동을 막는 셀. 잠긴 문(D)과 균열 벽(C)은 열리기 전까지 벽 취급. */
@@ -36,6 +45,7 @@ export class Level {
   readonly altarPos: { x: number; z: number } | null;
   readonly exitPos: { x: number; z: number } | null;
   readonly glyphs: GlyphDef[];
+  readonly levers: TriggerDef[];
   readonly rows: number;
   readonly cols: number;
 
@@ -66,6 +76,16 @@ export class Level {
       : null;
 
     this.glyphs = def.glyphs ?? [];
+    this.levers = (def.triggers ?? []).filter(
+      (trigger) => trigger.type === 'lever' && trigger.opens,
+    );
+  }
+
+  /** 셀을 바닥으로 연다 (문 개방 등). 이후 solidAt이 통과를 허용한다 */
+  openCell(col: number, row: number): void {
+    const line = this.grid[row];
+    if (!line || col < 0 || col >= line.length) return;
+    this.grid[row] = line.slice(0, col) + '.' + line.slice(col + 1);
   }
 
   charAt(col: number, row: number): string {
@@ -188,13 +208,23 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   const width = level.cols * cs;
   const depth = level.rows * cs;
 
-  // 셀 단위 박스 생성 후 카테고리별로 병합
+  // 셀 단위 박스 생성 후 카테고리별로 병합. 문(D)은 열릴 때 제거해야 하므로 개별 메시
   const byColor = new Map<number, THREE.BufferGeometry[]>();
   for (let row = 0; row < level.rows; row++) {
     for (let col = 0; col < level.cols; col++) {
       const ch = level.charAt(col, row);
       if (!SOLID_CHARS.has(ch)) continue;
-      const color = ch === 'D' ? COLOR_DOOR : ch === 'C' ? COLOR_CRACK : COLOR_WALL;
+      if (ch === 'D') {
+        const door = new THREE.Mesh(
+          new THREE.BoxGeometry(cs, level.ceiling, cs),
+          new THREE.MeshLambertMaterial({ color: COLOR_DOOR }),
+        );
+        door.position.set((col + 0.5) * cs, level.ceiling / 2, (row + 0.5) * cs);
+        door.name = `door-${row}-${col}`;
+        group.add(door);
+        continue;
+      }
+      const color = ch === 'C' ? COLOR_CRACK : COLOR_WALL;
       const box = new THREE.BoxGeometry(cs, level.ceiling, cs);
       box.translate((col + 0.5) * cs, level.ceiling / 2, (row + 0.5) * cs);
       let list = byColor.get(color);
@@ -276,6 +306,7 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
         );
         handle.position.set(x, 0.85, z);
         handle.rotation.z = 0.5;
+        handle.name = `lever-${row}-${col}`;
         group.add(handle);
       }
 

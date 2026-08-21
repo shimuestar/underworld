@@ -27,7 +27,8 @@ export type SoundName =
   | 'reload_start'
   | 'reload_end'
   | 'altar_enter'
-  | 'corruption_up';
+  | 'corruption_up'
+  | 'lever_pull';
 
 const MASTER_GAIN = 0.25;
 
@@ -162,6 +163,12 @@ export class GameAudio {
         this.tone(110, 1.2, 'sine', 0.7);
         this.tone(165, 1.0, 'sine', 0.45, 0.1);
         this.tone(220, 0.8, 'sine', 0.3, 0.25);
+        break;
+      case 'lever_pull':
+        // 육중한 기계 딸깍 + 멀리서 돌 문이 갈리는 소리
+        this.tone(180, 0.08, 'square', 0.6);
+        this.tone(120, 0.1, 'square', 0.5, 0.1);
+        this.noise(0.7, 0.4, 250, 0.25);
         break;
       case 'corruption_up':
         // 불길한 상승 — 오염 임계
