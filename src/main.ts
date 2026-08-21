@@ -85,6 +85,12 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM') minimap.toggle();
+  // 테스트용 마나 풀충전 — 마법 튜닝 편의 (슬라이스 검증 시 제거)
+  if (e.code === 'KeyO' && !world.dead) {
+    world.mana.value = balance.mana.max;
+    showReaction('(테스트) 마나 풀충전');
+    console.log('[debug] 마나 풀충전');
+  }
   // 연습용 창병 소환 — 패링 튜닝 편의 (슬라이스 검증 시 제거)
   if (e.code === 'KeyP' && !world.dead) {
     const p = world.player;
@@ -323,7 +329,7 @@ function render(alpha: number): void {
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     'WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)\n' +
-    'Q 마법 시전  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  P 연습용 창병 소환';
+    'Q 마법 시전  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  P 연습용 창병  O 마나 충전(테스트)';
 
   stage.render();
 }
