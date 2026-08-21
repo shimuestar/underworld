@@ -111,10 +111,12 @@
     "batteryMax": 100,
     "drainPerTick": 0.028,
     "spareCells": 2,
-    "intensity": 1.6,
-    "radius": 14.0,
-    "angleDeg": 42,
-    "penumbra": 0.35,
+    "intensity": 2.2,
+    "radius": 30.0,
+    "angleDeg": 15,
+    "penumbra": 0.45,
+    "spillIntensity": 0.4,
+    "spillRadius": 5.0,
     "attractsCasterRangeMul": 1.8
   },
 

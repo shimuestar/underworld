@@ -131,6 +131,7 @@ export class Stage {
   readonly camera: THREE.PerspectiveCamera;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly lantern: THREE.SpotLight;
+  private lanternSpill!: THREE.PointLight;
   private readonly muzzleLight: THREE.PointLight;
   private readonly eyeHeight = balance.player.eyeHeight;
   private readonly enemyVisuals = new Map<number, EnemyVisual>();
@@ -175,6 +176,10 @@ export class Stage {
     this.lantern.target.position.set(0, 0, -1);
     this.camera.add(this.lantern);
     this.camera.add(this.lantern.target);
+
+    // 랜턴 잔광 — 좁은 빔 밖 발밑 주변의 약한 빛 (완전 암흑 방지)
+    this.lanternSpill = new THREE.PointLight(0xffffff, lp.spillIntensity, lp.spillRadius, 0);
+    this.camera.add(this.lanternSpill);
 
     // 총구 화염 — 강도/반경은 랜턴의 배율 (combat.md §6: 실질적 정찰 수단, 미묘하게 만들지 말 것)
     const mf = balance.weapons.pistol.muzzleFlash;
@@ -229,9 +234,10 @@ export class Stage {
     if (this.ambientLight) this.ambientLight.intensity = this.levelAmbient + boost * 0.22;
   }
 
-  /** 왼팔 각인 페널티 — 랜턴 밝기 배율 */
+  /** 왼팔 각인 페널티 — 랜턴 밝기 배율 (빔·잔광 모두) */
   setLanternIntensityMul(mul: number): void {
     this.lantern.intensity = balance.lantern.intensity * mul;
+    this.lanternSpill.intensity = balance.lantern.spillIntensity * mul;
   }
 
   /** 오염 25 임계 — 벽 문자를 원문으로 교체 */
@@ -275,6 +281,7 @@ export class Stage {
 
   setLanternOn(on: boolean): void {
     this.lantern.visible = on;
+    this.lanternSpill.visible = on;
   }
 
   setMuzzleFlash(on: boolean): void {
