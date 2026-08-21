@@ -21,7 +21,7 @@
   },
 
   "reaction": {
-    "radius": 3.2,
+    "radius": 4.6,
     "windowPerfectTicks": 6,
     "windowNormalTicks": 12,
     "windowDeflectTicks": 8,

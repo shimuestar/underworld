@@ -33,7 +33,7 @@
   },
   "_layout": "북서 스폰 → 아레나A(기둥 홀, 러너) → 잠긴 보물방(주술사2) / 서쪽 주술사 방(레버2) / 중앙 제단(우회 가능) / 남부 복도(매복조) → 보스 아레나(지름길 문 + 동쪽 상시 입구) → 출구",
   "entities": [
-    { "type": "goblin_runner", "cell": [2, 6], "note": "초입 단독조우" },
+    { "type": "goblin_runner", "cell": [2, 8], "note": "초입 단독조우 — 스폰 안전지대 밖" },
     { "type": "goblin_runner", "cell": [1, 13] },
     { "type": "goblin_runner", "cell": [3, 10] },
     { "type": "goblin_runner", "cell": [3, 15] },
@@ -61,7 +61,7 @@
     { "type": "goblin_archer", "cell": [15, 23], "note": "보스 아레나 후방 궁수" },
     { "type": "goblin_archer", "cell": [1, 9] },
     { "type": "goblin_archer", "cell": [6, 15] },
-    { "type": "goblin_archer", "cell": [4, 2], "note": "스폰 방 후방" },
+    { "type": "goblin_archer", "cell": [6, 12], "note": "아레나 A 남측 (스폰 방에서 이동)" },
     { "type": "goblin_archer", "cell": [1, 20], "note": "보물방" },
     { "type": "goblin_archer", "cell": [4, 22], "note": "보물방" },
     { "type": "goblin_archer", "cell": [7, 5], "note": "주술사 방" },

@@ -34,9 +34,22 @@ const MUZZLE_OFFSET = { x: 0.16, y: -0.1, z: -0.66 }; // 카메라 로컬: 권�
 
 // 적 부속물 색
 const SHIELD_COLOR = 0x6f7480;
-const SPEAR_SHAFT = 0x5c4a33;
 const SPEAR_TIP = 0x9aa2ad;
 const HEAD_DARKEN = 0.72;
+
+// 근접 무기 규격 (시각 — 실제 사거리는 entities.json attackRange가 결정)
+const MELEE_WEAPONS: Record<
+  string,
+  { length: number; width: number; color: number; tip?: boolean; headSize?: number }
+> = {
+  goblin_runner: { length: 1.0, width: 0.11, color: 0x6b5233 },
+  goblin_spear: { length: 2.0, width: 0.07, color: 0x5c4a33, tip: true },
+  goblin_chieftain: { length: 2.0, width: 0.26, color: 0x4a3826, headSize: 0.5 },
+};
+/** 팔 휴식/치켜듦/내리침 각도 */
+const ARM_REST = 0.55;
+const ARM_RAISED = -2.0;
+const ARM_SMASH = 1.3;
 
 interface EnemyVisual {
   group: THREE.Group;
@@ -46,7 +59,8 @@ interface EnemyVisual {
   flashMaterials: THREE.MeshLambertMaterial[];
   shield?: THREE.Mesh;
   shieldMaterial?: THREE.MeshLambertMaterial;
-  spear?: THREE.Object3D;
+  /** 근접 무기 팔 피벗 — 치켜들었다 내리찍는다 */
+  arm?: THREE.Group;
   shieldFlashUntil: number;
   /** warden 방어막 셸 */
   barrier?: THREE.Mesh;
@@ -483,21 +497,35 @@ export class Stage {
       group.add(visual.shield);
     }
 
-    if (type === 'goblin_spear') {
-      const spear = new THREE.Group();
+    // 근접 무기 — 어깨 피벗 팔에 쥐고 치켜들었다 내리찍는다
+    const weaponSpec = MELEE_WEAPONS[type];
+    if (weaponSpec) {
+      const arm = new THREE.Group();
+      arm.position.set(def.radius * 0.85, def.height * 0.72, 0);
       const shaft = new THREE.Mesh(
-        new THREE.BoxGeometry(0.055, 0.055, 1.7),
-        new THREE.MeshLambertMaterial({ color: SPEAR_SHAFT }),
+        new THREE.BoxGeometry(weaponSpec.width, weaponSpec.width, weaponSpec.length),
+        new THREE.MeshLambertMaterial({ color: weaponSpec.color }),
       );
-      spear.add(shaft);
-      const tipMat = new THREE.MeshLambertMaterial({ color: SPEAR_TIP });
-      flashMaterials.push(tipMat);
-      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.075, 0.24), tipMat);
-      tip.position.z = -0.95;
-      spear.add(tip);
-      spear.position.set(def.radius + 0.15, def.height * 0.62, -0.3);
-      visual.spear = spear;
-      group.add(spear);
+      shaft.position.z = -weaponSpec.length / 2;
+      arm.add(shaft);
+      if (weaponSpec.tip) {
+        const tipMat = new THREE.MeshLambertMaterial({ color: SPEAR_TIP });
+        flashMaterials.push(tipMat);
+        const tip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.26), tipMat);
+        tip.position.z = -weaponSpec.length - 0.1;
+        arm.add(tip);
+      }
+      if (weaponSpec.headSize) {
+        const clubHead = new THREE.Mesh(
+          new THREE.BoxGeometry(weaponSpec.headSize, weaponSpec.headSize, weaponSpec.headSize),
+          new THREE.MeshLambertMaterial({ color: 0x7a7d84 }),
+        );
+        clubHead.position.z = -weaponSpec.length + 0.15;
+        arm.add(clubHead);
+      }
+      arm.rotation.x = ARM_REST;
+      visual.arm = arm;
+      torso.add(arm);
     }
 
     return visual;
@@ -581,29 +609,36 @@ export class Stage {
         }
       }
 
-      // 창 찌르기 — windup에 당겼다가 판정 창~impact에 내지른다
-      if (visual.spear) {
-        let targetZ = -0.3;
-        if (enemy.ai === 'windup') targetZ = 0.15;
-        else if (enemy.ai.startsWith('active') || enemy.ai === 'impact') targetZ = -1.1;
-        visual.spear.position.z += (targetZ - visual.spear.position.z) * 0.35;
-      }
-
-      // 공격 모션 — windup에 깊게 젖혔다가 타격 구간에 격하게 내지른다.
-      // 섬광 구간(마지막 visualLeadTicks)에는 몸이 부르르 떨린다 — "지금 온다"
+      // 공격 모션 — windup에 무기를 머리 위로 치켜들며 몸을 젖히고,
+      // 타격 구간에 격하게 내리찍는다. 섬광 구간(마지막 4틱)에는 부르르 떨림.
       const inWindup = enemy.ai === 'windup';
       const striking =
         enemy.ai === 'active_perfect' || enemy.ai === 'active_normal' || enemy.ai === 'impact';
       const windupProgress = inWindup ? 1 - enemy.timer / attack.windupTicks : 0;
       const isMelee = attack.type !== 'projectile';
-      let leanTarget = striking ? 0.62 : inWindup ? -0.5 * windupProgress : 0;
-      if (inWindup && enemy.timer <= balance.telegraph.visualLeadTicks) {
-        leanTarget += Math.sin(now / 14) * 0.06; // 떨림
-      }
-      const lungeTarget = striking && isMelee ? -0.7 : 0;
+      const trembling = inWindup && enemy.timer <= balance.telegraph.visualLeadTicks;
+
+      let leanTarget = striking && isMelee ? 0.4 : inWindup ? -0.28 * windupProgress : 0;
+      if (trembling) leanTarget += Math.sin(now / 14) * 0.05;
+      const lungeTarget = striking && isMelee ? -0.5 : 0;
       const snap = striking ? 0.55 : 0.3; // 타격은 빠르게, 복귀는 부드럽게
       visual.torso.rotation.x += (leanTarget - visual.torso.rotation.x) * snap;
       visual.torso.position.z += (lungeTarget - visual.torso.position.z) * snap;
+
+      // 무기 팔 — 치켜듦(windup 진행도) → 내리침(판정 창~타격)
+      if (visual.arm) {
+        let armTarget = ARM_REST;
+        if (isMelee) {
+          if (inWindup) {
+            armTarget = ARM_REST + (ARM_RAISED - ARM_REST) * windupProgress;
+            if (trembling) armTarget += Math.sin(now / 12) * 0.08;
+          } else if (striking) {
+            armTarget = ARM_SMASH;
+          }
+        }
+        const armSnap = striking ? 0.6 : 0.25;
+        visual.arm.rotation.x += (armTarget - visual.arm.rotation.x) * armSnap;
+      }
 
       // 시전 충전 구체 — windup 진행에 따라 커진다
       if (visual.chargeOrb) {
