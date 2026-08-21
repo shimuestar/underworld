@@ -292,10 +292,9 @@ function render(alpha: number): void {
     `spell ${world.sigils.equipped.rightArm ? sigilDef(world.sigils.equipped.rightArm).name : '(오른팔 각인 없음)'}${world.spell.cooldown > 0 ? ' [쿨]' : ''}   각인 ${world.sigils.inventory.length}개 소지\n` +
     `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
-    (input.pointerLocked
-      ? ''
-      : '[클릭] 마우스 잠금  WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)\n' +
-        'Q 마법 시전  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  P 연습용 창병 소환');
+    (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
+    'WASD 이동  Shift 질주  좌클릭 발사  우클릭 반응(패링/회피)\n' +
+    'Q 마법 시전  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  P 연습용 창병 소환';
 
   stage.render();
 }
