@@ -251,6 +251,50 @@ describe('화염구 폭발', () => {
     expect(far.kbTicks ?? 0).toBe(0); // blastRadius 밖은 밀리지 않는다
   });
 
+  it('폭심이 반경 안이면 플레이어도 피해를 입는다 (자폭)', () => {
+    // 코앞(2m)의 적에게 쏜다 — explodeRadius 4.0 안이라 나도 휘말린다
+    const close = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
+    close.health = 1000;
+    world.enemies.push(close);
+    const hits: { amount: number }[] = [];
+    world.events.on('player_damaged', (payload) => hits.push(payload as { amount: number }));
+    let blast: { x: number; z: number } | null = null;
+    world.events.on('explosion', (payload) => (blast = payload as { x: number; z: number }));
+
+    const before = world.player.health;
+    castAt();
+    expect(world.player.health).toBeLessThan(before);
+    expect(hits).toHaveLength(1);
+    // 실제 폭심까지의 거리로 감쇠를 계산해 대조한다 (탄이 적 표면에서 터지므로 2m보다 가깝다)
+    const at = blast!;
+    const dist = Math.hypot(at.x - 6, at.z - 6);
+    expect(dist).toBeLessThan(fx['explodeRadius']!);
+    const falloff = 1 - (1 - fx['explodeFalloffMin']!) * (dist / fx['explodeRadius']!);
+    expect(hits[0]!.amount).toBeCloseTo(fx['explodeDamage']! * falloff, 3);
+  });
+
+  it('멀리서 터지면 플레이어는 무사하다', () => {
+    const far = spawnEnemyAt('goblin_runner', 6 + 8, 6, 1); // 8m — 반경 4.0 밖
+    far.health = 1000;
+    world.enemies.push(far);
+
+    const before = world.player.health;
+    castAt();
+    expect(far.health).toBeLessThan(1000); // 적은 맞았고
+    expect(world.player.health).toBe(before); // 나는 안 맞았다
+  });
+
+  it('회피 무적 중에는 자폭 피해를 받지 않는다', () => {
+    const close = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
+    close.health = 1000;
+    world.enemies.push(close);
+    world.player.iframeTicks = 60;
+
+    const before = world.player.health;
+    castAt();
+    expect(world.player.health).toBe(before);
+  });
+
   it('벽에 맞아도 터진다 — 근처 적이 피해를 입는다', () => {
     // 사격장 복도 끝 벽까지 날아가 터지게, 벽 앞에 적을 둔다
     const nearWall = spawnEnemyAt('goblin_runner', 6 + 40, 6 + 1.5, 1);

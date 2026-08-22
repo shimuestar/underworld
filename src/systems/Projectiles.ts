@@ -292,7 +292,8 @@ function applyProjectileHit(
 }
 
 /** 화염구 폭발 — 반경 내 적에게 거리 감쇠 피해와 화상, 가까운 적은 크게 날린다.
- *  직격당한 적(direct)은 이미 본 피해를 받았으므로 폭발 피해에서는 제외한다 */
+ *  직격당한 적(direct)은 이미 본 피해를 받았으므로 폭발 피해에서는 제외한다.
+ *  플레이어도 반경 안이면 같은 감쇠로 맞는다 — 근접전에서 함부로 못 쏘게 하는 제약 */
 function explodeFireball(
   world: World,
   proj: (typeof world.projectiles)[number],
@@ -306,6 +307,11 @@ function explodeFireball(
   if (radius <= 0) return;
   const blastRadius = fx['blastRadius'] ?? 0;
   world.events.emit('explosion', { x, y, z, radius, kind: 'fireball' });
+
+  // 폭심에서 멀어질수록 약해진다 (반경 끝에서 explodeFalloffMin 배)
+  const damageAt = (dist: number): number =>
+    (fx['explodeDamage'] ?? 0) *
+    (1 - (1 - (fx['explodeFalloffMin'] ?? 0.3)) * Math.min(1, dist / radius));
 
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
@@ -324,9 +330,7 @@ function explodeFireball(
     if (enemy === direct) continue; // 직격 피해와 중복되지 않게
 
     if (enemy.ai === 'idle') enemy.ai = 'chase';
-    const falloff =
-      1 - (1 - (fx['explodeFalloffMin'] ?? 0.3)) * Math.min(1, dist / radius);
-    const damage = (fx['explodeDamage'] ?? 0) * falloff;
+    const damage = damageAt(dist);
     // 방어막·장갑은 폭발을 막지 못한다 (화염은 사방에서 온다)
     enemy.health -= damage;
     enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
@@ -335,6 +339,21 @@ function explodeFireball(
       enemy.alive = false;
       world.events.emit('spell_kill', { enemyType: enemy.type, splash: true });
       world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    }
+  }
+
+  // 자가 피해 — 내가 쏜 화염구도 나를 태운다 (수류탄 자폭과 같은 규칙).
+  // 방패로 막히지 않는다: 폭발은 사방에서 온다. 회피 무적 중에는 면제
+  const p = world.player;
+  const playerDist = Math.hypot(p.x - x, p.z - z);
+  if (playerDist <= radius && p.iframeTicks <= 0) {
+    const damage = damageAt(playerDist);
+    p.health -= damage;
+    world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'fireball' });
+    if (p.health <= 0) {
+      p.health = 0;
+      world.dead = true;
+      world.events.emit('player_died', { tick: world.tick });
     }
   }
 }
