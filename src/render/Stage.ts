@@ -113,6 +113,7 @@ interface EnemyVisual {
   armorPlates?: THREE.Mesh;
   /** 시전 충전 구체 (warden) */
   chargeOrb?: THREE.Mesh;
+  chargeOrbLight?: THREE.PointLight;
   /** 활 (archer) */
   bow?: THREE.Mesh;
   /** 머리 위 이름표 + HP 바 */
@@ -789,19 +790,26 @@ export class Stage {
       plateKey: '',
     };
 
-    // 시전 충전 구체 (마법 투사체 캐스터)
+    // 시전 충전 구체 (마법 투사체 캐스터) —
+    // 위치·크기·색을 발사 지점(Enemies.fireProjectile)과 정확히 맞춘다.
+    // torso에 달면 시전 중 상체가 기울 때 구체가 끌려가 "다른 데서 튀어나오는" 그림이 된다.
+    // 기울지 않는 group에 직접 매단다
     if (def.attack.type === 'projectile' && def.attack.deflectable) {
+      const projRadius = def.attack.projectileRadius ?? 0.3;
       visual.chargeOrb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.28, 10, 10),
+        new THREE.SphereGeometry(projRadius, 10, 10),
         new THREE.MeshBasicMaterial({
           color: ENEMY_BOLT_COLOR,
           transparent: true,
-          opacity: 0.9,
+          opacity: 1,
         }),
       );
-      visual.chargeOrb.position.set(0.45, def.height * 0.62, -def.radius - 0.35);
+      visual.chargeOrb.position.set(0, def.height * 0.7, -(def.radius + projRadius));
       visual.chargeOrb.visible = false;
-      torso.add(visual.chargeOrb);
+      // 투사체와 같은 점광원 — 어둠 속에서 밝기까지 이어져야 끊겨 보이지 않는다
+      visual.chargeOrbLight = new THREE.PointLight(ENEMY_BOLT_COLOR, 0, 9, 0);
+      visual.chargeOrb.add(visual.chargeOrbLight);
+      group.add(visual.chargeOrb);
     }
 
     // 활 (궁수)
@@ -1137,11 +1145,14 @@ export class Stage {
         }
       }
 
-      // 시전 충전 구체 — windup 진행에 따라 커진다
+      // 시전 충전 구체 — windup 동안 부풀어 발사 직전 투사체와 같은 크기·밝기가 된다.
+      // 끝값이 1이어야 발사 프레임에 크기가 튀지 않는다
       if (visual.chargeOrb) {
         visual.chargeOrb.visible = inWindup;
-        const s = 0.15 + windupProgress * 0.95;
+        const s = 0.12 + windupProgress * 0.88;
         visual.chargeOrb.scale.set(s, s, s);
+        (visual.chargeOrb.material as THREE.MeshBasicMaterial).opacity = 0.4 + 0.6 * windupProgress;
+        if (visual.chargeOrbLight) visual.chargeOrbLight.intensity = 2.2 * windupProgress;
       }
 
       // 활 시위 당기기 — windup에 활이 젖혀진다

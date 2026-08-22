@@ -195,6 +195,10 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     }
 
     case 'windup': {
+      // 원거리 시전은 발사 순간의 플레이어 위치로 날아간다 — 시전 중 몸이 굳어 있으면
+      // 충전 구체와 실제 발사 방향이 어긋난다. 근접 공격은 그대로 둔다
+      // (시전 중에도 몸을 돌리면 옆으로 비켜 피하는 플레이가 죽는다)
+      if (attack.type === 'projectile' && dist > 0) enemy.yaw = Math.atan2(-distX, -distZ);
       enemy.timer--;
       if (enemy.timer === balance.telegraph.visualLeadTicks) {
         world.events.emit('telegraph_flash', { enemyId: enemy.id, enemyType: enemy.type });
