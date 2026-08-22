@@ -6,13 +6,7 @@
 import { balance } from '../core/Balance';
 import { enemyDef, shieldBlocks } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import type { World } from '../core/World';
-
-const WEAPON_SLOTS: Record<number, 'hammer' | 'grenade' | 'pistol'> = {
-  1: 'hammer',
-  2: 'grenade',
-  3: 'pistol',
-};
+import { RANGED_WEAPONS, type World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   const w = world.weapon;
@@ -22,16 +16,28 @@ export function tick(world: World, _dt: number): void {
   if (w.cooldown > 0) w.cooldown--;
   if (w.meleeCooldown > 0) w.meleeCooldown--;
 
-  // 무기 전환 (1/2/3) — 장전은 취소된다
-  const select = WEAPON_SLOTS[world.input.weaponSelect];
-  if (select && select !== w.active) {
-    w.active = select;
-    w.reloading = 0;
-    world.events.emit('weapon_switched', { weapon: select });
+  // 원거리 무기 교체 (휠) — 장전·차징은 취소된다
+  if (world.input.cycleRanged !== 0) {
+    const i = RANGED_WEAPONS.indexOf(w.ranged);
+    const next =
+      RANGED_WEAPONS[(i + world.input.cycleRanged + RANGED_WEAPONS.length) % RANGED_WEAPONS.length]!;
+    if (next !== w.ranged) {
+      w.ranged = next;
+      w.reloading = 0;
+      w.grenadeCharge = 0;
+      world.events.emit('weapon_switched', { weapon: next, slot: 'ranged' });
+    }
   }
 
   // 경직/회피 대시/방어 중에는 공격·장전 불가
   if (world.player.stunTicks > 0 || world.player.dodgeTicks > 0 || world.player.blocking) return;
+
+  // 근접 공격(좌클릭) — 원거리 상태와 무관하게 항상 쓸 수 있다
+  if (world.input.meleePressed && w.meleeCooldown <= 0) {
+    swingHammer(world);
+    w.grenadeCharge = 0; // 근접을 섞으면 차징은 끊긴다
+    return;
+  }
 
   if (w.reloading > 0) {
     w.reloading--;
@@ -45,15 +51,10 @@ export function tick(world: World, _dt: number): void {
     return; // 장전 중에는 발사/재장전 입력 무시
   }
 
-  if (w.active === 'hammer') {
-    if (world.input.firePressed && w.meleeCooldown <= 0) swingHammer(world);
-    return;
-  }
-
-  if (w.active === 'grenade') {
+  if (w.ranged === 'grenade') {
     // 홀드 차징 — 누르는 동안 힘을 모으고, 놓으면 던진다
     if (w.grenades <= 0) {
-      if (world.input.firePressed) world.events.emit('weapon_empty');
+      if (world.input.rangedPressed) world.events.emit('weapon_empty');
       w.grenadeCharge = 0;
       return;
     }
@@ -62,7 +63,7 @@ export function tick(world: World, _dt: number): void {
       return;
     }
     const grenade = balance.weapons.grenade;
-    if (world.input.fireHeld) {
+    if (world.input.rangedHeld) {
       w.grenadeCharge = Math.min(w.grenadeCharge + 1, grenade.maxChargeTicks);
     } else if (w.grenadeCharge > 0) {
       throwGrenade(world, w.grenadeCharge / grenade.maxChargeTicks);
@@ -77,7 +78,7 @@ export function tick(world: World, _dt: number): void {
     return;
   }
 
-  if (!world.input.firePressed) return;
+  if (!world.input.rangedPressed) return;
 
   if (w.mag === 0) {
     // 빈 탄창 — 예비탄이 있으면 자동 장전, 없으면 불발

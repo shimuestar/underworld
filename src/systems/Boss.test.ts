@@ -35,7 +35,7 @@ function makeWorld(): World {
       iframeTicks: 0, reactionBufferTicks: 0, blocking: false, reactionHeldTicks: 0,
     },
     lantern: { on: true, battery: 100, spares: 0 },
-    weapon: { active: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0, grenadeCharge: 0 },
+    weapon: { melee: 'hammer', ranged: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0, grenadeCharge: 0 },
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
@@ -137,7 +137,7 @@ describe('warden (수호주술사)', () => {
   it('9mm는 방어막을 관통해 피해를 준다 (근거리 몸통 = damage × bodyMul)', () => {
     const warden = spawnEnemyAt('warden', 12, 6, 1);
     world.enemies.push(warden);
-    world.input = { ...Input.emptySnapshot(), firePressed: true };
+    world.input = { ...Input.emptySnapshot(), rangedPressed: true };
     Weapons.tick(world, DT);
     world.input = Input.emptySnapshot();
     // 수평 사격 → 눈높이 1.6 / warden 키 2.0 = 0.8 → 몸통 판정
@@ -210,7 +210,7 @@ describe('goblin_chieftain (1구역 보스)', () => {
     world.events.on('boss_phase', (payload) => phases.push(payload));
     for (let shot = 0; shot < 5; shot++) {
       world.weapon.cooldown = 0;
-      world.input = { ...Input.emptySnapshot(), firePressed: true };
+      world.input = { ...Input.emptySnapshot(), rangedPressed: true };
       Weapons.tick(world, DT);
       world.input = Input.emptySnapshot();
     }

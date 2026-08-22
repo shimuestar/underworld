@@ -28,9 +28,9 @@ export interface PlayerState {
   iframeTicks: number;
   /** 히트스톱 중 눌린 반응 입력의 버퍼 잔여 틱 */
   reactionBufferTicks: number;
-  /** 방어 중 (우클릭 홀드) — 정면 피해 경감, 이동·사격 제한 */
+  /** 방어 중 (Space 홀드) — 정면 피해 경감, 이동·사격 제한 */
   blocking: boolean;
-  /** 우클릭을 누르고 있는 누적 틱 — tapThreshold 이내에 떼면 패링 */
+  /** Space를 누르고 있는 누적 틱 — tapThreshold 이내에 떼면 패링 */
   reactionHeldTicks: number;
   /** 피격 밀림 잔여 틱 + 틱당 밀림량 (PlayerMove가 소비) */
   kbTicks?: number;
@@ -142,11 +142,17 @@ export interface LanternState {
   spares: number;
 }
 
-export type WeaponKind = 'hammer' | 'grenade' | 'pistol';
+export type MeleeWeaponKind = 'hammer';
+export type RangedWeaponKind = 'pistol' | 'grenade';
+export type WeaponKind = MeleeWeaponKind | RangedWeaponKind;
+/** 원거리 슬롯 교체 순서 (휠) */
+export const RANGED_WEAPONS: RangedWeaponKind[] = ['pistol', 'grenade'];
 
 export interface WeaponState {
-  /** 선택된 무기 (1=hammer, 2=grenade, 3=pistol) */
-  active: WeaponKind;
+  /** 장착한 근접 무기 (좌클릭) */
+  melee: MeleeWeaponKind;
+  /** 장착한 원거리 무기 (우클릭, 휠로 교체) */
+  ranged: RangedWeaponKind;
   /** 탄창 잔탄 */
   mag: number;
   /** 예비 탄약 (상한 balance.weapons.*.ammoMax) */

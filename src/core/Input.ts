@@ -14,24 +14,28 @@ export interface InputSnapshot {
   lanternToggle: boolean;
   /** 이번 틱에 배터리 교체 키가 눌렸는가 (엣지) */
   batterySwap: boolean;
-  /** 이번 틱에 발사 클릭이 있었는가 (엣지, 세미오토) */
-  firePressed: boolean;
-  /** 발사 버튼(좌클릭)을 누르고 있는가 (홀드 — 수류탄 차징) */
-  fireHeld: boolean;
+  /** 이번 틱에 근접 공격(좌클릭)이 있었는가 (엣지) */
+  meleePressed: boolean;
+  /** 근접 버튼을 누르고 있는가 */
+  meleeHeld: boolean;
+  /** 이번 틱에 원거리 공격(우클릭)이 있었는가 (엣지, 세미오토) */
+  rangedPressed: boolean;
+  /** 원거리 버튼을 누르고 있는가 (홀드 — 수류탄 차징) */
+  rangedHeld: boolean;
   /** 이번 틱에 재장전 키가 눌렸는가 (엣지) */
   reload: boolean;
-  /** 이번 틱에 반응 버튼(우클릭)이 눌렸는가 (엣지) */
+  /** 이번 틱에 반응 키(Space)가 눌렸는가 (엣지) */
   reactionPressed: boolean;
-  /** 반응 버튼(우클릭)을 누르고 있는가 (홀드 = 방패 방어) */
+  /** 반응 키(Space)를 누르고 있는가 (홀드 = 방패 방어) */
   reactionHeld: boolean;
-  /** 이번 틱에 반응 버튼을 뗐는가 (엣지 — 짧은 탭이었으면 패링 판정) */
+  /** 이번 틱에 반응 키를 뗐는가 (엣지 — 짧은 탭이었으면 패링 판정) */
   reactionReleased: boolean;
   /** 이번 틱에 시전 키(Q)가 눌렸는가 (엣지) */
   castPressed: boolean;
   /** 이번 틱에 상호작용 키(E)가 눌렸는가 (엣지) */
   interactPressed: boolean;
-  /** 이번 틱에 선택한 무기 슬롯 (0=없음, 1=해머, 2=수류탄, 3=권총) */
-  weaponSelect: number;
+  /** 원거리 무기 교체 (휠) — -1/0/+1 */
+  cycleRanged: number;
 }
 
 export class Input {
@@ -40,15 +44,17 @@ export class Input {
   private dy = 0;
   private lanternToggles = 0;
   private batterySwaps = 0;
-  private fireClicks = 0;
-  private fireDown = false;
+  private meleeClicks = 0;
+  private meleeDown = false;
+  private rangedClicks = 0;
+  private rangedDown = false;
   private reloads = 0;
   private reactionClicks = 0;
   private reactionDown = false;
   private reactionReleases = 0;
   private casts = 0;
   private interacts = 0;
-  private weaponSelect = 0;
+  private cycleRanged = 0;
 
   constructor(private readonly lockTarget: HTMLElement) {
     lockTarget.addEventListener('click', () => {
@@ -63,11 +69,20 @@ export class Input {
       if (e.code === 'KeyR') this.reloads++;
       if (e.code === 'KeyQ') this.casts++;
       if (e.code === 'KeyE') this.interacts++;
-      if (e.code === 'Digit1') this.weaponSelect = 1;
-      if (e.code === 'Digit2') this.weaponSelect = 2;
-      if (e.code === 'Digit3') this.weaponSelect = 3;
+      // 반응(패링/방어) — 스페이스. 누른 순간과 뗀 순간을 모두 엣지로 잡는다
+      if (e.code === 'Space') {
+        e.preventDefault();
+        this.reactionClicks++;
+        this.reactionDown = true;
+      }
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    window.addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      if (e.code === 'Space' && this.reactionDown) {
+        this.reactionDown = false;
+        this.reactionReleases++;
+      }
+    });
     window.addEventListener('blur', () => this.keys.clear());
 
     window.addEventListener('mousemove', (e) => {
@@ -80,23 +95,25 @@ export class Input {
     window.addEventListener('mousedown', (e) => {
       if (!this.pointerLocked) return;
       if (e.button === 0) {
-        this.fireClicks++;
-        this.fireDown = true;
+        this.meleeClicks++;
+        this.meleeDown = true;
       }
       if (e.button === 2) {
-        this.reactionClicks++;
-        this.reactionDown = true;
+        this.rangedClicks++;
+        this.rangedDown = true;
       }
     });
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.fireDown = false;
-      if (e.button === 2 && this.reactionDown) {
-        this.reactionDown = false;
-        this.reactionReleases++;
-      }
+      if (e.button === 0) this.meleeDown = false;
+      if (e.button === 2) this.rangedDown = false;
+    });
+    window.addEventListener('wheel', (e) => {
+      if (!this.pointerLocked) return;
+      this.cycleRanged = e.deltaY > 0 ? 1 : -1;
     });
     window.addEventListener('blur', () => {
-      this.fireDown = false;
+      this.meleeDown = false;
+      this.rangedDown = false;
       this.reactionDown = false;
     });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -116,27 +133,30 @@ export class Input {
       lookDY: this.dy,
       lanternToggle: this.lanternToggles > 0,
       batterySwap: this.batterySwaps > 0,
-      firePressed: this.fireClicks > 0,
-      fireHeld: this.fireDown,
+      meleePressed: this.meleeClicks > 0,
+      meleeHeld: this.meleeDown,
+      rangedPressed: this.rangedClicks > 0,
+      rangedHeld: this.rangedDown,
       reload: this.reloads > 0,
       reactionPressed: this.reactionClicks > 0,
       reactionHeld: this.reactionDown,
       reactionReleased: this.reactionReleases > 0,
       castPressed: this.casts > 0,
       interactPressed: this.interacts > 0,
-      weaponSelect: this.weaponSelect,
+      cycleRanged: this.cycleRanged,
     };
     this.dx = 0;
     this.dy = 0;
     this.lanternToggles = 0;
     this.batterySwaps = 0;
-    this.fireClicks = 0;
+    this.meleeClicks = 0;
+    this.rangedClicks = 0;
     this.reloads = 0;
     this.reactionClicks = 0;
     this.reactionReleases = 0;
     this.casts = 0;
     this.interacts = 0;
-    this.weaponSelect = 0;
+    this.cycleRanged = 0;
     return snapshot;
   }
 
@@ -149,15 +169,17 @@ export class Input {
       lookDY: 0,
       lanternToggle: false,
       batterySwap: false,
-      firePressed: false,
-      fireHeld: false,
+      meleePressed: false,
+      meleeHeld: false,
+      rangedPressed: false,
+      rangedHeld: false,
       reload: false,
       reactionPressed: false,
       reactionHeld: false,
       reactionReleased: false,
       castPressed: false,
       interactPressed: false,
-      weaponSelect: 0,
+      cycleRanged: 0,
     };
   }
 }

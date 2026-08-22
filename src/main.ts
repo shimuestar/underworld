@@ -72,7 +72,8 @@ const world = new World(events, {
     spares: balance.lantern.spareCells,
   },
   weapon: {
-    active: 'pistol',
+    melee: 'hammer',
+    ranged: 'pistol',
     mag: balance.weapons.pistol.magSize,
     reserve: balance.weapons.pistol.ammoMax,
     cooldown: 0,
@@ -309,12 +310,8 @@ events.on('block_hit', (payload) => {
   stage.triggerBlockHit((payload as { kind?: string }).kind);
 });
 
-// ---- 무기 3종 (1 해머 / 2 수류탄 / 3 권총) ----
-events.on('weapon_switched', (payload) => {
-  const kind = (payload as { weapon: 'hammer' | 'grenade' | 'pistol' }).weapon;
-  audio.play('weapon_switch');
-  stage.setHandWeapon(kind);
-});
+// ---- 무기 — 근접(좌클릭) / 원거리(우클릭, 휠 교체) ----
+events.on('weapon_switched', () => audio.play('weapon_switch'));
 events.on('hammer_swing', () => {
   audio.play('hammer_swing');
   stage.triggerHammerSwing();
@@ -659,9 +656,11 @@ function render(alpha: number): void {
   stage.syncProjectiles(world.projectiles, alpha);
   stage.syncGroundItems(world.groundItems);
   const chargeFrac =
-    world.weapon.active === 'grenade' && world.weapon.grenadeCharge > 0
+    world.weapon.ranged === 'grenade' && world.weapon.grenadeCharge > 0
       ? world.weapon.grenadeCharge / balance.weapons.grenade.maxChargeTicks
       : 0;
+  // 손에 든 것 — 평소엔 장착한 원거리 무기, 근접 스윙 중에는 근접 무기
+  stage.setHandWeapon(world.weapon.meleeCooldown > 0 ? world.weapon.melee : world.weapon.ranged);
   stage.updateHands({
     reloading: world.weapon.reloading > 0,
     stunned: p.stunTicks > 0,
@@ -706,15 +705,13 @@ function render(alpha: number): void {
   hpFill.style.width = `${hpFrac * 100}%`;
   hpFill.style.background = hpFrac > 0.5 ? '#3fae5a' : hpFrac > 0.25 ? '#c9a227' : '#e04444';
   document.getElementById('status-gold')!.textContent = `◆ ${world.gold}   XP ${world.xp}`;
-  document.getElementById('slot-hammer')!.className =
-    `weapon-slot${wpn.active === 'hammer' ? ' active' : ''}`;
-  document.getElementById('slot-grenade')!.className =
-    `weapon-slot${wpn.active === 'grenade' ? ' active' : ''}`;
-  document.getElementById('slot-pistol')!.className =
-    `weapon-slot${wpn.active === 'pistol' ? ' active' : ''}`;
-  document.getElementById('slot-grenade')!.textContent = `2 수류탄 ×${wpn.grenades}`;
-  document.getElementById('slot-pistol')!.textContent =
-    `3 권총 ${wpn.mag}/${wpn.reserve}${wpn.reloading > 0 ? ' …' : ''}`;
+  // 근접(좌클릭) / 원거리(우클릭) 두 슬롯. 원거리는 휠로 교체
+  document.getElementById('slot-melee')!.textContent =
+    `LMB ${wpn.melee === 'hammer' ? '해머' : wpn.melee}`;
+  document.getElementById('slot-ranged')!.textContent =
+    wpn.ranged === 'pistol'
+      ? `RMB 권총 ${wpn.mag}/${wpn.reserve}${wpn.reloading > 0 ? ' …' : ''}`
+      : `RMB 수류탄 ×${wpn.grenades}`;
 
   // 디버그 오버레이 (F1) — 0.5초마다 갱신
   if (debugOverlay.visible && now - debugOverlayLastUpdate > 500) {
@@ -777,7 +774,7 @@ function render(alpha: number): void {
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
-    'WASD 이동  Shift 질주  좌클릭 공격  우클릭 짧게=패링(뗄 때)·꾹=방어  Shift+우클릭 회피  1/2/3 무기\n' +
+    'WASD 이동  Shift 질주  좌클릭 근접  우클릭 원거리(휠 교체)  Space 짧게=패링·꾹=방어  Shift+Space 회피\n' +
     'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O 테스트';
 
   stage.render();

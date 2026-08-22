@@ -1,4 +1,4 @@
-// 단일 반응 버튼 (우클릭) — docs/systems/combat.md §1, §3.
+// 단일 반응 버튼 (Space) — docs/systems/combat.md §1, §3.
 // 상황에 따라 자동 분기: 패링 판정 > 반사(투사체) > 처형 > (windup 조기 입력 = 실패).
 // 회피는 Shift+탭 — 명시 입력이라 판정을 거치지 않는다 (빨강 공격 회피용).
 //
@@ -23,7 +23,7 @@ export function tick(world: World, _dt: number): void {
   if (p.iframeTicks > 0) p.iframeTicks--;
   if (p.reactionBufferTicks > 0) p.reactionBufferTicks--;
 
-  // 방어 (우클릭 홀드) — 탭 임계를 넘긴 뒤에만 발동. 짧은 탭(=패링 시도) 중에는
+  // 방어 (Space 홀드) — 탭 임계를 넘긴 뒤에만 발동. 짧은 탭(=패링 시도) 중에는
   // 방어가 켜지지 않아 브레이서가 두 번 올라가지 않는다. 경직/대시 중 불가.
   // 피해 처리는 Enemies/Projectiles가 playerBlocks()로 판정 (정면 한정, 칩 데미지 관통)
   if (world.input.reactionHeld) p.reactionHeldTicks++;
