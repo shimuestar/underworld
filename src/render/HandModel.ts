@@ -275,10 +275,16 @@ export class HandModel {
         y: a.y + (b.y - a.y) * k,
       });
       const e = now - this.swingStart;
-      const t1 = step.windupMs;
+      // 이미 그 자세에 있으면 감는 시간을 줄인다 — 아래에 있던 손이 곧바로 올라간다
+      const near =
+        Math.abs(from.rotX - step.windup.rotX) +
+        Math.abs(from.rotY - step.windup.rotY) +
+        Math.abs(from.x - step.windup.x) +
+        Math.abs(from.y - step.windup.y);
+      const t1 = step.windupMs * Math.min(1, near / 0.9);
       const t2 = t1 + step.strikeMs;
       const t3 = t2 + step.holdMs;
-      if (e < t1) pose = mix(from, step.windup, easeOutCubic(e / step.windupMs));
+      if (e < t1) pose = mix(from, step.windup, easeOutCubic(e / t1));
       else if (e < t2) pose = mix(step.windup, step.strike, easeInCubic((e - t1) / step.strikeMs));
       else if (e < t3) pose = step.strike; // 그대로 버틴다 — 연결 대기
       else pose = mix(step.strike, rest, easeOutCubic((e - t3) / step.returnMs));
@@ -432,8 +438,10 @@ const COMBO_SWINGS: SwingStep[] = [
     // 1타 — 오른쪽 위에서 왼쪽 아래로 베어 내린다
     windupMs: 80,
     strikeMs: 95,
-    holdMs: 250, // 여기서 다시 클릭하면 그 자리에서 2타가 이어진다
-    returnMs: 230,
+    // 버팀 = 로직상 연결 가능한 시간(후딜 10틱 + 창 26틱 ≒ 600ms)과 맞춘다.
+    // 짧으면 클릭 전에 팔이 복귀해 "정렬됐다가 다시 휘두르는" 그림이 된다
+    holdMs: 430,
+    returnMs: 260,
     windup: { rotX: 1.0, rotY: -0.75, x: 0.4, y: -0.2 },
     strike: { rotX: -0.85, rotY: 0.62, x: -0.06, y: -0.4 },
   },
@@ -441,8 +449,8 @@ const COMBO_SWINGS: SwingStep[] = [
     // 2타 — 왼쪽 아래에서 오른쪽 위로 올려친다 (1타 끝 자세에서 그대로 출발)
     windupMs: 60,
     strikeMs: 95,
-    holdMs: 250,
-    returnMs: 230,
+    holdMs: 430,
+    returnMs: 260,
     windup: { rotX: -0.8, rotY: 0.62, x: -0.02, y: -0.46 },
     strike: { rotX: 1.05, rotY: -0.5, x: 0.34, y: -0.16 },
   },
