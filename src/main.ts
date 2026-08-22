@@ -310,7 +310,7 @@ events.on('block_hit', (payload) => {
   stage.triggerBlockHit((payload as { kind?: string }).kind);
 });
 
-// ---- 무기 — 근접(좌클릭) / 원거리(우클릭, 휠 교체) ----
+// ---- 무기 — 원거리(좌클릭, 휠 교체) / 근접(우클릭) ----
 events.on('weapon_switched', () => audio.play('weapon_switch'));
 events.on('hammer_swing', () => {
   audio.play('hammer_swing');
@@ -705,13 +705,13 @@ function render(alpha: number): void {
   hpFill.style.width = `${hpFrac * 100}%`;
   hpFill.style.background = hpFrac > 0.5 ? '#3fae5a' : hpFrac > 0.25 ? '#c9a227' : '#e04444';
   document.getElementById('status-gold')!.textContent = `◆ ${world.gold}   XP ${world.xp}`;
-  // 근접(좌클릭) / 원거리(우클릭) 두 슬롯. 원거리는 휠로 교체
-  document.getElementById('slot-melee')!.textContent =
-    `LMB ${wpn.melee === 'hammer' ? '해머' : wpn.melee}`;
+  // 원거리(좌클릭) / 근접(우클릭) 두 슬롯. 원거리는 휠로 교체
   document.getElementById('slot-ranged')!.textContent =
     wpn.ranged === 'pistol'
-      ? `RMB 권총 ${wpn.mag}/${wpn.reserve}${wpn.reloading > 0 ? ' …' : ''}`
-      : `RMB 수류탄 ×${wpn.grenades}`;
+      ? `LMB 권총 ${wpn.mag}/${wpn.reserve}${wpn.reloading > 0 ? ' …' : ''}`
+      : `LMB 수류탄 ×${wpn.grenades}`;
+  document.getElementById('slot-melee')!.textContent =
+    `RMB ${wpn.melee === 'hammer' ? '해머' : wpn.melee}`;
 
   // 디버그 오버레이 (F1) — 0.5초마다 갱신
   if (debugOverlay.visible && now - debugOverlayLastUpdate > 500) {
@@ -774,7 +774,7 @@ function render(alpha: number): void {
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
-    'WASD 이동  Shift 질주  좌클릭 근접  우클릭 원거리(휠 교체)  Space 짧게=패링·꾹=방어  Shift+Space 회피\n' +
+    'WASD 이동  Shift 질주  좌클릭 원거리(휠 교체)  우클릭 근접  Space 짧게=패링·꾹=방어  Shift+Space 회피\n' +
     'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O 테스트';
 
   stage.render();

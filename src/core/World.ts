@@ -149,9 +149,9 @@ export type WeaponKind = MeleeWeaponKind | RangedWeaponKind;
 export const RANGED_WEAPONS: RangedWeaponKind[] = ['pistol', 'grenade'];
 
 export interface WeaponState {
-  /** 장착한 근접 무기 (좌클릭) */
+  /** 장착한 근접 무기 (우클릭) */
   melee: MeleeWeaponKind;
-  /** 장착한 원거리 무기 (우클릭, 휠로 교체) */
+  /** 장착한 원거리 무기 (좌클릭, 휠로 교체) */
   ranged: RangedWeaponKind;
   /** 탄창 잔탄 */
   mag: number;

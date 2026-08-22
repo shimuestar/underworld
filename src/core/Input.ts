@@ -14,11 +14,11 @@ export interface InputSnapshot {
   lanternToggle: boolean;
   /** 이번 틱에 배터리 교체 키가 눌렸는가 (엣지) */
   batterySwap: boolean;
-  /** 이번 틱에 근접 공격(좌클릭)이 있었는가 (엣지) */
+  /** 이번 틱에 근접 공격(우클릭)이 있었는가 (엣지) */
   meleePressed: boolean;
   /** 근접 버튼을 누르고 있는가 */
   meleeHeld: boolean;
-  /** 이번 틱에 원거리 공격(우클릭)이 있었는가 (엣지, 세미오토) */
+  /** 이번 틱에 원거리 공격(좌클릭)이 있었는가 (엣지, 세미오토) */
   rangedPressed: boolean;
   /** 원거리 버튼을 누르고 있는가 (홀드 — 수류탄 차징) */
   rangedHeld: boolean;
@@ -94,18 +94,19 @@ export class Input {
     // 포인터 락을 얻는 그 클릭은 발사로 치지 않는다 (mousedown 시점엔 아직 미잠금)
     window.addEventListener('mousedown', (e) => {
       if (!this.pointerLocked) return;
+      // 좌클릭 = 원거리 / 우클릭 = 근접
       if (e.button === 0) {
-        this.meleeClicks++;
-        this.meleeDown = true;
-      }
-      if (e.button === 2) {
         this.rangedClicks++;
         this.rangedDown = true;
       }
+      if (e.button === 2) {
+        this.meleeClicks++;
+        this.meleeDown = true;
+      }
     });
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.meleeDown = false;
-      if (e.button === 2) this.rangedDown = false;
+      if (e.button === 0) this.rangedDown = false;
+      if (e.button === 2) this.meleeDown = false;
     });
     window.addEventListener('wheel', (e) => {
       if (!this.pointerLocked) return;
