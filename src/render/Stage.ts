@@ -43,8 +43,9 @@ const MUZZLE_OFFSET = { x: -0.17, y: -0.1, z: -0.72 }; // 카메라 로컬: 왼�
 const SHIELD_COLOR = 0x6f7480;
 const SPEAR_TIP = 0x9aa2ad;
 const HEAD_DARKEN = 0.72;
-/** 공격 연출로 전진할 때 플레이어와 유지할 최소 시각 간격 — 이보다 가까이 오면 몸이 관통해 보인다 */
-const VISUAL_BODY_GAP = 0.85;
+/** 공격 연출로 전진할 때 적 몸통 표면과 카메라 사이에 남길 여유.
+ *  적 반경은 별도로 빼므로 큰 적도 같은 여유를 갖는다 */
+const VISUAL_BODY_GAP = 0.35;
 
 // 근접 무기 규격 (시각 — 실제 사거리는 entities.json attackRange가 결정)
 // style: smash = 치켜들었다 내리침 / thrust = 수평 견착 후 내지름
@@ -657,8 +658,10 @@ export class Stage {
 
     const bodyMat = new THREE.MeshLambertMaterial({ color: baseColor });
     flashMaterials.push(bodyMat);
+    // 몸통은 충돌 원과 같은 반경의 8각 기둥 — 박스로 두면 모서리가 반경 밖으로
+    // 0.21m 튀어나와(0.5→0.707) 비스듬히 부딪칠 때 뚫고 들어가 보인다
     const body = new THREE.Mesh(
-      new THREE.BoxGeometry(def.radius * 2, def.height * 0.78, def.radius * 2),
+      new THREE.CylinderGeometry(def.radius, def.radius, def.height * 0.78, 8),
       bodyMat,
     );
     body.position.y = (def.height * 0.78) / 2;
@@ -742,8 +745,9 @@ export class Stage {
     }
 
     if (def.boss) {
+      // 몸통과 같은 8각 기둥 — 박스로 두면 모서리가 충돌 반경 밖으로 크게 삐져나온다
       visual.armorPlates = new THREE.Mesh(
-        new THREE.BoxGeometry(def.radius * 2.4, def.height * 0.9, def.radius * 2.4),
+        new THREE.CylinderGeometry(def.radius * 1.04, def.radius * 1.04, def.height * 0.9, 8),
         new THREE.MeshLambertMaterial({ color: ARMOR_COLOR }),
       );
       visual.armorPlates.position.y = def.height * 0.5;
@@ -753,12 +757,14 @@ export class Stage {
 
     if (def.frontalShieldBlocksProjectiles) {
       visual.shieldMaterial = new THREE.MeshLambertMaterial({ color: SHIELD_COLOR });
+      // 폭은 충돌 원 안에 들어오도록 — 넓으면 옆구리가 반경 밖으로 삐져나온다
       visual.shield = new THREE.Mesh(
-        new THREE.BoxGeometry(def.radius * 2.3, def.height * 0.72, 0.09),
+        new THREE.BoxGeometry(def.radius * 1.6, def.height * 0.72, 0.09),
         visual.shieldMaterial,
       );
-      visual.shieldBaseZ = -(def.radius + 0.12);
-      visual.shield.position.set(-0.15, def.height * 0.5, visual.shieldBaseZ);
+      // 방패도 충돌 경계(반경) 근처까지만 — 더 내밀면 몸이 통과한 것처럼 보인다
+      visual.shieldBaseZ = -(def.radius * 0.92);
+      visual.shield.position.set(-0.08, def.height * 0.5, visual.shieldBaseZ);
       group.add(visual.shield);
     }
 
@@ -937,8 +943,17 @@ export class Stage {
         this.camera.position.x - enemy.x,
         this.camera.position.z - enemy.z,
       );
-      const maxAdvance = Math.max(0, toPlayer - VISUAL_BODY_GAP);
-      if (lungeTarget < -maxAdvance) lungeTarget = -maxAdvance;
+      const maxAdvance = Math.max(0, toPlayer - def2.radius - VISUAL_BODY_GAP);
+      // 앞으로 나가는 성분은 두 가지 — 몸통 전진(z)과 앞으로 숙임(회전).
+      // 숙임은 피벗이 발밑이라 머리가 height×sin(각) 만큼 앞으로 나간다.
+      // 둘을 합친 값이 여유를 넘으면 같은 비율로 함께 줄인다
+      const forwardLean = leanTarget < 0 ? def2.height * 0.8 * Math.sin(-leanTarget) : 0;
+      const desired = Math.max(0, -lungeTarget) + forwardLean;
+      if (desired > maxAdvance) {
+        const k = desired > 0 ? maxAdvance / desired : 0;
+        if (lungeTarget < 0) lungeTarget *= k;
+        if (leanTarget < 0) leanTarget *= k;
+      }
 
       if (trembling) leanTarget += Math.sin(now / 14) * 0.05;
       // 피탄 움찔 — 상체가 짧게 젖혀졌다 돌아온다 (+ = 뒤로). 남은 틱 비율로 감쇠
