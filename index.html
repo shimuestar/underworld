@@ -110,17 +110,41 @@
         font: 13px/1.5 monospace;
         text-align: center;
       }
-      #status-hp {
+      /* 중앙 기준 좌=HP 우=마나. 각 막대는 중앙에서 바깥으로 자란다 */
+      #status-bars {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 3px;
+      }
+      #status-hp,
+      #status-mana {
+        flex: 1;
         height: 14px;
         background: rgba(0, 0, 0, 0.6);
         border: 1px solid #444;
-        margin-bottom: 6px;
+        display: flex;
       }
-      #status-hp-fill {
+      #status-hp {
+        justify-content: flex-end; /* 중앙 쪽에 붙어 왼쪽으로 줄어든다 */
+      }
+      #status-hp-fill,
+      #status-mana-fill {
         height: 100%;
         width: 100%;
         background: #3fae5a;
         transition: width 120ms linear;
+      }
+      #status-mana-fill {
+        background: #4a9eff;
+      }
+      #status-battery {
+        font: 11px/1.4 monospace;
+        color: #8a8f9a;
+        margin-bottom: 5px;
+        letter-spacing: 1px;
+      }
+      #status-battery.low {
+        color: #e0a33a;
       }
       #status-gold {
         color: #ffcc3a;
@@ -188,7 +212,11 @@
     </div>
     <div id="altar-prompt"></div>
     <div id="status">
-      <div id="status-hp"><div id="status-hp-fill"></div></div>
+      <div id="status-bars">
+        <div id="status-hp"><div id="status-hp-fill"></div></div>
+        <div id="status-mana"><div id="status-mana-fill"></div></div>
+      </div>
+      <div id="status-battery">랜턴 100%</div>
       <div id="status-gold">◆ 0</div>
       <div id="status-weapons">
         <span class="weapon-slot active" id="slot-ranged">LMB 권총</span>

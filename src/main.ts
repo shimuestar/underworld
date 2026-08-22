@@ -378,7 +378,7 @@ events.on('cast_failed', (payload) => {
   showReaction(
     info.reason === 'no_mana'
       ? `마나 부족 — ${info.cost} 필요 (패링·처형으로 모아야 한다)`
-      : '오른팔에 각인이 없다 — Tab으로 부착',
+      : '오른팔에 각인이 없다 — 각인을 주우면 자동으로 새겨진다',
     2000,
   );
 });
@@ -451,7 +451,7 @@ events.on('shield_broken', (payload) => {
 });
 events.on('sigil_acquired', (payload) => {
   const id = (payload as { id: string }).id;
-  showReaction(`각인 획득: ${sigilDef(id).name} — Tab으로 부착`, 3500);
+  showReaction(`각인 각인됨: ${sigilDef(id).name}`, 2500);
 });
 
 events.on('player_died', () => {
@@ -700,6 +700,14 @@ function render(alpha: number): void {
     stunned: p.stunTicks > 0,
     blocking: p.blocking,
     chargeFrac,
+    // 손에 직접 띄우는 수치 — 왼손 탄약 / 오른손 연타 단계
+    ammoText:
+      world.weapon.ranged === 'pistol'
+        ? world.weapon.reloading > 0
+          ? '↻'
+          : String(world.weapon.mag)
+        : String(world.weapon.grenades),
+    comboStep: world.weapon.comboTimer > 0 ? world.weapon.comboStep : 0,
   });
 
   // 수류탄 차징 궤적 미리보기 — 실제 투척 물리와 동일한 시뮬레이션
@@ -738,6 +746,16 @@ function render(alpha: number): void {
   const hpFill = document.getElementById('status-hp-fill')!;
   hpFill.style.width = `${hpFrac * 100}%`;
   hpFill.style.background = hpFrac > 0.5 ? '#3fae5a' : hpFrac > 0.25 ? '#c9a227' : '#e04444';
+  // 마나 — 중앙 오른쪽. 연쇄 중에는 밝게
+  const manaFrac = Math.max(0, Math.min(1, world.mana.value / balance.mana.max));
+  const manaFill = document.getElementById('status-mana-fill')!;
+  manaFill.style.width = `${manaFrac * 100}%`;
+  manaFill.style.background = world.mana.chainIndex > 0 ? '#7fc4ff' : '#4a9eff';
+  // 랜턴 배터리 — HP 바 아래
+  const batt = Math.max(0, Math.round(world.lantern.battery));
+  const battEl = document.getElementById('status-battery')!;
+  battEl.textContent = `랜턴 ${world.lantern.on ? `${batt}%` : 'OFF'}  예비 ${world.lantern.spares}`;
+  battEl.className = batt <= 20 ? 'low' : '';
   document.getElementById('status-gold')!.textContent = `◆ ${world.gold}   XP ${world.xp}`;
   // 원거리(좌클릭) / 근접(우클릭) 두 슬롯. 원거리는 휠로 교체
   document.getElementById('slot-ranged')!.textContent =

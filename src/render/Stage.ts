@@ -313,6 +313,8 @@ export class Stage {
   }
 
   updateHands(state: {
+    ammoText?: string;
+    comboStep?: number;
     reloading: boolean;
     stunned: boolean;
     blocking?: boolean;

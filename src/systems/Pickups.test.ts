@@ -145,7 +145,7 @@ describe('자석 흡수', () => {
 
     Sigils.tick(world, DT);
     expect(world.groundItems).toHaveLength(0);
-    expect(world.sigils.inventory).toContain('sig_fireball');
+    expect(world.sigils.equipped.rightArm).toBe('sig_fireball'); // 주우면 즉시 장착
   });
 });
 

@@ -60,8 +60,11 @@ export function tick(world: World, _dt: number): void {
     if (item.kind !== 'sigil') continue; // 포션·골드는 Pickups가 줍는다
     if (Math.hypot(p.x - item.x, p.z - item.z) > balance.sigil.pickupRadius) continue;
     world.groundItems.splice(i, 1);
-    world.sigils.inventory.push(item.sigilId!);
-    world.events.emit('sigil_acquired', { id: item.sigilId });
+    const id = item.sigilId!;
+    world.sigils.inventory.push(id);
+    world.events.emit('sigil_acquired', { id });
+    // 주우면 곧바로 몸에 새긴다 — 슬롯이 이미 차 있으면 인벤토리에 남는다
+    attach(world, id);
   }
 }
 
@@ -97,36 +100,14 @@ export function detach(world: World, slot: SigilSlot): boolean {
   return true;
 }
 
-/** 부착 상태 + 흉터에서 Modifiers 전체 재계산 */
+/** 부착 상태에서 Modifiers 재계산.
+ *  부착 페널티(장전 지연·조준 산포·랜턴 약화 등)는 폐지했다 (2026-08) —
+ *  각인은 순수 강화이고, 대가는 오염 정산으로만 치른다 */
 export function recompute(world: World): void {
   const mods = defaultModifiers();
-  const penalty = balance.sigil.slotPenalty;
 
   for (const slot of SIGIL_SLOTS) {
     const id = world.sigils.equipped[slot];
-    // 페널티 강도: 부착 중 1.0, 해제 후 흉터만 남으면 scarRatio (0이면 없음)
-    const strength = id ? 1 : world.sigils.scars[slot];
-    if (strength > 0) {
-      switch (slot) {
-        case 'rightArm':
-          mods.reloadTimeMul = 1 + (1 / penalty.rightArm.reloadSpeedMul - 1) * strength;
-          break;
-        case 'leftArm':
-          mods.lanternIntensityMul = 1 - (1 - penalty.leftArm.lanternIntensityMul) * strength;
-          break;
-        case 'spine':
-          mods.aimSpreadMul = 1 + (penalty.spine.aimSpreadMul - 1) * strength;
-          break;
-        case 'heart':
-          mods.manaLostOnHit = penalty.heart.manaLostOnHit * strength;
-          break;
-        case 'eye':
-          // 불리언 페널티는 절반이 불가 — 부착 중에만 발동
-          mods.flashbangSelfDamage = id !== null && penalty.eye.flashbangSelfDamage;
-          break;
-      }
-    }
-
     if (!id) continue;
     // 각인 효과 (효과는 흉터와 무관 — 부착 중에만)
     const effects = sigilDef(id).effects;

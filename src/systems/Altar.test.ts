@@ -139,20 +139,14 @@ describe('오염 정산과 임계', () => {
 });
 
 describe('흉터', () => {
-  it('해제 시 페널티 절반 잔존, 재부착/해제해도 무한히 쌓이지 않는다', () => {
+  it('흉터는 기록되지만 더 이상 페널티를 남기지 않는다 (부착 페널티 폐지)', () => {
     world.sigils.inventory.push('sig_fireball');
     Sigils.attach(world, 'sig_fireball');
-    const fullPenalty = world.modifiers.reloadTimeMul;
+    expect(world.modifiers.reloadTimeMul).toBe(1);
 
     Sigils.detach(world, 'rightArm');
-    const scarPenalty = world.modifiers.reloadTimeMul;
-    expect(scarPenalty).toBeCloseTo(1 + (fullPenalty - 1) * balance.sigil.scarRatio);
-    expect(scarPenalty).toBeGreaterThan(1);
-
-    Sigils.attach(world, 'sig_fireball');
-    expect(world.modifiers.reloadTimeMul).toBeCloseTo(fullPenalty); // 부착 중엔 전체
-    Sigils.detach(world, 'rightArm');
-    expect(world.modifiers.reloadTimeMul).toBeCloseTo(scarPenalty); // 그대로
+    expect(world.modifiers.reloadTimeMul).toBe(1);
+    // 흉터 자체는 남는다 — 이후 다른 용도로 쓸 수 있게 기록만 유지
     expect(world.sigils.scars.rightArm).toBe(balance.sigil.scarRatio);
   });
 });

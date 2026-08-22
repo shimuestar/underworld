@@ -71,12 +71,13 @@ describe('각인 드랍과 부착', () => {
     Sigils.tick(world, DT);
     expect(world.sigils.inventory).toHaveLength(0);
 
-    // 접근 → 자동 획득
+    // 접근 → 자동 획득 + 즉시 장착
     world.player.x = 14 - balance.sigil.pickupRadius + 0.1;
     Sigils.tick(world, DT);
-    expect(world.sigils.inventory).toContain('sig_fireball');
     expect(world.groundItems).toHaveLength(0);
-    expect(world.modifiers.reloadTimeMul).toBe(1);
+    expect(world.sigils.equipped.rightArm).toBe('sig_fireball'); // 바로 몸에 새겨진다
+    expect(world.sigils.inventory).toHaveLength(0);
+    expect(world.modifiers.reloadTimeMul).toBe(1); // 부착 페널티는 폐지됐다
   });
 
   it('처형으로 죽여도 한 번만 떨어진다 (melee_kill + enemy_died 중복 방지)', () => {
@@ -90,11 +91,12 @@ describe('각인 드랍과 부착', () => {
     expect(world.groundItems).toHaveLength(0);
   });
 
-  it('부착: 오른팔 페널티(재장전 배율) + 오염 pending 누적', () => {
+  it('부착: 페널티는 없고 오염 pending 만 누적된다', () => {
     world.sigils.inventory.push('sig_fireball');
     expect(Sigils.attach(world, 'sig_fireball')).toBe(true);
     expect(world.sigils.equipped.rightArm).toBe('sig_fireball');
-    expect(world.modifiers.reloadTimeMul).toBeCloseTo(1 / balance.sigil.slotPenalty.rightArm.reloadSpeedMul);
+    expect(world.modifiers.reloadTimeMul).toBe(1); // 장전이 느려지지 않는다
+    expect(world.modifiers.aimSpreadMul).toBe(1);
     expect(world.corruption.pending).toBe(balance.corruption.slotCost.rightArm);
   });
 
@@ -104,13 +106,14 @@ describe('각인 드랍과 부착', () => {
     expect(Sigils.attach(world, 'sig_fireball')).toBe(false);
   });
 
-  it('해제: 인벤토리 복귀, 페널티는 흉터로 절반 잔존 (M6.3)', () => {
-    world.sigils.inventory.push('sig_fireball');
-    Sigils.attach(world, 'sig_fireball');
-    const full = world.modifiers.reloadTimeMul;
-    Sigils.detach(world, 'rightArm');
-    expect(world.modifiers.reloadTimeMul).toBeCloseTo(1 + (full - 1) * balance.sigil.scarRatio);
-    expect(world.sigils.inventory).toContain('sig_fireball');
+  it('해제: 인벤토리로 돌아오고 효과가 사라진다 (흉터 페널티도 폐지)', () => {
+    world.sigils.inventory.push('sig_dash');
+    Sigils.attach(world, 'sig_dash');
+    expect(world.modifiers.dodgeDistanceMul).toBeCloseTo(1.8);
+    Sigils.detach(world, 'spine');
+    expect(world.modifiers.dodgeDistanceMul).toBe(1);
+    expect(world.modifiers.aimSpreadMul).toBe(1);
+    expect(world.sigils.inventory).toContain('sig_dash');
   });
 
   it('돌진 회피(척추): 회피 거리·무적 연장 + 산포 페널티', () => {
@@ -118,7 +121,7 @@ describe('각인 드랍과 부착', () => {
     Sigils.attach(world, 'sig_dash');
     expect(world.modifiers.dodgeDistanceMul).toBeCloseTo(1.8);
     expect(world.modifiers.dodgeIFrameTicks).toBe(12);
-    expect(world.modifiers.aimSpreadMul).toBeCloseTo(balance.sigil.slotPenalty.spine.aimSpreadMul);
+    expect(world.modifiers.aimSpreadMul).toBe(1); // 산포 페널티 폐지
   });
 
   it('암시야(눈): ambient 부스트', () => {

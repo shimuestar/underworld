@@ -37,6 +37,40 @@ const PARRY_GLOW: Record<string, number> = {
 // 오염 시각 단계별 피부색 (economy.md §3 — 슬라이스는 0~2단계)
 const SKIN_BY_STAGE = [0xb08a63, 0x96866a, 0x7a8068];
 
+/** 손에 붙는 작은 표시판 — 캔버스 텍스처. 값이 바뀔 때만 다시 그린다 */
+class HandLabel {
+  readonly mesh: THREE.Mesh;
+  private readonly canvas = document.createElement('canvas');
+  private readonly texture: THREE.CanvasTexture;
+  private last = '';
+
+  constructor(width: number, height: number, private readonly color: string) {
+    this.canvas.width = 128;
+    this.canvas.height = 64;
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, height),
+      new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthTest: false }),
+    );
+    this.mesh.renderOrder = 10; // 무기에 가리지 않게
+  }
+
+  set(text: string): void {
+    if (text === this.last) return;
+    this.last = text;
+    const ctx = this.canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, 128, 64);
+    ctx.font = 'bold 44px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillText(text, 66, 35);
+    ctx.fillStyle = this.color;
+    ctx.fillText(text, 64, 33);
+    this.texture.needsUpdate = true;
+  }
+}
+
 function box(w: number, h: number, d: number, color: number): THREE.Mesh {
   return new THREE.Mesh(
     new THREE.BoxGeometry(w, h, d),
@@ -50,6 +84,8 @@ export class HandModel {
   private readonly leftArm = new THREE.Group();
   private readonly bracerMaterial: THREE.MeshLambertMaterial;
   private bracer!: THREE.Mesh;
+  private ammoLabel!: HandLabel;
+  private comboLabel!: HandLabel;
 
   private recoilUntil = 0;
   private parryUntil = 0;
@@ -99,6 +135,12 @@ export class HandModel {
     this.rightArm.add(hammerHead);
     this.rightArm.add(hammerBand);
 
+    // 오른손 해머 자루 옆 — 연타 단계
+    this.comboLabel = new HandLabel(0.12, 0.06, '#ffd9a0');
+    this.comboLabel.mesh.position.set(0.055, 0.055, -0.02);
+    this.comboLabel.mesh.rotation.y = -0.35;
+    this.rightArm.add(this.comboLabel.mesh);
+
     this.rightArm.position.copy(REST_RIGHT.pos);
     this.rightArm.rotation.set(HAMMER_REST_ROT, REST_RIGHT.rotY, REST_RIGHT.rotZ);
     this.baseRotX = HAMMER_REST_ROT;
@@ -133,6 +175,12 @@ export class HandModel {
     grenadeBall.position.set(0, 0.03, -0.15);
     this.grenadeParts.push(grenadeBall);
     this.leftArm.add(grenadeBall);
+
+    // 왼손 총 옆 — 남은 탄약
+    this.ammoLabel = new HandLabel(0.13, 0.065, '#ffe9b8');
+    this.ammoLabel.mesh.position.set(-0.055, 0.075, -0.11);
+    this.ammoLabel.mesh.rotation.y = 0.35;
+    this.leftArm.add(this.ammoLabel.mesh);
 
     this.setWeapon('pistol');
 
@@ -238,8 +286,14 @@ export class HandModel {
     stunned: boolean;
     blocking?: boolean;
     chargeFrac?: number;
+    /** 손에 띄울 값 — 왼손 탄약 / 오른손 연타 단계 */
+    ammoText?: string;
+    comboStep?: number;
   }): void {
     const now = performance.now();
+    this.ammoLabel.set(state.ammoText ?? '');
+    const step = state.comboStep ?? 0;
+    this.comboLabel.set(step > 0 ? String(step) : '');
 
     // ---- 오른팔 (해머) — 대기는 치켜든 자세, 좌클릭이 아니라 우클릭에 반응한다
     let targetY = REST_RIGHT.pos.y;
