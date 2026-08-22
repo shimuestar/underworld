@@ -73,23 +73,28 @@ export class HandModel {
 
   constructor() {
     // ---- 오른팔 = 해머 (근접, 우클릭) ----
-    const forearm = box(0.045, 0.045, 0.16, SLEEVE);
-    forearm.position.set(0.015, -0.035, 0.08);
-    forearm.rotation.x = 0.35;
+    // 피벗 = 손목. 팔뚝은 +z(카메라 쪽)로 뻗어 화면 밖에서 들어오는 팔처럼 보이고,
+    // 해머는 -z(정면)로 뻗는다. 이렇게 해야 팔을 돌려도 팔뚝이 늘 몸쪽에 남는다
+    const forearm = box(0.058, 0.058, 0.26, SLEEVE);
+    forearm.position.set(0, -0.008, 0.15);
     this.rightArm.add(forearm);
 
-    const hand = box(0.055, 0.052, 0.065, SKIN);
-    hand.position.set(0, -0.015, -0.01);
+    const hand = box(0.062, 0.058, 0.075, SKIN);
+    hand.position.set(0, 0, 0.01);
     this.skinMaterials.push(hand.material as THREE.MeshLambertMaterial);
     this.rightArm.add(hand);
 
-    const hammerShaft = box(0.032, 0.032, 0.42, 0x5c4a33);
-    hammerShaft.position.set(0, 0.03, -0.17);
-    const hammerHead = box(0.13, 0.09, 0.17, 0x7a7d84);
-    hammerHead.position.set(0, 0.03, -0.4);
-    this.hammerParts.push(hammerShaft, hammerHead);
+    // 자루는 손 앞뒤로 걸쳐 잡는다 (손에서 뒤로 조금, 앞으로 길게)
+    const hammerShaft = box(0.03, 0.03, 0.4, 0x5c4a33);
+    hammerShaft.position.set(0, 0.012, -0.16);
+    const hammerHead = box(0.115, 0.085, 0.145, 0x7a7d84);
+    hammerHead.position.set(0, 0.012, -0.37);
+    const hammerBand = box(0.034, 0.034, 0.04, 0x3b3f45); // 자루-머리 이음쇠
+    hammerBand.position.set(0, 0.012, -0.29);
+    this.hammerParts.push(hammerShaft, hammerHead, hammerBand);
     this.rightArm.add(hammerShaft);
     this.rightArm.add(hammerHead);
+    this.rightArm.add(hammerBand);
 
     this.rightArm.position.copy(REST_RIGHT.pos);
     this.rightArm.rotation.set(HAMMER_REST_ROT, REST_RIGHT.rotY, REST_RIGHT.rotZ);
@@ -176,7 +181,7 @@ export class HandModel {
   }
 
   triggerHammerSwing(): void {
-    this.swingUntil = performance.now() + 170;
+    this.swingUntil = performance.now() + SWING_MS;
   }
 
   triggerGrenadeThrow(): void {
@@ -230,28 +235,41 @@ export class HandModel {
       targetRotX -= 0.55;
     }
 
-    let swingRot = 0; // 즉발 오프셋 — 보간을 거치지 않아 스냅이 살아있다
-    let center = 0; // 0 = 어깨 너머 대기 / 1 = 화면 중앙으로 모은 타격 자세
+    // 스윙 — 치켜듦(예비 18%) → 내리침(37%) → 박힘(12%) → 회수(33%).
+    // 절대 각도로 지정한다: 대기 각도가 바뀌어도 궤적이 흔들리지 않는다
+    let swingAbs: number | null = null;
+    let center = 0; // 0 = 어깨 너머 대기 / 1 = 정면으로 모은 타격 자세
     if (now < this.swingUntil) {
-      const t = 1 - (this.swingUntil - now) / 170;
-      if (t < 0.45) swingRot += HAMMER_SMASH_ARC * easeInCubic(t / 0.45);
-      else if (t < 0.7) swingRot += HAMMER_SMASH_ARC;
-      else swingRot += HAMMER_SMASH_ARC * (1 - (t - 0.7) / 0.3);
-      // 대기 자세는 오른쪽으로 비껴 들지만, 내리칠 때는 정면으로 모아야
-      // 판정(전방)과 보이는 궤적이 맞는다
-      center = t < 0.6 ? Math.min(1, t / 0.18) : 1 - (t - 0.6) / 0.4;
+      const t = 1 - (this.swingUntil - now) / SWING_MS;
+      const bottom = HAMMER_REST_ROT + HAMMER_SMASH_ARC; // 내리친 끝 각도
+      if (t < 0.18) {
+        swingAbs = HAMMER_REST_ROT + (HAMMER_WINDUP_ROT - HAMMER_REST_ROT) * easeOutCubic(t / 0.18);
+      } else if (t < 0.55) {
+        swingAbs = HAMMER_WINDUP_ROT + (bottom - HAMMER_WINDUP_ROT) * easeInCubic((t - 0.18) / 0.37);
+      } else if (t < 0.67) {
+        swingAbs = bottom;
+      } else {
+        swingAbs = bottom + (HAMMER_REST_ROT - bottom) * easeOutCubic((t - 0.67) / 0.33);
+      }
+      // 정면으로 모았다가 회수하며 대기 자세로 돌아간다
+      center = t < 0.67 ? Math.min(1, t / 0.2) : 1 - (t - 0.67) / 0.33;
       center = Math.max(0, Math.min(1, center));
     }
 
-    this.rightArm.position.y += (targetY - this.rightArm.position.y) * 0.25;
     this.rightArm.position.x =
       REST_RIGHT.pos.x + (SMASH_RIGHT.x - REST_RIGHT.pos.x) * center;
     this.rightArm.position.z =
       REST_RIGHT.pos.z + (SMASH_RIGHT.z - REST_RIGHT.pos.z) * center;
+    const baseY = REST_RIGHT.pos.y + (SMASH_RIGHT.y - REST_RIGHT.pos.y) * center;
+    this.rightArm.position.y += (baseY + (targetY - REST_RIGHT.pos.y) - this.rightArm.position.y) * 0.3;
     this.rightArm.rotation.y = REST_RIGHT.rotY * (1 - center);
     this.rightArm.rotation.z = REST_RIGHT.rotZ * (1 - center);
-    this.baseRotX += (targetRotX - this.baseRotX) * 0.35;
-    this.rightArm.rotation.x = this.baseRotX + swingRot;
+    if (swingAbs !== null) {
+      this.baseRotX = swingAbs; // 스윙 중에는 보간 없이 커브를 그대로 따른다
+    } else {
+      this.baseRotX += (targetRotX - this.baseRotX) * 0.35;
+    }
+    this.rightArm.rotation.x = this.baseRotX;
 
     // ---- 왼팔 (총/수류탄 + 브레이서) — 반동·장전·차징·투척이 여기서 일어난다
     let gunY = 0;
@@ -363,19 +381,22 @@ export class HandModel {
 }
 
 // 해머 대기(치켜든) 각도와 내리침 호 크기 (+x 회전 = 무기 끝이 위로)
-const HAMMER_REST_ROT = 1.05; // 헤드가 어깨 위 (완전히 세우면 화면 중앙을 가린다)
-const HAMMER_SMASH_ARC = -2.5; // +1.35 → -1.15 (머리 위에서 정면 아래로)
+const HAMMER_REST_ROT = 0.95; // 헤드가 어깨 위 (완전히 세우면 화면 중앙을 가린다)
+const HAMMER_WINDUP_ROT = 1.35; // 내리치기 직전 살짝 더 치켜든다 (예비 동작)
+const SWING_MS = 210;
+const HAMMER_SMASH_ARC = -1.7; // 대기 0.95 → 바닥 -0.75rad(앞아래 43도). 수직으로 꽂으면 정면을 친 느낌이 안 난다
 
 // 포즈 정의 (카메라 로컬 좌표)
-// 오른팔 대기: 해머를 오른쪽 어깨 너머로 비껴 든다 (상시 표시라 시야를 최소로 가린다)
+// 오른팔 대기: 손목은 화면 오른쪽 아래, 해머는 어깨 위로 걸쳐 든다.
+// rotZ(손목 비틀기)는 거의 주지 않는다 — 크게 주면 팔이 꺾여 보인다
 const REST_RIGHT = {
-  pos: new THREE.Vector3(0.38, -0.4, -0.5),
+  pos: new THREE.Vector3(0.25, -0.33, -0.6),
   rotX: 0.06,
-  rotY: -0.35,
-  rotZ: 0.5,
+  rotY: -0.22,
+  rotZ: 0.12,
 };
-/** 내리치는 순간 팔이 모이는 위치 — 화면 중앙 살짝 오른쪽 */
-const SMASH_RIGHT = new THREE.Vector3(0.1, -0.24, -0.46);
+/** 내리치는 동안 손목이 옮겨가는 위치 — 화면 중앙 살짝 오른쪽, 앞으로 */
+const SMASH_RIGHT = new THREE.Vector3(0.1, -0.26, -0.56);
 // 대기: 화면 왼쪽 아래 밖. 가드: 팔뚝이 화면을 가로로 가로막는다 (rotY로 눕힘, 주먹이 오른쪽)
 // 왼팔 대기: 총을 든 손. 각도는 총열이 화면 중앙(조준점)으로 수렴하도록 맞췄다 —
 // 실측으로 좌 2.9°·상 3.4° 어긋나 있던 것을 보정한 값
