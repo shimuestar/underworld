@@ -2,6 +2,20 @@
 
 import entitiesJson from '../../data/entities.json';
 
+/** 착탄 시 광역 효과. 수호주술사 마법탄의 '내파' — 화염구(밀어냄)와 정반대로 끌어당긴다 */
+export interface ProjectileSplashDef {
+  /** 광역 반경(m) — 이 밖은 아무 영향 없음 */
+  radius: number;
+  /** 폭심 피해. 거리 감쇠는 falloffMin까지 */
+  damage: number;
+  falloffMin: number;
+  /** 폭심 쪽으로 끌려가는 거리(m). 감쇠가 함께 적용된다 */
+  pullDistance: number;
+  pullTicks: number;
+  /** 연출 종류 — Stage가 이 값으로 폭발/내파를 고른다 */
+  kind: string;
+}
+
 export interface EnemyAttackDef {
   type: string;
   windupTicks: number;
@@ -25,6 +39,8 @@ export interface EnemyAttackDef {
   projectileKind?: string;
   /** 원거리 공격 사용 최소 거리 (이보다 가까우면 근접) */
   minRange?: number;
+  /** 착탄 시 광역 효과 (없으면 단일 대상) */
+  splash?: ProjectileSplashDef;
 }
 
 export interface EnemyDef {

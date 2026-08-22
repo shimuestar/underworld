@@ -735,3 +735,85 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
     expect(world.player.dodgeTicks).toBe(0);
   });
 });
+
+describe('마법탄 내파 (수호주술사)', () => {
+  const splash = enemyDef('warden').attack.splash!;
+
+  function makeRunner(x: number, z: number, id: number): EnemyState {
+    return {
+      id, type: 'goblin_runner',
+      x, z, prevX: x, prevZ: z, yaw: 0,
+      health: 1000, alive: true, ai: 'chase', timer: 0,
+      burnTicks: 0, burnDamagePerTick: 0,
+    };
+  }
+
+  /** fromX 에서 -X(플레이어 쪽)로 마법탄을 쏜다 */
+  function fireBolt(world: World, fromX: number, owner: 'player' | 'enemy' = 'enemy'): void {
+    const p = world.player;
+    const dir = owner === 'player' ? 1 : -1;
+    world.projectiles.push({
+      id: 900, owner,
+      x: fromX, y: 1.2, z: p.z, prevX: fromX, prevY: 1.2, prevZ: p.z,
+      vx: 20 * dir, vy: 0, vz: 0,
+      lifeTicks: 120, damage: 26, burnTicks: 0, burnDamagePerTick: 0,
+      radius: 0.3, kind: 'magic', casterId: 99, deflectable: true,
+      splash,
+    });
+    for (let i = 0; i < 90 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+  }
+
+  it('빗나가 옆에서 터지면 플레이어가 폭심 쪽으로 끌려간다 (화염구와 반대)', () => {
+    const world = makeWorld();
+    const p = world.player;
+    // 플레이어 동쪽 2u 에 아군 — 탄이 여기서 막혀 터진다
+    world.enemies.push(makeRunner(p.x + 2, p.z, 7));
+    fireBolt(world, p.x + 8);
+
+    expect(p.kbTicks).toBe(splash.pullTicks);
+    expect(p.kbX!).toBeGreaterThan(0); // +X(폭심) 쪽으로 당겨진다
+    expect(Math.abs(p.kbZ!)).toBeLessThan(1e-6);
+    expect(p.health).toBeLessThan(balance.player.healthMax); // 감쇠 피해
+    expect(p.health).toBeGreaterThan(balance.player.healthMax - splash.damage);
+  });
+
+  it('직격이면 당김이 아니라 뒤로 밀린다 — 피해도 한 번만', () => {
+    const world = makeWorld();
+    const p = world.player;
+    fireBolt(world, p.x + 8);
+
+    expect(p.health).toBe(balance.player.healthMax - 26); // 광역 피해 중복 없음
+    expect(p.kbTicks).toBe(balance.playerKnockback.ticks); // 당김(14t)이 아니라 밀림(8t)
+    expect(p.kbX!).toBeLessThan(0); // 날아온 방향(-X)으로 밀린다
+  });
+
+  it('반경 밖에서 터지면 아무 영향 없다', () => {
+    const world = makeWorld();
+    const p = world.player;
+    world.enemies.push(makeRunner(p.x + splash.radius + 2, p.z, 7));
+    fireBolt(world, p.x + 12);
+
+    expect(p.health).toBe(balance.player.healthMax);
+    expect(p.kbTicks ?? 0).toBe(0);
+  });
+
+  it('반사되면 적들이 폭심으로 끌려 모인다 — 오사 감쇠 없이 전탄 피해', () => {
+    const world = makeWorld();
+    const p = world.player;
+    const direct = makeRunner(p.x + 4, p.z, 7);
+    const near = makeRunner(p.x + 4, p.z + 2, 8);
+    world.enemies.push(direct, near);
+    fireBolt(world, p.x, 'player'); // 반사된 탄 = owner player
+
+    // 둘 다 폭심 쪽으로 당겨진다
+    expect(direct.kbTicks).toBe(splash.pullTicks);
+    expect(near.kbTicks).toBe(splash.pullTicks);
+    expect(near.kbZ!).toBeLessThan(0); // z가 작아지는 쪽 = 폭심
+    // 직격은 본 피해만, 주변은 광역 피해만 (오사 배율 없이)
+    expect(1000 - direct.health).toBeCloseTo(26, 3);
+    const dist = Math.hypot(near.x - direct.x, near.z - direct.z);
+    expect(1000 - near.health).toBeGreaterThan(0);
+    expect(1000 - near.health).toBeLessThan(splash.damage);
+    expect(dist).toBeLessThan(splash.radius);
+  });
+});

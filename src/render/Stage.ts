@@ -20,6 +20,8 @@ const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
 const BARRIER_COLOR = 0x9db8e8;
 const ARMOR_COLOR = 0x777d88;
 const ENEMY_BOLT_COLOR = 0xa855f7; // 마법 투사체 색 규약 (balance.telegraph.colorProjectile)
+const IMPLODE_MS = 420; // 내파 연출 길이 (당김 지속 14틱 ≒ 233ms보다 길게 남는다)
+const IMPLODE_SHARDS = 16;
 
 // 텔레그래프 이외 상태 표시색 (텔레그래프 3색과 겹치지 않게 — 색이 곧 문법)
 const STAGGER_COLOR = 0xcc9922; // 스태거 = 처형 가능 표시
@@ -485,24 +487,94 @@ export class Stage {
     this.spawnDeathBurst(x, z, 'goblin_chieftain');
   }
 
+  /** 마법탄 내파 — 폭발의 역재생. 파편이 가장자리에서 폭심으로 빨려들고 셸이 오므라든다.
+   *  화염구(주황·팽창)와 한눈에 구분되도록 보라·수축으로 잡았다 */
+  spawnImplosion(x: number, y: number, z: number, radius: number): void {
+    const now = performance.now();
+    const cy = Math.max(0.6, y);
+    const light = new THREE.PointLight(ENEMY_BOLT_COLOR, 0, radius * 3, 0);
+    light.position.set(x, cy, z);
+    this.scene.add(light);
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 12, 10),
+      new THREE.MeshBasicMaterial({
+        color: ENEMY_BOLT_COLOR,
+        transparent: true,
+        opacity: 0.1,
+        depthWrite: false,
+      }),
+    );
+    shell.position.copy(light.position);
+    this.scene.add(shell);
+    this.explosions.push({ light, shell, bornMs: now, radius, implode: true });
+
+    // 파편 — 반경 가장자리에서 폭심으로. 중력 없이 직선으로 빨려든다
+    for (let i = 0; i < IMPLODE_SHARDS; i++) {
+      const angle = (i / IMPLODE_SHARDS) * Math.PI * 2 + Math.random() * 0.4;
+      const size = 0.07 + Math.random() * 0.08;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size, size),
+        new THREE.MeshLambertMaterial({
+          color: ENEMY_BOLT_COLOR,
+          emissive: ENEMY_BOLT_COLOR,
+          emissiveIntensity: 0.9,
+          transparent: true,
+          opacity: 1,
+        }),
+      );
+      const r = radius * (0.7 + Math.random() * 0.3);
+      const ox = x + Math.cos(angle) * r;
+      const oz = z + Math.sin(angle) * r;
+      const oy = 0.25 + Math.random() * 1.5;
+      const secs = IMPLODE_MS / 1000;
+      mesh.position.set(ox, oy, oz);
+      this.particles.push({
+        mesh,
+        ox,
+        oy,
+        oz,
+        vx: (x - ox) / secs,
+        vy: (cy - oy) / secs,
+        vz: (z - oz) / secs,
+        gravity: 0,
+        lifeMs: IMPLODE_MS,
+        bornMs: now,
+        spinX: 5,
+        spinY: 4,
+      });
+      this.scene.add(mesh);
+    }
+  }
+
   private readonly explosions: {
     light: THREE.PointLight;
     shell: THREE.Mesh;
     bornMs: number;
     radius: number;
+    /** 내파 — 셸이 커지는 대신 오므라든다 */
+    implode?: boolean;
   }[] = [];
 
   private updateExplosions(): void {
     const now = performance.now();
     for (let i = this.explosions.length - 1; i >= 0; i--) {
       const ex = this.explosions[i]!;
-      const age = (now - ex.bornMs) / 380;
+      const age = (now - ex.bornMs) / (ex.implode ? IMPLODE_MS : 380);
       if (age >= 1) {
         this.scene.remove(ex.light);
         this.scene.remove(ex.shell);
         ex.shell.geometry.dispose();
         (ex.shell.material as THREE.Material).dispose();
         this.explosions.splice(i, 1);
+        continue;
+      }
+      if (ex.implode) {
+        // 오므라들수록 진해지고 마지막에 번쩍 — 빨려드는 인상
+        const s = Math.max(0.15, ex.radius * (1 - age));
+        ex.shell.scale.set(s, s, s);
+        // 초반엔 옅게 — 크게 퍼져 있을 때 진하면 빨려드는 적이 안 보인다
+        (ex.shell.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.4 * age;
+        ex.light.intensity = 5 * age * age;
         continue;
       }
       const s = 0.4 + age * ex.radius;

@@ -199,6 +199,20 @@ function moveProjectiles(world: World, dt: number): void {
         );
       }
 
+      // 광역 효과를 든 투사체(수호주술사 마법탄)는 그 자리에서 내파한다.
+      // 직격 밀림보다 먼저 걸어야 한다 — 직격이면 밀림이 이 당김을 덮어써야 하므로
+      if (proj.splash) {
+        implodeBolt(
+          world,
+          proj,
+          proj.x + dirX * hitT,
+          proj.y + dirY * hitT,
+          proj.z + dirZ * hitT,
+          hitEnemy,
+          hitPlayer,
+        );
+      }
+
       if (hitPlayer) {
         const p = world.player;
         if (p.iframeTicks <= 0) {
@@ -355,6 +369,73 @@ function explodeFireball(
       world.dead = true;
       world.events.emit('player_died', { tick: world.tick });
     }
+  }
+}
+
+/** 마법탄 내파 — 착탄점으로 끌어당긴다. 화염구(밀어냄)의 정반대.
+ *  피해는 작고 이동 강제가 본체다: 빗나가도 폭심으로 끌려가 근접 적의 사거리에 들어간다.
+ *  반사되면 그대로 적들에게 터져 한곳에 뭉친다 — 광역 마무리로 이어지는 보상 */
+function implodeBolt(
+  world: World,
+  proj: (typeof world.projectiles)[number],
+  x: number,
+  y: number,
+  z: number,
+  direct: (typeof world.enemies)[number] | null,
+  directPlayer: boolean,
+): void {
+  const sp = proj.splash!;
+  if (sp.radius <= 0) return;
+  world.events.emit('explosion', { x, y, z, radius: sp.radius, kind: sp.kind });
+
+  const falloffAt = (dist: number): number =>
+    1 - (1 - sp.falloffMin) * Math.min(1, dist / sp.radius);
+
+  for (const enemy of world.enemies) {
+    if (!enemy.alive) continue;
+    const dist = Math.hypot(enemy.x - x, enemy.z - z);
+    if (dist > sp.radius) continue;
+    const falloff = falloffAt(dist);
+
+    // 끌림 — 폭심을 지나치지 않게 실제 거리까지만. 보스는 꿈쩍하지 않는다
+    if (!enemyDef(enemy.type).boss && dist > 0.001 && sp.pullTicks > 0) {
+      const pull = Math.min(sp.pullDistance * falloff, dist);
+      enemy.kbTicks = sp.pullTicks;
+      enemy.kbX = ((x - enemy.x) / dist) * (pull / sp.pullTicks);
+      enemy.kbZ = ((z - enemy.z) / dist) * (pull / sp.pullTicks);
+    }
+
+    if (enemy === direct) continue; // 직격 피해와 중복되지 않게
+    if (enemy.ai === 'idle') enemy.ai = 'chase';
+    // 적이 쏜 것이면 동료 오사 규칙을 따른다 (사고로 보이되 한 방에 죽지 않게)
+    const mul = proj.owner === 'enemy' ? balance.enemyAi.friendlyFireDamageMul : 1;
+    enemy.health -= sp.damage * falloff * mul;
+    if (enemy.health <= 0) {
+      enemy.alive = false;
+      world.events.emit(
+        proj.owner === 'player' ? 'spell_kill' : 'friendly_fire_kill',
+        { enemyType: enemy.type, splash: true },
+      );
+      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    }
+  }
+
+  // 플레이어 — 반사한 내 탄이라도 폭심 안이면 똑같이 휘말린다
+  const p = world.player;
+  const dist = Math.hypot(p.x - x, p.z - z);
+  if (dist > sp.radius || p.iframeTicks > 0) return;
+  const falloff = falloffAt(dist);
+  if (dist > 0.001 && sp.pullTicks > 0) {
+    pushPlayer(p, x - p.x, z - p.z, Math.min(sp.pullDistance * falloff, dist), sp.pullTicks);
+  }
+  if (directPlayer) return; // 직격 피해와 중복되지 않게 (밀림은 직격 쪽이 덮어쓴다)
+  const damage = sp.damage * falloff;
+  p.health -= damage;
+  world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'implode' });
+  if (p.health <= 0) {
+    p.health = 0;
+    world.dead = true;
+    world.events.emit('player_died', { tick: world.tick });
   }
 }
 

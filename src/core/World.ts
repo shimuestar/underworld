@@ -1,6 +1,7 @@
 // 전역 게임 상태 컨테이너. 시스템은 서로를 import 하지 않고
 // 이 객체의 상태와 이벤트 버스를 통해서만 통신한다.
 
+import type { ProjectileSplashDef } from './Entities';
 import type { Events } from './Events';
 import type { InputSnapshot } from './Input';
 import type { SigilSlot } from './SigilData';
@@ -100,6 +101,9 @@ export interface ProjectileState {
   deflectable?: boolean;
   /** 렌더 형태 */
   kind?: 'fireball' | 'magic' | 'arrow' | 'rock' | 'grenade';
+  /** 착탄 시 광역 효과. 시전자가 죽어도 남도록 투사체가 들고 다닌다.
+   *  반사되면 그대로 적에게 터진다 */
+  splash?: ProjectileSplashDef;
 }
 
 export interface SpellState {

@@ -363,7 +363,13 @@ events.on('grenade_thrown', () => {
   stage.triggerGrenadeThrow();
 });
 events.on('explosion', (payload) => {
-  const info = payload as { x: number; y: number; z: number; radius: number };
+  const info = payload as { x: number; y: number; z: number; radius: number; kind?: string };
+  // 내파(수호주술사 마법탄)는 보라·수축, 그 외는 주황·팽창
+  if (info.kind === 'implode') {
+    audio.play('implode');
+    stage.spawnImplosion(info.x, info.y, info.z, info.radius);
+    return;
+  }
   audio.play('explosion');
   stage.spawnExplosion(info.x, info.y, info.z, info.radius);
 });

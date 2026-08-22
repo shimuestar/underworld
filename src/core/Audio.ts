@@ -47,7 +47,8 @@ export type SoundName =
   | 'hammer_swing'
   | 'melee_hit'
   | 'grenade_throw'
-  | 'explosion';
+  | 'explosion'
+  | 'implode';
 
 const MASTER_GAIN = 0.25;
 
@@ -235,6 +236,14 @@ export class GameAudio {
         this.tone(60, 0.7, 'sine', 1.6, 0, 28);
         this.noise(0.5, 1.3, 900);
         this.noise(0.9, 0.5, 300, 0.1);
+        break;
+      case 'implode':
+        // 내파 — 빨려드는 상승음 3겹 뒤에 압착. 폭발과 반대로 음이 올라갔다 꺼진다
+        this.tone(170, 0.18, 'sawtooth', 0.14, 0, 520);
+        this.tone(240, 0.16, 'sawtooth', 0.22, 0.1, 780);
+        this.tone(330, 0.14, 'triangle', 0.36, 0.2, 1200);
+        this.tone(70, 0.42, 'sine', 1.0, 0.32, 38);
+        this.noise(0.3, 0.55, 620, 0.32);
         break;
       case 'hammer_heavy':
         // 강타 스윙 — 길고 낮은 바람 가르는 소리
