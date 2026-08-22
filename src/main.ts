@@ -245,6 +245,7 @@ for (const name of [
   'enemy_repositioning',
   'deflect',
   'barrier_blocked',
+  'shield_broken',
   'armor_hit',
   'boss_phase',
   'boss_staggered',
@@ -406,6 +407,12 @@ events.on('potion_picked', (payload) => {
   showReaction(`+${Math.round(info.healed)} HP`, 900);
 });
 events.on('gold_picked', () => audio.play('pickup_gold'));
+events.on('shield_broken', (payload) => {
+  const info = payload as { enemyId: number };
+  audio.play('shield_break');
+  stage.shatterShield(info.enemyId);
+  showReaction('방패 파괴!', 1200);
+});
 events.on('sigil_acquired', (payload) => {
   const id = (payload as { id: string }).id;
   showReaction(`각인 획득: ${sigilDef(id).name} — Tab으로 부착`, 3500);
@@ -504,9 +511,15 @@ events.on('barrier_blocked', (payload) => {
   const info = payload as { enemyId: number; kind: string };
   audio.play('barrier_blocked');
   stage.flashBarrier(info.enemyId);
-  showReaction(info.kind === 'armor' ? '장갑 — 실탄만 통한다' : '방어막 — 9mm만 뚫는다');
+  showReaction(
+    info.kind === 'armor'
+      ? '장갑 — 실탄만 통한다'
+      : info.kind === 'shield'
+        ? '방패에 막혔다 — 화염구로 부술 수 있다'
+        : '방어막 — 9mm만 뚫는다',
+  );
 });
-events.on('shot_blocked', () => showReaction('방패 — 정면은 막힌다'));
+events.on('shot_blocked', () => showReaction('방패 — 정면은 막힌다 (화염구로 부술 수 있다)'));
 events.on('boss_staggered', () => showReaction('보스 스태거 — 지금 처형 타격!'));
 events.on('boss_phase', (payload) => {
   const phase = (payload as { phase: string }).phase;

@@ -62,6 +62,25 @@ export function currentAttack(
   return def.attack;
 }
 
+/** (fromX, fromZ)에서 오는 공격이 정면 방패에 막히는가.
+ *  스태거 중이거나 이미 깨졌으면 막지 못한다 — Weapons·Projectiles 공용 규칙 */
+export function shieldBlocks(
+  def: EnemyDef,
+  enemy: { x: number; z: number; yaw: number; ai: string; shieldBroken?: boolean },
+  fromX: number,
+  fromZ: number,
+): boolean {
+  if (!def.frontalShieldBlocksProjectiles) return false;
+  if (enemy.shieldBroken || enemy.ai === 'staggered') return false;
+  const facingX = -Math.sin(enemy.yaw);
+  const facingZ = -Math.cos(enemy.yaw);
+  const toX = fromX - enemy.x;
+  const toZ = fromZ - enemy.z;
+  const len = Math.hypot(toX, toZ);
+  const dot = len > 0 ? (facingX * toX + facingZ * toZ) / len : 1;
+  return dot >= Math.cos(((def.shieldArcDeg ?? 120) / 2) * (Math.PI / 180));
+}
+
 export function enemyDef(type: string): EnemyDef {
   const def = (entitiesJson.enemies as Record<string, unknown>)[type];
   if (!def) throw new Error(`entities.json에 없는 적 타입: ${type}`);

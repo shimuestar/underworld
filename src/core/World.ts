@@ -200,6 +200,8 @@ export interface EnemyState {
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
   attackMode?: 'melee' | 'ranged';
+  /** 정면 방패가 부서졌는가 (화염구 명중) — 이후 투사체를 막지 못한다 */
+  shieldBroken?: boolean;
   /** 타격 진행도 0~1 (무기가 뻗어나가는 정도) 과 그 시점의 무기 끝 거리(중심 기준).
    *  패링은 이 값으로 판정한다 — 시간이 아니라 무기가 실제로 닿았는지 */
   strikeProgress?: number;

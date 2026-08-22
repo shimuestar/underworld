@@ -33,6 +33,7 @@ export type SoundName =
   | 'headshot'
   | 'player_hurt'
   | 'block_hit'
+  | 'shield_break'
   | 'pickup_potion'
   | 'pickup_gold'
   | 'weapon_switch'
@@ -227,6 +228,16 @@ export class GameAudio {
         this.tone(60, 0.7, 'sine', 1.6, 0, 28);
         this.noise(0.5, 1.3, 900);
         this.noise(0.9, 0.5, 300, 0.1);
+        break;
+      case 'shield_break':
+        // 방패 파괴 — 금속 갈라짐 + 나무 쪼개짐(40ms) + 화염 삼킴(저음 스윕)
+        this.tone(740, 0.09, 'square', 0.8);
+        this.tone(1100, 0.12, 'triangle', 0.55);
+        this.noise(0.07, 0.85, 5600);
+        this.noise(0.2, 0.75, 1400, 0.04); // 쪼개지는 파편
+        this.tone(300, 0.28, 'sawtooth', 0.6, 0.04, 90);
+        this.noise(0.3, 0.5, 620, 0.06); // 화염 삼킴
+        this.tone(70, 0.34, 'sine', 0.8, 0.03, 40);
         break;
       case 'pickup_potion':
         // 회복 — 따뜻하게 차오르는 상승 3화음

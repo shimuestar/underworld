@@ -56,6 +56,11 @@
     "magic": 2.8
   },
 
+  "shieldBreak": {
+    "_comment": "화염구가 방패병 정면 방패를 부순다. 방패가 화염을 일부 먹으므로 피해는 damageRatio 배",
+    "damageRatio": 0.5
+  },
+
   "block": {
     "chipDamageRatio": 0.3,
     "chipRatioByKind": { "arrow": 0 },

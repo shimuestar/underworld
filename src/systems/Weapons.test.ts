@@ -261,3 +261,66 @@ describe('거리 감쇠', () => {
     );
   });
 });
+
+describe('방패 파괴 (화염구)', () => {
+  /** 플레이어(6,6)를 향해 서 있는 방패병 */
+  function shieldman(dist: number): EnemyState {
+    const enemy = spawnEnemyAt('goblin_spear', 6 + dist, 6, 1);
+    enemy.health = 1000;
+    enemy.yaw = Math.atan2(-(6 - enemy.x), -(6 - enemy.z)); // 플레이어를 바라봄
+    world.enemies.push(enemy);
+    return enemy;
+  }
+
+  /** 적을 향해 화염구를 날린다 (owner=player) */
+  function fireball(target: EnemyState, damage = 40): void {
+    world.projectiles.push({
+      id: 700, owner: 'player',
+      x: 6, y: 1.2, z: 6, prevX: 6, prevY: 1.2, prevZ: 6,
+      vx: 20, vy: 0, vz: 0,
+      lifeTicks: 120, damage, burnTicks: 0, burnDamagePerTick: 0,
+      radius: 0.3, kind: 'fireball',
+    });
+    for (let i = 0; i < 40 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    void target;
+  }
+
+  it('화염구가 정면 방패를 부순다 — 피해는 damageRatio 배', () => {
+    const enemy = shieldman(4);
+    const events: unknown[] = [];
+    world.events.on('shield_broken', (payload) => events.push(payload));
+
+    fireball(enemy, 40);
+    expect(enemy.shieldBroken).toBe(true);
+    expect(events[0]).toMatchObject({ enemyType: 'goblin_spear' });
+    expect(enemy.health).toBe(1000 - 40 * balance.shieldBreak.damageRatio);
+  });
+
+  it('방패가 깨지면 그 뒤 총알은 막히지 않는다', () => {
+    const enemy = shieldman(4);
+    // 깨지기 전 — 정면 사격은 막힌다
+    const blocked: unknown[] = [];
+    world.events.on('shot_blocked', (payload) => blocked.push(payload));
+    fireAt(4, 1.0);
+    expect(blocked).toHaveLength(1);
+    expect(enemy.health).toBe(1000);
+
+    fireball(enemy, 40);
+    const hpAfterFireball = enemy.health;
+
+    fireAt(4, 1.0); // 깨진 뒤 — 관통
+    expect(blocked).toHaveLength(1); // 더 막히지 않는다
+    expect(enemy.health).toBeLessThan(hpAfterFireball);
+  });
+
+  it('등 뒤에서 맞은 화염구는 방패와 무관 — 온전한 피해', () => {
+    const enemy = spawnEnemyAt('goblin_spear', 6 + 4, 6, 1);
+    enemy.health = 1000;
+    enemy.yaw = Math.atan2(-(20 - enemy.x), -(6 - enemy.z)); // 플레이어 반대편을 봄
+    world.enemies.push(enemy);
+
+    fireball(enemy, 40);
+    expect(enemy.shieldBroken).toBeUndefined();
+    expect(enemy.health).toBe(1000 - 40); // 감쇠 없음
+  });
+});

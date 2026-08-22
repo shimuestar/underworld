@@ -4,7 +4,7 @@
 //    두 자원 경제를 분리하는 유일한 규칙이다 — docs/systems/combat.md §5.
 
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
+import { enemyDef, shieldBlocks } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import type { World } from '../core/World';
 
@@ -272,24 +272,15 @@ function fire(world: World): void {
   // 정면 방패 — 전방 호 안에서 맞은 투사체는 무효 (스태거 중에는 방패 무력화)
   if (hit) {
     const def = enemyDef(hit.enemy.type);
-    if (def.frontalShieldBlocksProjectiles && hit.enemy.ai !== 'staggered') {
-      const facingX = -Math.sin(hit.enemy.yaw);
-      const facingZ = -Math.cos(hit.enemy.yaw);
-      const toPlayerX = p.x - hit.enemy.x;
-      const toPlayerZ = p.z - hit.enemy.z;
-      const len = Math.hypot(toPlayerX, toPlayerZ);
-      const dot = len > 0 ? (facingX * toPlayerX + facingZ * toPlayerZ) / len : 1;
-      const halfArcCos = Math.cos(((def.shieldArcDeg ?? 120) / 2) * (Math.PI / 180));
-      if (dot >= halfArcCos) {
-        world.events.emit('shot_blocked', { enemyId: hit.enemy.id, enemyType: hit.enemy.type });
-        world.events.emit('shot_fired', {
-          sx: p.x, sy: oy, sz: p.z,
-          ex: p.x + dx * hit.t, ey: oy + dy * hit.t, ez: p.z + dz * hit.t,
-          hitEnemy: false,
-          blocked: true, // 착탄음 대신 shot_blocked의 방패 클랭이 재생된다
-        });
-        return;
-      }
+    if (shieldBlocks(def, hit.enemy, p.x, p.z)) {
+      world.events.emit('shot_blocked', { enemyId: hit.enemy.id, enemyType: hit.enemy.type });
+      world.events.emit('shot_fired', {
+        sx: p.x, sy: oy, sz: p.z,
+        ex: p.x + dx * hit.t, ey: oy + dy * hit.t, ez: p.z + dz * hit.t,
+        hitEnemy: false,
+        blocked: true, // 착탄음 대신 shot_blocked의 방패 클랭이 재생된다
+      });
+      return;
     }
   }
 

@@ -27,6 +27,7 @@ export interface MetricsSnapshot {
   };
   kills: { weapon: number; execution: number; spell: number; friendlyFire: number; total: number };
   pickups: { potions: number; healed: number; gold: number; xp: number };
+  shieldsBroken: number;
   ammo: { shotsFired: number; shotsHit: number; altarEntries: number; altarBypasses: number };
   mana: { gained: number; decayed: number; lostToFail: number };
   derived: {
@@ -60,6 +61,7 @@ export class Metrics {
   private healedTotal = 0;
   private goldCollected = 0;
   private xpGained = 0;
+  private shieldsBroken = 0;
   private shotsFired = 0;
   private shotsHit = 0;
   private altarEntries = 0;
@@ -95,6 +97,7 @@ export class Metrics {
     events.on('gold_picked', (payload) => {
       this.goldCollected += (payload as { amount: number }).amount;
     });
+    events.on('shield_broken', () => this.shieldsBroken++);
     events.on('xp_gained', (payload) => {
       this.xpGained += (payload as { amount: number }).amount;
     });
@@ -179,6 +182,7 @@ export class Metrics {
         gold: this.goldCollected,
         xp: this.xpGained,
       },
+      shieldsBroken: this.shieldsBroken,
       ammo: {
         shotsFired: this.shotsFired,
         shotsHit: this.shotsHit,

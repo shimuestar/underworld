@@ -3,7 +3,7 @@
 // 시전 시 cast_spell 이벤트 발행 → Mana가 연쇄를 리셋한다.
 
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
+import { enemyDef, shieldBlocks } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef } from '../core/SigilData';
 import { playerBlocks, pushPlayer, type World } from '../core/World';
@@ -228,6 +228,24 @@ function applyProjectileHit(
   enemy: (typeof world.enemies)[number],
 ): void {
   const def = enemyDef(enemy.type);
+
+  // 정면 방패 — 화염구가 명중하면 방패가 부서진다. 방패가 화염을 일부 먹으므로 피해 감소
+  if (shieldBlocks(def, enemy, proj.x, proj.z)) {
+    if (proj.kind === 'fireball') {
+      enemy.shieldBroken = true;
+      proj.damage *= balance.shieldBreak.damageRatio;
+      world.events.emit('shield_broken', {
+        enemyId: enemy.id,
+        enemyType: enemy.type,
+        x: enemy.x,
+        z: enemy.z,
+      });
+    } else {
+      // 그 외 투사체(반사된 마법 등)는 방패에 막힌다
+      world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'shield' });
+      return;
+    }
+  }
 
   // 마법 방어막(warden) — 반사된 투사체가 아니면 무효 (7.2 피드백)
   if (def.magicBarrier?.blocksMagic && !proj.deflected) {

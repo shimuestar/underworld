@@ -160,6 +160,14 @@ interface Particle {
   vy: number;
   vz: number;
   bornMs: number;
+  /** 없으면 DEATH_PARTICLE_LIFE_MS */
+  lifeMs?: number;
+  /** 초당 회전 (파편이 돌면서 날아간다) */
+  spinX?: number;
+  spinY?: number;
+  spinZ?: number;
+  /** 없으면 DEATH_GRAVITY */
+  gravity?: number;
 }
 
 interface Tracer {
@@ -191,6 +199,8 @@ export class Stage {
   /** 처형 섬광 — 짧게 터지는 점광 */
   private readonly executeFlash: THREE.PointLight;
   private executeFlashUntil = 0;
+  private executeFlashMs = 200;
+  private executeFlashPower = 5;
   private ambientLight: THREE.AmbientLight | null = null;
   private levelAmbient = 0;
 
@@ -494,8 +504,23 @@ export class Stage {
 
   /** 처형 섬광 — 지정 위치에서 짧게 터진다 */
   triggerExecuteFlash(x: number, z: number, height = 1.2): void {
-    this.executeFlash.position.set(x, height, z);
-    this.executeFlashUntil = performance.now() + 200;
+    this.triggerFlash(x, height, z, 0xffe6b0, 200, 5);
+  }
+
+  /** 범용 섬광 — 위치·색·지속·세기 */
+  triggerFlash(
+    x: number,
+    y: number,
+    z: number,
+    color: number,
+    durationMs: number,
+    power: number,
+  ): void {
+    this.executeFlash.position.set(x, y, z);
+    this.executeFlash.color.setHex(color);
+    this.executeFlashMs = durationMs;
+    this.executeFlashPower = power;
+    this.executeFlashUntil = performance.now() + durationMs;
   }
 
   /** 보간된 플레이어 상태를 카메라에 반영 */
@@ -521,8 +546,8 @@ export class Stage {
     const flashLeft = this.executeFlashUntil - now;
     this.executeFlash.visible = flashLeft > 0;
     if (flashLeft > 0) {
-      const f = flashLeft / 200;
-      this.executeFlash.intensity = balance.lantern.intensity * 5 * f * f;
+      const f = flashLeft / this.executeFlashMs;
+      this.executeFlash.intensity = balance.lantern.intensity * this.executeFlashPower * f * f;
     }
   }
 
@@ -771,6 +796,10 @@ export class Stage {
       let visual = this.enemyVisuals.get(enemy.id);
       if (!visual) {
         visual = this.buildEnemyVisual(enemy.type);
+        if (enemy.shieldBroken && visual.shield) {
+          visual.group.remove(visual.shield);
+          visual.shield = undefined;
+        }
         this.enemyVisuals.set(enemy.id, visual);
         this.scene.add(visual.group);
       }
@@ -1036,6 +1065,94 @@ export class Stage {
     }
   }
 
+  /** 방패 파괴 — 판이 조각나 튀고, 화염구가 남긴 불티가 흩날린다 */
+  shatterShield(enemyId: number): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    if (!visual?.shield) return;
+    const shield = visual.shield;
+    const size = new THREE.Vector3();
+    new THREE.Box3().setFromObject(shield).getSize(size);
+    const origin = shield.getWorldPosition(new THREE.Vector3());
+    const yaw = visual.group.rotation.y;
+
+    // 방패 본체 제거 — 이후 업데이트에서도 건너뛴다
+    this.scene.remove(shield);
+    visual.group.remove(shield);
+    shield.geometry.dispose();
+    visual.shieldMaterial?.dispose();
+    visual.shield = undefined;
+    visual.shieldMaterial = undefined;
+
+    const now = performance.now();
+    // 판을 3×4 격자로 쪼갠 조각들 — 원래 자리에서 앞쪽으로 터져 나간다
+    const cols = 3;
+    const rows = 4;
+    const fw = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const w = (size.x / cols) * 0.86;
+        const h = (size.y / rows) * 0.86;
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, 0.07),
+          new THREE.MeshLambertMaterial({
+            color: SHIELD_COLOR,
+            transparent: true,
+            opacity: 1,
+            emissive: 0x552200, // 화염에 달궈진 가장자리
+            emissiveIntensity: 0.5,
+          }),
+        );
+        const offX = (c - (cols - 1) / 2) * (size.x / cols);
+        const offY = (r - (rows - 1) / 2) * (size.y / rows);
+        mesh.rotation.y = yaw;
+        const burst = 2.2 + Math.random() * 2.6;
+        this.particles.push({
+          mesh,
+          ox: origin.x + Math.cos(yaw) * offX,
+          oy: origin.y + offY,
+          oz: origin.z - Math.sin(yaw) * offX,
+          // 플레이어 쪽(방패 정면)으로 터지고 좌우로 흩어진다
+          vx: fw * burst + (Math.random() - 0.5) * 2.4,
+          vy: 1.2 + Math.random() * 3.2 + offY * 1.5,
+          vz: fz * burst + (Math.random() - 0.5) * 2.4,
+          bornMs: now,
+          lifeMs: 1100,
+          spinX: (Math.random() - 0.5) * 14,
+          spinY: (Math.random() - 0.5) * 14,
+          spinZ: (Math.random() - 0.5) * 14,
+        });
+        this.scene.add(mesh);
+      }
+    }
+
+    // 불티 — 작고 밝고 짧게, 위로 흩날린다
+    for (let i = 0; i < 12; i++) {
+      const size2 = 0.04 + Math.random() * 0.05;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size2, size2, size2),
+        new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 1 }),
+      );
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.2 + Math.random() * 3;
+      this.particles.push({
+        mesh,
+        ox: origin.x,
+        oy: origin.y,
+        oz: origin.z,
+        vx: Math.cos(angle) * speed,
+        vy: 2.5 + Math.random() * 3.5,
+        vz: Math.sin(angle) * speed,
+        bornMs: now,
+        lifeMs: 620,
+        gravity: 4.5, // 불티는 천천히 떨어진다
+      });
+      this.scene.add(mesh);
+    }
+
+    this.triggerFlash(origin.x, origin.y, origin.z, 0xff7a2a, 260, 6);
+  }
+
   /** 적 사망 파편 폭발 — 몸통 색 조각들이 튀어 흩어진다. power>1 이면 더 많이·세게 */
   spawnDeathBurst(x: number, z: number, enemyType: string, power = 1): void {
     const def = enemyDef(enemyType);
@@ -1120,7 +1237,7 @@ export class Stage {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i]!;
       const age = (now - p.bornMs) / 1000;
-      const lifeFrac = (now - p.bornMs) / DEATH_PARTICLE_LIFE_MS;
+      const lifeFrac = (now - p.bornMs) / (p.lifeMs ?? DEATH_PARTICLE_LIFE_MS);
       if (lifeFrac >= 1) {
         this.scene.remove(p.mesh);
         p.mesh.geometry.dispose();
@@ -1130,9 +1247,16 @@ export class Stage {
       }
       p.mesh.position.set(
         p.ox + p.vx * age,
-        Math.max(0.04, p.oy + p.vy * age - 0.5 * DEATH_GRAVITY * age * age),
+        Math.max(0.04, p.oy + p.vy * age - 0.5 * (p.gravity ?? DEATH_GRAVITY) * age * age),
         p.oz + p.vz * age,
       );
+      if (p.spinX || p.spinY || p.spinZ) {
+        p.mesh.rotation.set(
+          p.mesh.rotation.x + (p.spinX ?? 0) * 0.016,
+          p.mesh.rotation.y + (p.spinY ?? 0) * 0.016,
+          p.mesh.rotation.z + (p.spinZ ?? 0) * 0.016,
+        );
+      }
       (p.mesh.material as THREE.MeshLambertMaterial).opacity = 1 - lifeFrac * lifeFrac;
     }
   }
