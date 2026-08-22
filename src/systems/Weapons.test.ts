@@ -96,15 +96,16 @@ describe('해머 (슬롯 1)', () => {
     expect(enemy.x).toBeCloseTo(startX + hammer.knockback, 1);
   });
 
-  it('헛스윙은 후딜 추가, 명중은 기본 쿨다운', () => {
+  it('헛스윙은 후딜 추가, 명중은 짧은 연결 쿨다운 (1·2타)', () => {
     const hammer = balance.weapons.hammer;
+    const chain = hammer.combo.chainCooldownTicks;
     swing(); // 아무도 없음 — 헛스윙
-    expect(world.weapon.meleeCooldown).toBe(hammer.cooldownTicks + hammer.whiffExtraCooldownTicks);
+    expect(world.weapon.meleeCooldown).toBe(chain + hammer.whiffExtraCooldownTicks);
 
     const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
     world.enemies.push(enemy);
-    swing(); // 명중
-    expect(world.weapon.meleeCooldown).toBe(hammer.cooldownTicks);
+    swing(); // 명중 — 바로 다음 타로 이어칠 수 있게 짧다
+    expect(world.weapon.meleeCooldown).toBe(chain);
   });
 
   it('처치 시 melee_kill(비처형) → 마나 지급 경로', () => {

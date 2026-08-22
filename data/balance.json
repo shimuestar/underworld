@@ -115,9 +115,10 @@
       "knockback": 2.4,
       "knockbackTicks": 6,
       "combo": {
-        "_comment": "연속 3타째가 강타. 이전 스윙 후 windowTicks 안에 다시 쳐야 이어진다",
+        "_comment": "연속 3타째가 강타. 1·2타는 chainCooldownTicks 뒤 바로 이어칠 수 있고, windowTicks 안에 안 치면 끊긴다",
         "finisherStep": 3,
-        "windowTicks": 48,
+        "chainCooldownTicks": 10,
+        "windowTicks": 26,
         "damageMul": 2.4,
         "knockbackMul": 2.2,
         "rangeMul": 1.15,

@@ -61,6 +61,7 @@ export class HandModel {
   private swingUntil = 0;
   private swingStart = 0;
   private swingIndex = 0;
+  private swingFrom: SwingPose | null = null;
   private baseRotX = 0;
   /** 왼팔(총) 자세 보간값 — 가드 블렌드와 별도로 유지된다 */
   private gunPoseY = 0;
@@ -182,11 +183,19 @@ export class HandModel {
     for (const mesh of this.grenadeParts) mesh.visible = kind === 'grenade';
   }
 
-  /** step: 1·2·3 연속타 단계. 단계마다 궤적이 다르다 */
+  /** step: 1·2·3 연속타 단계. 직전 타의 끝 자세에서 그대로 이어진다 */
   triggerHammerSwing(step = 1): void {
     this.swingIndex = Math.max(0, Math.min(COMBO_SWINGS.length - 1, step - 1));
+    const s = COMBO_SWINGS[this.swingIndex]!;
+    // 지금 팔이 있는 위치를 출발점으로 삼는다 — 대기 자세로 되돌아갔다 오지 않는다
+    this.swingFrom = {
+      rotX: this.rightArm.rotation.x,
+      rotY: this.rightArm.rotation.y,
+      x: this.rightArm.position.x,
+      y: this.rightArm.position.y,
+    };
     this.swingStart = performance.now();
-    this.swingUntil = this.swingStart + COMBO_SWINGS[this.swingIndex]!.ms;
+    this.swingUntil = this.swingStart + s.windupMs + s.strikeMs + s.holdMs + s.returnMs;
   }
 
   triggerGrenadeThrow(): void {
@@ -242,11 +251,17 @@ export class HandModel {
 
     // 스윙 — 치켜듦(예비 18%) → 내리침(37%) → 박힘(12%) → 회수(33%).
     // 절대 각도로 지정한다: 대기 각도가 바뀌어도 궤적이 흔들리지 않는다
-    // 스윙 — 감기(22%) → 베기(33%) → 버팀 → 대기 자세로 복귀
+    // 스윙 — 감기 → 베기 → 버팀(이 구간에 다시 클릭하면 다음 타로 연결) → 복귀.
+    // 출발 자세는 "지금 팔이 있는 곳"이라 1→2→3타가 끊기지 않고 이어진다
     let pose: SwingPose | null = null;
     if (now < this.swingUntil) {
       const step = COMBO_SWINGS[this.swingIndex]!;
-      const t = (now - this.swingStart) / step.ms;
+      const from = this.swingFrom ?? {
+        rotX: HAMMER_REST_ROT,
+        rotY: REST_RIGHT.rotY,
+        x: REST_RIGHT.pos.x,
+        y: REST_RIGHT.pos.y,
+      };
       const rest: SwingPose = {
         rotX: HAMMER_REST_ROT,
         rotY: REST_RIGHT.rotY,
@@ -259,11 +274,14 @@ export class HandModel {
         x: a.x + (b.x - a.x) * k,
         y: a.y + (b.y - a.y) * k,
       });
-      const strikeEnd = 0.22 + 0.33;
-      if (t < 0.22) pose = mix(rest, step.windup, easeOutCubic(t / 0.22)); // 감기
-      else if (t < strikeEnd) pose = mix(step.windup, step.strike, easeInCubic((t - 0.22) / 0.33));
-      else if (t < strikeEnd + SWING_HOLD) pose = step.strike; // 버팀
-      else pose = mix(step.strike, rest, easeOutCubic((t - strikeEnd - SWING_HOLD) / (1 - strikeEnd - SWING_HOLD)));
+      const e = now - this.swingStart;
+      const t1 = step.windupMs;
+      const t2 = t1 + step.strikeMs;
+      const t3 = t2 + step.holdMs;
+      if (e < t1) pose = mix(from, step.windup, easeOutCubic(e / step.windupMs));
+      else if (e < t2) pose = mix(step.windup, step.strike, easeInCubic((e - t1) / step.strikeMs));
+      else if (e < t3) pose = step.strike; // 그대로 버틴다 — 연결 대기
+      else pose = mix(step.strike, rest, easeOutCubic((e - t3) / step.returnMs));
     }
 
     if (pose) {
@@ -401,31 +419,44 @@ interface SwingPose {
   y: number;
 }
 interface SwingStep {
-  ms: number;
+  /** 감기 / 베기 / 버팀(연결 대기) / 복귀 — 절대 시간(ms) */
+  windupMs: number;
+  strikeMs: number;
+  holdMs: number;
+  returnMs: number;
   windup: SwingPose;
   strike: SwingPose;
 }
 const COMBO_SWINGS: SwingStep[] = [
   {
     // 1타 — 오른쪽 위에서 왼쪽 아래로 베어 내린다
-    ms: 220,
+    windupMs: 80,
+    strikeMs: 95,
+    holdMs: 250, // 여기서 다시 클릭하면 그 자리에서 2타가 이어진다
+    returnMs: 230,
     windup: { rotX: 1.0, rotY: -0.75, x: 0.4, y: -0.2 },
     strike: { rotX: -0.85, rotY: 0.62, x: -0.06, y: -0.4 },
   },
   {
-    // 2타 — 왼쪽 아래에서 오른쪽 위로 올려친다
-    ms: 220,
+    // 2타 — 왼쪽 아래에서 오른쪽 위로 올려친다 (1타 끝 자세에서 그대로 출발)
+    windupMs: 60,
+    strikeMs: 95,
+    holdMs: 250,
+    returnMs: 230,
     windup: { rotX: -0.8, rotY: 0.62, x: -0.02, y: -0.46 },
     strike: { rotX: 1.05, rotY: -0.5, x: 0.34, y: -0.16 },
   },
   {
     // 3타 — 머리 위로 치켜들었다 정면 아래로 내리찍는다 (강타)
-    ms: 360,
+    windupMs: 130,
+    strikeMs: 110,
+    holdMs: 170,
+    returnMs: 280,
     windup: { rotX: 1.6, rotY: 0.02, x: 0.16, y: -0.12 },
     strike: { rotX: -0.8, rotY: -0.02, x: 0.11, y: -0.42 },
   },
 ];
-const SWING_HOLD = 0.12; // 타격 끝에서 버티는 구간 비율
+
 
 // 포즈 정의 (카메라 로컬 좌표)
 // 오른팔 대기: 손목은 화면 오른쪽 아래, 해머는 어깨 위로 걸쳐 든다.

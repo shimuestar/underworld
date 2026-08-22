@@ -168,8 +168,9 @@ function swingHammer(world: World): void {
     }
   }
 
-  // 헛스윙이면 후딜 추가 — 마구 휘두르기 억제. 강타는 후딜도 크다
-  const base = heavy ? hammer.cooldownTicks * combo.cooldownMul : hammer.cooldownTicks;
+  // 1·2타는 짧은 후딜로 바로 이어칠 수 있게 하고(연결), 마무리 강타만 크게 쉰다.
+  // 헛스윙이면 추가 후딜 — 마구 휘두르기 억제
+  const base = heavy ? hammer.cooldownTicks * combo.cooldownMul : combo.chainCooldownTicks;
   w.meleeCooldown = Math.round(hitAny ? base : base + hammer.whiffExtraCooldownTicks);
 
   if (heavy) {
