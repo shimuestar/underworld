@@ -117,8 +117,9 @@ export class HandModel {
     this.leftArm.add(lFist);
 
     this.bracerMaterial = new THREE.MeshLambertMaterial({ color: BRACER });
-    const bracer = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.09, 0.21), this.bracerMaterial);
-    bracer.position.set(-0.038, 0.008, 0);
+    // 가로(z 0.21)는 유지, 세로(y)를 크게 — 가드 시 화면을 세로로도 넉넉히 가리도록
+    const bracer = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.24, 0.21), this.bracerMaterial);
+    bracer.position.set(-0.038, 0.02, 0);
     this.leftArm.add(bracer);
 
     this.leftArm.position.copy(REST_LEFT.pos);
