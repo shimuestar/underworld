@@ -21,8 +21,8 @@
       "aggroRange": 14, "attackRange": 3.6,
       "behavior": "guard_advance",
       "frontalShieldBlocksProjectiles": true, "shieldArcDeg": 120,
-      "attack": { "type": "thrust", "arcDeg": 50, "windupTicks": 20, "recoverTicks": 45, "whiffRecoverTicks": 90, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
-      "chargeAttack": { "type": "thrust", "arcDeg": 55, "chargeSpeed": 11.5, "minRange": 4.5, "windupTicks": 22, "recoverTicks": 55, "whiffRecoverTicks": 90, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
+      "attack": { "type": "thrust", "arcDeg": 50, "windupTicks": 17, "recoverTicks": 23, "whiffRecoverTicks": 90, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
+      "chargeAttack": { "type": "thrust", "arcDeg": 55, "chargeSpeed": 11.5, "minRange": 4.5, "windupTicks": 19, "recoverTicks": 28, "whiffRecoverTicks": 90, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
       "counters": { "pistol": "poor", "rifle": "poor", "grenade": "good", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
       "drops": ["sig_fireball"], "dropsOnDeath": true
     },
