@@ -82,6 +82,8 @@ const world = new World(events, {
     grenades: balance.weapons.grenade.startCount,
     meleeCooldown: 0,
     grenadeCharge: 0,
+    comboStep: 0,
+    comboTimer: 0,
   },
   mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
   sigils: {
@@ -313,13 +315,21 @@ events.on('block_hit', (payload) => {
 
 // ---- 무기 — 원거리(좌클릭, 휠 교체) / 근접(우클릭) ----
 events.on('weapon_switched', () => audio.play('weapon_switch'));
-events.on('hammer_swing', () => {
-  audio.play('hammer_swing');
-  stage.triggerHammerSwing();
+events.on('hammer_swing', (payload) => {
+  const heavy = (payload as { heavy?: boolean }).heavy === true;
+  audio.play(heavy ? 'hammer_heavy' : 'hammer_swing');
+  stage.triggerHammerSwing(heavy);
+  if (heavy) showReaction('강타!', 700);
 });
 events.on('melee_hit', (payload) => {
-  audio.play('melee_hit');
-  stage.flashEnemyHit((payload as { enemyId: number }).enemyId);
+  const hit = payload as { enemyId: number; heavy?: boolean };
+  audio.play(hit.heavy ? 'heavy_hit' : 'melee_hit');
+  stage.flashEnemyHit(hit.enemyId);
+  if (hit.heavy) {
+    stage.triggerCameraKick(1.2, 300);
+    const e = world.enemies.find((x) => x.id === hit.enemyId);
+    if (e) stage.spawnGuardSparks(e.x, e.z, 1.0, 0xffc27a, 1.8);
+  }
 });
 events.on('grenade_thrown', () => {
   audio.play('grenade_throw');
@@ -734,8 +744,13 @@ function render(alpha: number): void {
     wpn.ranged === 'pistol'
       ? `LMB 권총 ${wpn.mag}/${wpn.reserve}${wpn.reloading > 0 ? ' …' : ''}`
       : `LMB 수류탄 ×${wpn.grenades}`;
-  document.getElementById('slot-melee')!.textContent =
-    `RMB ${wpn.melee === 'hammer' ? '해머' : wpn.melee}`;
+  // 연속타 단계 — 다음 타가 강타면 눈에 띄게 표시
+  const step = wpn.comboTimer > 0 ? wpn.comboStep : 0;
+  const finisher = balance.weapons.hammer.combo.finisherStep;
+  const pips = '●'.repeat(step) + '○'.repeat(Math.max(0, finisher - 1 - step));
+  const meleeSlot = document.getElementById('slot-melee')!;
+  meleeSlot.textContent = `RMB ${wpn.melee === 'hammer' ? '해머' : wpn.melee} ${pips}`;
+  meleeSlot.className = `weapon-slot active${step >= finisher - 1 ? ' charged' : ''}`;
 
   // 디버그 오버레이 (F1) — 0.5초마다 갱신
   if (debugOverlay.visible && now - debugOverlayLastUpdate > 500) {

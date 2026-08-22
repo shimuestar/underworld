@@ -36,7 +36,7 @@ function makeWorld(): World {
       iframeTicks: 0, reactionBufferTicks: 0, blocking: false, reactionHeldTicks: 0,
     },
     lantern: { on: true, battery: 100, spares: 0 },
-    weapon: { melee: 'hammer', ranged: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0, grenadeCharge: 0 },
+    weapon: { melee: 'hammer', ranged: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0, grenadeCharge: 0, comboStep: 0, comboTimer: 0 },
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
@@ -391,5 +391,73 @@ describe('방어 중 손 역할 분담', () => {
     Weapons.tick(world, DT);
     expect(world.weapon.grenadeCharge).toBe(0);
     expect(world.weapon.grenades).toBe(3); // 던져지지도 않았다
+  });
+});
+
+describe('해머 3타 콤보', () => {
+  const hammer = balance.weapons.hammer;
+  const combo = hammer.combo;
+
+  function swingAt(enemy: EnemyState): { damage: number; heavy: boolean } {
+    const hp = enemy.health;
+    let heavy = false;
+    const off = world.events.on('hammer_swing', (payload) => {
+      heavy = (payload as { heavy: boolean }).heavy;
+    });
+    world.weapon.meleeCooldown = 0;
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    if (typeof off === 'function') off();
+    return { damage: hp - enemy.health, heavy };
+  }
+
+  it('3타째가 강타 — 피해·넉백·사거리가 커지고 후딜도 길다', () => {
+    const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
+    enemy.health = 100000;
+    world.enemies.push(enemy);
+
+    const a = swingAt(enemy);
+    const b = swingAt(enemy);
+    const c = swingAt(enemy);
+    expect(a.heavy).toBe(false);
+    expect(b.heavy).toBe(false);
+    expect(c.heavy).toBe(true);
+    expect(a.damage).toBe(hammer.damage);
+    expect(c.damage).toBeCloseTo(hammer.damage * combo.damageMul, 5);
+    expect(world.weapon.meleeCooldown).toBe(Math.round(hammer.cooldownTicks * combo.cooldownMul));
+    expect(world.weapon.comboStep).toBe(0); // 마무리 후 초기화
+  });
+
+  it('시간이 지나 창이 끊기면 1타부터 다시 센다', () => {
+    const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
+    enemy.health = 100000;
+    world.enemies.push(enemy);
+
+    swingAt(enemy);
+    swingAt(enemy);
+    // 연속타 창이 만료될 때까지 대기
+    for (let i = 0; i < combo.windowTicks + hammer.cooldownTicks + 2; i++) {
+      world.input = Input.emptySnapshot();
+      Weapons.tick(world, DT);
+    }
+    expect(world.weapon.comboStep).toBe(0);
+    const next = swingAt(enemy);
+    expect(next.heavy).toBe(false); // 3타가 아니라 다시 1타
+  });
+
+  it('강타는 사거리 밖의 적에게도 닿는다 (rangeMul)', () => {
+    // 판정은 적 반경(0.5)을 더해 재므로 일반 3.6 / 강타 4.07 사이에 둔다
+    const far = spawnEnemyAt('goblin_runner', 6 + hammer.range + 0.75, 6, 1);
+    far.health = 100000;
+    world.enemies.push(far);
+
+    const a = swingAt(far); // 1타 — 닿지 않는다
+    expect(a.damage).toBe(0);
+    // 콤보를 이어 3타를 만든다
+    swingAt(far);
+    const heavy = swingAt(far);
+    expect(heavy.heavy).toBe(true);
+    expect(heavy.damage).toBeGreaterThan(0);
   });
 });

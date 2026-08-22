@@ -171,6 +171,10 @@ export interface WeaponState {
   meleeCooldown: number;
   /** 수류탄 차징 누적 틱 (홀드 중) */
   grenadeCharge: number;
+  /** 해머 연속타 단계 (0=처음). finisherStep 에 도달하면 강타 */
+  comboStep: number;
+  /** 연속타가 유지되는 잔여 틱. 0이 되면 단계가 초기화된다 */
+  comboTimer: number;
 }
 
 // 근접 적 공격 상태 머신 — docs/systems/combat.md §2.

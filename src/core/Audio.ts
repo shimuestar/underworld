@@ -33,6 +33,8 @@ export type SoundName =
   | 'headshot'
   | 'player_hurt'
   | 'block_hit'
+  | 'hammer_heavy'
+  | 'heavy_hit'
   | 'guard_clash'
   | 'enemy_whiff'
   | 'shield_break'
@@ -230,6 +232,19 @@ export class GameAudio {
         this.tone(60, 0.7, 'sine', 1.6, 0, 28);
         this.noise(0.5, 1.3, 900);
         this.noise(0.9, 0.5, 300, 0.1);
+        break;
+      case 'hammer_heavy':
+        // 강타 스윙 — 길고 낮은 바람 가르는 소리
+        this.noise(0.34, 0.7, 900);
+        this.tone(120, 0.3, 'sawtooth', 0.35, 0, 55);
+        break;
+      case 'heavy_hit':
+        // 강타 적중 — 서브베이스 폭발 + 금속 파열 + 긴 여운
+        this.tone(48, 0.5, 'sine', 1.0, 0, 26);
+        this.tone(90, 0.34, 'sawtooth', 0.85, 0, 40);
+        this.noise(0.12, 1.0, 2200);
+        this.noise(0.3, 0.7, 700, 0.05);
+        this.tone(320, 0.4, 'triangle', 0.4, 0.03, 120);
         break;
       case 'guard_clash':
         // 방패 격돌 — 묵직한 충돌(저음) + 금속 마찰 + 여운 있는 링

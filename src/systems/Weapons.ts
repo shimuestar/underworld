@@ -15,6 +15,11 @@ export function tick(world: World, _dt: number): void {
   if (w.muzzleFlash > 0) w.muzzleFlash--;
   if (w.cooldown > 0) w.cooldown--;
   if (w.meleeCooldown > 0) w.meleeCooldown--;
+  // 연속타 유지 시간 — 끊기면 1타부터 다시
+  if (w.comboTimer > 0) {
+    w.comboTimer--;
+    if (w.comboTimer === 0) w.comboStep = 0;
+  }
 
   // 원거리 무기 교체 (휠) — 장전·차징은 취소된다
   if (world.input.cycleRanged !== 0) {
@@ -101,13 +106,24 @@ export function tick(world: World, _dt: number): void {
 /** 해머 — 전방 부채꼴 내리치기. 근접 처치는 마나를 준다 (총과의 결정적 차이) */
 function swingHammer(world: World): void {
   const hammer = balance.weapons.hammer;
+  const combo = hammer.combo;
+  const w = world.weapon;
   const p = world.player;
-  world.events.emit('hammer_swing', {});
-  alertNearby(world, p.x, p.z, hammer.noiseRadius);
+
+  // 연속타 단계 진행 — 창이 끊겼으면 1타부터
+  w.comboStep = (w.comboTimer > 0 ? w.comboStep : 0) + 1;
+  const heavy = w.comboStep >= combo.finisherStep;
+  const damage = heavy ? hammer.damage * combo.damageMul : hammer.damage;
+  const range = heavy ? hammer.range * combo.rangeMul : hammer.range;
+  const arcDeg = heavy ? hammer.arcDeg * combo.arcMul : hammer.arcDeg;
+  const knockback = heavy ? hammer.knockback * combo.knockbackMul : hammer.knockback;
+
+  world.events.emit('hammer_swing', { heavy, step: w.comboStep });
+  alertNearby(world, p.x, p.z, hammer.noiseRadius * (heavy ? 2 : 1));
 
   const facingX = -Math.sin(p.yaw);
   const facingZ = -Math.cos(p.yaw);
-  const arcCos = Math.cos(((hammer.arcDeg / 2) * Math.PI) / 180);
+  const arcCos = Math.cos(((arcDeg / 2) * Math.PI) / 180);
   let hitAny = false;
 
   for (const enemy of world.enemies) {
@@ -116,7 +132,7 @@ function swingHammer(world: World): void {
     const toX = enemy.x - p.x;
     const toZ = enemy.z - p.z;
     const dist = Math.hypot(toX, toZ);
-    if (dist > hammer.range + def.radius || dist === 0) continue;
+    if (dist > range + def.radius || dist === 0) continue;
     if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
 
     // 상성 — warden 방어막은 근접 무효, 보스 장갑은 실탄 전용
@@ -129,16 +145,16 @@ function swingHammer(world: World): void {
       continue;
     }
 
-    enemy.health -= hammer.damage;
+    enemy.health -= damage;
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     // 넉백 — 타격 방향으로 밀려난다 (보스는 밀리지 않는다)
     if (!enemyDef(enemy.type).boss) {
       enemy.kbTicks = hammer.knockbackTicks;
-      enemy.kbX = (toX / dist) * (hammer.knockback / hammer.knockbackTicks);
-      enemy.kbZ = (toZ / dist) * (hammer.knockback / hammer.knockbackTicks);
+      enemy.kbX = (toX / dist) * (knockback / hammer.knockbackTicks);
+      enemy.kbZ = (toZ / dist) * (knockback / hammer.knockbackTicks);
     }
     hitAny = true;
-    world.events.emit('melee_hit', { enemyId: enemy.id, damage: hammer.damage });
+    world.events.emit('melee_hit', { enemyId: enemy.id, damage, heavy });
     if (enemy.health <= 0) {
       enemy.alive = false;
       // 근접 처치 — Mana가 melee_kill(비처형)을 구독해 마나를 지급한다
@@ -152,10 +168,18 @@ function swingHammer(world: World): void {
     }
   }
 
-  // 헛스윙이면 후딜 추가 — 마구 휘두르기 억제
-  world.weapon.meleeCooldown = hitAny
-    ? hammer.cooldownTicks
-    : hammer.cooldownTicks + hammer.whiffExtraCooldownTicks;
+  // 헛스윙이면 후딜 추가 — 마구 휘두르기 억제. 강타는 후딜도 크다
+  const base = heavy ? hammer.cooldownTicks * combo.cooldownMul : hammer.cooldownTicks;
+  w.meleeCooldown = Math.round(hitAny ? base : base + hammer.whiffExtraCooldownTicks);
+
+  if (heavy) {
+    w.comboStep = 0; // 마무리 — 다음은 다시 1타부터
+    w.comboTimer = 0;
+    if (hitAny) world.freezeTicks = Math.max(world.freezeTicks, combo.hitstopTicks);
+  } else {
+    // 다음 타를 이어갈 수 있는 시간 (후딜이 끝난 뒤부터 세는 게 아니라 총 여유)
+    w.comboTimer = w.meleeCooldown + combo.windowTicks;
+  }
 }
 
 /** 수류탄 투척 속도 — 차징 비율(0~1)에 따라 min~max 선형 */

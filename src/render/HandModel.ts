@@ -59,6 +59,7 @@ export class HandModel {
   private readonly hammerParts: THREE.Mesh[] = [];
   private readonly grenadeParts: THREE.Mesh[] = [];
   private swingUntil = 0;
+  private heavySwing = false;
   private baseRotX = 0;
   /** 왼팔(총) 자세 보간값 — 가드 블렌드와 별도로 유지된다 */
   private gunPoseY = 0;
@@ -180,8 +181,10 @@ export class HandModel {
     for (const mesh of this.grenadeParts) mesh.visible = kind === 'grenade';
   }
 
-  triggerHammerSwing(): void {
-    this.swingUntil = performance.now() + SWING_MS;
+  /** heavy = 3타 마무리. 세로 내리침 대신 옆에서 크게 후려친다 */
+  triggerHammerSwing(heavy = false): void {
+    this.heavySwing = heavy;
+    this.swingUntil = performance.now() + (heavy ? HEAVY_SWING_MS : SWING_MS);
   }
 
   triggerGrenadeThrow(): void {
@@ -238,8 +241,29 @@ export class HandModel {
     // 스윙 — 치켜듦(예비 18%) → 내리침(37%) → 박힘(12%) → 회수(33%).
     // 절대 각도로 지정한다: 대기 각도가 바뀌어도 궤적이 흔들리지 않는다
     let swingAbs: number | null = null;
+    let sweepYaw: number | null = null; // 강타 전용 수평 궤적
     let center = 0; // 0 = 어깨 너머 대기 / 1 = 정면으로 모은 타격 자세
-    if (now < this.swingUntil) {
+    if (now < this.swingUntil && this.heavySwing) {
+      // 강타 — 오른쪽 뒤로 크게 감았다가(28%) 왼쪽으로 훑고(34%) 버틴 뒤 회수
+      const t = 1 - (this.swingUntil - now) / HEAVY_SWING_MS;
+      if (t < 0.28) {
+        sweepYaw = HEAVY_WINDUP_YAW * easeOutCubic(t / 0.28);
+        swingAbs = HAMMER_REST_ROT + 0.25 * easeOutCubic(t / 0.28);
+      } else if (t < 0.62) {
+        const k = easeInCubic((t - 0.28) / 0.34);
+        sweepYaw = HEAVY_WINDUP_YAW + (HEAVY_SWEEP_YAW - HEAVY_WINDUP_YAW) * k;
+        swingAbs = HAMMER_REST_ROT + 0.25 - 0.85 * k; // 수평에 가깝게 눕힌다
+      } else if (t < 0.74) {
+        sweepYaw = HEAVY_SWEEP_YAW;
+        swingAbs = HAMMER_REST_ROT - 0.6;
+      } else {
+        const k = easeOutCubic((t - 0.74) / 0.26);
+        sweepYaw = HEAVY_SWEEP_YAW * (1 - k);
+        swingAbs = HAMMER_REST_ROT - 0.6 + 0.6 * k;
+      }
+      center = t < 0.74 ? Math.min(1, t / 0.2) : 1 - (t - 0.74) / 0.26;
+      center = Math.max(0, Math.min(1, center));
+    } else if (now < this.swingUntil) {
       const t = 1 - (this.swingUntil - now) / SWING_MS;
       const bottom = HAMMER_REST_ROT + HAMMER_SMASH_ARC; // 내리친 끝 각도
       if (t < 0.18) {
@@ -262,7 +286,8 @@ export class HandModel {
       REST_RIGHT.pos.z + (SMASH_RIGHT.z - REST_RIGHT.pos.z) * center;
     const baseY = REST_RIGHT.pos.y + (SMASH_RIGHT.y - REST_RIGHT.pos.y) * center;
     this.rightArm.position.y += (baseY + (targetY - REST_RIGHT.pos.y) - this.rightArm.position.y) * 0.3;
-    this.rightArm.rotation.y = REST_RIGHT.rotY * (1 - center);
+    this.rightArm.rotation.y =
+      sweepYaw !== null ? sweepYaw : REST_RIGHT.rotY * (1 - center);
     this.rightArm.rotation.z = REST_RIGHT.rotZ * (1 - center);
     if (swingAbs !== null) {
       this.baseRotX = swingAbs; // 스윙 중에는 보간 없이 커브를 그대로 따른다
@@ -384,6 +409,9 @@ export class HandModel {
 const HAMMER_REST_ROT = 0.95; // 헤드가 어깨 위 (완전히 세우면 화면 중앙을 가린다)
 const HAMMER_WINDUP_ROT = 1.35; // 내리치기 직전 살짝 더 치켜든다 (예비 동작)
 const SWING_MS = 210;
+const HEAVY_SWING_MS = 380; // 3타 강타 — 크게 감았다 후려친다
+const HEAVY_WINDUP_YAW = 1.15; // 오른쪽 뒤로 크게 당김
+const HEAVY_SWEEP_YAW = -1.05; // 왼쪽 끝까지 훑는다
 const HAMMER_SMASH_ARC = -1.7; // 대기 0.95 → 바닥 -0.75rad(앞아래 43도). 수직으로 꽂으면 정면을 친 느낌이 안 난다
 
 // 포즈 정의 (카메라 로컬 좌표)

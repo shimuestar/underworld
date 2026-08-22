@@ -278,8 +278,8 @@ export class Stage {
     this.hands.setWeapon(kind);
   }
 
-  triggerHammerSwing(): void {
-    this.hands.triggerHammerSwing();
+  triggerHammerSwing(heavy = false): void {
+    this.hands.triggerHammerSwing(heavy);
   }
 
   /** 방어 성공 — 방패 섬광 + 화살이면 방패에 꽂힘 */

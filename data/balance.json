@@ -113,7 +113,18 @@
       "whiffExtraCooldownTicks": 20,
       "noiseRadius": 5.0,
       "knockback": 2.4,
-      "knockbackTicks": 6
+      "knockbackTicks": 6,
+      "combo": {
+        "_comment": "연속 3타째가 강타. 이전 스윙 후 windowTicks 안에 다시 쳐야 이어진다",
+        "finisherStep": 3,
+        "windowTicks": 48,
+        "damageMul": 2.4,
+        "knockbackMul": 2.2,
+        "rangeMul": 1.15,
+        "arcMul": 1.35,
+        "cooldownMul": 1.7,
+        "hitstopTicks": 6
+      }
     },
     "pistol": {
       "ammoMax": 60,
