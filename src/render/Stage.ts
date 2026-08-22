@@ -28,6 +28,10 @@ const HIT_FLASH_MS = 240;
 const HIT_FLASH_HZ = 26; // 초당 명멸 횟수 (아주 빠르게)
 const WINDUP_TINT = 0x0e2440; // 예비 동작의 옅은 예고 (본 섬광은 종료 4t 전)
 const BURN_TINT = 0x8f3300; // 화상 중
+// 화상 표시 — 발광은 텔레그래프·스태거 색에 가려지므로 불티로 따로 알린다
+const BURN_EMBER_MS = 85; // 적 하나당 불티 생성 간격
+const BURN_EMBER_LIFE_MS = 520;
+const BURN_EMBER_COLORS = [0xff8a2a, 0xffc04a, 0xff5a1a];
 const FIREBALL_COLOR = 0xff7733;
 const GROUND_ITEM_COLOR = 0xe8c76a; // 바닥 각인 — 어둠 속 금색 발광
 const POTION_COLOR = 0xe0384a; // HP 포션 — 붉은 약병
@@ -92,6 +96,8 @@ interface EnemyVisual {
   shieldBaseZ: number;
   /** 방패 균열 (마무리 타를 받아내면 드러난다) */
   shieldCracks?: THREE.Group;
+  /** 다음 화상 불티를 낼 시각 */
+  nextEmberMs: number;
   /** 해머 적중 명멸이 끝나는 시각 */
   hitFlashUntil: number;
   /** 근접 무기 팔 피벗 — 치켜들었다 내리찍는다 */
@@ -698,6 +704,7 @@ export class Stage {
       flashMaterials,
       shieldBaseZ: 0,
       hitFlashUntil: 0,
+      nextEmberMs: 0,
       shieldFlashUntil: 0,
       barrierFlashUntil: 0,
       plate,
@@ -869,6 +876,13 @@ export class Stage {
       else if (enemy.ai === 'windup') emissive = WINDUP_TINT;
       else if (enemy.ai === 'staggered') emissive = STAGGER_COLOR;
       else if (enemy.burnTicks > 0) emissive = BURN_TINT;
+
+      // 화상 — 몸에서 불티가 계속 피어오른다. 발광색은 다른 상태에 가려지므로
+      // 이것이 "불타는 중"을 알리는 실제 신호다
+      if (enemy.burnTicks > 0 && now >= visual.nextEmberMs) {
+        visual.nextEmberMs = now + BURN_EMBER_MS;
+        this.spawnBurnEmber(enemy.x, enemy.z, def2.radius, def2.height);
+      }
 
       // 해머 적중 명멸 — 무엇보다 우선한다. 켜짐/꺼짐을 빠르게 교대해 "번쩍번쩍"
       const hitLeft = visual.hitFlashUntil - now;
@@ -1184,6 +1198,31 @@ export class Stage {
       this.scene.add(mesh);
     }
     this.triggerFlash(x, height, z, color, 150 + 60 * (power - 1), 3.2 * power);
+  }
+
+  /** 화상 불티 하나 — 몸 아무 데서나 피어올라 잠깐 떠 있다 사라진다 */
+  private spawnBurnEmber(x: number, z: number, radius: number, height: number): void {
+    const size = 0.035 + Math.random() * 0.045;
+    const color = BURN_EMBER_COLORS[Math.floor(Math.random() * BURN_EMBER_COLORS.length)]!;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(size, size, size),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 }),
+    );
+    const angle = Math.random() * Math.PI * 2;
+    const r = radius * (0.2 + Math.random() * 0.8);
+    this.particles.push({
+      mesh,
+      ox: x + Math.cos(angle) * r,
+      oy: height * (0.15 + Math.random() * 0.75),
+      oz: z + Math.sin(angle) * r,
+      vx: (Math.random() - 0.5) * 0.35,
+      vy: 0.8 + Math.random() * 0.9, // 위로 천천히
+      vz: (Math.random() - 0.5) * 0.35,
+      bornMs: performance.now(),
+      lifeMs: BURN_EMBER_LIFE_MS,
+      gravity: -0.6, // 살짝 가속해 올라간다
+    });
+    this.scene.add(mesh);
   }
 
   /** 해머 적중 — 몸 전체가 아주 빠르게 명멸한다 */
