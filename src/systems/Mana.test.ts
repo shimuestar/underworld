@@ -119,47 +119,25 @@ describe('리셋과 소실', () => {
   });
 });
 
-describe('전투 종료 휘발', () => {
-  it('활성 적 0 → combatExitTicks 후 매 틱 decayPerTick 감소', () => {
+describe('전투 종료 휘발 — 폐지 (2026-08)', () => {
+  it('전투가 끝나도 마나가 줄지 않는다', () => {
     world.mana.value = 50;
-    for (let i = 0; i < balance.mana.combatExitTicks; i++) Mana.tick(world, DT);
-    expect(world.mana.value).toBeCloseTo(50 - balance.mana.decayPerTick); // 임계 도달 틱부터 감소
-    Mana.tick(world, DT);
-    expect(world.mana.value).toBeCloseTo(50 - 2 * balance.mana.decayPerTick);
+    for (let i = 0; i < balance.mana.combatExitTicks + 600; i++) Mana.tick(world, DT);
+    expect(world.mana.value).toBeGreaterThanOrEqual(50); // 오히려 자동 회복으로 는다
   });
 
-  it('재교전 시 휘발 즉시 중단, 마나는 초기화되지 않는다', () => {
-    world.mana.value = 50;
-    for (let i = 0; i < balance.mana.combatExitTicks + 10; i++) Mana.tick(world, DT);
-    const remaining = world.mana.value;
-    expect(remaining).toBeLessThan(50);
-
-    world.enemies.push(chaseEnemy()); // 재교전
-    Mana.tick(world, DT);
-    expect(world.mana.value).toBeCloseTo(remaining);
-    expect(world.mana.outOfCombatTicks).toBe(0);
-  });
-
-  it('전투 중에는 휘발하지 않는다', () => {
-    world.mana.value = 50;
+  it('전투 종료 이벤트는 그대로 발행된다 (다른 시스템이 쓴다)', () => {
+    const events: unknown[] = [];
+    world.events.on('combat_exited', (payload) => events.push(payload));
     world.enemies.push(chaseEnemy());
-    for (let i = 0; i < 300; i++) Mana.tick(world, DT);
-    expect(world.mana.value).toBe(50);
+    Mana.tick(world, DT);
+    world.enemies[0]!.alive = false;
+    for (let i = 0; i < balance.mana.combatExitTicks + 2; i++) Mana.tick(world, DT);
+    expect(events).toHaveLength(1);
   });
 
-  it('idle 적만 있으면 전투로 치지 않는다', () => {
-    world.mana.value = 50;
-    const enemy = chaseEnemy();
-    enemy.ai = 'idle';
-    world.enemies.push(enemy);
-    for (let i = 0; i < balance.mana.combatExitTicks + 5; i++) Mana.tick(world, DT);
-    expect(world.mana.value).toBeLessThan(50);
-  });
-
-  it('휘발은 기본 충전 상한(regenCap)에서 멈춘다', () => {
-    world.mana.value = 50;
-    for (let i = 0; i < 2000; i++) Mana.tick(world, DT);
-    expect(world.mana.value).toBeCloseTo(balance.mana.regenCap);
+  it('decayPerTick 을 되살리면 휘발도 되살아난다 (설정으로만 꺼둔 상태)', () => {
+    expect(balance.mana.decayPerTick).toBe(0);
   });
 });
 
@@ -175,10 +153,10 @@ describe('기본 충전', () => {
     expect(world.mana.value).toBeCloseTo(before + 60 * balance.mana.regenPerTick);
   });
 
-  it('자동 회복은 regenCap을 넘지 않는다', () => {
-    world.mana.value = balance.mana.regenCap - 0.01;
-    world.enemies.push(chaseEnemy()); // 휘발 없이 회복만 보기
+  it('자동 회복은 최대치까지 찬다 (상한 폐지)', () => {
+    expect(balance.mana.regenCap).toBe(balance.mana.max);
+    world.mana.value = balance.mana.max - 0.01;
     for (let i = 0; i < 600; i++) Mana.tick(world, DT);
-    expect(world.mana.value).toBe(balance.mana.regenCap);
+    expect(world.mana.value).toBe(balance.mana.max);
   });
 });

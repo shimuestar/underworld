@@ -26,6 +26,17 @@ export function rollDrops(world: World, enemyType: string, x: number, z: number)
     world.events.emit('potion_dropped', { x, z });
   }
 
+  if (Math.random() < cfg.manaPotion.dropChance || (def.boss && cfg.potion.bossAlways)) {
+    const angle = Math.random() * Math.PI * 2;
+    world.groundItems.push({
+      id: nextPickupId++,
+      kind: 'mana',
+      x: x + Math.cos(angle) * 0.45,
+      z: z + Math.sin(angle) * 0.45,
+    });
+    world.events.emit('mana_potion_dropped', { x, z });
+  }
+
   if (Math.random() < cfg.gold.dropChance || def.boss) {
     const span = cfg.gold.max - cfg.gold.min;
     let amount = cfg.gold.min + Math.round(Math.random() * span);
@@ -48,6 +59,13 @@ function restHeight(kind: string): number {
   return kind === 'gold' ? 0.12 : 0.55;
 }
 
+/** 이 아이템을 지금 주울 이유가 있는가 (가득 차 있으면 남겨둔다) */
+function wants(world: World, kind: string): boolean {
+  if (kind === 'potion') return world.player.health < balance.player.healthMax;
+  if (kind === 'mana') return world.mana.value < balance.mana.max;
+  return true;
+}
+
 /** 자석 흡수 — 반경에 들면 공중으로 떠올라 가속하며 몸으로 빨려든다.
  *  한 번 걸린 아이템은 플레이어가 멀어져도 계속 따라온다 */
 export function tick(world: World, dt: number): void {
@@ -59,13 +77,18 @@ export function tick(world: World, dt: number): void {
 
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
     const item = world.groundItems[i]!;
-    if (item.kind !== 'potion' && item.kind !== 'gold') continue; // 각인은 Sigils
+    if (item.kind === 'sigil') continue; // 각인은 Sigils 담당
 
-    // 체력이 가득이면 포션은 걸리지 않는다 — 필요할 때 오라고 남겨둔다
-    if (item.kind === 'potion' && !item.magnet && p.health >= balance.player.healthMax) continue;
+    // 이미 가득이면 걸리지 않는다 — 필요할 때 오라고 남겨둔다
+    if (!item.magnet && !wants(world, item.kind)) continue;
 
     if (!item.magnet) {
-      const radius = item.kind === 'gold' ? cfg.gold.magnetRadius : cfg.potion.magnetRadius;
+      const radius =
+        item.kind === 'gold'
+          ? cfg.gold.magnetRadius
+          : item.kind === 'mana'
+            ? cfg.manaPotion.magnetRadius
+            : cfg.potion.magnetRadius;
       if (Math.hypot(p.x - item.x, p.z - item.z) > radius) continue;
       item.magnet = true;
       item.y = restHeight(item.kind) + mag.popUp; // 살짝 튀어오르며 출발
@@ -92,6 +115,16 @@ export function tick(world: World, dt: number): void {
       const before = p.health;
       p.health = Math.min(balance.player.healthMax, p.health + cfg.potion.healAmount);
       world.events.emit('potion_picked', { healed: p.health - before, health: p.health });
+    } else if (item.kind === 'mana') {
+      const before = world.mana.value;
+      world.mana.value = Math.min(
+        balance.mana.max,
+        world.mana.value + cfg.manaPotion.restoreAmount,
+      );
+      world.events.emit('mana_potion_picked', {
+        restored: world.mana.value - before,
+        mana: world.mana.value,
+      });
     } else {
       world.gold += item.amount ?? 0;
       world.events.emit('gold_picked', { amount: item.amount ?? 0, total: world.gold });

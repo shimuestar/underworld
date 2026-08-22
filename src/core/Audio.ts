@@ -39,6 +39,7 @@ export type SoundName =
   | 'enemy_whiff'
   | 'shield_break'
   | 'pickup_potion'
+  | 'pickup_mana'
   | 'pickup_gold'
   | 'weapon_switch'
   | 'hammer_swing'
@@ -275,6 +276,13 @@ export class GameAudio {
         this.tone(523, 0.2, 'sine', 0.45, 0.05);
         this.tone(659, 0.3, 'sine', 0.4, 0.1);
         this.tone(784, 0.35, 'triangle', 0.25, 0.14);
+        break;
+      case 'pickup_mana':
+        // 마나 회복 — 차가운 상승 배음 (회복과 구분되는 푸른 음색)
+        this.tone(523, 0.2, 'triangle', 0.4);
+        this.tone(784, 0.24, 'sine', 0.4, 0.05);
+        this.tone(1046, 0.34, 'sine', 0.32, 0.1);
+        this.tone(1568, 0.3, 'triangle', 0.16, 0.14);
         break;
       case 'pickup_gold':
         // 동전 — 짧고 밝은 금속 딸랑

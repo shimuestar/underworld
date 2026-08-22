@@ -73,6 +73,12 @@ describe('처치 드랍', () => {
     expect(world.groundItems).toHaveLength(0);
   });
 
+  it('마나 물약도 함께 떨어진다', () => {
+    fixRandom(0.01);
+    Pickups.rollDrops(world, 'goblin_runner', 12, 10);
+    expect(world.groundItems.map((i) => i.kind)).toContain('mana');
+  });
+
   it('보스는 확률과 무관하게 포션 확정 + 골드 ×배율', () => {
     fixRandom(0.99);
     Pickups.rollDrops(world, 'goblin_chieftain', 12, 10);
@@ -167,5 +173,28 @@ describe('경험치', () => {
     expect(enemyDef('goblin_chieftain').xp).toBeGreaterThan(enemyDef('warden').xp);
     expect(enemyDef('warden').xp).toBeGreaterThan(enemyDef('goblin_spear').xp);
     expect(enemyDef('goblin_spear').xp).toBeGreaterThan(enemyDef('goblin_runner').xp);
+  });
+});
+
+describe('마나 물약', () => {
+  it('마나가 가득이면 걸리지 않고, 부족하면 날아와 회복시킨다', () => {
+    world.mana.value = balance.mana.max;
+    world.groundItems.push({ id: 1, kind: 'mana', x: 10.5, z: 10 });
+    Pickups.tick(world, DT);
+    expect(world.groundItems[0]!.magnet).toBeUndefined(); // 가득하면 남겨둔다
+
+    world.mana.value = 10;
+    const events: unknown[] = [];
+    world.events.on('mana_potion_picked', (payload) => events.push(payload));
+    for (let i = 0; i < 60 && world.groundItems.length > 0; i++) Pickups.tick(world, DT);
+    expect(world.mana.value).toBe(10 + cfg.manaPotion.restoreAmount);
+    expect(events[0]).toMatchObject({ restored: cfg.manaPotion.restoreAmount });
+  });
+
+  it('최대치를 넘지 않는다', () => {
+    world.mana.value = balance.mana.max - 5;
+    world.groundItems.push({ id: 1, kind: 'mana', x: 10.5, z: 10 });
+    for (let i = 0; i < 60 && world.groundItems.length > 0; i++) Pickups.tick(world, DT);
+    expect(world.mana.value).toBe(balance.mana.max);
   });
 });

@@ -90,10 +90,11 @@
       "bayonetMelee": 3.6,
       "weaponKill": 0
     },
+    "_regenNote": "2026-08: 자동 회복 상한과 전투 후 휘발 폐지 — 마나는 최대치까지 차고 유지된다. decayPerTick을 0보다 크게 하면 휘발이 되살아난다",
     "combatExitTicks": 90,
-    "decayPerTick": 1.2,
+    "decayPerTick": 0,
     "regenPerTick": 0.02,
-    "regenCap": 30,
+    "regenCap": 100,
     "heartSigilBonus": 0.6
   },
 
@@ -185,6 +186,11 @@
       "dropChance": 0.18,
       "bossAlways": true,
       "healAmount": 25,
+      "magnetRadius": 3.2
+    },
+    "manaPotion": {
+      "dropChance": 0.16,
+      "restoreAmount": 35,
       "magnetRadius": 3.2
     },
     "gold": {

@@ -5,9 +5,9 @@
 //
 // 획득: 완벽 패링 / 일반 패링 / 처형 / 근접 처치 (전부 연쇄 배율 적용)
 // 연쇄: incrementOn(완벽 패링·반사)에만 상승, 일반 패링은 유지, resetOn(피격·실패·시전)에 리셋
-// 기본 충전: regenCap까지는 시간 경과로 천천히 자동 회복 (소형 마법 1회분 보장)
-// 휘발: 활성 적 0 + combatExitTicks 경과 → regenCap 초과분만 매 틱 decayPerTick 감소.
-//       재교전 시 즉시 중단. 실패: 축적 마나 절반 소실
+// 기본 충전: 시간 경과로 천천히 자동 회복 (2026-08: 상한 regenCap 폐지 — 최대치까지 찬다)
+// 휘발: decayPerTick 0 이면 비활성 (2026-08 폐지). 값을 되살리면 regenCap 초과분이 다시 증발한다.
+//       실패: 축적 마나 절반 소실
 
 import { balance } from '../core/Balance';
 import type { World } from '../core/World';
@@ -98,7 +98,7 @@ export function init(world: World): void {
 export function tick(world: World, _dt: number): void {
   const mana = world.mana;
 
-  // 기본 충전 — regenCap까지 자동 회복 (전투 여부 무관)
+  // 기본 충전 — regenCap(현재 최대치)까지 자동 회복 (전투 여부 무관)
   if (mana.value < balance.mana.regenCap) {
     mana.value = Math.min(balance.mana.regenCap, mana.value + balance.mana.regenPerTick);
   }
@@ -118,7 +118,11 @@ export function tick(world: World, _dt: number): void {
     world.events.emit('combat_exited');
   }
   // 휘발은 기본 충전 상한 초과분(전투에서 번 마나)에만 적용
-  if (mana.outOfCombatTicks >= balance.mana.combatExitTicks && mana.value > balance.mana.regenCap) {
+  if (
+    balance.mana.decayPerTick > 0 &&
+    mana.outOfCombatTicks >= balance.mana.combatExitTicks &&
+    mana.value > balance.mana.regenCap
+  ) {
     const amount = Math.min(mana.value - balance.mana.regenCap, balance.mana.decayPerTick);
     mana.value -= amount;
     world.events.emit('mana_decayed', { amount, wasted: true });

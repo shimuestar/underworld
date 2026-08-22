@@ -234,6 +234,8 @@ for (const name of [
   'sigil_dropped',
   'potion_dropped',
   'potion_picked',
+  'mana_potion_dropped',
+  'mana_potion_picked',
   'gold_dropped',
   'gold_picked',
   'xp_gained',
@@ -417,6 +419,11 @@ events.on('potion_picked', (payload) => {
   const info = payload as { healed: number; health: number };
   audio.play('pickup_potion');
   showReaction(`+${Math.round(info.healed)} HP`, 900);
+});
+events.on('mana_potion_picked', (payload) => {
+  const info = payload as { restored: number };
+  audio.play('pickup_mana');
+  showReaction(`+${Math.round(info.restored)} 마나`, 900);
 });
 events.on('gold_picked', () => audio.play('pickup_gold'));
 const PARRY_SPARK_COLOR = 0xbfe0ff; // 패링은 청백색 (텔레그래프 청색 계열)

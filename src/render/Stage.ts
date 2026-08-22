@@ -31,6 +31,7 @@ const BURN_TINT = 0x8f3300; // 화상 중
 const FIREBALL_COLOR = 0xff7733;
 const GROUND_ITEM_COLOR = 0xe8c76a; // 바닥 각인 — 어둠 속 금색 발광
 const POTION_COLOR = 0xe0384a; // HP 포션 — 붉은 약병
+const MANA_POTION_COLOR = 0x3a7ce0; // 마나 물약 — 푸른 약병
 const POTION_GLASS = 0xbfe6ff;
 const GOLD_COLOR = 0xffcc3a; // 골드 더미
 
@@ -1255,16 +1256,13 @@ export class Stage {
   }
 
   /** 바닥 아이템 비주얼 — 각인(팔면체 보석) / 포션(붉은 약병) / 골드(낮은 더미) */
-  private makeGroundItem(kind: 'sigil' | 'potion' | 'gold'): THREE.Group {
+  private makeGroundItem(kind: 'sigil' | 'potion' | 'mana' | 'gold'): THREE.Group {
     const group = new THREE.Group();
-    if (kind === 'potion') {
+    if (kind === 'potion' || kind === 'mana') {
+      const color = kind === 'mana' ? MANA_POTION_COLOR : POTION_COLOR;
       const body = new THREE.Mesh(
         new THREE.CylinderGeometry(0.11, 0.13, 0.24, 8),
-        new THREE.MeshLambertMaterial({
-          color: POTION_COLOR,
-          emissive: POTION_COLOR,
-          emissiveIntensity: 0.5,
-        }),
+        new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.5 }),
       );
       body.name = 'gem';
       const neck = new THREE.Mesh(
@@ -1274,7 +1272,7 @@ export class Stage {
       neck.position.y = 0.16;
       body.add(neck);
       group.add(body);
-      group.add(new THREE.PointLight(POTION_COLOR, 0.8, 4.5, 0));
+      group.add(new THREE.PointLight(color, 0.8, 4.5, 0));
     } else if (kind === 'gold') {
       const pile = new THREE.Mesh(
         new THREE.CylinderGeometry(0.02, 0.17, 0.12, 7),
