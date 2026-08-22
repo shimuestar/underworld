@@ -319,6 +319,60 @@ describe('피격 밀림', () => {
   });
 });
 
+describe('근접 히트박스 방향 판정', () => {
+  const spearArc = enemyDef('goblin_spear').attack.arcDeg!;
+
+  /** 예비동작 진입 후 플레이어를 (x,z)로 옮기고 타격까지 진행 */
+  function attackFrom(x: number, z: number): World {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(13, 10)); // 플레이어(10,10) 동쪽 3.0
+    tickUntil(world, 'windup'); // 이 시점에 적의 방향이 고정된다
+    world.player.x = x;
+    world.player.z = z;
+    tickUntil(world, 'recover');
+    return world;
+  }
+
+  it('정면에 서 있으면 맞는다', () => {
+    const world = attackFrom(10, 10);
+    expect(world.player.health).toBeLessThan(balance.player.healthMax);
+  });
+
+  it('옆으로 비키면 같은 거리라도 빗나간다 (사거리 안이어도)', () => {
+    // 적(13,10)에서 거리 3.0을 유지한 채 90도 옆 — 예전엔 거리만 봐서 맞았다
+    const world = attackFrom(13, 13);
+    const dist = Math.hypot(world.player.x - 13, world.player.z - 13 + 3);
+    expect(dist).toBeLessThan(enemyDef('goblin_spear').attackRange); // 사거리 안이다
+    expect(world.player.health).toBe(balance.player.healthMax); // 그래도 안 맞는다
+    expect(world.enemies[0]!.whiffed).toBe(true); // 헛창 경직으로 이어진다
+  });
+
+  it('등 뒤로 돌아가면 빗나간다', () => {
+    const world = attackFrom(15, 10); // 적 반대편
+    expect(world.player.health).toBe(balance.player.healthMax);
+  });
+
+  it('찌르기 호는 좁고 손톱 호는 넓다', () => {
+    expect(spearArc).toBeLessThan(enemyDef('goblin_runner').attack.arcDeg!);
+    expect(spearArc).toBeLessThanOrEqual(60);
+  });
+
+  it('빗나간 공격은 패링 대상도 아니다 (판정 일관성)', () => {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(13, 10));
+    tickUntil(world, 'windup');
+    world.player.x = 13; // 옆으로 비킴
+    world.player.z = 13;
+    tickUntil(world, 'active_perfect');
+    for (let i = 0; i < 12; i++) Enemies.tick(world, DT);
+
+    const results: unknown[] = [];
+    world.events.on('parry_attempt', (payload) => results.push(payload));
+    pressReaction(world);
+    expect(results).toHaveLength(0);
+  });
+});
+
 describe('창병 헛창 경직', () => {
   const spearAttack = enemyDef('goblin_spear').attack;
 

@@ -6,6 +6,8 @@ export interface EnemyAttackDef {
   type: string;
   windupTicks: number;
   recoverTicks: number;
+  /** 유효 전방 호(도). 없으면 각 제한 없음. 찌르기는 좁고 후려치기는 넓다 */
+  arcDeg?: number;
   /** 헛쳤을 때의 경직 틱 (없으면 recoverTicks). 그동안 마지막 동작으로 굳는다 */
   whiffRecoverTicks?: number;
   impactRangeMul: number;
@@ -62,6 +64,26 @@ export function currentAttack(
   if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
   if (enemy.phase === 'armored' && def.armoredAttack) return def.armoredAttack;
   return def.attack;
+}
+
+/** 이 근접 공격의 유효 범위(사거리 × impactRangeMul, 전방 arcDeg) 안에 (x,z)가 있는가.
+ *  적은 예비동작에 들어가면 방향을 고정하므로, 옆으로 비키면 빗나간다 */
+export function attackReaches(
+  def: EnemyDef,
+  enemy: { x: number; z: number; yaw: number },
+  attack: EnemyAttackDef,
+  x: number,
+  z: number,
+): boolean {
+  const dx = x - enemy.x;
+  const dz = z - enemy.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist > def.attackRange * attack.impactRangeMul) return false;
+  if (attack.arcDeg === undefined || dist === 0) return true;
+  const facingX = -Math.sin(enemy.yaw);
+  const facingZ = -Math.cos(enemy.yaw);
+  const dot = (facingX * dx + facingZ * dz) / dist;
+  return dot >= Math.cos(((attack.arcDeg / 2) * Math.PI) / 180);
 }
 
 /** (fromX, fromZ)에서 오는 공격이 정면 방패에 막히는가.

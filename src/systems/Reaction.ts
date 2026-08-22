@@ -15,7 +15,7 @@
 //       스태거 중 처형은 즉사가 아니라 executeDamage 타격.
 
 import { balance } from '../core/Balance';
-import { currentAttack, enemyDef } from '../core/Entities';
+import { attackReaches, currentAttack, enemyDef } from '../core/Entities';
 import type { EnemyState, ProjectileState, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
@@ -70,6 +70,8 @@ export function tick(world: World, _dt: number): void {
     const attack = currentAttack(enemyDef(enemy.type), enemy);
 
     if (enemy.ai === 'active_perfect' || enemy.ai === 'active_normal') {
+      // 애초에 나를 향하지 않는 공격은 막을 것도 없다 (옆으로 비켰으면 그냥 빗나간다)
+      if (!attackReaches(enemyDef(enemy.type), enemy, attack, p.x, p.z)) continue;
       // 무기 끝이 가드 안까지 왔는가 — 아직 멀면 그냥 헛손질 (경직 없음)
       const gap = dist - balance.player.radius - (enemy.weaponTipDist ?? 0);
       if (gap <= space.guardDepth && (!parryTarget || gap < parryTarget.gap)) {

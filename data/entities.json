@@ -9,7 +9,7 @@
       "radius": 0.5, "height": 1.6,
       "aggroRange": 16, "attackRange": 2.2,
       "behavior": "charge",
-      "attack": { "type": "contact", "windupTicks": 18, "recoverTicks": 30, "impactRangeMul": 1.3, "parryable": true },
+      "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 18, "recoverTicks": 30, "impactRangeMul": 1.3, "parryable": true },
       "counters": { "pistol": "poor", "rifle": "good", "grenade": "good", "flash": "poor", "melee": "best", "magic": "best", "deflect": "none" },
       "drops": []
     },
@@ -21,7 +21,7 @@
       "aggroRange": 14, "attackRange": 3.6,
       "behavior": "guard_advance",
       "frontalShieldBlocksProjectiles": true, "shieldArcDeg": 120,
-      "attack": { "type": "thrust", "windupTicks": 34, "recoverTicks": 45, "whiffRecoverTicks": 90, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
+      "attack": { "type": "thrust", "arcDeg": 50, "windupTicks": 34, "recoverTicks": 45, "whiffRecoverTicks": 90, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
       "counters": { "pistol": "poor", "rifle": "poor", "grenade": "good", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
       "drops": ["sig_fireball"]
     },
@@ -56,8 +56,8 @@
       "radius": 0.8, "height": 2.4,
       "aggroRange": 18, "attackRange": 3.4,
       "behavior": "boss_two_phase",
-      "attack": { "type": "smash", "windupTicks": 40, "recoverTicks": 45, "impactRangeMul": 1.25, "parryable": true, "telegraph": "blue" },
-      "armoredAttack": { "type": "smash", "windupTicks": 30, "recoverTicks": 40, "impactRangeMul": 1.3, "parryable": false, "telegraph": "red" },
+      "attack": { "type": "smash", "arcDeg": 110, "windupTicks": 40, "recoverTicks": 45, "impactRangeMul": 1.25, "parryable": true, "telegraph": "blue" },
+      "armoredAttack": { "type": "smash", "arcDeg": 120, "windupTicks": 30, "recoverTicks": 40, "impactRangeMul": 1.3, "parryable": false, "telegraph": "red" },
       "rangedAttack": { "type": "projectile", "windupTicks": 36, "recoverTicks": 55, "impactRangeMul": 1, "parryable": false, "deflectable": false, "telegraph": "red", "projectileSpeed": 18, "projectileRadius": 0.45, "projectileKind": "rock", "minRange": 7 },
       "parriesToStagger": 3, "executeDamage": 60, "armorHealth": 120,
       "phases": [

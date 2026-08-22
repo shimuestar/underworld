@@ -9,7 +9,7 @@
 // windup 진입 시 enemy_windup(오디오), 종료 visualLeadTicks 전에 telegraph_flash(섬광).
 
 import { balance } from '../core/Balance';
-import { currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
+import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { playerBlocks, pushPlayer, type EnemyState, type World } from '../core/World';
 
@@ -154,7 +154,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     }
 
     case 'impact': {
-      const connected = dist <= def.attackRange * attack.impactRangeMul && p.iframeTicks <= 0;
+      const connected = attackReaches(def, enemy, attack, p.x, p.z) && p.iframeTicks <= 0;
       if (connected) {
         // 방어(정면) — 칩 데미지만 관통. 피해가 있으므로 연쇄는 여전히 리셋된다
         const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
