@@ -103,10 +103,54 @@ describe('제단 상점', () => {
     expect(world.gold).toBe(100 - shop.ammo.price);
     expect(bought).toHaveLength(1);
 
-    // 상한 근처 — 넘치지 않고 상한에서 멈춘다
+    // 상한 근처 — 넘치지 않고 상한에서 멈춘다 (쿨타임이 지난 뒤)
+    world.tick += shop.cooldownTicks;
     world.weapon.reserve = balance.weapons.pistol.ammoMax - 3;
     expect(Altar.purchase(world, 'ammo')).toBe(true);
     expect(world.weapon.reserve).toBe(balance.weapons.pistol.ammoMax);
+  });
+
+  it('같은 품목은 쿨타임(5분) 동안 다시 못 산다 — 다른 품목은 영향 없다', () => {
+    world.gold = 1000;
+    world.weapon.reserve = 0;
+    world.weapon.grenades = 0;
+    const denied: { reason: string; cooldown: number }[] = [];
+    world.events.on('shop_denied', (payload) =>
+      denied.push(payload as { reason: string; cooldown: number }),
+    );
+
+    expect(shop.cooldownTicks).toBe(300 * 60); // 5분 = 18000틱
+    expect(Altar.purchase(world, 'ammo')).toBe(true);
+
+    // 같은 품목 — 거절, 골드도 그대로
+    const goldAfter = world.gold;
+    expect(Altar.purchase(world, 'ammo')).toBe(false);
+    expect(world.gold).toBe(goldAfter);
+    expect(denied[0]).toMatchObject({ reason: 'cooldown', cooldown: shop.cooldownTicks });
+
+    // 다른 품목은 바로 살 수 있다
+    expect(Altar.purchase(world, 'grenade')).toBe(true);
+
+    // 1틱 모자라면 여전히 거절
+    world.tick += shop.cooldownTicks - 1;
+    expect(Altar.shopState(world, 'ammo').cooldown).toBe(1);
+    expect(Altar.purchase(world, 'ammo')).toBe(false);
+
+    // 딱 맞으면 풀린다
+    world.tick += 1;
+    expect(Altar.shopState(world, 'ammo').cooldown).toBe(0);
+    expect(Altar.purchase(world, 'ammo')).toBe(true);
+  });
+
+  it('쿨타임 거절은 골드·상한 거절보다 우선해 알려준다', () => {
+    world.gold = 1000;
+    world.player.health = 10;
+    expect(Altar.purchase(world, 'heal')).toBe(true);
+    world.gold = 0; // 돈까지 없는 상태
+    const denied: { reason: string }[] = [];
+    world.events.on('shop_denied', (payload) => denied.push(payload as { reason: string }));
+    expect(Altar.purchase(world, 'heal')).toBe(false);
+    expect(denied[0]!.reason).toBe('cooldown');
   });
 
   it('HP·마나·수류탄·배터리도 각각 산다', () => {
@@ -159,6 +203,7 @@ describe('제단 상점', () => {
       max: balance.weapons.grenade.ammoMax,
       full: false,
       poor: true,
+      cooldown: 0,
       canBuy: false,
     });
   });

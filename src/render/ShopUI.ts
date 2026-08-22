@@ -16,6 +16,12 @@ const ROWS: { item: Altar.ShopItem; name: string; unit: string }[] = [
 const UP_KEYS = new Set(['KeyW', 'KeyA', 'ArrowUp', 'ArrowLeft']);
 const DOWN_KEYS = new Set(['KeyS', 'KeyD', 'ArrowDown', 'ArrowRight']);
 
+/** 남은 쿨타임(틱) → m:ss */
+function clock(ticks: number): string {
+  const sec = Math.ceil(ticks / 60);
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+}
+
 export class ShopUI {
   private readonly root: HTMLDivElement;
   open = false;
@@ -121,6 +127,12 @@ export class ShopUI {
         this.selected = i;
         this.rebuild();
       };
+      // 줄 어디를 좌클릭해도 구매 (커서가 그 줄로 옮겨간 뒤 산다)
+      line.style.cursor = 'pointer';
+      line.onclick = () => {
+        this.selected = i;
+        this.buy(row.item);
+      };
 
       const cursor = document.createElement('span');
       cursor.textContent = here ? '▸' : ' ';
@@ -153,16 +165,18 @@ export class ShopUI {
       line.appendChild(price);
 
       const action = document.createElement('span');
-      if (s.full) {
+      if (s.cooldown > 0) {
+        action.textContent = `재입고 ${clock(s.cooldown)}`;
+        action.style.color = '#8a7a4a';
+      } else if (s.full) {
         action.textContent = '가득 참';
         action.style.color = '#555c66';
       } else if (s.poor) {
         action.textContent = '골드 부족';
         action.style.color = '#a05050';
       } else {
-        action.textContent = '구매';
-        action.style.cssText = 'color:#7fbfff;cursor:pointer;';
-        action.onclick = () => this.buy(row.item);
+        action.textContent = here ? '구매 (Enter·클릭)' : '구매';
+        action.style.color = '#7fbfff';
       }
       line.appendChild(action);
 
@@ -170,8 +184,11 @@ export class ShopUI {
     });
 
     const hint = document.createElement('div');
-    hint.textContent = 'WASD·↑↓ 이동   Enter 구매   1~5 바로 구매   Tab 각인 교체   E / Esc 닫기';
-    hint.style.cssText = 'margin-top:16px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;';
+    hint.textContent =
+      'WASD·↑↓ 이동   Enter·좌클릭 구매   1~5 바로 구매   Tab 각인 교체   E / Esc 닫기\n' +
+      '같은 품목은 한 번 사면 5분간 재입고를 기다려야 한다';
+    hint.style.cssText =
+      'margin-top:16px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;white-space:pre-line;';
     panel.appendChild(hint);
 
     this.root.replaceChildren(panel);

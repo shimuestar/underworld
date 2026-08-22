@@ -68,6 +68,8 @@ export interface ShopState {
   full: boolean;
   /** 골드가 모자란다 */
   poor: boolean;
+  /** 재구매 쿨타임 남은 틱 (0이면 준비됨) */
+  cooldown: number;
   canBuy: boolean;
 }
 
@@ -110,7 +112,8 @@ export function shopState(world: World, item: ShopItem): ShopState {
 
   const full = have >= max;
   const poor = world.gold < price;
-  return { price, amount, have, max, full, poor, canBuy: !full && !poor };
+  const cooldown = Math.max(0, (world.shopReadyTick[item] ?? 0) - world.tick);
+  return { price, amount, have, max, full, poor, cooldown, canBuy: !full && !poor && cooldown === 0 };
 }
 
 /** 구매 시도. 성공하면 true. 실패 사유는 shop_denied 로 알린다 */
@@ -119,8 +122,10 @@ export function purchase(world: World, item: ShopItem): boolean {
   if (!state.canBuy) {
     world.events.emit('shop_denied', {
       item,
-      reason: state.full ? 'full' : 'no_gold',
+      // 쿨타임을 먼저 알린다 — 돈이 있어도 못 사는 이유가 그쪽이므로
+      reason: state.cooldown > 0 ? 'cooldown' : state.full ? 'full' : 'no_gold',
       price: state.price,
+      cooldown: state.cooldown,
       gold: world.gold,
     });
     return false;
@@ -147,11 +152,15 @@ export function purchase(world: World, item: ShopItem): boolean {
       break;
   }
 
+  // 같은 품목은 한동안 다시 못 산다 — 제단 하나에서 물자를 통째로 사 모으지 못하게
+  world.shopReadyTick[item] = world.tick + balance.altar.shop.cooldownTicks;
+
   world.events.emit('shop_purchased', {
     item,
     price: state.price,
     amount: state.amount,
     gold: world.gold,
+    cooldown: balance.altar.shop.cooldownTicks,
   });
   return true;
 }

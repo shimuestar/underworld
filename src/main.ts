@@ -623,12 +623,16 @@ events.on('shop_purchased', (payload) => {
   showReaction(`${SHOP_LABEL[buy.item] ?? buy.item} +${buy.amount}  (◆ ${buy.price})`, 1200);
 });
 events.on('shop_denied', (payload) => {
-  const deny = payload as { item: string; reason: string; price: number };
+  const deny = payload as { item: string; reason: string; price: number; cooldown: number };
   audio.play('shop_deny');
+  const label = SHOP_LABEL[deny.item] ?? deny.item;
+  const sec = Math.ceil(deny.cooldown / balance.loop.tickRate);
   showReaction(
-    deny.reason === 'full'
-      ? `${SHOP_LABEL[deny.item] ?? deny.item} — 이미 가득 찼다`
-      : `골드 부족 — ◆ ${deny.price} 필요`,
+    deny.reason === 'cooldown'
+      ? `${label} — 재입고까지 ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
+      : deny.reason === 'full'
+        ? `${label} — 이미 가득 찼다`
+        : `골드 부족 — ◆ ${deny.price} 필요`,
     1400,
   );
 });
