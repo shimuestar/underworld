@@ -234,9 +234,9 @@ export class HandModel {
   }
 }
 
-// 해머 대기(치켜든) 각도와 내리침 호 크기
-const HAMMER_REST_ROT = -1.35;
-const HAMMER_SMASH_ARC = 2.6; // -1.35 → +1.25 (머리 위에서 바닥까지)
+// 해머 대기(치켜든) 각도와 내리침 호 크기 (+x 회전 = 무기 끝이 위로)
+const HAMMER_REST_ROT = 1.35; // 헤드가 머리 위
+const HAMMER_SMASH_ARC = -2.5; // +1.35 → -1.15 (머리 위에서 정면 아래로)
 
 // 포즈 정의 (카메라 로컬 좌표)
 const REST_RIGHT = { pos: new THREE.Vector3(0.16, -0.14, -0.5), rotX: 0.06 };
