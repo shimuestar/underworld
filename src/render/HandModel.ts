@@ -231,14 +231,25 @@ export class HandModel {
     }
 
     let swingRot = 0; // 즉발 오프셋 — 보간을 거치지 않아 스냅이 살아있다
+    let center = 0; // 0 = 어깨 너머 대기 / 1 = 화면 중앙으로 모은 타격 자세
     if (now < this.swingUntil) {
       const t = 1 - (this.swingUntil - now) / 170;
       if (t < 0.45) swingRot += HAMMER_SMASH_ARC * easeInCubic(t / 0.45);
       else if (t < 0.7) swingRot += HAMMER_SMASH_ARC;
       else swingRot += HAMMER_SMASH_ARC * (1 - (t - 0.7) / 0.3);
+      // 대기 자세는 오른쪽으로 비껴 들지만, 내리칠 때는 정면으로 모아야
+      // 판정(전방)과 보이는 궤적이 맞는다
+      center = t < 0.6 ? Math.min(1, t / 0.18) : 1 - (t - 0.6) / 0.4;
+      center = Math.max(0, Math.min(1, center));
     }
 
     this.rightArm.position.y += (targetY - this.rightArm.position.y) * 0.25;
+    this.rightArm.position.x =
+      REST_RIGHT.pos.x + (SMASH_RIGHT.x - REST_RIGHT.pos.x) * center;
+    this.rightArm.position.z =
+      REST_RIGHT.pos.z + (SMASH_RIGHT.z - REST_RIGHT.pos.z) * center;
+    this.rightArm.rotation.y = REST_RIGHT.rotY * (1 - center);
+    this.rightArm.rotation.z = REST_RIGHT.rotZ * (1 - center);
     this.baseRotX += (targetRotX - this.baseRotX) * 0.35;
     this.rightArm.rotation.x = this.baseRotX + swingRot;
 
@@ -363,8 +374,11 @@ const REST_RIGHT = {
   rotY: -0.35,
   rotZ: 0.5,
 };
+/** 내리치는 순간 팔이 모이는 위치 — 화면 중앙 살짝 오른쪽 */
+const SMASH_RIGHT = new THREE.Vector3(0.1, -0.24, -0.46);
 // 대기: 화면 왼쪽 아래 밖. 가드: 팔뚝이 화면을 가로로 가로막는다 (rotY로 눕힘, 주먹이 오른쪽)
-// 왼팔 대기: 오른팔을 좌우 반전한 위치에서 총을 들고 있다 (화면 안)
-const REST_LEFT = { pos: new THREE.Vector3(-0.17, -0.15, -0.5), rotX: 0.06, rotY: 0.05, rotZ: 0 };
+// 왼팔 대기: 총을 든 손. 각도는 총열이 화면 중앙(조준점)으로 수렴하도록 맞췄다 —
+// 실측으로 좌 2.9°·상 3.4° 어긋나 있던 것을 보정한 값
+const REST_LEFT = { pos: new THREE.Vector3(-0.17, -0.15, -0.5), rotX: 0.008, rotY: -0.013, rotZ: 0 };
 // 가드 높이: 조준점(화면 중앙)을 가리지 않도록 하단에 배치 — 시야 확보 피드백
 const GUARD_LEFT = { pos: new THREE.Vector3(0.02, -0.24, -0.44), rotX: 0.12, rotY: -1.3, rotZ: -0.3 };
