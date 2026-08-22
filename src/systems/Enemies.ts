@@ -11,7 +11,7 @@
 import { balance } from '../core/Balance';
 import { currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { playerBlocks, type EnemyState, type World } from '../core/World';
+import { playerBlocks, pushPlayer, type EnemyState, type World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -149,6 +149,12 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         const damage = blocked ? def.damage * balance.block.chipDamageRatio : def.damage;
         p.health -= damage;
         if (enemy.parryStreak !== undefined) enemy.parryStreak = 0; // 연속 패링 끊김
+
+        // 뒤로 밀림 — 무기가 무거울수록 크게. 방어 중이면 버티므로 1/3
+        const kb = balance.playerKnockback as unknown as Record<string, number>;
+        const push = (kb[attack.type] ?? kb['contact']!) * (blocked ? kb['blockedMul']! : 1);
+        pushPlayer(p, p.x - enemy.x, p.z - enemy.z, push, balance.playerKnockback.ticks);
+
         if (blocked) world.events.emit('block_hit', { amount: damage, kind: 'melee' });
         world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
         if (p.health <= 0) {

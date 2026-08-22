@@ -32,6 +32,10 @@ export interface PlayerState {
   blocking: boolean;
   /** 우클릭을 누르고 있는 누적 틱 — tapThreshold 이내에 떼면 패링 */
   reactionHeldTicks: number;
+  /** 피격 밀림 잔여 틱 + 틱당 밀림량 (PlayerMove가 소비) */
+  kbTicks?: number;
+  kbX?: number;
+  kbZ?: number;
 }
 
 export interface SigilState {
@@ -202,6 +206,22 @@ export interface EnemyState {
   kbTicks?: number;
   kbX?: number;
   kbZ?: number;
+}
+
+/** 피격 밀림 시작 — (dirX,dirZ) 방향으로 distance 만큼 ticks 동안 밀린다.
+ *  balance는 호출하는 시스템이 읽어 넘긴다 (World는 데이터에 의존하지 않는다) */
+export function pushPlayer(
+  player: PlayerState,
+  dirX: number,
+  dirZ: number,
+  distance: number,
+  ticks: number,
+): void {
+  const len = Math.hypot(dirX, dirZ);
+  if (len === 0 || distance <= 0 || ticks <= 0) return;
+  player.kbTicks = ticks;
+  player.kbX = (dirX / len) * (distance / ticks);
+  player.kbZ = (dirZ / len) * (distance / ticks);
 }
 
 /** (sourceX, sourceZ)에서 오는 공격을 방어 중인가 — 정면 arcDeg 안일 때만 */

@@ -44,6 +44,18 @@
     "pullbackRatio": 0.3
   },
 
+  "playerKnockback": {
+    "_comment": "피격 시 뒤로 밀리는 거리(m). 공격 종류별로 체감이 다르다. 방어 중에는 blockedMul 배",
+    "ticks": 8,
+    "blockedMul": 0.33,
+    "arrow": 0.35,
+    "contact": 0.8,
+    "thrust": 1.6,
+    "smash": 2.0,
+    "rock": 1.8,
+    "magic": 2.8
+  },
+
   "block": {
     "chipDamageRatio": 0.3,
     "chipRatioByKind": { "arrow": 0 },

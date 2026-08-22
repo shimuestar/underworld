@@ -8,6 +8,7 @@ import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Enemies from './Enemies';
+import * as PlayerMove from './PlayerMove';
 import * as Projectiles from './Projectiles';
 import * as Reaction from './Reaction';
 import * as Sigils from './Sigils';
@@ -193,6 +194,75 @@ describe('공격 상태 머신 타이밍 (goblin_spear: windup 34t)', () => {
     world.player.iframeTicks = 3;
     Enemies.tick(world, DT);
     expect(world.player.health).toBe(balance.player.healthMax);
+  });
+});
+
+describe('피격 밀림', () => {
+  const kb = balance.playerKnockback;
+
+  /** 밀림이 끝날 때까지 PlayerMove만 돌려 이동 거리를 잰다 (입력 없음) */
+  function settle(world: World): number {
+    const x0 = world.player.x;
+    const z0 = world.player.z;
+    for (let i = 0; i < kb.ticks + 2; i++) PlayerMove.tick(world, DT);
+    return Math.hypot(world.player.x - x0, world.player.z - z0);
+  }
+
+  function spearHit(blocking: boolean): number {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(12, 10)); // 플레이어(10,10) 동쪽
+    world.player.yaw = -Math.PI / 2; // 적을 바라봄 (정면 방어 성립)
+    world.player.blocking = blocking;
+    tickUntil(world, 'impact');
+    Enemies.tick(world, DT); // 타격 적용 → 밀림 시작
+    world.player.blocking = false; // 이동 감속 페널티는 배제하고 밀림만 측정
+    return settle(world);
+  }
+
+  function arrowHit(blocking: boolean): number {
+    const world = makeWorld();
+    world.player.yaw = -Math.PI / 2;
+    world.player.blocking = blocking;
+    world.projectiles.push({
+      id: 1, owner: 'enemy',
+      x: 12, y: 1.2, z: 10, prevX: 12, prevY: 1.2, prevZ: 10,
+      vx: -20, vy: 0, vz: 0,
+      lifeTicks: 120, damage: 8, burnTicks: 0, burnDamagePerTick: 0,
+      radius: 0.15, kind: 'arrow',
+    });
+    for (let i = 0; i < 10 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    world.player.blocking = false;
+    return settle(world);
+  }
+
+  it('창병 찌르기 — 적 반대 방향으로 thrust 거리만큼 밀린다', () => {
+    expect(spearHit(false)).toBeCloseTo(kb.thrust, 1);
+  });
+
+  it('방어 중이면 1/3만 밀린다', () => {
+    expect(spearHit(true)).toBeCloseTo(kb.thrust * kb.blockedMul, 1);
+  });
+
+  it('화살은 아주 조금, 마법은 많이 — 종류별로 다르다', () => {
+    expect(arrowHit(false)).toBeCloseTo(kb.arrow, 1);
+    expect(kb.arrow).toBeLessThan(kb.contact);
+    expect(kb.contact).toBeLessThan(kb.thrust);
+    expect(kb.thrust).toBeLessThan(kb.magic);
+  });
+
+  it('화살도 방어하면 1/3 (막아도 밀린다)', () => {
+    expect(arrowHit(true)).toBeCloseTo(kb.arrow * kb.blockedMul, 2);
+  });
+
+  it('벽을 등지면 벽에서 멈춘다 (밀림이 벽을 뚫지 않는다)', () => {
+    const world = makeWorld();
+    world.player.x = 5; // 서쪽 벽(x=4) 바로 앞
+    world.player.z = 10;
+    world.enemies.push(makeSpear(8, 10)); // 동쪽에서 찌른다 → 서쪽으로 밀림
+    tickUntil(world, 'impact');
+    Enemies.tick(world, DT);
+    settle(world);
+    expect(world.player.x).toBeGreaterThanOrEqual(4 + balance.player.radius - 0.01);
   });
 });
 

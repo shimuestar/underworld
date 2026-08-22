@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef } from '../core/SigilData';
-import { playerBlocks, type World } from '../core/World';
+import { playerBlocks, pushPlayer, type World } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -195,6 +195,12 @@ function moveProjectiles(world: World, dt: number): void {
             balance.block.chipDamageRatio;
           const damage = blocked ? proj.damage * chipRatio : proj.damage;
           p.health -= damage;
+
+          // 뒤로 밀림 — 날아온 방향으로. 마법이 가장 세고 화살은 거의 없다
+          const kb = balance.playerKnockback as unknown as Record<string, number>;
+          const push = (kb[proj.kind ?? 'arrow'] ?? kb['arrow']!) * (blocked ? kb['blockedMul']! : 1);
+          pushPlayer(p, dirX, dirZ, push, balance.playerKnockback.ticks);
+
           if (blocked) world.events.emit('block_hit', { amount: damage, kind: proj.kind });
           world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
           if (p.health <= 0) {

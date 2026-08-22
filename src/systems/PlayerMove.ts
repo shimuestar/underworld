@@ -16,6 +16,12 @@ export function tick(world: World, dt: number): void {
   p.prevY = p.y;
   p.prevZ = p.z;
 
+  // 피격 밀림 — 입력·경직과 무관하게 먼저 적용된다. 벽에 막히면 거기서 멈춘다
+  if ((p.kbTicks ?? 0) > 0) {
+    p.kbTicks = (p.kbTicks ?? 0) - 1;
+    world.level.slideMove(p, balance.player.radius, p.kbX ?? 0, p.kbZ ?? 0);
+  }
+
   // 경직/회피 대시 중에는 일반 이동 불가 (시선은 위에서 이미 처리 — 계속 돌아본다)
   if (p.stunTicks > 0 || p.dodgeTicks > 0) return;
 
