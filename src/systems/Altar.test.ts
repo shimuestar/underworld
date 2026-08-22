@@ -143,46 +143,68 @@ describe('제단 상점', () => {
     expect(world.gold).toBe(100 - shop.ammo.price);
     expect(bought).toHaveLength(1);
 
-    // 상한 근처 — 넘치지 않고 상한에서 멈춘다 (쿨타임이 지난 뒤)
-    world.tick += shop.cooldownTicks;
+    // 상한 근처 — 넘치지 않고 상한에서 멈춘다 (재고가 남아 바로 살 수 있다)
     world.weapon.reserve = balance.weapons.pistol.ammoMax - 3;
     expect(Altar.purchase(world, 'ammo')).toBe(true);
     expect(world.weapon.reserve).toBe(balance.weapons.pistol.ammoMax);
   });
 
-  it('같은 품목은 쿨타임(5분) 동안 다시 못 산다 — 다른 품목은 영향 없다', () => {
-    world.gold = 1000;
+  it('재고를 다 쓰면 5분 재입고 — 품목별 재고 수가 다르다', () => {
+    world.gold = 10000;
     world.weapon.reserve = 0;
     world.weapon.grenades = 0;
-    const denied: { reason: string; cooldown: number }[] = [];
+    world.lantern.spares = 0;
+    const denied: { item: string; reason: string; cooldown: number }[] = [];
     world.events.on('shop_denied', (payload) =>
-      denied.push(payload as { reason: string; cooldown: number }),
+      denied.push(payload as { item: string; reason: string; cooldown: number }),
     );
 
     expect(shop.cooldownTicks).toBe(300 * 60); // 5분 = 18000틱
-    expect(Altar.purchase(world, 'ammo')).toBe(true);
+    expect([shop.ammo.stock, shop.grenade.stock, shop.battery.stock]).toEqual([3, 2, 1]);
 
-    // 같은 품목 — 거절, 골드도 그대로
+    // 권총탄 3번까지는 산다 (탄약 상한에 걸리지 않게 매번 비워 둔다)
+    for (let i = 0; i < shop.ammo.stock; i++) {
+      world.weapon.reserve = 0;
+      expect(Altar.purchase(world, 'ammo')).toBe(true);
+      expect(Altar.shopState(world, 'ammo').stock).toBe(shop.ammo.stock - 1 - i);
+    }
+    world.weapon.reserve = 0;
     const goldAfter = world.gold;
-    expect(Altar.purchase(world, 'ammo')).toBe(false);
+    expect(Altar.purchase(world, 'ammo')).toBe(false); // 4번째 — 재입고 대기
     expect(world.gold).toBe(goldAfter);
-    expect(denied[0]).toMatchObject({ reason: 'cooldown', cooldown: shop.cooldownTicks });
+    expect(denied[0]).toMatchObject({ item: 'ammo', reason: 'cooldown', cooldown: shop.cooldownTicks });
 
-    // 다른 품목은 바로 살 수 있다
+    // 수류탄은 2번, 배터리는 1번
     expect(Altar.purchase(world, 'grenade')).toBe(true);
-
-    // 1틱 모자라면 여전히 거절
-    world.tick += shop.cooldownTicks - 1;
-    expect(Altar.shopState(world, 'ammo').cooldown).toBe(1);
-    expect(Altar.purchase(world, 'ammo')).toBe(false);
-
-    // 딱 맞으면 풀린다
-    world.tick += 1;
-    expect(Altar.shopState(world, 'ammo').cooldown).toBe(0);
-    expect(Altar.purchase(world, 'ammo')).toBe(true);
+    expect(Altar.purchase(world, 'grenade')).toBe(true);
+    expect(Altar.purchase(world, 'grenade')).toBe(false);
+    expect(Altar.purchase(world, 'battery')).toBe(true);
+    expect(Altar.purchase(world, 'battery')).toBe(false);
   });
 
-  it('쿨타임 거절은 골드·상한 거절보다 우선해 알려준다', () => {
+  it('재입고되면 재고가 가득 찬다 — 1틱 모자라면 아직', () => {
+    world.gold = 10000;
+    for (let i = 0; i < shop.ammo.stock; i++) {
+      world.weapon.reserve = 0;
+      Altar.purchase(world, 'ammo');
+    }
+    world.weapon.reserve = 0;
+    expect(Altar.shopState(world, 'ammo').stock).toBe(0);
+
+    world.tick += shop.cooldownTicks - 1;
+    expect(Altar.shopState(world, 'ammo')).toMatchObject({ stock: 0, cooldown: 1 });
+    expect(Altar.purchase(world, 'ammo')).toBe(false);
+
+    world.tick += 1;
+    expect(Altar.shopState(world, 'ammo')).toMatchObject({
+      stock: shop.ammo.stock, // 하나가 아니라 가득
+      cooldown: 0,
+    });
+    expect(Altar.purchase(world, 'ammo')).toBe(true);
+    expect(Altar.shopState(world, 'ammo').stock).toBe(shop.ammo.stock - 1);
+  });
+
+  it('재입고 대기 거절은 골드·상한 거절보다 우선해 알려준다', () => {
     world.gold = 1000;
     world.player.health = 10;
     expect(Altar.purchase(world, 'heal')).toBe(true);
@@ -244,6 +266,8 @@ describe('제단 상점', () => {
       full: false,
       poor: true,
       cooldown: 0,
+      stock: shop.grenade.stock,
+      stockMax: shop.grenade.stock,
       canBuy: false,
     });
   });

@@ -54,16 +54,18 @@
 
 가격·회복량은 전부 `balance.altar.shop`. 기준은 **처치당 평균 골드 ≈ 3.9** (드랍률 0.65 × 3~9).
 
-| 품목 | 효과 | 가격 | 상한 |
-|---|---|---|---|
-| 체력 회복 | +25 HP | 20 | `player.healthMax` |
-| 마나 회복 | +35 마나 | 15 | `mana.max` |
-| 권총탄 | +20발 | 12 | `weapons.pistol.ammoMax` |
-| 수류탄 | +1개 | 25 | `weapons.grenade.ammoMax` |
-| 예비 배터리 | +1개 | 20 | `altar.shop.battery.sparesMax` |
+| 품목 | 효과 | 가격 | 재고 | 보유 상한 |
+|---|---|---|---|---|
+| 체력 회복 | +25 HP | 20 | 1 | `player.healthMax` |
+| 마나 회복 | +35 마나 | 15 | 1 | `mana.max` |
+| 권총탄 | +20발 | 12 | **3** | `weapons.pistol.ammoMax` |
+| 수류탄 | +1개 | 25 | **2** | `weapons.grenade.ammoMax` |
+| 예비 배터리 | +1개 | 20 | 1 | `altar.shop.battery.sparesMax` |
 
-- **같은 품목 재구매 쿨타임 5분** (`altar.shop.cooldownTicks` = 18000틱). 한 제단에서 물자를
-  통째로 사 모으지 못하게 하는 장치다. 품목별로 따로 돌며, 다른 품목은 영향받지 않는다.
+- **재고 소진 → 5분 재입고** (`altar.shop.cooldownTicks` = 18000틱). 품목별 `stock` 만큼
+  연속으로 살 수 있고, 다 쓰면 타이머가 걸린다. 시간이 지나면 하나가 아니라 **가득** 찬다.
+  품목별로 따로 돌며 다른 품목은 영향받지 않는다. 한 제단에서 물자를 통째로 쓸어 담지
+  못하게 하는 장치다.
   UI가 열려 있는 동안은 시뮬레이션이 멈추므로 **상점에 서서 기다려도 줄지 않는다**.
 - 이미 상한이면 **구매 자체가 막힌다** (`shop_denied { reason: 'full' }`) — 골드를 헛되이 쓰지 않게.
 - 골드가 모자라도 같은 경로로 거절한다 (`reason: 'no_gold'`). 쿨타임 중이면 `'cooldown'` 이

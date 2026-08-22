@@ -621,9 +621,15 @@ const SHOP_LABEL: Record<string, string> = {
   heal: '체력', mana: '마나', ammo: '권총탄', grenade: '수류탄', battery: '배터리',
 };
 events.on('shop_purchased', (payload) => {
-  const buy = payload as { item: string; price: number; amount: number };
+  const buy = payload as {
+    item: string; price: number; amount: number; stock: number; stockMax: number;
+  };
   audio.play('shop_buy');
-  showReaction(`${SHOP_LABEL[buy.item] ?? buy.item} +${buy.amount}  (◆ ${buy.price})`, 1200);
+  const left = buy.stockMax > 1 ? `  재고 ${buy.stock}/${buy.stockMax}` : '';
+  showReaction(
+    `${SHOP_LABEL[buy.item] ?? buy.item} +${buy.amount}  (◆ ${buy.price})${left}`,
+    1200,
+  );
 });
 events.on('shop_denied', (payload) => {
   const deny = payload as { item: string; reason: string; price: number; cooldown: number };

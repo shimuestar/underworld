@@ -305,7 +305,9 @@ export class World {
   /** 보유 골드 — 적 처치 드랍으로 모인다 (사용처는 이후 구역) */
   gold = 0;
 
-  /** 제단 상점 재구매 쿨타임 — 품목별로 "다시 살 수 있게 되는 tick".
+  /** 제단 상점 남은 재고 — 품목별. 비어 있으면 stock 만큼 있는 것으로 본다 */
+  shopStock: Record<string, number> = {};
+  /** 재고가 0이 된 품목이 다시 채워지는 tick.
    *  UI가 열린 동안은 시뮬레이션이 멈추므로 상점에 서서 기다려도 줄지 않는다 */
   shopReadyTick: Record<string, number> = {};
 

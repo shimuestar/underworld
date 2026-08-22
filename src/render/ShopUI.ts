@@ -164,6 +164,12 @@ export class ShopUI {
       price.style.cssText = `width:56px;color:${s.poor ? '#a05050' : '#e8c76a'};`;
       line.appendChild(price);
 
+      // 재고 — 여러 번 살 수 있는 품목만 표시한다 (1개짜리는 군더더기)
+      const stock = document.createElement('span');
+      stock.textContent = s.stockMax > 1 ? `재고 ${s.stock}/${s.stockMax}` : '';
+      stock.style.cssText = `width:66px;color:${s.stock > 0 ? '#8a8f9a' : '#8a7a4a'};`;
+      line.appendChild(stock);
+
       const action = document.createElement('span');
       if (s.cooldown > 0) {
         action.textContent = `재입고 ${clock(s.cooldown)}`;
@@ -175,7 +181,7 @@ export class ShopUI {
         action.textContent = '골드 부족';
         action.style.color = '#a05050';
       } else {
-        action.textContent = here ? '구매 (Enter·클릭)' : '구매';
+        action.textContent = '구매';
         action.style.color = '#7fbfff';
       }
       line.appendChild(action);
@@ -186,7 +192,7 @@ export class ShopUI {
     const hint = document.createElement('div');
     hint.textContent =
       'WASD·↑↓ 이동   Enter·좌클릭 구매   1~5 바로 구매   Tab 각인 교체   E / Esc 닫기\n' +
-      '같은 품목은 한 번 사면 5분간 재입고를 기다려야 한다';
+      '재고를 다 쓰면 5분 뒤에 가득 재입고된다';
     hint.style.cssText =
       'margin-top:16px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;white-space:pre-line;';
     panel.appendChild(hint);

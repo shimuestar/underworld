@@ -83,7 +83,11 @@ export interface ShopState {
   full: boolean;
   /** 골드가 모자란다 */
   poor: boolean;
-  /** 재구매 쿨타임 남은 틱 (0이면 준비됨) */
+  /** 남은 재고 (0이면 재입고 대기) */
+  stock: number;
+  /** 가득 찼을 때의 재고 */
+  stockMax: number;
+  /** 재입고까지 남은 틱 (재고가 있으면 0) */
   cooldown: number;
   canBuy: boolean;
 }
@@ -94,41 +98,50 @@ export function shopState(world: World, item: ShopItem): ShopState {
   const w = world.weapon;
   let price: number;
   let amount: number;
+  let stockMax: number;
   let have: number;
   let max: number;
 
   switch (item) {
     case 'heal':
-      ({ price, amount } = shop.heal);
+      ({ price, amount, stock: stockMax } = shop.heal);
       have = Math.round(p.health);
       max = balance.player.healthMax;
       break;
     case 'mana':
-      ({ price, amount } = shop.mana);
+      ({ price, amount, stock: stockMax } = shop.mana);
       have = Math.round(world.mana.value);
       max = balance.mana.max;
       break;
     case 'ammo':
-      ({ price, amount } = shop.ammo);
+      ({ price, amount, stock: stockMax } = shop.ammo);
       have = w.reserve;
       max = balance.weapons.pistol.ammoMax;
       break;
     case 'grenade':
-      ({ price, amount } = shop.grenade);
+      ({ price, amount, stock: stockMax } = shop.grenade);
       have = w.grenades;
       max = balance.weapons.grenade.ammoMax;
       break;
     case 'battery':
-      ({ price, amount } = shop.battery);
+      ({ price, amount, stock: stockMax } = shop.battery);
       have = world.lantern.spares;
       max = shop.battery.sparesMax;
       break;
   }
 
+  // 재입고 시각이 지났으면 가득 찬 것으로 본다 (여기서 쓰지는 않는다 — 조회는 순수하게)
+  const readyTick = world.shopReadyTick[item] ?? 0;
+  let stock = world.shopStock[item] ?? stockMax;
+  if (stock <= 0 && world.tick >= readyTick) stock = stockMax;
+
   const full = have >= max;
   const poor = world.gold < price;
-  const cooldown = Math.max(0, (world.shopReadyTick[item] ?? 0) - world.tick);
-  return { price, amount, have, max, full, poor, cooldown, canBuy: !full && !poor && cooldown === 0 };
+  const cooldown = stock > 0 ? 0 : Math.max(0, readyTick - world.tick);
+  return {
+    price, amount, have, max, stock, stockMax, full, poor, cooldown,
+    canBuy: !full && !poor && stock > 0,
+  };
 }
 
 /** 구매 시도. 성공하면 true. 실패 사유는 shop_denied 로 알린다 */
@@ -141,6 +154,7 @@ export function purchase(world: World, item: ShopItem): boolean {
       reason: state.cooldown > 0 ? 'cooldown' : state.full ? 'full' : 'no_gold',
       price: state.price,
       cooldown: state.cooldown,
+      stock: state.stock,
       gold: world.gold,
     });
     return false;
@@ -167,15 +181,19 @@ export function purchase(world: World, item: ShopItem): boolean {
       break;
   }
 
-  // 같은 품목은 한동안 다시 못 산다 — 제단 하나에서 물자를 통째로 사 모으지 못하게
-  world.shopReadyTick[item] = world.tick + balance.altar.shop.cooldownTicks;
+  // 재고를 하나 깎고, 다 떨어지면 재입고 타이머를 건다 —
+  // 제단 하나에서 물자를 통째로 쓸어 담지 못하게
+  const left = state.stock - 1;
+  world.shopStock[item] = left;
+  if (left <= 0) world.shopReadyTick[item] = world.tick + balance.altar.shop.cooldownTicks;
 
   world.events.emit('shop_purchased', {
     item,
     price: state.price,
     amount: state.amount,
     gold: world.gold,
-    cooldown: balance.altar.shop.cooldownTicks,
+    stock: left,
+    stockMax: state.stockMax,
   });
   return true;
 }
