@@ -28,6 +28,7 @@
     "failStunTicks": 20,
     "hitstopPerfectTicks": 4,
     "hitstopExecuteTicks": 8,
+    "parryRecoilTicks": 36,
     "hitstopNormalTicks": 2,
     "staggerTicks": 90,
     "dodgeIFrameTicks": 8,
@@ -105,7 +106,7 @@
     "hammer": {
       "_damageNote": "권총(34)의 약 60%",
       "damage": 20,
-      "range": 2.6,
+      "range": 3.1,
       "arcDeg": 100,
       "cooldownTicks": 18,
       "whiffExtraCooldownTicks": 20,

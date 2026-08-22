@@ -111,21 +111,31 @@ export function tick(world: World, _dt: number): void {
         world.events.emit('boss_staggered', { enemyId: enemy.id });
       } else {
         enemy.ai = 'recover';
-        enemy.timer = attack.recoverTicks;
+        enemy.timer = attack.recoverTicks + reaction.parryRecoilTicks;
+        enemy.recoiled = true;
       }
     } else if (perfect) {
       // 완벽 패링 — 적 스태거 → 처형 가능
       enemy.ai = 'staggered';
       enemy.timer = reaction.staggerTicks;
     } else {
-      // 일반 패링 — 공격만 무효 (스태거 없음)
+      // 일반 패링 — 스태거는 없지만 크게 튕겨 후딜이 붙는다 (막기보다 큰 보상)
       enemy.ai = 'recover';
-      enemy.timer = attack.recoverTicks;
+      enemy.timer = attack.recoverTicks + reaction.parryRecoilTicks;
+      enemy.recoiled = true;
     }
     world.events.emit('parry_attempt', {
       result: perfect ? 'perfect' : 'normal',
       chain: 0,
       enemyType: enemy.type,
+    });
+    // 격돌 연출 — 막기와 같은 계열이되 플레이어는 경직되지 않는다 (패링의 보상)
+    world.events.emit('guard_clash', {
+      kind: perfect ? 'parry_perfect' : 'parry_normal',
+      enemyId: enemy.id,
+      enemyType: enemy.type,
+      x: enemy.x,
+      z: enemy.z,
     });
     return;
   }

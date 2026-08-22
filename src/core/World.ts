@@ -208,8 +208,8 @@ export interface EnemyState {
   attackMode?: 'melee' | 'ranged';
   /** 피탄 경직 잔여 틱 — 그동안 발이 묶인다 (공격 진행은 막지 않는다) */
   flinchTicks?: number;
-  /** 방패에 막혀 튕긴 직후인가 — recover 동안 뒤로 젖혀진 채 굳는다 */
-  blockRecoil?: boolean;
+  /** 방패에 막히거나 패링당해 튕긴 직후인가 — recover 동안 뒤로 젖혀진 채 굳는다 */
+  recoiled?: boolean;
   /** 헛친 직후인가 — recover 동안 마지막 동작으로 굳고 무방비가 된다 */
   whiffed?: boolean;
   /** 정면 방패가 부서졌는가 (화염구 명중) — 이후 투사체를 막지 못한다 */

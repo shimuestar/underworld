@@ -893,7 +893,7 @@ export class Stage {
       // 헛친 경직 중에는 마지막(내지른) 자세로 굳는다 — 무방비라는 신호
       const frozenWhiff = enemy.ai === 'recover' && enemy.whiffed === true;
       // 방패에 막혀 튕긴 경직 — 상체가 크게 젖혀진 채 굳는다
-      const recoiled = enemy.ai === 'recover' && enemy.blockRecoil === true;
+      const recoiled = enemy.ai === 'recover' && enemy.recoiled === true;
       const striking =
         enemy.ai === 'active_perfect' ||
         enemy.ai === 'active_normal' ||
@@ -1098,17 +1098,17 @@ export class Stage {
     }
   }
 
-  /** 방패 격돌 — 부딪힌 지점에서 불꽃이 튀고 짧게 번쩍인다 */
-  spawnGuardSparks(x: number, z: number, height: number): void {
+  /** 격돌 — 부딪힌 지점에서 불꽃이 튀고 짧게 번쩍인다 (막기: 주황 / 패링: 청백) */
+  spawnGuardSparks(x: number, z: number, height: number, color = 0xfff0b0, power = 1): void {
     const now = performance.now();
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < Math.round(16 * power); i++) {
       const size = 0.03 + Math.random() * 0.05;
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(size, size, size),
-        new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 1 }),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 }),
       );
       const angle = Math.random() * Math.PI * 2;
-      const speed = 1.8 + Math.random() * 4.5;
+      const speed = (1.8 + Math.random() * 4.5) * power;
       this.particles.push({
         mesh,
         ox: x,
@@ -1123,7 +1123,7 @@ export class Stage {
       });
       this.scene.add(mesh);
     }
-    this.triggerFlash(x, height, z, 0xfff2c0, 150, 3.2);
+    this.triggerFlash(x, height, z, color, 150 + 60 * (power - 1), 3.2 * power);
   }
 
   /** 해머 적중 — 몸 전체가 아주 빠르게 명멸한다 */

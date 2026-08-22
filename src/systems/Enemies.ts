@@ -171,10 +171,11 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           // 방패 격돌 — 양쪽이 잠깐 굳는다. 적이 더 오래 굳어 반격 창이 열린다
           const clash = balance.block;
           p.stunTicks = Math.max(p.stunTicks, clash.clashPlayerStunTicks);
-          enemy.blockRecoil = true;
+          enemy.recoiled = true;
           world.freezeTicks = Math.max(world.freezeTicks, clash.clashHitstopTicks);
           world.events.emit('block_hit', { amount: damage, kind: 'melee' });
           world.events.emit('guard_clash', {
+            kind: 'block',
             enemyId: enemy.id,
             enemyType: enemy.type,
             x: enemy.x,
@@ -193,7 +194,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       enemy.whiffed = !connected && attack.whiffRecoverTicks !== undefined;
       enemy.timer = enemy.whiffed ? attack.whiffRecoverTicks! : attack.recoverTicks;
       // 방패에 막혔으면 튕겨 나가 후딜이 더 붙는다 (기본 후딜에 가산)
-      if (enemy.blockRecoil) enemy.timer += balance.block.clashEnemyRecoilTicks;
+      if (enemy.recoiled) enemy.timer += balance.block.clashEnemyRecoilTicks;
       if (enemy.whiffed) {
         world.events.emit('enemy_whiffed', {
           enemyId: enemy.id,
@@ -209,7 +210,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (enemy.timer <= 0) {
         enemy.ai = 'chase';
         enemy.whiffed = false;
-        enemy.blockRecoil = false;
+        enemy.recoiled = false;
       }
       break;
     }
@@ -408,7 +409,7 @@ function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): v
   enemy.ai = 'windup';
   enemy.timer = attack.windupTicks;
   enemy.whiffed = false;
-  enemy.blockRecoil = false;
+  enemy.recoiled = false;
   enemy.strikeProgress = 0;
   enemy.weaponTipDist = fullReach(enemyDef(enemy.type), attack) * balance.parrySpace.pullbackRatio;
   world.events.emit('enemy_windup', {

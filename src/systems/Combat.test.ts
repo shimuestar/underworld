@@ -319,6 +319,54 @@ describe('피격 밀림', () => {
   });
 });
 
+describe('패링 격돌 — 적만 굳는다', () => {
+  const reaction = balance.reaction;
+
+  /** 창병을 dist 앞에 두고 타격 이동 n틱째에 패링 */
+  function parryAt(dist: number, n: number): World {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(10 + dist, 10));
+    tickUntil(world, 'active_perfect');
+    for (let i = 0; i < n; i++) Enemies.tick(world, DT);
+    pressReaction(world);
+    return world;
+  }
+
+  it('완벽 패링 — 적 스태거, 플레이어는 경직 없음', () => {
+    const world = parryAt(3.5, 10);
+    const enemy = world.enemies[0]!;
+    expect(enemy.ai).toBe('staggered');
+    expect(world.player.stunTicks).toBe(0); // 성공했으니 벌이 없다
+    expect(world.freezeTicks).toBe(reaction.hitstopPerfectTicks);
+  });
+
+  it('일반 패링 — 스태거는 없지만 후딜이 크게 붙고, 플레이어는 멀쩡하다', () => {
+    const world = parryAt(3.5, 6);
+    const enemy = world.enemies[0]!;
+    expect(enemy.ai).toBe('recover');
+    expect(enemy.timer).toBe(
+      enemyDef('goblin_spear').attack.recoverTicks + reaction.parryRecoilTicks,
+    );
+    expect(enemy.recoiled).toBe(true);
+    expect(world.player.stunTicks).toBe(0);
+  });
+
+  it('패링 보상이 막기보다 크다 (패링 반동 > 막기 반동)', () => {
+    expect(reaction.parryRecoilTicks).toBeGreaterThan(balance.block.clashEnemyRecoilTicks);
+  });
+
+  it('격돌 연출 이벤트를 kind와 함께 발행한다', () => {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(13.5, 10));
+    const events: { kind: string }[] = [];
+    world.events.on('guard_clash', (payload) => events.push(payload as { kind: string }));
+    tickUntil(world, 'active_perfect');
+    for (let i = 0; i < 10; i++) Enemies.tick(world, DT);
+    pressReaction(world);
+    expect(events[0]!.kind).toBe('parry_perfect');
+  });
+});
+
 describe('방패 격돌 — 막으면 양쪽이 굳는다', () => {
   const clash = balance.block;
 
@@ -345,7 +393,7 @@ describe('방패 격돌 — 막으면 양쪽이 굳는다', () => {
     const enemy = world.enemies[0]!;
     expect(events).toHaveLength(1);
     expect(world.player.stunTicks).toBe(clash.clashPlayerStunTicks);
-    expect(enemy.blockRecoil).toBe(true);
+    expect(enemy.recoiled).toBe(true);
     expect(enemy.timer).toBe(
       enemyDef('goblin_spear').attack.recoverTicks + clash.clashEnemyRecoilTicks,
     );
@@ -362,7 +410,7 @@ describe('방패 격돌 — 막으면 양쪽이 굳는다', () => {
       Reaction.tick(world, DT);
     }
     expect(world.player.stunTicks).toBe(0);
-    expect(enemy.blockRecoil).toBe(false);
+    expect(enemy.recoiled).toBe(false);
     expect(enemy.ai).not.toBe('recover'); // 다시 움직인다 (붙어 있으면 바로 다음 공격)
   });
 
@@ -374,7 +422,7 @@ describe('방패 격돌 — 막으면 양쪽이 굳는다', () => {
     tickUntil(world, 'impact');
     Enemies.tick(world, DT);
     expect(events).toHaveLength(0);
-    expect(world.enemies[0]!.blockRecoil).toBeFalsy();
+    expect(world.enemies[0]!.recoiled).toBeFalsy();
     expect(world.player.health).toBeLessThan(balance.player.healthMax);
   });
 });

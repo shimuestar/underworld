@@ -409,16 +409,25 @@ events.on('potion_picked', (payload) => {
   showReaction(`+${Math.round(info.healed)} HP`, 900);
 });
 events.on('gold_picked', () => audio.play('pickup_gold'));
+const PARRY_SPARK_COLOR = 0xbfe0ff; // 패링은 청백색 (텔레그래프 청색 계열)
 events.on('guard_clash', (payload) => {
-  const c = payload as { x: number; z: number };
+  const c = payload as { kind: string; x: number; z: number };
+  const parry = c.kind !== 'block';
+  const perfect = c.kind === 'parry_perfect';
   audio.play('guard_clash');
-  stage.triggerCameraKick(0.75, 200);
-  // 플레이어와 적 사이 — 방패가 부딪힌 지점에서 불꽃
+  stage.triggerCameraKick(perfect ? 1.0 : parry ? 0.85 : 0.75, 200);
+  // 플레이어와 적 사이 — 무기가 부딪힌 지점에서 불꽃
   const p2 = world.player;
   const midX = (p2.x + c.x) / 2;
   const midZ = (p2.z + c.z) / 2;
-  stage.spawnGuardSparks(midX, midZ, balance.player.eyeHeight * 0.72);
-  showReaction('막았다! 반격 기회', 800);
+  stage.spawnGuardSparks(
+    midX,
+    midZ,
+    balance.player.eyeHeight * 0.72,
+    parry ? PARRY_SPARK_COLOR : 0xfff0b0,
+    perfect ? 1.6 : parry ? 1.3 : 1,
+  );
+  if (!parry) showReaction('막았다! 반격 기회', 800);
 });
 events.on('enemy_whiffed', () => {
   audio.play('enemy_whiff');
