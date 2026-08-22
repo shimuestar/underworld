@@ -24,7 +24,7 @@ let nextGroundItemId = 1;
 
 function dropAll(world: World, enemyType: string, x: number, z: number): void {
   for (const id of enemyDef(enemyType).drops ?? []) {
-    world.groundItems.push({ id: nextGroundItemId++, sigilId: id, x, z });
+    world.groundItems.push({ id: nextGroundItemId++, kind: 'sigil', sigilId: id, x, z });
     world.events.emit('sigil_dropped', { id });
   }
 }
@@ -57,9 +57,10 @@ export function tick(world: World, _dt: number): void {
   const p = world.player;
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
     const item = world.groundItems[i]!;
+    if (item.kind !== 'sigil') continue; // 포션·골드는 Pickups가 줍는다
     if (Math.hypot(p.x - item.x, p.z - item.z) > balance.sigil.pickupRadius) continue;
     world.groundItems.splice(i, 1);
-    world.sigils.inventory.push(item.sigilId);
+    world.sigils.inventory.push(item.sigilId!);
     world.events.emit('sigil_acquired', { id: item.sigilId });
   }
 }

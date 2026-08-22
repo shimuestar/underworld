@@ -17,6 +17,7 @@ import * as Enemies from './systems/Enemies';
 import * as Weapons from './systems/Weapons';
 import * as Projectiles from './systems/Projectiles';
 import * as Mana from './systems/Mana';
+import * as Pickups from './systems/Pickups';
 import * as Sigils from './systems/Sigils';
 import * as Corruption from './systems/Corruption';
 import * as Altar from './systems/Altar';
@@ -225,6 +226,10 @@ for (const name of [
   'spell_kill',
   'friendly_fire_kill',
   'sigil_dropped',
+  'potion_dropped',
+  'potion_picked',
+  'gold_dropped',
+  'gold_picked',
   'sigil_acquired',
   'sigil_attached',
   'sigil_detached',
@@ -393,6 +398,12 @@ events.on('melee_kill', (payload) => {
   if ((payload as { execution: boolean }).execution) showReaction('처형!');
 });
 events.on('dodge_step', () => showReaction('회피'));
+events.on('potion_picked', (payload) => {
+  const info = payload as { healed: number; health: number };
+  audio.play('pickup_potion');
+  showReaction(`+${Math.round(info.healed)} HP`, 900);
+});
+events.on('gold_picked', () => audio.play('pickup_gold'));
 events.on('sigil_acquired', (payload) => {
   const id = (payload as { id: string }).id;
   showReaction(`각인 획득: ${sigilDef(id).name} — Tab으로 부착`, 3500);
@@ -534,6 +545,7 @@ events.on('corruption_threshold', (payload) => {
 // 상태가 확정된 뒤 판정해야 한다.
 Mana.init(world);
 Sigils.init(world);
+Pickups.init(world);
 Corruption.init(world);
 Altar.init(world);
 const systems = [
@@ -541,6 +553,7 @@ const systems = [
   Enemies.tick,
   Reaction.tick,
   Sigils.tick,
+  Pickups.tick,
   Weapons.tick,
   Projectiles.tick,
   Mana.tick,
@@ -671,6 +684,7 @@ function render(alpha: number): void {
   const hpFill = document.getElementById('status-hp-fill')!;
   hpFill.style.width = `${hpFrac * 100}%`;
   hpFill.style.background = hpFrac > 0.5 ? '#3fae5a' : hpFrac > 0.25 ? '#c9a227' : '#e04444';
+  document.getElementById('status-gold')!.textContent = `◆ ${world.gold}`;
   document.getElementById('slot-hammer')!.className =
     `weapon-slot${wpn.active === 'hammer' ? ' active' : ''}`;
   document.getElementById('slot-grenade')!.className =

@@ -27,6 +27,9 @@ const WINDUP_TINT = 0x0e2440; // 예비 동작의 옅은 예고 (본 섬광은 �
 const BURN_TINT = 0x8f3300; // 화상 중
 const FIREBALL_COLOR = 0xff7733;
 const GROUND_ITEM_COLOR = 0xe8c76a; // 바닥 각인 — 어둠 속 금색 발광
+const POTION_COLOR = 0xe0384a; // HP 포션 — 붉은 약병
+const POTION_GLASS = 0xbfe6ff;
+const GOLD_COLOR = 0xffcc3a; // 골드 더미
 
 // 트레이서 시각 상수 (튜닝값 아님 — 순수 연출)
 const TRACER_COLOR = 0xffe9b8;
@@ -1063,6 +1066,55 @@ export class Stage {
     }
   }
 
+  /** 바닥 아이템 비주얼 — 각인(팔면체 보석) / 포션(붉은 약병) / 골드(낮은 더미) */
+  private makeGroundItem(kind: 'sigil' | 'potion' | 'gold'): THREE.Group {
+    const group = new THREE.Group();
+    if (kind === 'potion') {
+      const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.11, 0.13, 0.24, 8),
+        new THREE.MeshLambertMaterial({
+          color: POTION_COLOR,
+          emissive: POTION_COLOR,
+          emissiveIntensity: 0.5,
+        }),
+      );
+      body.name = 'gem';
+      const neck = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.045, 0.1, 6),
+        new THREE.MeshLambertMaterial({ color: POTION_GLASS }),
+      );
+      neck.position.y = 0.16;
+      body.add(neck);
+      group.add(body);
+      group.add(new THREE.PointLight(POTION_COLOR, 0.8, 4.5, 0));
+    } else if (kind === 'gold') {
+      const pile = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.02, 0.17, 0.12, 7),
+        new THREE.MeshLambertMaterial({
+          color: GOLD_COLOR,
+          emissive: GOLD_COLOR,
+          emissiveIntensity: 0.4,
+        }),
+      );
+      pile.name = 'gem';
+      group.add(pile);
+      group.add(new THREE.PointLight(GOLD_COLOR, 0.5, 3.5, 0));
+    } else {
+      const gem = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.22),
+        new THREE.MeshLambertMaterial({
+          color: GROUND_ITEM_COLOR,
+          emissive: GROUND_ITEM_COLOR,
+          emissiveIntensity: 0.55,
+        }),
+      );
+      gem.name = 'gem';
+      group.add(gem);
+      group.add(new THREE.PointLight(GROUND_ITEM_COLOR, 0.9, 5, 0));
+    }
+    return group;
+  }
+
   private updateParticles(): void {
     const now = performance.now();
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -1093,25 +1145,16 @@ export class Stage {
       seen.add(item.id);
       let group = this.groundItemVisuals.get(item.id);
       if (!group) {
-        group = new THREE.Group();
-        const gem = new THREE.Mesh(
-          new THREE.OctahedronGeometry(0.22),
-          new THREE.MeshLambertMaterial({
-            color: GROUND_ITEM_COLOR,
-            emissive: GROUND_ITEM_COLOR,
-            emissiveIntensity: 0.55,
-          }),
-        );
-        gem.name = 'gem';
-        group.add(gem);
-        group.add(new THREE.PointLight(GROUND_ITEM_COLOR, 0.9, 5, 0));
+        group = this.makeGroundItem(item.kind);
         this.groundItemVisuals.set(item.id, group);
         this.scene.add(group);
       }
-      const bob = 0.55 + Math.sin(now / 400 + item.id) * 0.1;
+      // 골드는 바닥에 깔리고, 각인·포션은 떠서 돈다
+      const bob =
+        item.kind === 'gold' ? 0.12 : 0.55 + Math.sin(now / 400 + item.id) * 0.1;
       group.position.set(item.x, bob, item.z);
       const gem = group.getObjectByName('gem');
-      if (gem) gem.rotation.y = now / 700;
+      if (gem) gem.rotation.y = now / (item.kind === 'gold' ? 1400 : 700);
     }
     for (const [id, group] of this.groundItemVisuals) {
       if (seen.has(id)) continue;

@@ -108,9 +108,14 @@ export interface SpellState {
 /** 바닥에 떨어진 각인. 접근하면 획득 */
 export interface GroundItemState {
   id: number;
-  sigilId: string;
+  /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
+  kind: 'sigil' | 'potion' | 'gold';
   x: number;
   z: number;
+  /** kind==='sigil' 일 때만 */
+  sigilId?: string;
+  /** kind==='gold' 일 때 획득량 */
+  amount?: number;
 }
 
 export interface ManaState {
@@ -244,6 +249,9 @@ export class World {
   projectiles: ProjectileState[] = [];
   spell: SpellState = { cooldown: 0 };
   groundItems: GroundItemState[] = [];
+
+  /** 보유 골드 — 적 처치 드랍으로 모인다 (사용처는 이후 구역) */
+  gold = 0;
 
   /** 마지막으로 진입한 제단 (리스폰 지점). 없으면 사망 시 완전 재시작 */
   respawn: { x: number; z: number } | null = null;

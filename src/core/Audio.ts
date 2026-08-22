@@ -33,6 +33,8 @@ export type SoundName =
   | 'headshot'
   | 'player_hurt'
   | 'block_hit'
+  | 'pickup_potion'
+  | 'pickup_gold'
   | 'weapon_switch'
   | 'hammer_swing'
   | 'melee_hit'
@@ -225,6 +227,19 @@ export class GameAudio {
         this.tone(60, 0.7, 'sine', 1.6, 0, 28);
         this.noise(0.5, 1.3, 900);
         this.noise(0.9, 0.5, 300, 0.1);
+        break;
+      case 'pickup_potion':
+        // 회복 — 따뜻하게 차오르는 상승 3화음
+        this.tone(392, 0.18, 'sine', 0.5);
+        this.tone(523, 0.2, 'sine', 0.45, 0.05);
+        this.tone(659, 0.3, 'sine', 0.4, 0.1);
+        this.tone(784, 0.35, 'triangle', 0.25, 0.14);
+        break;
+      case 'pickup_gold':
+        // 동전 — 짧고 밝은 금속 딸랑
+        this.tone(1568, 0.07, 'triangle', 0.35);
+        this.tone(2093, 0.1, 'triangle', 0.28, 0.03);
+        this.tone(2637, 0.08, 'sine', 0.18, 0.06);
         break;
       case 'block_hit':
         // 브레이서 방어 — 묵직한 금속 튕김 (피격음보다 단단한 느낌)
