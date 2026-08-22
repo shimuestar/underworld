@@ -12,9 +12,15 @@ const ROWS: { item: Altar.ShopItem; name: string; unit: string }[] = [
   { item: 'battery', name: '예비 배터리', unit: '개' },
 ];
 
+// WASD 는 이동키 그대로 쓰는 게 손이 편하다 — 세로 목록이라 A/D 도 위/아래에 붙인다
+const UP_KEYS = new Set(['KeyW', 'KeyA', 'ArrowUp', 'ArrowLeft']);
+const DOWN_KEYS = new Set(['KeyS', 'KeyD', 'ArrowDown', 'ArrowRight']);
+
 export class ShopUI {
   private readonly root: HTMLDivElement;
   open = false;
+  /** 키보드 커서 위치 (WASD/화살표로 이동, Enter로 구매) */
+  private selected = 0;
   /** 닫힐 때 main이 uiOpen 을 되돌린다 */
   onClose: (() => void) | null = null;
 
@@ -26,13 +32,31 @@ export class ShopUI {
       'background:rgba(0,0,0,0.72);color:#cfd2da;font:13px/1.6 monospace;user-select:none;z-index:10;';
     document.body.appendChild(this.root);
 
-    // 숫자키 즉시 구매 — 상점이 열려 있을 때만 반응한다
+    // 상점이 열려 있을 때만 반응한다.
+    // WASD/화살표로 커서 이동 + Enter 구매, 숫자키는 바로 구매 (둘 다 지원)
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
       const digit = ROWS.findIndex((_, i) => e.code === `Digit${i + 1}`);
       if (digit >= 0) {
         e.preventDefault();
+        this.selected = digit; // 숫자로 산 줄에 커서를 남긴다
         this.buy(ROWS[digit]!.item);
+        return;
+      }
+      if (UP_KEYS.has(e.code)) {
+        e.preventDefault();
+        this.move(-1);
+        return;
+      }
+      if (DOWN_KEYS.has(e.code)) {
+        e.preventDefault();
+        this.move(1);
+        return;
+      }
+      // Space 는 일부러 뺐다 — 전투에서 가장 많이 두들기는 키라 오구매가 난다
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+        e.preventDefault();
+        this.buy(ROWS[this.selected]!.item);
         return;
       }
       if (e.code === 'KeyE' || e.code === 'Escape') {
@@ -45,7 +69,14 @@ export class ShopUI {
 
   show(): void {
     this.open = true;
+    this.selected = 0;
     this.root.style.display = 'flex';
+    this.rebuild();
+  }
+
+  /** 커서 이동 — 끝에서 반대편으로 돈다 (5줄뿐이라 감기는 편이 빠르다) */
+  private move(step: number): void {
+    this.selected = (this.selected + step + ROWS.length) % ROWS.length;
     this.rebuild();
   }
 
@@ -77,9 +108,24 @@ export class ShopUI {
 
     ROWS.forEach((row, i) => {
       const s = Altar.shopState(world, row.item);
+      const here = i === this.selected;
       const line = document.createElement('div');
       line.style.cssText =
-        'display:flex;gap:12px;padding:4px 0;align-items:baseline;border-top:1px solid #23232b;';
+        'display:flex;gap:12px;padding:4px 8px;align-items:baseline;border-top:1px solid #23232b;' +
+        (here ? 'background:#242a36;box-shadow:inset 2px 0 0 #7fbfff;' : '');
+      // 마우스를 움직이면 커서가 따라온다. mouseenter 가 아니라 mousemove 인 이유:
+      // 커서가 패널 위에 멈춰 있어도 rebuild 로 노드가 갈리면 mouseenter 가 다시 떠서
+      // 키보드로 옮긴 선택을 마우스 위치로 되돌려 버린다 (실측으로 확인)
+      line.onmousemove = () => {
+        if (this.selected === i) return;
+        this.selected = i;
+        this.rebuild();
+      };
+
+      const cursor = document.createElement('span');
+      cursor.textContent = here ? '▸' : ' ';
+      cursor.style.cssText = 'color:#7fbfff;width:10px;';
+      line.appendChild(cursor);
 
       const key = document.createElement('span');
       key.textContent = `${i + 1}`;
@@ -124,7 +170,7 @@ export class ShopUI {
     });
 
     const hint = document.createElement('div');
-    hint.textContent = '1~5 구매   Tab 각인 교체   E / Esc 닫기';
+    hint.textContent = 'WASD·↑↓ 이동   Enter 구매   1~5 바로 구매   Tab 각인 교체   E / Esc 닫기';
     hint.style.cssText = 'margin-top:16px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;';
     panel.appendChild(hint);
 
