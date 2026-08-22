@@ -343,6 +343,9 @@ function fire(world: World): void {
   }
 
   hit.enemy.health -= damage;
+  // 피탄 경직 — 잠깐 발이 묶인다. 공격 상태 머신은 그대로 진행되므로
+  // 총으로 공격을 끊거나 스턴락할 수는 없다 (패링 게임을 지우지 않는다)
+  hit.enemy.flinchTicks = pistol.flinchTicks;
   if (hit.enemy.health <= 0) {
     hit.enemy.alive = false;
     // 총기 처치는 마나 0 — 여기서 마나 이벤트를 발행하지 않는다 (하드 룰)

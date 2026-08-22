@@ -905,6 +905,9 @@ export class Stage {
         lungeTarget = striking && isMelee ? -0.5 : 0;
       }
       if (trembling) leanTarget += Math.sin(now / 14) * 0.05;
+      // 피탄 움찔 — 상체가 짧게 젖혀졌다 돌아온다 (+ = 뒤로). 남은 틱 비율로 감쇠
+      const flinch = (enemy.flinchTicks ?? 0) / balance.weapons.pistol.flinchTicks;
+      if (flinch > 0) leanTarget += 0.16 * Math.min(1, flinch);
       // 굳은 동안 힘겹게 버티는 미세 떨림 (완전 정지는 프리즈처럼 보인다)
       if (frozenWhiff) leanTarget += Math.sin(now / 55) * 0.012;
       const snap = striking ? 0.55 : 0.3; // 타격은 빠르게, 복귀는 부드럽게

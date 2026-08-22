@@ -19,6 +19,8 @@ export function tick(world: World, dt: number): void {
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
     tickEnemy(world, enemy, dt);
+    // 피탄 경직 소진은 행동 뒤에 — 앞에서 줄이면 마지막 틱에 움직여버린다
+    if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
   }
 }
 
@@ -233,7 +235,7 @@ function separation(world: World, enemy: EnemyState): { x: number; z: number } {
   return { x: sx, z: sz };
 }
 
-/** 목표 방향 + 아군 회피를 합쳐 한 발짝 이동 */
+/** 목표 방향 + 아군 회피를 합쳐 한 발짝 이동. 피탄 경직 중에는 발이 묶인다 */
 function moveAvoiding(
   world: World,
   enemy: EnemyState,
@@ -242,6 +244,7 @@ function moveAvoiding(
   dirZ: number,
   step: number,
 ): void {
+  if ((enemy.flinchTicks ?? 0) > 0) return; // 총에 맞아 움찔 — 이번 틱은 못 움직인다
   const sep = separation(world, enemy);
   const strength = balance.enemyAi.separation.strength;
   let mx = dirX + sep.x * strength;
@@ -331,6 +334,7 @@ function strafeForAngle(
   dist: number,
   dt: number,
 ): void {
+  if ((enemy.flinchTicks ?? 0) > 0) return; // 움찔하는 동안은 각도 못 잡는다
   const perpX = -distZ / dist;
   const perpZ = distX / dist;
   const ticks = (enemy.strafeBlockedTicks ?? 0) + 1;

@@ -323,3 +323,39 @@ describe('방패 파괴 (화염구)', () => {
     expect(enemy.health).toBe(1000 - 40); // 감쇠 없음
   });
 });
+
+describe('피탄 경직', () => {
+  it('총에 맞으면 잠깐 발이 묶인다 — 공격 진행은 막지 않는다', () => {
+    const enemy = spawnEnemyAt('goblin_runner', 6 + 6, 6, 1);
+    enemy.health = 1000;
+    enemy.ai = 'chase';
+    world.enemies.push(enemy);
+
+    fireAt(6, 1.0);
+    expect(enemy.flinchTicks).toBe(balance.weapons.pistol.flinchTicks);
+
+    // 경직 동안은 다가오지 못한다
+    const x0 = enemy.x;
+    for (let i = 0; i < balance.weapons.pistol.flinchTicks; i++) Enemies.tick(world, DT);
+    expect(enemy.x).toBeCloseTo(x0, 5);
+
+    // 끝나면 다시 접근한다
+    for (let i = 0; i < 10; i++) Enemies.tick(world, DT);
+    expect(enemy.x).toBeLessThan(x0);
+  });
+
+  it('경직이 공격 상태 머신을 끊지 않는다 (스턴락 불가)', () => {
+    const enemy = spawnEnemyAt('goblin_spear', 6 + 3, 6, 1);
+    enemy.health = 1000;
+    enemy.ai = 'chase';
+    world.enemies.push(enemy);
+    Enemies.tick(world, DT); // windup 진입
+    expect(enemy.ai).toBe('windup');
+    const timerBefore = enemy.timer;
+
+    fireAt(3, 1.0);
+    Enemies.tick(world, DT);
+    expect(enemy.ai).toBe('windup'); // 여전히 공격 중
+    expect(enemy.timer).toBe(timerBefore - 1); // 예비동작은 정상 진행
+  });
+});
