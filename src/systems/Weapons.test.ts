@@ -97,6 +97,17 @@ describe('해머 (슬롯 1)', () => {
     expect(enemy.x).toBeCloseTo(startX + hammer.knockback, 1);
   });
 
+  it('헛스윙은 후딜 추가, 명중은 기본 쿨다운', () => {
+    const hammer = balance.weapons.hammer;
+    swing(); // 아무도 없음 — 헛스윙
+    expect(world.weapon.meleeCooldown).toBe(hammer.cooldownTicks + hammer.whiffExtraCooldownTicks);
+
+    const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
+    world.enemies.push(enemy);
+    swing(); // 명중
+    expect(world.weapon.meleeCooldown).toBe(hammer.cooldownTicks);
+  });
+
   it('처치 시 melee_kill(비처형) → 마나 지급 경로', () => {
     const hammer = balance.weapons.hammer;
     const enemy = spawnEnemyAt('goblin_runner', 6 + hammer.range - 0.2, 6, 1);

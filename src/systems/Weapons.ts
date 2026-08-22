@@ -95,13 +95,13 @@ export function tick(world: World, _dt: number): void {
 function swingHammer(world: World): void {
   const hammer = balance.weapons.hammer;
   const p = world.player;
-  world.weapon.meleeCooldown = hammer.cooldownTicks;
   world.events.emit('hammer_swing', {});
   alertNearby(world, p.x, p.z, hammer.noiseRadius);
 
   const facingX = -Math.sin(p.yaw);
   const facingZ = -Math.cos(p.yaw);
   const arcCos = Math.cos(((hammer.arcDeg / 2) * Math.PI) / 180);
+  let hitAny = false;
 
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
@@ -130,6 +130,7 @@ function swingHammer(world: World): void {
       enemy.kbX = (toX / dist) * (hammer.knockback / hammer.knockbackTicks);
       enemy.kbZ = (toZ / dist) * (hammer.knockback / hammer.knockbackTicks);
     }
+    hitAny = true;
     world.events.emit('melee_hit', { enemyId: enemy.id, damage: hammer.damage });
     if (enemy.health <= 0) {
       enemy.alive = false;
@@ -143,6 +144,11 @@ function swingHammer(world: World): void {
       world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
     }
   }
+
+  // 헛스윙이면 후딜 추가 — 마구 휘두르기 억제
+  world.weapon.meleeCooldown = hitAny
+    ? hammer.cooldownTicks
+    : hammer.cooldownTicks + hammer.whiffExtraCooldownTicks;
 }
 
 /** 수류탄 투척 속도 — 차징 비율(0~1)에 따라 min~max 선형 */

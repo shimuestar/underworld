@@ -53,6 +53,7 @@ export class HandModel {
   private readonly hammerParts: THREE.Mesh[] = [];
   private readonly grenadeParts: THREE.Mesh[] = [];
   private swingUntil = 0;
+  private baseRotX = 0;
   private throwUntil = 0;
   private readonly skinMaterials: THREE.MeshLambertMaterial[] = [];
   private corruptionStage = -1;
@@ -136,7 +137,7 @@ export class HandModel {
   }
 
   triggerHammerSwing(): void {
-    this.swingUntil = performance.now() + 210;
+    this.swingUntil = performance.now() + 170;
   }
 
   triggerGrenadeThrow(): void {
@@ -176,32 +177,35 @@ export class HandModel {
       targetRotX -= 0.8;
     }
 
-    // 반동 킥
+    // 즉발 오프셋 — 보간을 거치지 않아 스냅이 살아있다 (반동/스윙/투척)
+    let directRot = 0;
     let kickZ = 0;
     if (now < this.recoilUntil) {
       const k = (this.recoilUntil - now) / RECOIL_MS;
       kickZ = 0.055 * k;
-      targetRotX += 0.3 * k;
+      directRot += 0.3 * k;
     }
 
-    // 해머 스윙 — 치켜들었다(40%) 내리찍기(60%)
+    // 해머 스윙 — 머리 위로 확 치켜들었다(35%) 격하게 내리찍고(35%) 복귀(30%)
     if (now < this.swingUntil) {
-      const t = 1 - (this.swingUntil - now) / 210;
-      targetRotX +=
-        t < 0.4 ? -1.4 * easeOutCubic(t / 0.4) : -1.4 + 2.4 * easeInCubic((t - 0.4) / 0.6);
+      const t = 1 - (this.swingUntil - now) / 170;
+      if (t < 0.35) directRot += -1.7 * easeOutCubic(t / 0.35);
+      else if (t < 0.7) directRot += -1.7 + 3.0 * easeInCubic((t - 0.35) / 0.35);
+      else directRot += 1.3 * (1 - (t - 0.7) / 0.3);
     }
-    // 수류탄 — 차징 중엔 뒤로 당기고, 투척 시 앞으로 밀기
+    // 수류탄 — 차징 중엔 뒤로 당기고(부드럽게), 투척 시 앞으로 밀기(즉발)
     kickZ += 0.14 * (state.chargeFrac ?? 0);
     targetRotX -= 0.35 * (state.chargeFrac ?? 0);
     if (now < this.throwUntil) {
       const t = 1 - (this.throwUntil - now) / 240;
       kickZ -= 0.2 * Math.sin(t * Math.PI);
-      targetRotX -= 0.5 * Math.sin(t * Math.PI);
+      directRot -= 0.5 * Math.sin(t * Math.PI);
     }
 
     this.rightArm.position.y += (targetY - this.rightArm.position.y) * 0.25;
     this.rightArm.position.z = REST_RIGHT.pos.z + kickZ;
-    this.rightArm.rotation.x += (targetRotX - this.rightArm.rotation.x) * 0.35;
+    this.baseRotX += (targetRotX - this.baseRotX) * 0.35;
+    this.rightArm.rotation.x = this.baseRotX + directRot;
 
     // 왼팔 패링 스윙 — 빠르게 올려 가로로 막고(28%), 잠깐 유지(27%), 천천히 내린다.
     // 방어 홀드(C) 중에는 가드 자세를 유지한다

@@ -78,7 +78,8 @@
       "damage": 20,
       "range": 2.6,
       "arcDeg": 100,
-      "cooldownTicks": 24,
+      "cooldownTicks": 18,
+      "whiffExtraCooldownTicks": 20,
       "noiseRadius": 5.0,
       "knockback": 2.4,
       "knockbackTicks": 6
