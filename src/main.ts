@@ -707,7 +707,6 @@ function render(alpha: number): void {
           ? '↻'
           : String(world.weapon.mag)
         : String(world.weapon.grenades),
-    comboStep: world.weapon.comboTimer > 0 ? world.weapon.comboStep : 0,
   });
 
   // 수류탄 차징 궤적 미리보기 — 실제 투척 물리와 동일한 시뮬레이션

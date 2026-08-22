@@ -85,7 +85,6 @@ export class HandModel {
   private readonly bracerMaterial: THREE.MeshLambertMaterial;
   private bracer!: THREE.Mesh;
   private ammoLabel!: HandLabel;
-  private comboLabel!: HandLabel;
 
   private recoilUntil = 0;
   private parryUntil = 0;
@@ -134,12 +133,6 @@ export class HandModel {
     this.rightArm.add(hammerShaft);
     this.rightArm.add(hammerHead);
     this.rightArm.add(hammerBand);
-
-    // 오른손 해머 자루 옆 — 연타 단계
-    this.comboLabel = new HandLabel(0.12, 0.06, '#ffd9a0');
-    this.comboLabel.mesh.position.set(0.055, 0.055, -0.02);
-    this.comboLabel.mesh.rotation.y = -0.35;
-    this.rightArm.add(this.comboLabel.mesh);
 
     this.rightArm.position.copy(REST_RIGHT.pos);
     this.rightArm.rotation.set(HAMMER_REST_ROT, REST_RIGHT.rotY, REST_RIGHT.rotZ);
@@ -286,14 +279,11 @@ export class HandModel {
     stunned: boolean;
     blocking?: boolean;
     chargeFrac?: number;
-    /** 손에 띄울 값 — 왼손 탄약 / 오른손 연타 단계 */
+    /** 왼손에 띄울 탄약 수 */
     ammoText?: string;
-    comboStep?: number;
   }): void {
     const now = performance.now();
     this.ammoLabel.set(state.ammoText ?? '');
-    const step = state.comboStep ?? 0;
-    this.comboLabel.set(step > 0 ? String(step) : '');
 
     // ---- 오른팔 (해머) — 대기는 치켜든 자세, 좌클릭이 아니라 우클릭에 반응한다
     let targetY = REST_RIGHT.pos.y;

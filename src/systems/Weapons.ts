@@ -157,8 +157,9 @@ function swingHammer(world: World): void {
         enemy.kbZ = (toZ / dist) * (knockback / kbTicks);
       }
     } else {
-      // 1·2타는 밀치지 않고 그 자리에 굳힌다 — 밀려나면 연속타가 이어지지 않는다
-      enemy.flinchTicks = Math.max(enemy.flinchTicks ?? 0, combo.chainFlinchTicks);
+      // 1·2타는 밀치지 않고 그 자리에 굳힌다 — 밀려나면 연속타가 이어지지 않는다.
+      // 공격 중이었다면 그 동작 그대로 얼어붙는다 (해머는 흐름을 끊을 수 있다)
+      enemy.attackFreezeTicks = Math.max(enemy.attackFreezeTicks ?? 0, combo.chainFlinchTicks);
     }
     hitAny = true;
     world.events.emit('melee_hit', { enemyId: enemy.id, damage, heavy });

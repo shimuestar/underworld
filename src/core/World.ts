@@ -212,8 +212,10 @@ export interface EnemyState {
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
   attackMode?: 'melee' | 'ranged';
-  /** 피탄 경직 잔여 틱 — 그동안 발이 묶인다 (공격 진행은 막지 않는다) */
+  /** 피탄 경직 잔여 틱 — 발이 묶인다 (공격 진행은 막지 않는다. 총알용) */
   flinchTicks?: number;
+  /** 강한 타격 경직 — 공격 중이라도 그 상태 그대로 굳는다 (해머용) */
+  attackFreezeTicks?: number;
   /** 방패에 막히거나 패링당해 튕긴 직후인가 — recover 동안 뒤로 젖혀진 채 굳는다 */
   recoiled?: boolean;
   /** 헛친 직후인가 — recover 동안 마지막 동작으로 굳고 무방비가 된다 */

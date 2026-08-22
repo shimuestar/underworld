@@ -31,6 +31,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   enemy.prevX = enemy.x;
   enemy.prevZ = enemy.z;
 
+  // 강타 경직 — 예비동작이든 타격 중이든 그 상태 그대로 멈춘다.
+  // 상태도 타이머도 진행하지 않으므로 공격이 취소되지 않고 "얼어붙는다"
+  if ((enemy.attackFreezeTicks ?? 0) > 0) {
+    enemy.attackFreezeTicks = (enemy.attackFreezeTicks ?? 0) - 1;
+    return;
+  }
+
   // 넉백 — 밀려나는 동안은 휘청여서 다른 행동을 못 한다 (벽에는 막힘)
   if ((enemy.kbTicks ?? 0) > 0) {
     enemy.kbTicks = (enemy.kbTicks ?? 0) - 1;

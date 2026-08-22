@@ -91,12 +91,33 @@ describe('해머 (슬롯 1)', () => {
     expect(enemy.health).toBe(30 - hammer.damage); // 20 — 러너 2방
     expect(enemy.alive).toBe(true);
     expect(enemy.kbTicks ?? 0).toBe(0); // 밀려나지 않는다
-    expect(enemy.flinchTicks).toBe(hammer.combo.chainFlinchTicks);
+    expect(enemy.attackFreezeTicks).toBe(hammer.combo.chainFlinchTicks);
 
     // 굳어 있는 동안 제자리 (연속타를 이어갈 수 있게 붙잡아 둔다)
     world.input = Input.emptySnapshot();
     for (let i = 0; i < hammer.combo.chainFlinchTicks; i++) Enemies.tick(world, DT);
     expect(enemy.x).toBeCloseTo(startX, 5);
+  });
+
+  it('공격 중에 맞으면 그 동작 그대로 얼어붙는다 (타이머도 멈춘다)', () => {
+    const hammer = balance.weapons.hammer;
+    const enemy = spawnEnemyAt('goblin_spear', 6 + 3, 6, 1);
+    enemy.health = 1000;
+    enemy.ai = 'chase';
+    world.enemies.push(enemy);
+    Enemies.tick(world, DT); // 예비동작 진입
+    expect(enemy.ai).toBe('windup');
+    for (let i = 0; i < 5; i++) Enemies.tick(world, DT);
+    const frozenTimer = enemy.timer;
+
+    swing(); // 해머 적중
+    expect(enemy.attackFreezeTicks).toBe(hammer.combo.chainFlinchTicks);
+    for (let i = 0; i < hammer.combo.chainFlinchTicks; i++) Enemies.tick(world, DT);
+    expect(enemy.ai).toBe('windup'); // 취소되지 않는다
+    expect(enemy.timer).toBe(frozenTimer); // 예비동작이 진행되지도 않는다
+
+    Enemies.tick(world, DT); // 경직이 풀리면 이어서 진행
+    expect(enemy.timer).toBe(frozenTimer - 1);
   });
 
   it('마무리 3타에서만 뒤로 밀린다', () => {
@@ -106,8 +127,11 @@ describe('해머 (슬롯 1)', () => {
     world.enemies.push(enemy);
 
     swing();
+    // 경직을 지나야 다음 타가 유효하다 (얼어붙은 동안은 그대로 서 있는다)
+    for (let i = 0; i < hammer.combo.chainFlinchTicks; i++) Enemies.tick(world, DT);
     swing();
     expect(enemy.kbTicks ?? 0).toBe(0);
+    for (let i = 0; i < hammer.combo.chainFlinchTicks; i++) Enemies.tick(world, DT);
     const startX = enemy.x;
     swing(); // 3타 강타
 
