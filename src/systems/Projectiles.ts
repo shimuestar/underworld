@@ -35,7 +35,9 @@ function tryCast(world: World): void {
   if (world.spell.cooldown > 0) return;
 
   const def = sigilDef(sigilId);
-  const cost = balance.spellCost[def.tier as keyof typeof balance.spellCost] ?? 0;
+  // 각인이 manaCost 를 명시하면 그 값, 없으면 티어 기본값
+  const cost =
+    def.effects['manaCost'] ?? balance.spellCost[def.tier as keyof typeof balance.spellCost] ?? 0;
   if (world.mana.value < cost) {
     world.events.emit('cast_failed', { reason: 'no_mana', cost, current: world.mana.value });
     return;

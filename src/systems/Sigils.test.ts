@@ -146,13 +146,13 @@ describe('화염구', () => {
     expect(world.mana.value).toBe(100);
   });
 
-  it('시전: 마나 소모(small=22) + 연쇄 리셋 + 투사체 생성', () => {
+  it('시전: 마나 소모(각인이 지정한 manaCost) + 연쇄 리셋 + 투사체 생성', () => {
     world.sigils.inventory.push('sig_fireball');
     Sigils.attach(world, 'sig_fireball');
     world.mana.chainIndex = 2;
     cast();
     expect(world.projectiles).toHaveLength(1);
-    expect(world.mana.value).toBeCloseTo(100 - balance.spellCost.small);
+    expect(world.mana.value).toBeCloseTo(100 - (sigilDef('sig_fireball').effects['manaCost'] as number));
     expect(world.mana.chainIndex).toBe(0); // cast_spell → 리셋
   });
 

@@ -7,7 +7,7 @@
     { "id": "sig_trapsense",   "name": "함정 감지",   "slot": "eye",      "tier": "passive", "zone": 2, "slice": false, "effects": { "revealTrapsRadius": 12 } },
     { "id": "sig_lifesight",   "name": "잔명 시야",   "slot": "eye",      "tier": "passive", "zone": 4, "slice": false, "effects": { "showHealthBars": 1 } },
 
-    { "id": "sig_fireball",    "name": "화염구",      "slot": "rightArm", "tier": "small",   "zone": 1, "slice": true,  "effects": { "damage": 45, "burnTicks": 180, "burnDamagePerTick": 0.15, "speed": 26, "radius": 0.35, "lifeTicks": 120, "cooldownTicks": 30, "explodeRadius": 4.0, "explodeDamage": 30, "explodeFalloffMin": 0.3, "blastRadius": 2.2, "blastKnockback": 4.5, "blastKnockbackTicks": 12 } },
+    { "id": "sig_fireball",    "name": "화염구",      "slot": "rightArm", "tier": "small",   "zone": 1, "slice": true,  "effects": { "damage": 45, "burnTicks": 180, "burnDamagePerTick": 0.15, "speed": 26, "radius": 0.35, "lifeTicks": 120, "cooldownTicks": 30, "manaCost": 11, "explodeRadius": 4.0, "explodeDamage": 30, "explodeFalloffMin": 0.3, "blastRadius": 2.2, "blastKnockback": 4.5, "blastKnockbackTicks": 12 } },
     { "id": "sig_lightning",   "name": "관통 뇌창",   "slot": "rightArm", "tier": "medium",  "zone": 2, "slice": false, "effects": { "damage": 90, "pierce": 5 } },
     { "id": "sig_acid",        "name": "산성 분사",   "slot": "rightArm", "tier": "small",   "zone": 3, "slice": false, "effects": { "armorShred": 0.4 } },
     { "id": "sig_homing",      "name": "유도 파편",   "slot": "rightArm", "tier": "medium",  "zone": 4, "slice": false, "effects": { "projectiles": 6, "damage": 28 } },
