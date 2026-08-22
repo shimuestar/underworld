@@ -54,14 +54,21 @@ const MELEE_WEAPONS: Record<
   goblin_spear: { length: 2.0, width: 0.07, color: 0x5c4a33, style: 'thrust', tip: true },
   goblin_chieftain: { length: 2.0, width: 0.26, color: 0x4a3826, style: 'smash', headSize: 0.5 },
 };
-/** smash 팔 각도: 휴식/치켜듦/내리침 */
-const ARM_REST = 0.55;
-const ARM_RAISED = -2.0;
-const ARM_SMASH = 1.3;
-/** thrust: 수평 견착 각도, 당김/내지름 거리 */
-const THRUST_LEVEL = 0.05;
-const THRUST_PULL = 0.6;
-const THRUST_LUNGE = -1.0;
+/** smash 팔 각도: 휴식/치켜듦/내리침.
+ *  무기는 팔 피벗에서 -z로 뻗으므로 +회전이 무기 끝을 위로 올린다 */
+const ARM_REST = -0.45; // 무기를 내려 든 대기
+const ARM_RAISED = 2.0; // 머리 위로 치켜듦
+const ARM_SMASH = -1.15; // 앞아래로 내리찍음
+/** thrust: 창끝은 항상 수평(플레이어를 겨눔). 움츠렸다 진격하며 내지른다.
+ *  몸통 rotation.x는 + 가 뒤로 젖힘 / - 가 앞으로 숙임 (피벗이 발밑) */
+const THRUST_LEVEL = 0.02;
+const THRUST_PULL = 0.8; // windup: 창을 뒤로 당김
+const THRUST_LUNGE = -1.35; // 타격: 내지름
+const THRUST_CROUCH = 0.22; // windup: 몸을 낮춰 움츠림
+const THRUST_COIL = 0.25; // windup: 몸을 뒤로 뺌
+const THRUST_COIL_LEAN = 0.1; // windup: 뒤로 살짝 젖힘 (뒷발에 체중)
+const THRUST_ADVANCE = -1.0; // 타격: 몸통째 진격
+const THRUST_LEAN = -0.18; // 타격: 앞으로 숙임
 
 interface EnemyVisual {
   group: THREE.Group;
@@ -71,6 +78,8 @@ interface EnemyVisual {
   flashMaterials: THREE.MeshLambertMaterial[];
   shield?: THREE.Mesh;
   shieldMaterial?: THREE.MeshLambertMaterial;
+  /** 방패의 기준 z — 몸통 전진에 오프셋으로 더한다 */
+  shieldBaseZ: number;
   /** 근접 무기 팔 피벗 — 치켜들었다 내리찍는다 */
   arm?: THREE.Group;
   shieldFlashUntil: number;
@@ -593,6 +602,7 @@ export class Stage {
       group,
       torso,
       flashMaterials,
+      shieldBaseZ: 0,
       shieldFlashUntil: 0,
       barrierFlashUntil: 0,
       plate,
@@ -657,7 +667,8 @@ export class Stage {
         new THREE.BoxGeometry(def.radius * 2.3, def.height * 0.72, 0.09),
         visual.shieldMaterial,
       );
-      visual.shield.position.set(-0.15, def.height * 0.5, -(def.radius + 0.12));
+      visual.shieldBaseZ = -(def.radius + 0.12);
+      visual.shield.position.set(-0.15, def.height * 0.5, visual.shieldBaseZ);
       group.add(visual.shield);
     }
 
@@ -782,12 +793,25 @@ export class Stage {
       const isMelee = attack.type !== 'projectile';
       const trembling = inWindup && enemy.timer <= balance.telegraph.visualLeadTicks;
 
-      let leanTarget = striking && isMelee ? 0.4 : inWindup ? -0.28 * windupProgress : 0;
+      const isThrust = (MELEE_WEAPONS[enemy.type]?.style ?? 'smash') === 'thrust';
+      let leanTarget: number;
+      let lungeTarget: number;
+      let crouchTarget = 0;
+      if (isThrust && isMelee) {
+        // 창: 낮추고 뒤로 움츠렸다가(windup) 몸통째 진격하며 내지른다(strike)
+        leanTarget = striking ? THRUST_LEAN : inWindup ? THRUST_COIL_LEAN * windupProgress : 0;
+        lungeTarget = striking ? THRUST_ADVANCE : inWindup ? THRUST_COIL * windupProgress : 0;
+        crouchTarget = inWindup ? -THRUST_CROUCH * windupProgress : 0;
+      } else {
+        // 치켜들 때 몸을 젖히고(+), 내리칠 때 앞으로 숙인다(-)
+        leanTarget = striking && isMelee ? -0.42 : inWindup ? 0.28 * windupProgress : 0;
+        lungeTarget = striking && isMelee ? -0.5 : 0;
+      }
       if (trembling) leanTarget += Math.sin(now / 14) * 0.05;
-      const lungeTarget = striking && isMelee ? -0.5 : 0;
       const snap = striking ? 0.55 : 0.3; // 타격은 빠르게, 복귀는 부드럽게
       visual.torso.rotation.x += (leanTarget - visual.torso.rotation.x) * snap;
       visual.torso.position.z += (lungeTarget - visual.torso.position.z) * snap;
+      visual.torso.position.y += (crouchTarget - visual.torso.position.y) * snap;
 
       // 무기 팔 — smash: 치켜들었다 내리침 / thrust: 뒤로 당겼다 내지름
       if (visual.arm) {
@@ -795,10 +819,10 @@ export class Stage {
         let armRotTarget: number;
         let armZTarget = 0;
         if (style === 'thrust') {
-          armRotTarget = THRUST_LEVEL;
+          // 몸통 기울기를 상쇄 — 창끝이 위로 쓸리지 않고 계속 플레이어를 겨눈다
+          armRotTarget = THRUST_LEVEL - visual.torso.rotation.x;
           if (isMelee && inWindup) {
             armZTarget = THRUST_PULL * windupProgress; // 뒤로 당김
-            armRotTarget = THRUST_LEVEL - 0.08 * windupProgress;
             if (trembling) armZTarget += Math.sin(now / 12) * 0.05;
           } else if (isMelee && striking) {
             armZTarget = THRUST_LUNGE; // 내지름
@@ -834,8 +858,12 @@ export class Stage {
       if (visual.shield && visual.shieldMaterial) {
         visual.shieldMaterial.emissive.set(now < visual.shieldFlashUntil ? 0xffffff : 0x000000);
         const def = enemyDef(enemy.type);
-        const targetY = enemy.ai === 'staggered' ? def.height * 0.18 : def.height * 0.5;
+        const targetY =
+          (enemy.ai === 'staggered' ? def.height * 0.18 : def.height * 0.5) +
+          visual.torso.position.y; // 움츠릴 때 함께 내려간다
         visual.shield.position.y += (targetY - visual.shield.position.y) * 0.2;
+        // 몸통 전진/후퇴를 따라간다 (방패는 group 소속이라 자동으로 따라오지 않는다)
+        visual.shield.position.z = visual.shieldBaseZ + visual.torso.position.z;
       }
     }
 
