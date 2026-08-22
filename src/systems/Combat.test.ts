@@ -200,11 +200,28 @@ describe('반응 판정 분기', () => {
     expect(kills[0]).toMatchObject({ enemyType: 'goblin_spear', execution: true });
   });
 
-  it('반경 내 아무것도 없으면 회피 스텝', () => {
+  it('Shift+탭 = 즉시 회피 (판정 생략)', () => {
     const world = makeWorld();
-    pressReaction(world);
+    world.input = { ...Input.emptySnapshot(), reactionReleased: true, sprint: true };
+    Reaction.tick(world, DT);
     expect(world.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
     expect(world.player.iframeTicks).toBe(balance.reaction.dodgeIFrameTicks);
+
+    // windup 중이어도 Shift+탭은 실패 경직 없이 회피한다 (빨강 공격 탈출용)
+    const world2 = makeWorld();
+    world2.enemies.push(makeSpear(12, 10));
+    tickUntil(world2, 'windup');
+    world2.input = { ...Input.emptySnapshot(), reactionReleased: true, sprint: true };
+    Reaction.tick(world2, DT);
+    expect(world2.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
+    expect(world2.player.stunTicks).toBe(0);
+  });
+
+  it('Shift 없는 탭은 반경 내 아무것도 없으면 헛스윙 (회피 아님)', () => {
+    const world = makeWorld();
+    pressReaction(world);
+    expect(world.player.dodgeTicks).toBe(0);
+    expect(world.player.iframeTicks).toBe(0);
   });
 
   it('경직 중에는 반응 입력이 무시된다', () => {

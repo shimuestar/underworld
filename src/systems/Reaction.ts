@@ -1,5 +1,6 @@
 // 단일 반응 버튼 (우클릭) — docs/systems/combat.md §1, §3.
-// 상황에 따라 자동 분기: 패링 판정 > 반사(투사체) > 처형 > (windup 조기 입력 = 실패) > 회피.
+// 상황에 따라 자동 분기: 패링 판정 > 반사(투사체) > 처형 > (windup 조기 입력 = 실패).
+// 회피는 Shift+탭 — 명시 입력이라 판정을 거치지 않는다 (빨강 공격 회피용).
 // Enemies 뒤에 실행된다 — 적의 공격 상태가 확정된 뒤 판정해야 하기 때문.
 //
 // 보스: 완벽/일반 패링 모두 공격을 끊지만, parriesToStagger 연속 성공해야 스태거.
@@ -49,6 +50,13 @@ export function tick(world: World, _dt: number): void {
   p.reactionHeldTicks = 0;
   p.reactionBufferTicks = 0;
   if (!wasTap) return;
+
+  // Shift+탭 = 명시적 회피 — 판정을 거치지 않고 즉시 발동.
+  // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다
+  if (world.input.sprint) {
+    startDodge(world);
+    return;
+  }
 
   // 반경 내 적을 우선순위로 분류 (같은 우선순위면 가장 가까운 적)
   let parryTarget: { enemy: EnemyState; dist: number } | null = null;
@@ -187,7 +195,13 @@ export function tick(world: World, _dt: number): void {
     return;
   }
 
-  // 아무것도 없음 — 회피 스텝 (이동 입력 방향, 없으면 뒤로)
+  // 아무것도 없음 — 헛스윙 (회피는 Shift+탭 전용)
+}
+
+/** 회피 스텝 — 이동 입력 방향, 없으면 뒤로 */
+function startDodge(world: World): void {
+  const p = world.player;
+  const reaction = balance.reaction;
   const input = world.input;
   let dirX: number;
   let dirZ: number;

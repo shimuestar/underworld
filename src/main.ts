@@ -715,7 +715,7 @@ function render(alpha: number): void {
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
-    'WASD 이동  Shift 질주  좌클릭 공격  우클릭 짧게=패링(뗄 때)·꾹=방어  1/2/3 무기\n' +
+    'WASD 이동  Shift 질주  좌클릭 공격  우클릭 짧게=패링(뗄 때)·꾹=방어  Shift+우클릭 회피  1/2/3 무기\n' +
     'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O 테스트';
 
   stage.render();
