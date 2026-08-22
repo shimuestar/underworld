@@ -20,7 +20,7 @@ const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
 const BARRIER_COLOR = 0x9db8e8;
 const ARMOR_COLOR = 0x777d88;
 const ENEMY_BOLT_COLOR = 0xa855f7; // 마법 투사체 색 규약 (balance.telegraph.colorProjectile)
-const IMPLODE_MS = 420; // 내파 연출 길이 (당김 지속 14틱 ≒ 233ms보다 길게 남는다)
+const IMPLODE_MS = 560; // 내파 연출 길이 (당김 지속 22틱 ≒ 367ms보다 길게 남는다)
 const IMPLODE_SHARDS = 16;
 
 // 텔레그래프 이외 상태 표시색 (텔레그래프 3색과 겹치지 않게 — 색이 곧 문법)

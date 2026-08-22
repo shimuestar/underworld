@@ -48,7 +48,7 @@
       "magicBarrier": { "blocksMagic": true, "blocksMelee": true, "piercedBy": ["pistol"] },
       "attack": { "type": "projectile", "windupTicks": 46, "recoverTicks": 70, "impactRangeMul": 1, "parryable": false, "deflectable": true, "telegraph": "purple", "projectileSpeed": 14, "projectileRadius": 0.3,
         "_splashNote": "내파 — 화염구(밀어냄)의 정반대. 직격은 뒤로 밀지만 빗나가면 폭심으로 끌려간다. 반사하면 적들이 한곳에 뭉친다",
-        "splash": { "kind": "implode", "radius": 3.6, "damage": 12, "falloffMin": 0.35, "pullDistance": 3.2, "pullTicks": 14 } },
+        "splash": { "kind": "implode", "radius": 4.8, "damage": 12, "falloffMin": 0.35, "pullDistance": 4.2, "pullTicks": 22 } },
       "counters": { "pistol": "best", "rifle": "poor", "grenade": "poor", "flash": "poor", "melee": "none", "magic": "none", "deflect": "good" },
       "_dropsNote": "sig_curse(4구역)는 슬라이스 밖이라 sig_dash로 교체. 왼팔 마법 시스템 구현 시 복원 검토",
       "drops": ["sig_dash"], "dropsOnDeath": true

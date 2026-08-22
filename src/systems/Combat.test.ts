@@ -797,6 +797,29 @@ describe('마법탄 내파 (수호주술사)', () => {
     expect(p.kbTicks ?? 0).toBe(0);
   });
 
+  it('적에게 적중돼도 터진다 — 직격 적은 오사 피해만, 주변 적은 광역 피해', () => {
+    const world = makeWorld();
+    const p = world.player;
+    const direct = makeRunner(p.x + 2, p.z, 7); // 탄이 여기서 막혀 터진다
+    const bystander = makeRunner(p.x + 2, p.z + 1.8, 8); // 폭심 옆
+    world.enemies.push(direct, bystander);
+    const explosions: unknown[] = [];
+    world.events.on('explosion', (payload) => explosions.push(payload));
+    fireBolt(world, p.x + 8);
+
+    expect(explosions).toHaveLength(1); // 적 몸에 맞아도 광역은 난다
+    const ff = balance.enemyAi.friendlyFireDamageMul;
+    // 직격 적 — 본 피해(오사 감쇠)만, 광역 피해 중복 없음
+    expect(1000 - direct.health).toBeCloseTo(26 * ff, 3);
+    // 옆의 적 — 광역 피해만 (역시 오사 감쇠)
+    expect(1000 - bystander.health).toBeGreaterThan(0);
+    expect(1000 - bystander.health).toBeLessThan(splash.damage * ff);
+    // 둘 다 폭심으로 끌린다 (직격 적 포함)
+    expect(direct.kbTicks).toBe(splash.pullTicks);
+    expect(bystander.kbTicks).toBe(splash.pullTicks);
+    expect(bystander.kbZ!).toBeLessThan(0); // z가 작아지는 쪽 = 폭심
+  });
+
   it('반사되면 적들이 폭심으로 끌려 모인다 — 오사 감쇠 없이 전탄 피해', () => {
     const world = makeWorld();
     const p = world.player;
