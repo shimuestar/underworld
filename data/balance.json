@@ -148,7 +148,8 @@
     },
     "pistol": {
       "ammoMax": 60,
-      "damage": 34,
+      "_damageNote": "34 → 22 (2026-08, −35%). 러너 30HP 기준 몸통 2발, 헤드샷 1발",
+      "damage": 22,
       "fireIntervalTicks": 14,
       "reloadTicks": 66,
       "magSize": 12,

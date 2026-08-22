@@ -206,10 +206,13 @@ describe('goblin_chieftain (1구역 보스)', () => {
     expect(blocked[0]).toMatchObject({ kind: 'armor' });
     expect(boss.health).toBe(def.health);
 
-    // 실탄으로 장갑 파괴 — 몸통 판정 27.2/발 × 5발 = 136 > 120
+    // 실탄으로 장갑 파괴 — 필요한 발수는 밸런스에서 계산한다 (총 위력을 조정해도 안 깨지게)
+    const pistol = balance.weapons.pistol;
+    const perShot = pistol.damage * pistol.hitZones.bodyMul; // 몸통 판정
+    const shots = Math.ceil(def.armorHealth! / perShot);
     const phases: unknown[] = [];
     world.events.on('boss_phase', (payload) => phases.push(payload));
-    for (let shot = 0; shot < 5; shot++) {
+    for (let shot = 0; shot < shots; shot++) {
       world.weapon.cooldown = 0;
       world.input = { ...Input.emptySnapshot(), rangedPressed: true };
       Weapons.tick(world, DT);
