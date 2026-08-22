@@ -153,6 +153,18 @@ function moveProjectiles(world: World, dt: number): void {
         hitEnemy: hitEnemy !== null || hitPlayer,
       });
 
+      // 화살은 벽·바닥에 꽂힌 채 남는다 (렌더 전용 잔존물)
+      if (proj.kind === 'arrow' && !hitEnemy && !hitPlayer) {
+        world.events.emit('arrow_stuck', {
+          x: proj.x + dirX * hitT,
+          y: proj.y + dirY * hitT,
+          z: proj.z + dirZ * hitT,
+          dx: dirX,
+          dy: dirY,
+          dz: dirZ,
+        });
+      }
+
       if (hitPlayer) {
         const p = world.player;
         if (p.iframeTicks <= 0) {

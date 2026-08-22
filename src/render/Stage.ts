@@ -324,6 +324,50 @@ export class Stage {
     }
   }
 
+  /** 벽에 꽂힌 화살 (잔존물 — 오래된 것부터 제거) */
+  private readonly stuckArrows: THREE.Group[] = [];
+  spawnStuckArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number): void {
+    const arrow = new THREE.Group();
+    const shaft = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.05, 0.6),
+      new THREE.MeshLambertMaterial({ color: 0x6b5233 }),
+    );
+    arrow.add(shaft);
+    // 촉이 박힌 지점에서 꼬리가 튀어나오도록 뒤로 물림
+    arrow.position.set(x - dx * 0.26, y - dy * 0.26, z - dz * 0.26);
+    arrow.lookAt(x + dx, y + dy, z + dz);
+    this.scene.add(arrow);
+    this.stuckArrows.push(arrow);
+    if (this.stuckArrows.length > 30) {
+      const oldest = this.stuckArrows.shift()!;
+      this.scene.remove(oldest);
+      oldest.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          (obj.material as THREE.Material).dispose();
+        }
+      });
+    }
+  }
+
+  /** 총알 탄흔 (잔존물) */
+  private readonly bulletMarks: THREE.Mesh[] = [];
+  spawnBulletMark(x: number, y: number, z: number): void {
+    const mark = new THREE.Mesh(
+      new THREE.SphereGeometry(0.07, 6, 5),
+      new THREE.MeshBasicMaterial({ color: 0x121216 }),
+    );
+    mark.position.set(x, y, z);
+    this.scene.add(mark);
+    this.bulletMarks.push(mark);
+    if (this.bulletMarks.length > 40) {
+      const oldest = this.bulletMarks.shift()!;
+      this.scene.remove(oldest);
+      oldest.geometry.dispose();
+      (oldest.material as THREE.Material).dispose();
+    }
+  }
+
   /** 수류탄 차징 궤적 미리보기 — 점선. null이면 숨김 */
   private readonly arcDots: THREE.Mesh[] = [];
   updateThrowArc(points: { x: number; y: number; z: number }[] | null): void {

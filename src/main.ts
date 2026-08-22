@@ -418,6 +418,12 @@ events.on('shot_fired', (payload) => {
   audio.play('gunshot');
   // 방패에 막힌 샷은 shot_blocked의 금속 클랭이 담당 — 벽 착탄음으로 덮지 않는다
   if (!shot.blocked) audio.play(shot.hitEnemy ? 'hit_flesh' : 'hit_wall');
+  // 벽 착탄 탄흔
+  if (!shot.blocked && !shot.hitEnemy) stage.spawnBulletMark(shot.ex, shot.ey, shot.ez);
+});
+events.on('arrow_stuck', (payload) => {
+  const a = payload as { x: number; y: number; z: number; dx: number; dy: number; dz: number };
+  stage.spawnStuckArrow(a.x, a.y, a.z, a.dx, a.dy, a.dz);
 });
 events.on('parry_attempt', (payload) => {
   stage.triggerParry((payload as { result: string }).result);
