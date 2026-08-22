@@ -18,7 +18,7 @@
       "zone": 1, "slice": true,
       "health": 55, "speed": 3.2, "damage": 22,
       "radius": 0.5, "height": 1.8,
-      "aggroRange": 14, "attackRange": 3.0,
+      "aggroRange": 14, "attackRange": 3.6,
       "behavior": "guard_advance",
       "frontalShieldBlocksProjectiles": true, "shieldArcDeg": 120,
       "attack": { "type": "thrust", "windupTicks": 34, "recoverTicks": 45, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
