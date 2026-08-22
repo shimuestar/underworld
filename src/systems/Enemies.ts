@@ -56,25 +56,24 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (def.behavior === 'caster_kite') {
         // 너무 가까우면 물러나고, 시야가 트이면 시전
         if (dist < (def.kiteMinRange ?? 0) && dist > 0) {
-          const step = def.speed * dt;
-          world.level.slideMove(enemy, def.radius, (-distX / dist) * step, (-distZ / dist) * step);
+          moveAvoiding(world, enemy, def, -distX / dist, -distZ / dist, def.speed * dt);
         } else if (
           dist <= def.attackRange &&
           world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
         ) {
-          // 아군이 사선을 막으면 옆으로 이동해 각을 잡는다.
-          // 너무 오래 못 잡으면 그냥 쏜다 — 아군을 맞히는 것도 결과 중 하나
+          // 아군이 사선을 막으면 쏘지 않고 옆으로 이동해 각을 잡는다.
+          // giveUpTicks(10초)는 아군이 영영 비켜주지 않는 교착을 푸는 안전장치일 뿐이다 —
+          // 일부러 아군을 쏘게 하면 적이 바보처럼 보인다
           const blocker = blockingAlly(world, enemy, def, attack);
           const blockedTicks = enemy.strafeBlockedTicks ?? 0;
           if (blocker && blockedTicks < strafeCfg.giveUpTicks) {
             strafeForAngle(world, enemy, def, blocker, distX, distZ, dist, dt);
             break;
           }
-          enemy.strafeBlockedTicks = 0;
+          if (!blocker) enemy.strafeBlockedTicks = 0; // 각이 났다 (막힌 채면 포기 상태 유지)
           startWindup(world, enemy, attack);
         } else if (dist > 0) {
-          const step = def.speed * dt;
-          world.level.slideMove(enemy, def.radius, (distX / dist) * step, (distZ / dist) * step);
+          moveAvoiding(world, enemy, def, distX / dist, distZ / dist, def.speed * dt);
         }
         break;
       }
@@ -95,8 +94,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         break;
       }
       if (dist > 0) {
-        const step = def.speed * dt;
-        world.level.slideMove(enemy, def.radius, (distX / dist) * step, (distZ / dist) * step);
+        moveAvoiding(world, enemy, def, distX / dist, distZ / dist, def.speed * dt);
       }
       break;
     }
@@ -109,7 +107,18 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (enemy.timer > 0) break;
 
       if (attack.type === 'projectile') {
+        // 쏘기 직전 사선을 한 번 더 확인 — 겨누는 0.5초 사이 아군이 끼어들 수 있다.
+        // 끼어들었으면 쏘지 않고 내린다 (아군 등에 쏘는 것보다 훨씬 낫다)
+        // (교착을 풀려고 포기한 상태라면 그대로 쏜다 — 안전장치)
+        const givenUp = (enemy.strafeBlockedTicks ?? 0) >= strafeCfg.giveUpTicks;
+        if (!givenUp && blockingAlly(world, enemy, def, attack)) {
+          enemy.ai = 'chase';
+          enemy.strafeBlockedTicks = 1; // 바로 다시 겨누지 말고 각부터 잡는다
+          world.events.emit('enemy_hold_fire', { enemyId: enemy.id, enemyType: enemy.type });
+          break;
+        }
         // 시전 완료 — 마법 투사체 발사
+        enemy.strafeBlockedTicks = 0;
         fireProjectile(world, enemy, attack);
         enemy.ai = 'recover';
         enemy.timer = attack.recoverTicks;
@@ -206,6 +215,44 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
 
 const strafeCfg = balance.enemyAi.strafe;
 
+/** 주변 아군에게서 밀려나는 방향 — 일렬로 겹쳐 서지 않게 한다 (반환값은 정규화 전) */
+function separation(world: World, enemy: EnemyState): { x: number; z: number } {
+  const cfg = balance.enemyAi.separation;
+  let sx = 0;
+  let sz = 0;
+  for (const other of world.enemies) {
+    if (other === enemy || !other.alive) continue;
+    const dx = enemy.x - other.x;
+    const dz = enemy.z - other.z;
+    const d = Math.hypot(dx, dz);
+    if (d === 0 || d > cfg.radius) continue;
+    const weight = (cfg.radius - d) / cfg.radius; // 가까울수록 세게
+    sx += (dx / d) * weight;
+    sz += (dz / d) * weight;
+  }
+  return { x: sx, z: sz };
+}
+
+/** 목표 방향 + 아군 회피를 합쳐 한 발짝 이동 */
+function moveAvoiding(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  dirX: number,
+  dirZ: number,
+  step: number,
+): void {
+  const sep = separation(world, enemy);
+  const strength = balance.enemyAi.separation.strength;
+  let mx = dirX + sep.x * strength;
+  let mz = dirZ + sep.z * strength;
+  const len = Math.hypot(mx, mz);
+  if (len === 0) return;
+  mx /= len;
+  mz /= len;
+  world.level.slideMove(enemy, def.radius, mx * step, mz * step);
+}
+
 /** 발사선을 가로막는 아군 — 실제 투사체와 같은 기하로 예측한다 (Projectiles와 동일 규칙) */
 function blockingAlly(
   world: World,
@@ -289,7 +336,8 @@ function strafeForAngle(
       blockedBy: blocker.id,
     });
   } else if (ticks % strafeCfg.flipAfterTicks === 0) {
-    enemy.strafeDir = -(enemy.strafeDir ?? 1); // 한쪽으로 계속 못 트이면 반대로
+    // 그 방향으로 끝까지 가도 안 트이면 반대쪽으로 (우물쭈물하지 않고 크게 돈다)
+    enemy.strafeDir = -(enemy.strafeDir ?? 1);
   }
 
   const dir = enemy.strafeDir ?? 1;

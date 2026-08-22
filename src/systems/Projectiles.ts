@@ -258,7 +258,10 @@ function applyProjectileHit(
     return;
   }
 
-  enemy.health -= proj.damage;
+  // 동료 오사는 위력이 줄어든다 — 사고로 보이되 한 방에 죽지는 않게
+  const damage =
+    proj.owner === 'enemy' ? proj.damage * balance.enemyAi.friendlyFireDamageMul : proj.damage;
+  enemy.health -= damage;
   enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
   if (proj.burnDamagePerTick > 0) enemy.burnDamagePerTick = proj.burnDamagePerTick;
   if (enemy.health <= 0) {

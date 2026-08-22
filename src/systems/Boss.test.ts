@@ -324,6 +324,25 @@ describe('캐스터 재배치 — 아군이 사선을 막을 때', () => {
     expect(ticks).toBeGreaterThanOrEqual(strafe.giveUpTicks);
   });
 
+  it('겨누는 사이 아군이 끼어들면 쏘지 않고 내린다 (enemy_hold_fire)', () => {
+    const { archer, ally } = setup();
+    ally.x = -500; // 처음엔 사선이 비어 있다
+    ally.z = -500;
+    Enemies.tick(world, DT);
+    expect(archer.ai).toBe('windup');
+
+    // 겨누는 도중 아군이 사선으로 들어온다
+    ally.x = (archer.x + world.player.x) / 2;
+    ally.z = world.player.z;
+    const holds: unknown[] = [];
+    world.events.on('enemy_hold_fire', (payload) => holds.push(payload));
+
+    for (let i = 0; i < 40 && archer.ai === 'windup'; i++) Enemies.tick(world, DT);
+    expect(holds).toHaveLength(1);
+    expect(world.projectiles).toHaveLength(0); // 발사하지 않았다
+    expect(archer.ai).toBe('chase'); // 각부터 다시 잡는다
+  });
+
   it('사선이 비어 있으면 재배치 없이 즉시 발사', () => {
     world.player.x = 6;
     world.player.z = 10;

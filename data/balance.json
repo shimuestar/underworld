@@ -264,11 +264,17 @@
 
   "enemyAi": {
     "strafe": {
-      "_comment": "캐스터(궁수/주술사)가 아군에 사선이 막혔을 때 옆으로 각을 잡는 동작",
-      "speedMul": 0.9,
-      "flipAfterTicks": 45,
-      "giveUpTicks": 150
-    }
+      "_comment": "캐스터(궁수/주술사)가 아군에 사선이 막혔을 때 옆으로 각을 잡는 동작. giveUpTicks는 교착 방지용 안전장치(10초) — 평소엔 각이 날 때까지 쏘지 않는다",
+      "speedMul": 1.0,
+      "flipAfterTicks": 200,
+      "giveUpTicks": 600
+    },
+    "separation": {
+      "_comment": "추격 중 서로 밀어내는 힘 — 일렬로 겹쳐 서는 것을 막는다",
+      "radius": 2.2,
+      "strength": 0.85
+    },
+    "friendlyFireDamageMul": 0.4
   },
 
   "telegraph": {

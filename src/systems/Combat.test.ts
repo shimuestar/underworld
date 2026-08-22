@@ -169,7 +169,9 @@ describe('공격 상태 머신 타이밍 (goblin_spear: windup 34t)', () => {
     ally.id = 7;
     world.enemies.push(ally);
     spawnArrow(world, 1); // 시전자는 다른 id
-    expect(ally.health).toBe(enemyDef('goblin_spear').health - 10);
+    // 오사는 위력 감소 — 막아주긴 하되 한 방에 죽지는 않는다
+    const ffMul = balance.enemyAi.friendlyFireDamageMul;
+    expect(ally.health).toBe(enemyDef('goblin_spear').health - 10 * ffMul);
     expect(world.player.health).toBe(balance.player.healthMax);
 
     // 사선이 비면 플레이어가 맞는다
