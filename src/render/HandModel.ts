@@ -243,4 +243,5 @@ const HAMMER_SMASH_ARC = -2.5; // +1.35 → -1.15 (머리 위에서 정면 아�
 const REST_RIGHT = { pos: new THREE.Vector3(0.16, -0.14, -0.5), rotX: 0.06 };
 // 대기: 화면 왼쪽 아래 밖. 가드: 팔뚝이 화면을 가로로 가로막는다 (rotY로 눕힘, 주먹이 오른쪽)
 const REST_LEFT = { pos: new THREE.Vector3(-0.42, -0.58, -0.5), rotX: 0.35, rotY: -0.15, rotZ: 0.45 };
-const GUARD_LEFT = { pos: new THREE.Vector3(0.02, -0.09, -0.44), rotX: 0.12, rotY: -1.3, rotZ: -0.3 };
+// 가드 높이: 조준점(화면 중앙)을 가리지 않도록 하단에 배치 — 시야 확보 피드백
+const GUARD_LEFT = { pos: new THREE.Vector3(0.02, -0.24, -0.44), rotX: 0.12, rotY: -1.3, rotZ: -0.3 };
