@@ -80,15 +80,7 @@ export function init(world: World): void {
     }
   });
 
-  events.on('player_damaged', () => {
-    resetChain(world, 'damaged');
-    // 심장 각인 페널티 — 피격 시 마나 소실 (combat.md §5: Mana.ts에서 처리)
-    if (world.modifiers.manaLostOnHit > 0 && world.mana.value > 0) {
-      const lost = world.mana.value * world.modifiers.manaLostOnHit;
-      world.mana.value -= lost;
-      world.events.emit('mana_lost', { amount: lost, reason: 'heart_penalty' });
-    }
-  });
+  events.on('player_damaged', () => resetChain(world, 'damaged'));
 
   // 마법 시전(M5)이 생기면 이 이벤트가 발행된다
   events.on('cast_spell', () => resetChain(world, 'cast_spell'));

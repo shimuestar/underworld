@@ -707,7 +707,6 @@ function render(alpha: number): void {
     }
   }
   stage.setLanternOn(lanternVisible);
-  stage.setLanternIntensityMul(world.modifiers.lanternIntensityMul);
   stage.setAmbientBoost(world.modifiers.ambientVisionBoost);
   stage.setMuzzleFlash(world.weapon.muzzleFlash > 0);
   stage.syncEnemies(world.enemies, alpha);

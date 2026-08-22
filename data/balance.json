@@ -284,15 +284,9 @@
   },
 
   "sigil": {
+    "_penaltyNote": "2026-08: 부위 페널티(slotPenalty) 폐지 — 각인은 순수 강화, 대가는 오염 정산으로만",
     "pickupRadius": 1.3,
-    "scarRatio": 0.5,
-    "slotPenalty": {
-      "eye": { "flashbangSelfDamage": true },
-      "rightArm": { "reloadSpeedMul": 0.65 },
-      "leftArm": { "lanternIntensityMul": 0.5, "grenadeRangeMul": 0.7 },
-      "heart": { "manaLostOnHit": 1.0 },
-      "spine": { "aimSpreadMul": 1.4 }
-    }
+    "scarRatio": 0.5
   },
 
   "enemyAi": {

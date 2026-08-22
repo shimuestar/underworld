@@ -79,7 +79,6 @@ describe('각인 드랍과 부착', () => {
     expect(world.groundItems).toHaveLength(0);
     expect(world.sigils.equipped.rightArm).toBe('sig_fireball'); // 바로 몸에 새겨진다
     expect(world.sigils.inventory).toHaveLength(0);
-    expect(world.modifiers.reloadTimeMul).toBe(1); // 부착 페널티는 폐지됐다
   });
 
   it('처형으로 죽여도 한 번만 떨어진다 (melee_kill + enemy_died 중복 방지)', () => {
@@ -97,8 +96,6 @@ describe('각인 드랍과 부착', () => {
     world.sigils.inventory.push('sig_fireball');
     expect(Sigils.attach(world, 'sig_fireball')).toBe(true);
     expect(world.sigils.equipped.rightArm).toBe('sig_fireball');
-    expect(world.modifiers.reloadTimeMul).toBe(1); // 장전이 느려지지 않는다
-    expect(world.modifiers.aimSpreadMul).toBe(1);
     expect(world.corruption.pending).toBe(balance.corruption.slotCost.rightArm);
   });
 
@@ -114,7 +111,6 @@ describe('각인 드랍과 부착', () => {
     expect(world.modifiers.dodgeDistanceMul).toBeCloseTo(1.8);
     Sigils.detach(world, 'spine');
     expect(world.modifiers.dodgeDistanceMul).toBe(1);
-    expect(world.modifiers.aimSpreadMul).toBe(1);
     expect(world.sigils.inventory).toContain('sig_dash');
   });
 
@@ -123,7 +119,6 @@ describe('각인 드랍과 부착', () => {
     Sigils.attach(world, 'sig_dash');
     expect(world.modifiers.dodgeDistanceMul).toBeCloseTo(1.8);
     expect(world.modifiers.dodgeIFrameTicks).toBe(12);
-    expect(world.modifiers.aimSpreadMul).toBe(1); // 산포 페널티 폐지
   });
 
   it('암시야(눈): ambient 부스트', () => {

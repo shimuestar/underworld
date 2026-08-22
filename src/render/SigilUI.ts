@@ -13,14 +13,6 @@ const SLOT_LABELS: Record<SigilSlot, string> = {
   spine: '척추',
 };
 
-const PENALTY_HINTS: Record<SigilSlot, string> = {
-  eye: '섬광탄 자가 피해',
-  rightArm: '재장전 −35%',
-  leftArm: '랜턴 밝기 −50%',
-  heart: '피격 시 마나 전량 소실',
-  spine: '조준 산포 +40%',
-};
-
 export class SigilUI {
   private readonly root: HTMLDivElement;
   open = false;
@@ -77,12 +69,11 @@ export class SigilUI {
       row.appendChild(label);
 
       const equipped = world.sigils.equipped[slot];
-      const scar = world.sigils.scars[slot];
       const value = document.createElement('span');
       if (equipped) {
         const def = sigilDef(equipped);
         if (this.altarMode) {
-          value.textContent = `[${def.name}] — 클릭해서 해제 (흉터: 페널티 절반 영구 잔존)`;
+          value.textContent = `[${def.name}] — 클릭해서 해제`;
           value.style.cssText = 'color:#e8c76a;cursor:pointer;';
           value.onclick = () => {
             Sigils.detach(world, slot);
@@ -93,9 +84,8 @@ export class SigilUI {
           value.style.color = '#8a8f9a';
         }
       } else {
-        value.textContent =
-          `(비어 있음 · 페널티: ${PENALTY_HINTS[slot]})` + (scar > 0 ? '  ⚠흉터' : '');
-        value.style.color = scar > 0 ? '#8a6a6a' : '#555c66';
+        value.textContent = '(비어 있음)';
+        value.style.color = '#555c66';
       }
       row.appendChild(value);
       panel.appendChild(row);

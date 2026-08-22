@@ -306,9 +306,8 @@ function alertNearby(world: World, x: number, z: number, radius: number): void {
 }
 
 function startReload(world: World): void {
-  // 오른팔 각인 페널티 — 재장전 시간 배율 (M5 완료 조건: 부착하면 느려진 게 체감돼야 한다)
   world.weapon.reloading = Math.round(
-    balance.weapons.pistol.reloadTicks * world.modifiers.reloadTimeMul,
+    balance.weapons.pistol.reloadTicks,
   );
   world.events.emit('reload_started', { ticks: world.weapon.reloading });
 }

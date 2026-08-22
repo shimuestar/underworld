@@ -44,7 +44,7 @@ export interface SigilState {
   /** 소지 중(효과 없음). 부착해야 발동 — economy.md §4 */
   inventory: string[];
   equipped: Record<SigilSlot, string | null>;
-  /** 흉터 — 해제해도 잔존하는 페널티 비율 (0 또는 scarRatio, 누적 최댓값) */
+  /** 흉터 — 각인을 뗀 자국. 페널티 폐지 후에는 기록용 (이후 용도를 위해 남겨둠) */
   scars: Record<SigilSlot, number>;
 }
 
@@ -58,14 +58,9 @@ export interface CombatStats {
   damagedThisEncounter: boolean;
 }
 
-/** 부착된 각인·부위 페널티에서 매번 재계산되는 파생 수치. Sigils가 갱신한다 */
+/** 부착된 각인에서 매번 재계산되는 파생 수치. Sigils가 갱신한다.
+ *  (2026-08: 부위 페널티 폐지 — 각인은 순수 강화이고 대가는 오염으로만 치른다) */
 export interface Modifiers {
-  reloadTimeMul: number;
-  lanternIntensityMul: number;
-  aimSpreadMul: number;
-  /** 피격 시 소실되는 마나 비율 (heart 페널티: 1.0 = 전량) */
-  manaLostOnHit: number;
-  flashbangSelfDamage: boolean;
   dodgeDistanceMul: number;
   dodgeIFrameTicks: number;
   /** 암시야 — 렌더 ambient 가산 계수 */

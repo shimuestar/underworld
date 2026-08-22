@@ -142,10 +142,8 @@ describe('흉터', () => {
   it('흉터는 기록되지만 더 이상 페널티를 남기지 않는다 (부착 페널티 폐지)', () => {
     world.sigils.inventory.push('sig_fireball');
     Sigils.attach(world, 'sig_fireball');
-    expect(world.modifiers.reloadTimeMul).toBe(1);
 
     Sigils.detach(world, 'rightArm');
-    expect(world.modifiers.reloadTimeMul).toBe(1);
     // 흉터 자체는 남는다 — 이후 다른 용도로 쓸 수 있게 기록만 유지
     expect(world.sigils.scars.rightArm).toBe(balance.sigil.scarRatio);
   });

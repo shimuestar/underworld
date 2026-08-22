@@ -1,5 +1,5 @@
 // 각인 — 획득(처형 드랍), 부착/해제, 파생 수치(Modifiers) 재계산.
-// 소지만으로는 무효. 부착 시 효과 + 부위 페널티 즉시 적용, 오염은 pending에 누적.
+// 주우면 즉시 부착되어 효과가 붙는다. 부위 페널티는 폐지(2026-08), 오염만 pending에 누적.
 // docs/systems/economy.md §3~4.
 
 import { balance } from '../core/Balance';
@@ -9,11 +9,6 @@ import type { Modifiers, World } from '../core/World';
 
 export function defaultModifiers(): Modifiers {
   return {
-    reloadTimeMul: 1,
-    lanternIntensityMul: 1,
-    aimSpreadMul: 1,
-    manaLostOnHit: 0,
-    flashbangSelfDamage: false,
     dodgeDistanceMul: 1,
     dodgeIFrameTicks: balance.reaction.dodgeIFrameTicks,
     ambientVisionBoost: 0,
@@ -87,7 +82,7 @@ export function attach(world: World, sigilId: string): boolean {
   return true;
 }
 
-/** 부위의 각인을 떼어 인벤토리로. 흉터 — 페널티의 scarRatio만큼 영구 잔존 */
+/** 부위의 각인을 떼어 인벤토리로. 흉터는 기록만 남는다 (페널티 폐지) */
 export function detach(world: World, slot: SigilSlot): boolean {
   const id = world.sigils.equipped[slot];
   if (!id) return false;

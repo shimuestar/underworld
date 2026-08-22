@@ -346,12 +346,6 @@ export class Stage {
     if (this.ambientLight) this.ambientLight.intensity = this.levelAmbient + boost * 0.22;
   }
 
-  /** 왼팔 각인 페널티 — 랜턴 밝기 배율 (빔·잔광 모두) */
-  setLanternIntensityMul(mul: number): void {
-    this.lantern.intensity = balance.lantern.intensity * mul;
-    this.lanternSpill.intensity = balance.lantern.spillIntensity * mul;
-  }
-
   /** 오염 25 임계 — 벽 문자를 원문으로 교체 */
   setGlyphsReadable(readable: boolean): void {
     this.scene.traverse((obj) => {
