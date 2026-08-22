@@ -148,6 +148,44 @@ describe('공격 상태 머신 타이밍 (goblin_spear: windup 34t)', () => {
     expect(world3.player.health).toBe(balance.player.healthMax - 10);
   });
 
+  it('적 화살은 사선의 다른 적에게 막힌다 (동료 오사)', () => {
+    const spawnArrow = (world: World, casterId: number): void => {
+      const p = world.player;
+      // 플레이어 동쪽 6u 지점에서 서쪽(플레이어)을 향해 발사
+      world.projectiles.push({
+        id: 500, owner: 'enemy',
+        x: p.x + 6, y: 1.2, z: p.z, prevX: p.x + 6, prevY: 1.2, prevZ: p.z,
+        vx: -20, vy: 0, vz: 0,
+        lifeTicks: 120, damage: 10, burnTicks: 0, burnDamagePerTick: 0,
+        radius: 0.15, kind: 'arrow', casterId,
+      });
+      for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    };
+
+    // 사선 중간(3u)에 아군 — 화살이 아군에 맞고 플레이어는 무사
+    const world = makeWorld();
+    const ally = makeSpear(world.player.x + 3, world.player.z);
+    ally.id = 7;
+    world.enemies.push(ally);
+    spawnArrow(world, 1); // 시전자는 다른 id
+    expect(ally.health).toBe(enemyDef('goblin_spear').health - 10);
+    expect(world.player.health).toBe(balance.player.healthMax);
+
+    // 사선이 비면 플레이어가 맞는다
+    const world2 = makeWorld();
+    spawnArrow(world2, 1);
+    expect(world2.player.health).toBe(balance.player.healthMax - 10);
+
+    // 시전자 자신은 맞지 않는다 (발사 지점과 겹쳐도 통과)
+    const world3 = makeWorld();
+    const archer = makeSpear(world3.player.x + 6, world3.player.z);
+    archer.id = 7;
+    world3.enemies.push(archer);
+    spawnArrow(world3, 7);
+    expect(archer.health).toBe(enemyDef('goblin_spear').health);
+    expect(world3.player.health).toBe(balance.player.healthMax - 10);
+  });
+
   it('회피 무적 중에는 impact가 빗나간다', () => {
     const world = makeWorld();
     world.enemies.push(makeSpear(12, 10));

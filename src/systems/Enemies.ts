@@ -193,15 +193,21 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
   if (len === 0) return;
   const speed = attack.projectileSpeed ?? 12;
 
+  // 시전자 몸 밖에서 출발 — 밀착한 아군이 발사 즉시 삼키는 것을 막는다
+  const radius = attack.projectileRadius ?? 0.3;
+  const muzzle = def.radius + radius;
+  const originX = enemy.x + (dx / len) * muzzle;
+  const originZ = enemy.z + (dz / len) * muzzle;
+
   world.projectiles.push({
     id: nextProjectileId++,
     owner: 'enemy',
-    x: enemy.x,
+    x: originX,
     y: originY,
-    z: enemy.z,
-    prevX: enemy.x,
+    z: originZ,
+    prevX: originX,
     prevY: originY,
-    prevZ: enemy.z,
+    prevZ: originZ,
     vx: (dx / len) * speed,
     vy: (dy / len) * speed,
     vz: (dz / len) * speed,
@@ -209,7 +215,7 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
     damage: def.damage,
     burnTicks: 0,
     burnDamagePerTick: 0,
-    radius: attack.projectileRadius ?? 0.3,
+    radius,
     casterId: enemy.id,
     deflectable: attack.deflectable ?? false,
     kind:

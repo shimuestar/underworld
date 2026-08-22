@@ -223,6 +223,7 @@ for (const name of [
   'cast_failed',
   'spell_impact',
   'spell_kill',
+  'friendly_fire_kill',
   'sigil_dropped',
   'sigil_acquired',
   'sigil_attached',

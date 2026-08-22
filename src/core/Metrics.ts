@@ -25,7 +25,7 @@ export interface MetricsSnapshot {
     damageTakenTotal: number;
     timesDamaged: number;
   };
-  kills: { weapon: number; execution: number; spell: number; total: number };
+  kills: { weapon: number; execution: number; spell: number; friendlyFire: number; total: number };
   ammo: { shotsFired: number; shotsHit: number; altarEntries: number; altarBypasses: number };
   mana: { gained: number; decayed: number; lostToFail: number };
   derived: {
@@ -54,6 +54,7 @@ export class Metrics {
   private killsWeapon = 0;
   private killsExecution = 0;
   private killsSpell = 0;
+  private killsFriendlyFire = 0; // 적 투사체가 적을 죽인 수 (플레이어 전과 아님)
   private shotsFired = 0;
   private shotsHit = 0;
   private altarEntries = 0;
@@ -81,6 +82,7 @@ export class Metrics {
     });
     events.on('boss_execute', () => this.killsExecution++); // 처형 타격도 시도로 집계
     events.on('spell_kill', () => this.killsSpell++);
+    events.on('friendly_fire_kill', () => this.killsFriendlyFire++);
 
     events.on('shot_fired', (payload) => {
       this.shotsFired++;
@@ -153,6 +155,7 @@ export class Metrics {
         weapon: this.killsWeapon,
         execution: this.killsExecution,
         spell: this.killsSpell,
+        friendlyFire: this.killsFriendlyFire,
         total: this.killsWeapon + this.killsExecution + this.killsSpell,
       },
       ammo: {

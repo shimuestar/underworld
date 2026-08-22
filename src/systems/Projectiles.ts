@@ -119,6 +119,25 @@ function moveProjectiles(world: World, dt: number): void {
         }
       }
     } else {
+      // 동료 오사 — 시전자를 제외한 다른 적의 몸에 막힌다. 사선이 막힌 궁수는 아군을 쏜다
+      for (const enemy of world.enemies) {
+        if (!enemy.alive || enemy.id === proj.casterId) continue;
+        const def = enemyDef(enemy.type);
+        const pad = proj.radius;
+        const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
+          minX: enemy.x - def.radius - pad,
+          minY: -pad,
+          minZ: enemy.z - def.radius - pad,
+          maxX: enemy.x + def.radius + pad,
+          maxY: def.height + pad,
+          maxZ: enemy.z + def.radius + pad,
+        });
+        if (t !== null && t < hitT) {
+          hitT = t;
+          hitEnemy = enemy;
+        }
+      }
+
       const p = world.player;
       const r = balance.player.radius + proj.radius;
       const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
@@ -132,6 +151,7 @@ function moveProjectiles(world: World, dt: number): void {
       if (t !== null && t < hitT) {
         hitT = t;
         hitPlayer = true;
+        hitEnemy = null; // 적보다 플레이어가 앞
       }
     }
 
@@ -219,8 +239,13 @@ function applyProjectileHit(
   if (proj.burnDamagePerTick > 0) enemy.burnDamagePerTick = proj.burnDamagePerTick;
   if (enemy.health <= 0) {
     enemy.alive = false;
-    // 마법 처치도 마나 0 — 마나는 패링/처형 경로로만 (combat.md §5)
-    world.events.emit('spell_kill', { enemyType: enemy.type });
+    if (proj.owner === 'player') {
+      // 마법 처치도 마나 0 — 마나는 패링/처형 경로로만 (combat.md §5)
+      world.events.emit('spell_kill', { enemyType: enemy.type });
+    } else {
+      // 동료 오사 — 플레이어 전과가 아니므로 처치 통계·마나 경로에서 제외
+      world.events.emit('friendly_fire_kill', { enemyType: enemy.type });
+    }
     world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
   }
 }
