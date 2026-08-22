@@ -123,6 +123,8 @@
         "windowTicks": 26,
         "damageMul": 2.4,
         "knockbackMul": 1.8,
+        "_weightNote": "체급별 넉백 배율 — 무거울수록 덜 밀린다",
+        "knockbackByWeight": { "light": 1.0, "medium": 0.5, "heavy": 0.25 },
         "knockbackTicksMul": 2,
         "rangeMul": 1.15,
         "arcMul": 1.35,

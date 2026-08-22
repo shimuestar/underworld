@@ -5,7 +5,7 @@
     "goblin_runner": {
       "name": "고블린 러너",
       "zone": 1, "slice": true,
-      "xp": 10, "health": 30, "speed": 7.5, "damage": 12,
+      "weight": "light", "xp": 10, "health": 30, "speed": 7.5, "damage": 12,
       "radius": 0.5, "height": 1.6,
       "aggroRange": 16, "attackRange": 2.2,
       "behavior": "charge",
@@ -16,7 +16,7 @@
     "goblin_spear": {
       "name": "고블린 창병",
       "zone": 1, "slice": true,
-      "xp": 20, "health": 110, "speed": 3.2, "damage": 22,
+      "weight": "medium", "xp": 20, "health": 110, "speed": 3.2, "damage": 22,
       "radius": 0.62, "height": 1.8,
       "aggroRange": 14, "attackRange": 3.6,
       "behavior": "guard_advance",
@@ -28,7 +28,7 @@
     "goblin_archer": {
       "name": "고블린 궁수",
       "zone": 1, "slice": true,
-      "xp": 15, "health": 25, "speed": 3.0, "damage": 15,
+      "weight": "light", "xp": 15, "health": 25, "speed": 3.0, "damage": 15,
       "radius": 0.5, "height": 1.7,
       "aggroRange": 20, "attackRange": 18, "kiteMinRange": 8,
       "behavior": "caster_kite",
@@ -39,7 +39,7 @@
     "warden": {
       "name": "수호주술사",
       "zone": 2, "slice": true,
-      "xp": 45, "health": 90, "speed": 2.4, "damage": 26,
+      "weight": "medium", "xp": 45, "health": 90, "speed": 2.4, "damage": 26,
       "radius": 0.6, "height": 2.0,
       "aggroRange": 18, "attackRange": 16, "kiteMinRange": 6,
       "behavior": "caster_kite",
@@ -52,7 +52,7 @@
     "goblin_chieftain": {
       "name": "고블린 족장",
       "zone": 1, "slice": true, "boss": true,
-      "xp": 250, "health": 420, "speed": 4.0, "damage": 30,
+      "weight": "heavy", "xp": 250, "health": 420, "speed": 4.0, "damage": 30,
       "radius": 0.8, "height": 2.4,
       "aggroRange": 18, "attackRange": 3.4,
       "behavior": "boss_two_phase",
@@ -68,16 +68,16 @@
       "drops": ["sig_darkvision"], "dropsOnDeath": true
     },
 
-    "orc_warrior":    { "zone": 2, "slice": false, "xp": 50, "health": 140, "counters": { "melee": "best" } },
-    "orc_berserker":  { "zone": 2, "slice": false, "xp": 45, "health": 120, "counters": { "rifle": "best", "melee": "poor" } },
-    "orc_sentinel":   { "zone": 2, "slice": false, "xp": 55, "health": 160, "counters": { "pistol": "best" } },
-    "brood_sac":      { "zone": 2, "slice": false, "xp": 25, "health": 60,  "counters": { "rifle": "best", "melee": "none" } },
-    "stone_golem":    { "zone": 3, "slice": false, "xp": 110, "health": 300, "counters": { "grenade": "best", "pistol": "none", "magic": "none" } },
-    "lurker":         { "zone": 3, "slice": false, "xp": 30, "health": 70,  "counters": { "flash": "best", "pistol": "none", "rifle": "none" } },
-    "echo":           { "zone": 4, "slice": false, "xp": 40, "health": 110, "counters": { "deflect": "best", "pistol": "none", "rifle": "none", "magic": "none" } },
-    "librarian":      { "zone": 4, "slice": false, "xp": 35, "health": 95,  "counters": { "deflect": "best" } },
-    "swarm_worm":     { "zone": 4, "slice": false, "xp": 4, "health": 15,  "counters": { "magic": "best", "pistol": "none" } },
-    "hybrid_elite":   { "zone": 5, "slice": false, "xp": 95, "health": 260, "counters": { "_note": "페이즈별 전환" } }
+    "orc_warrior":    { "zone": 2, "slice": false, "weight": "medium", "xp": 50, "health": 140, "counters": { "melee": "best" } },
+    "orc_berserker":  { "zone": 2, "slice": false, "weight": "medium", "xp": 45, "health": 120, "counters": { "rifle": "best", "melee": "poor" } },
+    "orc_sentinel":   { "zone": 2, "slice": false, "weight": "heavy", "xp": 55, "health": 160, "counters": { "pistol": "best" } },
+    "brood_sac":      { "zone": 2, "slice": false, "weight": "medium", "xp": 25, "health": 60,  "counters": { "rifle": "best", "melee": "none" } },
+    "stone_golem":    { "zone": 3, "slice": false, "weight": "heavy", "xp": 110, "health": 300, "counters": { "grenade": "best", "pistol": "none", "magic": "none" } },
+    "lurker":         { "zone": 3, "slice": false, "weight": "light", "xp": 30, "health": 70,  "counters": { "flash": "best", "pistol": "none", "rifle": "none" } },
+    "echo":           { "zone": 4, "slice": false, "weight": "medium", "xp": 40, "health": 110, "counters": { "deflect": "best", "pistol": "none", "rifle": "none", "magic": "none" } },
+    "librarian":      { "zone": 4, "slice": false, "weight": "medium", "xp": 35, "health": 95,  "counters": { "deflect": "best" } },
+    "swarm_worm":     { "zone": 4, "slice": false, "weight": "light", "xp": 4, "health": 15,  "counters": { "magic": "best", "pistol": "none" } },
+    "hybrid_elite":   { "zone": 5, "slice": false, "weight": "heavy", "xp": 95, "health": 260, "counters": { "_note": "페이즈별 전환" } }
   },
 
   "counterScale": {

@@ -27,6 +27,8 @@ export interface EnemyDef {
   health: number;
   /** 처치 시 획득 경험치 */
   xp: number;
+  /** 체급 — 넉백 저항 등에 쓴다 (light / medium / heavy) */
+  weight: 'light' | 'medium' | 'heavy';
   speed: number;
   damage: number;
   radius: number;

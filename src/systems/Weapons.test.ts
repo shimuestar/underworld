@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
+import { enemyDef } from '../core/Entities';
 import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
@@ -139,6 +140,7 @@ describe('해머 (슬롯 1)', () => {
     const kbTicks = Math.round(hammer.knockbackTicks * hammer.combo.knockbackTicksMul);
     expect(enemy.kbTicks).toBe(kbTicks); // 미는 시간도 늘어난다
     for (let i = 0; i < kbTicks; i++) Enemies.tick(world, DT);
+    // 러너는 경량 — 배율 1.0
     expect(enemy.x).toBeCloseTo(startX + hammer.knockback * hammer.combo.knockbackMul, 1);
   });
 
@@ -506,5 +508,49 @@ describe('해머 3타 콤보', () => {
     const heavy = swingAt(far);
     expect(heavy.heavy).toBe(true);
     expect(heavy.damage).toBeGreaterThan(0);
+  });
+});
+
+describe('체급별 넉백 저항', () => {
+  const hammer = balance.weapons.hammer;
+  const byWeight = hammer.combo.knockbackByWeight as unknown as Record<string, number>;
+
+  /** 3타 강타를 맞히고 밀려난 거리를 잰다 */
+  function finisherPush(type: string): number {
+    const world2 = makeWorld();
+    const enemy = spawnEnemyAt(type, 6 + 2, 6, 1);
+    enemy.health = 1e9;
+    world2.enemies.push(enemy);
+    const swing3 = (): void => {
+      world2.weapon.meleeCooldown = 0;
+      world2.input = { ...Input.emptySnapshot(), meleePressed: true };
+      Weapons.tick(world2, DT);
+      world2.input = Input.emptySnapshot();
+      for (let i = 0; i < hammer.combo.chainFlinchTicks; i++) Enemies.tick(world2, DT);
+    };
+    swing3();
+    swing3();
+    const startX = enemy.x;
+    world2.weapon.meleeCooldown = 0;
+    world2.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world2, DT);
+    world2.input = Input.emptySnapshot();
+    for (let i = 0; i < Math.round(hammer.knockbackTicks * hammer.combo.knockbackTicksMul); i++) {
+      Enemies.tick(world2, DT);
+    }
+    return enemy.x - startX;
+  }
+
+  it('경량 1.0 / 중량 0.5 / 중장 0.25 — 무거울수록 덜 밀린다', () => {
+    const full = hammer.knockback * hammer.combo.knockbackMul;
+    expect(finisherPush('goblin_runner')).toBeCloseTo(full * byWeight['light']!, 1);
+    expect(finisherPush('goblin_spear')).toBeCloseTo(full * byWeight['medium']!, 1);
+    expect(finisherPush('goblin_chieftain')).toBeCloseTo(full * byWeight['heavy']!, 1);
+  });
+
+  it('모든 적에 체급이 지정돼 있다', () => {
+    for (const type of ['goblin_runner', 'goblin_spear', 'goblin_archer', 'warden', 'goblin_chieftain']) {
+      expect(['light', 'medium', 'heavy']).toContain(enemyDef(type).weight);
+    }
   });
 });

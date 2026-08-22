@@ -149,12 +149,15 @@ function swingHammer(world: World): void {
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     if (heavy) {
       // 마무리 강타에서만 밀어낸다 (보스는 밀리지 않는다)
-      if (!def.boss) {
+      // 체급이 무거울수록 덜 밀린다 (경량 1.0 / 중량 0.5 / 중장 0.25)
+      const byWeight = combo.knockbackByWeight as unknown as Record<string, number>;
+      const weightMul = byWeight[def.weight] ?? 1;
+      if (weightMul > 0) {
         // 멀리 밀되 미는 시간도 함께 늘린다 — 같은 속도로 더 멀리 (순간이동 방지)
         const kbTicks = Math.round(hammer.knockbackTicks * combo.knockbackTicksMul);
         enemy.kbTicks = kbTicks;
-        enemy.kbX = (toX / dist) * (knockback / kbTicks);
-        enemy.kbZ = (toZ / dist) * (knockback / kbTicks);
+        enemy.kbX = (toX / dist) * ((knockback * weightMul) / kbTicks);
+        enemy.kbZ = (toZ / dist) * ((knockback * weightMul) / kbTicks);
       }
     } else {
       // 1·2타는 밀치지 않고 그 자리에 굳힌다 — 밀려나면 연속타가 이어지지 않는다.
