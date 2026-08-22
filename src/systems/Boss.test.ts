@@ -274,3 +274,63 @@ describe('출구 (7.4)', () => {
     expect(world.cleared).toBe(true);
   });
 });
+
+describe('캐스터 재배치 — 아군이 사선을 막을 때', () => {
+  const strafe = balance.enemyAi.strafe;
+
+  /** 궁수(사거리 18, 카이팅 최소 8)와 그 사선 중앙에 고정된 아군 */
+  function setup(): { archer: ReturnType<typeof spawnEnemyAt>; ally: ReturnType<typeof spawnEnemyAt> } {
+    world.player.x = 6;
+    world.player.z = 10;
+    const archer = spawnEnemyAt('goblin_archer', 16, 10, 11);
+    archer.ai = 'chase';
+    const ally = spawnEnemyAt('goblin_spear', 11, 10, 12);
+    ally.ai = 'windup'; // 제자리 고정 (추격으로 사선이 저절로 트이는 것 방지)
+    ally.timer = 99999;
+    world.enemies.push(archer, ally);
+    return { archer, ally };
+  }
+
+  it('막히면 쏘지 않고 옆으로 이동한다 — enemy_repositioning 1회', () => {
+    const { archer } = setup();
+    const repos: unknown[] = [];
+    world.events.on('enemy_repositioning', (payload) => repos.push(payload));
+    const z0 = archer.z;
+
+    for (let i = 0; i < 20; i++) Enemies.tick(world, DT);
+    expect(archer.ai).toBe('chase'); // 아직 발사 안 함
+    expect(Math.abs(archer.z - z0)).toBeGreaterThan(0.5); // 옆으로 움직였다
+    expect(repos).toHaveLength(1); // 재배치 시작 시 1회만
+  });
+
+  it('각이 트이면 발사한다', () => {
+    const { archer } = setup();
+    for (let i = 0; i < 200 && archer.ai === 'chase'; i++) Enemies.tick(world, DT);
+    expect(archer.ai).toBe('windup');
+    expect(archer.strafeBlockedTicks).toBe(0);
+  });
+
+  it('끝내 각이 안 나오면 giveUpTicks 후 아군을 무릅쓰고 쏜다', () => {
+    const { archer, ally } = setup();
+    let ticks = 0;
+    for (let i = 0; i < strafe.giveUpTicks + 30; i++) {
+      ally.x = (archer.x + world.player.x) / 2; // 계속 사선에 붙는다
+      ally.z = (archer.z + world.player.z) / 2;
+      Enemies.tick(world, DT);
+      ticks++;
+      if (archer.ai !== 'chase') break;
+    }
+    expect(archer.ai).toBe('windup');
+    expect(ticks).toBeGreaterThanOrEqual(strafe.giveUpTicks);
+  });
+
+  it('사선이 비어 있으면 재배치 없이 즉시 발사', () => {
+    world.player.x = 6;
+    world.player.z = 10;
+    const archer = spawnEnemyAt('goblin_archer', 16, 10, 11);
+    archer.ai = 'chase';
+    world.enemies.push(archer);
+    Enemies.tick(world, DT);
+    expect(archer.ai).toBe('windup');
+  });
+});

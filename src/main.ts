@@ -235,6 +235,7 @@ for (const name of [
   'corruption_applied',
   'corruption_threshold',
   'enemy_cast',
+  'enemy_repositioning',
   'deflect',
   'barrier_blocked',
   'armor_hit',

@@ -186,6 +186,9 @@ export interface EnemyState {
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
   attackMode?: 'melee' | 'ranged';
+  /** 캐스터 재배치 — 사선이 아군에 막힌 누적 틱 / 현재 횡이동 방향(+1·-1) */
+  strafeBlockedTicks?: number;
+  strafeDir?: number;
   /** 넉백 잔여 틱 + 틱당 밀림량 (해머 등) */
   kbTicks?: number;
   kbX?: number;

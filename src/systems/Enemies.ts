@@ -10,6 +10,7 @@
 
 import { balance } from '../core/Balance';
 import { currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
+import { rayVsAabb } from '../core/Ray';
 import { playerBlocks, type EnemyState, type World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
@@ -61,6 +62,15 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           dist <= def.attackRange &&
           world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
         ) {
+          // 아군이 사선을 막으면 옆으로 이동해 각을 잡는다.
+          // 너무 오래 못 잡으면 그냥 쏜다 — 아군을 맞히는 것도 결과 중 하나
+          const blocker = blockingAlly(world, enemy, def, attack);
+          const blockedTicks = enemy.strafeBlockedTicks ?? 0;
+          if (blocker && blockedTicks < strafeCfg.giveUpTicks) {
+            strafeForAngle(world, enemy, def, blocker, distX, distZ, dist, dt);
+            break;
+          }
+          enemy.strafeBlockedTicks = 0;
           startWindup(world, enemy, attack);
         } else if (dist > 0) {
           const step = def.speed * dt;
@@ -168,6 +178,105 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
       break;
     }
+  }
+}
+
+const strafeCfg = balance.enemyAi.strafe;
+
+/** 발사선을 가로막는 아군 — 실제 투사체와 같은 기하로 예측한다 (Projectiles와 동일 규칙) */
+function blockingAlly(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  attack: EnemyAttackDef,
+): EnemyState | null {
+  const p = world.player;
+  const originY = def.height * 0.7;
+  const targetY = p.y + balance.player.eyeHeight * 0.8;
+  const dx = p.x - enemy.x;
+  const dy = targetY - originY;
+  const dz = p.z - enemy.z;
+  const len = Math.hypot(dx, dy, dz);
+  if (len === 0) return null;
+  const dirX = dx / len;
+  const dirY = dy / len;
+  const dirZ = dz / len;
+
+  const projRadius = attack.projectileRadius ?? 0.3;
+  const muzzle = def.radius + projRadius;
+  const ox = enemy.x + dirX * muzzle;
+  const oz = enemy.z + dirZ * muzzle;
+
+  // 플레이어까지의 거리 — 이보다 앞에 있는 아군만 사선을 막는다
+  const pr = balance.player.radius + projRadius;
+  const playerT =
+    rayVsAabb(ox, originY, oz, dirX, dirY, dirZ, {
+      minX: p.x - pr,
+      minY: -projRadius,
+      minZ: p.z - pr,
+      maxX: p.x + pr,
+      maxY: balance.player.height + projRadius,
+      maxZ: p.z + pr,
+    }) ?? Infinity;
+
+  let nearest: EnemyState | null = null;
+  let nearestT = playerT;
+  for (const other of world.enemies) {
+    if (!other.alive || other.id === enemy.id) continue;
+    const od = enemyDef(other.type);
+    const t = rayVsAabb(ox, originY, oz, dirX, dirY, dirZ, {
+      minX: other.x - od.radius - projRadius,
+      minY: -projRadius,
+      minZ: other.z - od.radius - projRadius,
+      maxX: other.x + od.radius + projRadius,
+      maxY: od.height + projRadius,
+      maxZ: other.z + od.radius + projRadius,
+    });
+    if (t !== null && t < nearestT) {
+      nearestT = t;
+      nearest = other;
+    }
+  }
+  return nearest;
+}
+
+/** 사선이 트일 때까지 플레이어를 중심으로 옆걸음. 막힌 아군 반대쪽으로 시작한다 */
+function strafeForAngle(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  blocker: EnemyState,
+  distX: number,
+  distZ: number,
+  dist: number,
+  dt: number,
+): void {
+  const perpX = -distZ / dist;
+  const perpZ = distX / dist;
+  const ticks = (enemy.strafeBlockedTicks ?? 0) + 1;
+  enemy.strafeBlockedTicks = ticks;
+
+  if (ticks === 1) {
+    // 막은 아군의 반대쪽으로 — 더 빨리 트인다
+    const lateral = perpX * (blocker.x - enemy.x) + perpZ * (blocker.z - enemy.z);
+    enemy.strafeDir = lateral > 0 ? -1 : 1;
+    world.events.emit('enemy_repositioning', {
+      enemyId: enemy.id,
+      enemyType: enemy.type,
+      blockedBy: blocker.id,
+    });
+  } else if (ticks % strafeCfg.flipAfterTicks === 0) {
+    enemy.strafeDir = -(enemy.strafeDir ?? 1); // 한쪽으로 계속 못 트이면 반대로
+  }
+
+  const dir = enemy.strafeDir ?? 1;
+  const step = def.speed * strafeCfg.speedMul * dt;
+  const beforeX = enemy.x;
+  const beforeZ = enemy.z;
+  world.level.slideMove(enemy, def.radius, perpX * step * dir, perpZ * step * dir);
+  // 벽에 막혀 제자리면 즉시 반대쪽으로
+  if (Math.hypot(enemy.x - beforeX, enemy.z - beforeZ) < step * 0.3) {
+    enemy.strafeDir = -dir;
   }
 }
 

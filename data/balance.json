@@ -211,6 +211,15 @@
     }
   },
 
+  "enemyAi": {
+    "strafe": {
+      "_comment": "캐스터(궁수/주술사)가 아군에 사선이 막혔을 때 옆으로 각을 잡는 동작",
+      "speedMul": 0.9,
+      "flipAfterTicks": 45,
+      "giveUpTicks": 150
+    }
+  },
+
   "telegraph": {
     "colorParryable": "#4A9EFF",
     "colorUnparryable": "#FF3B3B",
