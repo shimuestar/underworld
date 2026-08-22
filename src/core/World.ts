@@ -317,6 +317,9 @@ export class World {
   /** 일시정지 중 — 렌더는 계속되지만 시뮬레이션은 멈춰 있다 */
   paused = false;
 
+  /** 처형 연출 잔여 틱 — 그동안 모든 적이 멈춘다 (플레이어 동작을 보여주는 시간) */
+  executeFocusTicks = 0;
+
   /** 마지막으로 진입한 제단 (리스폰 지점). 없으면 사망 시 완전 재시작 */
   respawn: { x: number; z: number } | null = null;
 

@@ -28,6 +28,8 @@
     "failStunTicks": 20,
     "hitstopPerfectTicks": 4,
     "hitstopExecuteTicks": 8,
+    "_focusNote": "처형 연출 동안 모든 적이 멈춘다 — 플레이어 동작이 온전히 보이도록",
+    "executeFocusTicks": 32,
     "parryRecoilTicks": 36,
     "parryBufferTicks": 8,
     "hitstopNormalTicks": 2,

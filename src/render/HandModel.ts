@@ -14,8 +14,14 @@ const BRACER = 0x555c66;
 const RECOIL_MS = 130;
 const PARRY_SWING_MS = 340;
 const BLOCK_FLASH_MS = 260; // 방어 성공 섬광 (2회 깜빡임)
-const BASH_MS = 420; // 처형 방패 강타
-const BASH_GLOW = 0xfff0c0; // 강타 순간의 백금색 발광
+// 처형 마무리 — 어깨 뒤로 크게 젖혔다 대각선으로 분쇄한다.
+// 평타 3타(정면 수직 강타)와 구분되게 뒤로 빼는 예비동작과 비트는 궤적을 준다
+export const FINISHER_MS = 560;
+const FINISHER_COCK_T = 0.3; // 젖히기 완료 지점
+const FINISHER_CRUSH_T = 0.44; // 해머가 닿는 지점 — 연출·판정 타이밍의 기준
+const FINISHER_BURY_T = 0.6; // 박아 누르기 종료
+/** 처형 애니메이션 시작 후 해머가 실제로 닿기까지의 시간(ms) */
+export const FINISHER_CONTACT_MS = Math.round(FINISHER_MS * FINISHER_CRUSH_T);
 const SHIELD_ARROW_MS = 4000; // 방패에 꽂힌 화살 유지 시간
 const BLOCK_FLASH_COLOR = 0xbfd4ff;
 
@@ -103,7 +109,8 @@ export class HandModel {
   private gunPoseRot = 0;
   private throwUntil = 0;
   private blockFlashUntil = 0;
-  private bashUntil = 0;
+  private finisherUntil = 0;
+  private finisherStart = 0;
   private readonly shieldArrows: { group: THREE.Group; until: number }[] = [];
   private shieldArrowSlot = 0;
   private readonly skinMaterials: THREE.MeshLambertMaterial[] = [];
@@ -255,9 +262,10 @@ export class HandModel {
     }
   }
 
-  /** 처형 방패 강타 — 살짝 당겼다 화면 밖으로 찍어누르듯 밀어친다 */
-  triggerShieldBash(): void {
-    this.bashUntil = performance.now() + BASH_MS;
+  /** 처형 마무리 — 어깨 뒤로 젖혔다 대각선으로 분쇄한다 (방패 강타를 대체) */
+  triggerExecuteFinisher(): void {
+    this.finisherStart = performance.now();
+    this.finisherUntil = this.finisherStart + FINISHER_MS;
   }
 
   triggerParry(result: string): void {
@@ -295,6 +303,54 @@ export class HandModel {
 
     // 스윙 — 치켜듦(예비 18%) → 내리침(37%) → 박힘(12%) → 회수(33%).
     // 절대 각도로 지정한다: 대기 각도가 바뀌어도 궤적이 흔들리지 않는다
+    // 처형 마무리 — 다른 어떤 동작보다 우선한다 (보여주기 위한 시간이므로)
+    let finisher: SwingPose | null = null;
+    if (now < this.finisherUntil) {
+      const t = (now - this.finisherStart) / FINISHER_MS;
+      const restPose: SwingPose = {
+        rotX: HAMMER_REST_ROT,
+        rotY: REST_RIGHT.rotY,
+        x: REST_RIGHT.pos.x,
+        y: REST_RIGHT.pos.y,
+        z: SMASH_RIGHT.z,
+        rotZ: 0,
+      };
+      // 젖힘 — 해머를 오른쪽 어깨 너머로 넘긴다. z는 거의 건드리지 않는다:
+      // 카메라 쪽으로 당기면 팔이 화면을 덮는 판때기가 된다 (+0.18에서 실측 확인)
+      const cocked: SwingPose = {
+        rotX: 1.98, rotY: -0.42, x: 0.3, y: -0.04, z: SMASH_RIGHT.z + 0.04, rotZ: 0.26,
+      };
+      // 분쇄 — 오른쪽 위 뒤에서 화면 중앙 아래 앞으로 대각선으로 찍어 내린다
+      // 수직으로 깊이 찍으면(rotX −1.0 이하) 헤드가 화면 아래로 빠져 타격 순간이 안 보인다.
+      // 그래서 오른쪽 위 → 왼쪽 아래로 몸을 가로지르는 대각선으로 내린다
+      const crushed: SwingPose = {
+        rotX: -0.52, rotY: 0.58, x: -0.06, y: -0.3, z: SMASH_RIGHT.z - 0.18, rotZ: -0.32,
+      };
+      // 박아 누르기 — 닿은 뒤 체중을 실어 조금 더 밀어 넣는다
+      const buried: SwingPose = {
+        rotX: -0.62, rotY: 0.66, x: -0.1, y: -0.34, z: SMASH_RIGHT.z - 0.22, rotZ: -0.4,
+      };
+      const mixF = (a: SwingPose, b: SwingPose, k: number): SwingPose => ({
+        rotX: a.rotX + (b.rotX - a.rotX) * k,
+        rotY: a.rotY + (b.rotY - a.rotY) * k,
+        x: a.x + (b.x - a.x) * k,
+        y: a.y + (b.y - a.y) * k,
+        z: a.z! + (b.z! - a.z!) * k,
+        rotZ: a.rotZ! + (b.rotZ! - a.rotZ!) * k,
+      });
+      if (t < FINISHER_COCK_T) {
+        finisher = mixF(restPose, cocked, easeOutCubic(t / FINISHER_COCK_T));
+      } else if (t < FINISHER_CRUSH_T) {
+        const k = (t - FINISHER_COCK_T) / (FINISHER_CRUSH_T - FINISHER_COCK_T);
+        finisher = mixF(cocked, crushed, easeInCubic(k));
+      } else if (t < FINISHER_BURY_T) {
+        const k = (t - FINISHER_CRUSH_T) / (FINISHER_BURY_T - FINISHER_CRUSH_T);
+        finisher = mixF(crushed, buried, easeOutCubic(k));
+      } else {
+        finisher = mixF(buried, restPose, easeInCubic((t - FINISHER_BURY_T) / (1 - FINISHER_BURY_T)));
+      }
+    }
+
     // 스윙 — 감기 → 베기 → 버팀(이 구간에 다시 클릭하면 다음 타로 연결) → 복귀.
     // 출발 자세는 "지금 팔이 있는 곳"이라 1→2→3타가 끊기지 않고 이어진다
     let pose: SwingPose | null = null;
@@ -334,10 +390,11 @@ export class HandModel {
       else pose = mix(step.strike, rest, easeOutCubic((e - t3) / step.returnMs));
     }
 
+    if (finisher) pose = finisher; // 처형이 스윙을 덮어쓴다
     if (pose) {
-      this.rightArm.position.set(pose.x, pose.y, SMASH_RIGHT.z);
+      this.rightArm.position.set(pose.x, pose.y, pose.z ?? SMASH_RIGHT.z);
       this.rightArm.rotation.y = pose.rotY;
-      this.rightArm.rotation.z = 0; // 스윙 중에는 손목 비틀림 없음
+      this.rightArm.rotation.z = pose.rotZ ?? 0; // 평타는 손목 비틀림 없음
       this.baseRotX = pose.rotX;
     } else {
       this.rightArm.position.x = REST_RIGHT.pos.x;
@@ -387,21 +444,11 @@ export class HandModel {
     }
     // 올릴 때는 즉발에 가깝게(3프레임 내 84%), 내릴 때는 부드럽게 —
     // 방패가 늦게 나온다는 체감의 절반은 이 보간이 원인이었다
-    const blockTarget = state.blocking ? 1 : 0;
+    let blockTarget = state.blocking ? 1 : 0;
+    // 처형 중에는 왼팔을 내려 시야를 비운다 (해머 동작이 주인공)
+    if (now < this.finisherUntil) blockTarget = 0;
     this.blockBlend += (blockTarget - this.blockBlend) * (blockTarget > this.blockBlend ? 0.6 : 0.22);
     swing = Math.max(swing, this.blockBlend);
-
-    // 처형 강타 — 가드 자세를 기준점으로 삼아 뒤로 당겼다(15%) 앞으로 찍고(35%) 회수
-    let bash = 0;
-    if (now < this.bashUntil) {
-      const t = 1 - (this.bashUntil - now) / BASH_MS;
-      if (t < 0.15) bash = -0.35 * easeOutCubic(t / 0.15); // 당김 (뒤로)
-      else if (t < 0.35) bash = -0.35 + 1.35 * easeInCubic((t - 0.15) / 0.2); // 강타
-      else bash = 1.0 * (1 - easeOutCubic((t - 0.35) / 0.65)); // 회수
-      // 강타 내내 팔은 화면 안에 있어야 한다 — 당김 단계가 보이지 않으면 준비 동작이 죽는다
-      const presence = t < 0.35 ? 0.88 : 0.72 + 0.28 * Math.max(0, bash);
-      swing = Math.max(swing, presence);
-    }
 
     this.leftArm.position.lerpVectors(REST_LEFT.pos, GUARD_LEFT.pos, swing);
     this.leftArm.rotation.x = REST_LEFT.rotX + (GUARD_LEFT.rotX - REST_LEFT.rotX) * swing;
@@ -416,17 +463,6 @@ export class HandModel {
     this.leftArm.position.y += this.gunPoseY * gunWeight;
     this.leftArm.position.z += gunZ * gunWeight;
     this.leftArm.rotation.x += this.gunPoseRot * gunWeight;
-    if (bash !== 0) {
-      // 가드 자세에서 화면 안쪽으로 밀어치며 방패면이 정면을 향하도록 비튼다
-      this.leftArm.position.z -= 0.42 * bash;
-      this.leftArm.position.x += 0.1 * bash;
-      this.leftArm.position.y += 0.06 * bash;
-      this.leftArm.rotation.y += 0.55 * bash;
-      this.leftArm.rotation.z -= 0.25 * bash;
-      // 오른팔은 반동으로 뒤로 빠진다
-      this.rightArm.position.z += 0.12 * Math.max(0, bash);
-      this.rightArm.rotation.x -= 0.25 * Math.max(0, bash);
-    }
     if (swing > 0) {
       this.bracerMaterial.emissive.set(this.parryGlow);
       this.bracerMaterial.emissiveIntensity = swing;
@@ -440,15 +476,6 @@ export class HandModel {
       const pulse = Math.abs(Math.sin(t * Math.PI * 2)) * (1 - t * 0.35);
       this.bracerMaterial.emissive.set(BLOCK_FLASH_COLOR);
       this.bracerMaterial.emissiveIntensity = pulse;
-    }
-
-    // 강타 발광 — 당기는 동안 은은히 차오르다 찍는 순간 터진다
-    if (bash < 0) {
-      this.bracerMaterial.emissive.set(BASH_GLOW);
-      this.bracerMaterial.emissiveIntensity = 0.35 * (-bash / 0.35);
-    } else if (bash > 0) {
-      this.bracerMaterial.emissive.set(BASH_GLOW);
-      this.bracerMaterial.emissiveIntensity = bash;
     }
 
     // 방패에 꽂힌 화살 — 시간이 지나면 사라진다
@@ -467,6 +494,9 @@ interface SwingPose {
   rotY: number;
   x: number;
   y: number;
+  /** 처형 마무리만 사용 — 앞뒤(z)와 손목 비틀기까지 준다 */
+  z?: number;
+  rotZ?: number;
 }
 interface SwingStep {
   /** 감기 / 베기 / 버팀(연결 대기) / 복귀 — 절대 시간(ms) */

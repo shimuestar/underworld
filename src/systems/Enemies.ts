@@ -16,6 +16,12 @@ import { playerBlocks, pushPlayer, type EnemyState, type World } from '../core/W
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
 export function tick(world: World, dt: number): void {
+  // 처형 연출 중 — 모든 적이 멈춘다. 플레이어의 마무리 동작이 온전히 보이도록
+  if (world.executeFocusTicks > 0) {
+    world.executeFocusTicks--;
+    return;
+  }
+
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
     tickEnemy(world, enemy, dt);

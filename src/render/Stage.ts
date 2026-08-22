@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { currentAttack, enemyDef } from '../core/Entities';
 import { glyphTexture } from '../level/GridLoader';
 import type { EnemyState, GroundItemState, ProjectileState } from '../core/World';
-import { HandModel } from './HandModel';
+import { FINISHER_CONTACT_MS, HandModel } from './HandModel';
 
 // 적 타입별 몸통 색 (시각 팔레트 — 튜닝값 아님)
 const ENEMY_COLORS: Record<string, number> = {
@@ -204,6 +204,8 @@ export class Stage {
   private readonly muzzleLight: THREE.PointLight;
   private readonly eyeHeight = balance.player.eyeHeight;
   private readonly enemyVisuals = new Map<number, EnemyVisual>();
+  /** 처형 연출 중 붙잡아 둔 시체 — id → 해제 시각(ms) */
+  private readonly heldVictims = new Map<number, number>();
   private readonly projectileVisuals = new Map<number, THREE.Group>();
   private readonly groundItemVisuals = new Map<number, THREE.Group>();
   private readonly tracers: Tracer[] = [];
@@ -300,9 +302,17 @@ export class Stage {
     this.hands.triggerBlockHit(kind);
   }
 
-  /** 처형 방패 강타 */
-  triggerShieldBash(): void {
-    this.hands.triggerShieldBash();
+  /** 처형 마무리 — 해머 분쇄. 해머가 닿기까지의 시간(ms)을 돌려준다.
+   *  호출자는 이 값으로 섬광·카메라 킥·사망 연출을 타격 순간에 맞춘다 */
+  triggerExecuteFinisher(): number {
+    this.hands.triggerExecuteFinisher();
+    return FINISHER_CONTACT_MS;
+  }
+
+  /** 처형당한 적의 모습을 해머가 닿을 때까지 그 자리에 붙잡아 둔다.
+   *  로직상 이미 죽었지만, 내려찍기 전에 사라지면 허공을 치는 그림이 된다 */
+  holdExecutionVictim(enemyId: number, holdMs: number): void {
+    this.heldVictims.set(enemyId, performance.now() + holdMs);
   }
 
   triggerGrenadeThrow(): void {
@@ -1084,6 +1094,11 @@ export class Stage {
 
     for (const [id, visual] of this.enemyVisuals) {
       if (seen.has(id)) continue;
+      const heldUntil = this.heldVictims.get(id);
+      if (heldUntil !== undefined) {
+        if (now < heldUntil) continue; // 처형 대기 — 마지막 자세 그대로 얼어 있는다
+        this.heldVictims.delete(id);
+      }
       this.scene.remove(visual.group);
       visual.group.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {

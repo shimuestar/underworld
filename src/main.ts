@@ -291,13 +291,32 @@ events.on('parry_attempt', (payload) => {
 });
 // 보스는 boss_execute(타격) 후 치명타면 melee_kill 도 같은 틱에 온다 — 연출 1회만
 let executePresentedTick = -1;
+// 연출 지연 큐 — 처형처럼 "동작이 닿는 순간"에 맞춰야 하는 효과를 담는다.
+// 로직이 아니라 화면용이므로 render 루프의 벽시계로 돈다 (HandModel과 동일 기준)
+const delayedFx: { at: number; run: () => void }[] = [];
+function afterMs(ms: number, run: () => void): void {
+  delayedFx.push({ at: performance.now() + ms, run });
+}
+function runDelayedFx(now: number): void {
+  for (let i = delayedFx.length - 1; i >= 0; i--) {
+    if (now < delayedFx[i]!.at) continue;
+    const fx = delayedFx.splice(i, 1)[0]!;
+    fx.run();
+  }
+}
+
+/** 처형 연출 — 해머가 닿는 순간에 소리·섬광·카메라 킥을 몰아준다.
+ *  즉발로 터뜨리면 아직 치켜든 상태에서 적이 터져 동작과 어긋난다 */
+let executeContactMs = 0;
 function presentExecute(power: number, x?: number, z?: number): void {
   if (executePresentedTick === world.tick) return;
   executePresentedTick = world.tick;
-  audio.play('execute');
-  stage.triggerShieldBash();
-  stage.triggerCameraKick(power);
-  if (x !== undefined && z !== undefined) stage.triggerExecuteFlash(x, z);
+  executeContactMs = stage.triggerExecuteFinisher(); // 방패가 아니라 해머로 끝낸다
+  afterMs(executeContactMs, () => {
+    audio.play('execute');
+    stage.triggerCameraKick(power);
+    if (x !== undefined && z !== undefined) stage.triggerExecuteFlash(x, z);
+  });
 }
 events.on('boss_execute', () => presentExecute(1.15));
 events.on('melee_kill', (payload) => {
@@ -372,12 +391,25 @@ events.on('reload_started', () => audio.play('reload_start'));
 events.on('reload_finished', () => audio.play('reload_end'));
 let executedThisFrame = false; // 직전 melee_kill 이 처형이었는지 (파편 세기 결정)
 events.on('melee_kill', (payload) => {
-  executedThisFrame = (payload as { execution: boolean }).execution;
+  const kill = payload as { execution: boolean; enemyId?: number };
+  executedThisFrame = kill.execution;
+  // 해머가 닿기 전에 시체가 사라지면 허공을 치는 그림이 된다 — 접촉까지 붙잡아 둔다
+  if (kill.execution && kill.enemyId !== undefined) {
+    stage.holdExecutionVictim(kill.enemyId, executeContactMs);
+  }
 });
 events.on('enemy_died', (payload) => {
   const dead = payload as { enemyType: string; x: number; z: number };
-  audio.play('enemy_death');
-  stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType, executedThisFrame ? 1.8 : 1);
+  if (executedThisFrame) {
+    // 처형 — 사망 연출도 해머가 닿는 순간까지 미룬다
+    afterMs(executeContactMs, () => {
+      audio.play('enemy_death');
+      stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType, 1.8);
+    });
+  } else {
+    audio.play('enemy_death');
+    stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType, 1);
+  }
   executedThisFrame = false;
 });
 events.on('cast_failed', (payload) => {
@@ -690,6 +722,7 @@ let measuredTps = 0;
 
 function render(alpha: number): void {
   const now = performance.now();
+  runDelayedFx(now);
   if (now - tpsWindowStart >= 1000) {
     measuredTps = tpsWindowTicks / ((now - tpsWindowStart) / 1000);
     tpsWindowStart = now;

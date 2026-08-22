@@ -180,10 +180,12 @@ export function tick(world: World, _dt: number): void {
       // 보스 처형 — 즉사가 아니라 큰 타격. 스태거를 끝내 armored 전환을 유도
       enemy.health -= def.executeDamage;
       world.freezeTicks = reaction.hitstopExecuteTicks;
+      world.executeFocusTicks = reaction.executeFocusTicks;
       world.events.emit('boss_execute', { enemyId: enemy.id, damage: def.executeDamage });
       if (enemy.health <= 0) {
         enemy.alive = false;
         world.events.emit('melee_kill', {
+          enemyId: enemy.id,
           enemyType: enemy.type,
           execution: true,
           x: enemy.x,
@@ -197,8 +199,10 @@ export function tick(world: World, _dt: number): void {
     }
     // 일반 적 — 처형 즉사. 마나는 Mana가, 각인 드랍은 Sigils가 이 이벤트를 구독해 처리
     enemy.alive = false;
-    world.freezeTicks = reaction.hitstopExecuteTicks; // 방패 강타의 무게
+    world.freezeTicks = reaction.hitstopExecuteTicks; // 마무리 일격의 무게
+    world.executeFocusTicks = reaction.executeFocusTicks; // 그동안 적 전체 정지
     world.events.emit('melee_kill', {
+      enemyId: enemy.id,
       enemyType: enemy.type,
       execution: true,
       x: enemy.x,

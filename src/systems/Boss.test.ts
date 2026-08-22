@@ -182,7 +182,8 @@ describe('goblin_chieftain (1구역 보스)', () => {
     expect(boss.health).toBe(def.health - def.executeDamage!);
     expect(boss.alive).toBe(true);
 
-    Enemies.tick(world, DT); // 스태거 종료
+    // 처형 연출 동안은 적 전체가 멈춘다 — 그 시간을 지나야 스태거가 끝난다
+    for (let i = 0; i < balance.reaction.executeFocusTicks + 1; i++) Enemies.tick(world, DT);
     expect(boss.phase).toBe('armored');
     expect(boss.armorHealth).toBe(def.armorHealth);
   });
