@@ -293,6 +293,9 @@ export class World {
   /** 누적 경험치 — 적 처치 시 획득 (레벨업은 이후 구역) */
   xp = 0;
 
+  /** 일시정지 중 — 렌더는 계속되지만 시뮬레이션은 멈춰 있다 */
+  paused = false;
+
   /** 마지막으로 진입한 제단 (리스폰 지점). 없으면 사망 시 완전 재시작 */
   respawn: { x: number; z: number } | null = null;
 

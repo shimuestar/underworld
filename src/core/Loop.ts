@@ -12,6 +12,7 @@ export class Loop {
   private readonly step: number;
   private acc = 0;
   private last = 0;
+  private paused = false;
 
   constructor(
     tickRate: number,
@@ -26,10 +27,32 @@ export class Loop {
     requestAnimationFrame(this.frame);
   }
 
+  /** 일시정지 — simulate만 멈추고 render는 계속한다 (화면은 정지 상태로 보인다).
+   *  재개 시 누적 시간을 버려 멈춰 있던 만큼 틱이 몰아치지 않게 한다 */
+  setPaused(paused: boolean): void {
+    if (this.paused === paused) return;
+    this.paused = paused;
+    if (!paused) {
+      this.last = performance.now();
+      this.acc = 0;
+    }
+  }
+
+  get isPaused(): boolean {
+    return this.paused;
+  }
+
   private frame = (now: number): void => {
     // 스파이크 클램프 — 탭 전환 후 복귀 시 수백 틱이 몰아치는 것을 막는다
     this.acc += Math.min((now - this.last) / 1000, this.maxFrameClampSec);
     this.last = now;
+
+    if (this.paused) {
+      this.acc = 0;
+      this.hooks.render(0);
+      requestAnimationFrame(this.frame);
+      return;
+    }
 
     while (this.acc >= this.step) {
       this.hooks.simulate(this.step);

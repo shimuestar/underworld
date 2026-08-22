@@ -120,6 +120,14 @@ export class Input {
     window.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
+  /** 눌린 상태를 전부 해제 — 일시정지·포커스 상실 시 키가 눌린 채 남지 않게 */
+  releaseHeld(): void {
+    this.keys.clear();
+    this.meleeDown = false;
+    this.rangedDown = false;
+    this.reactionDown = false;
+  }
+
   get pointerLocked(): boolean {
     return document.pointerLockElement === this.lockTarget;
   }

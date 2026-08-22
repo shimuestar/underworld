@@ -788,6 +788,28 @@ const loop = new Loop(balance.loop.tickRate, balance.loop.maxFrameClampSec, {
   render,
 });
 
+// ---- 일시정지 ----
+// 포인터 락이 풀리면(ESC·알트탭·창 밖 클릭) 곧 화면 밖이라는 뜻이므로 함께 멈춘다.
+// 브라우저가 ESC를 포인터 락 해제로 예약해 두었기 때문에 이게 가장 자연스럽다.
+const pauseOverlay = document.getElementById('pause')!;
+function setPaused(paused: boolean): void {
+  if (loop.isPaused === paused) return;
+  loop.setPaused(paused);
+  world.paused = paused;
+  // 각인 UI·사망·클리어 화면이 떠 있을 때는 정지 안내를 겹쳐 띄우지 않는다
+  const showOverlay = paused && !world.uiOpen && !world.dead && !world.cleared;
+  pauseOverlay.classList.toggle('visible', showOverlay);
+  if (paused) input.releaseHeld(); // 멈춘 사이 눌려 있던 키가 남지 않게
+}
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement) setPaused(false);
+  else if (!world.uiOpen) setPaused(true);
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) setPaused(true);
+});
+window.addEventListener('blur', () => setPaused(true));
+
 // 개발 빌드 전용 디버그 핸들 (헤드리스 테스트/콘솔 조작용)
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__world = world;
