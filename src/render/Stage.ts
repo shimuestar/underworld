@@ -46,6 +46,11 @@ const TRACER_COLOR = 0xffe9b8;
 const MUZZLE_OFFSET = { x: -0.17, y: -0.1, z: -0.72 }; // 카메라 로컬: 왼손 권총 총구 끝
 
 // 적 부속물 색
+/** 벽 잔존물 수명 — 화살은 좀 더 오래 남는다 (눈에 띄는 물건이라). 끝 DECAL_FADE_MS 동안 옅어진다 */
+const STUCK_ARROW_MS = 14000;
+const BULLET_MARK_MS = 10000;
+const DECAL_FADE_MS = 2000;
+
 const SHIELD_COLOR = 0x6f7480;
 const SHIELD_BASE_X = -0.08;
 /** 가드가 풀렸을 때 방패 — 팔이 옆으로 툭 늘어진 그림 (낮게 + 옆으로 + 뉘어서) */
@@ -401,48 +406,79 @@ export class Stage {
     }
   }
 
-  /** 벽에 꽂힌 화살 (잔존물 — 오래된 것부터 제거) */
-  private readonly stuckArrows: THREE.Group[] = [];
-  spawnStuckArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number): void {
-    const arrow = new THREE.Group();
-    const shaft = new THREE.Mesh(
-      new THREE.BoxGeometry(0.05, 0.05, 0.6),
-      new THREE.MeshLambertMaterial({ color: 0x6b5233 }),
-    );
-    arrow.add(shaft);
-    // 촉이 박힌 지점에서 꼬리가 튀어나오도록 뒤로 물림
-    arrow.position.set(x - dx * 0.26, y - dy * 0.26, z - dz * 0.26);
-    arrow.lookAt(x + dx, y + dy, z + dz);
-    this.scene.add(arrow);
-    this.stuckArrows.push(arrow);
-    if (this.stuckArrows.length > 30) {
-      const oldest = this.stuckArrows.shift()!;
-      this.scene.remove(oldest);
-      oldest.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          (obj.material as THREE.Material).dispose();
-        }
-      });
+  /** 벽 잔존물 (화살·탄흔) — 수명이 다하면 옅어지며 사라진다.
+   *  개수 상한은 짧은 시간에 몰아칠 때를 위한 안전장치로 남겨 둔다 */
+  private readonly decals: {
+    kind: 'arrow' | 'mark';
+    object: THREE.Object3D;
+    material: THREE.Material & { opacity: number };
+    bornMs: number;
+    lifeMs: number;
+  }[] = [];
+
+  private addDecal(
+    kind: 'arrow' | 'mark',
+    object: THREE.Object3D,
+    material: THREE.Material & { opacity: number },
+    lifeMs: number,
+    maxCount: number,
+  ): void {
+    this.scene.add(object);
+    this.decals.push({ kind, object, material, bornMs: performance.now(), lifeMs });
+    const sameKind = this.decals.filter((d) => d.kind === kind);
+    if (sameKind.length > maxCount) this.removeDecal(sameKind[0]!);
+  }
+
+  private removeDecal(decal: (typeof this.decals)[number]): void {
+    const i = this.decals.indexOf(decal);
+    if (i >= 0) this.decals.splice(i, 1);
+    this.scene.remove(decal.object);
+    decal.object.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        (obj.material as THREE.Material).dispose();
+      }
+    });
+  }
+
+  private updateDecals(now: number): void {
+    for (let i = this.decals.length - 1; i >= 0; i--) {
+      const d = this.decals[i]!;
+      const left = d.lifeMs - (now - d.bornMs);
+      if (left <= 0) {
+        this.removeDecal(d);
+        continue;
+      }
+      // 마지막 구간에서만 옅어진다 — 그 전에는 또렷하게 남아 있어야 흔적 구실을 한다
+      d.material.opacity = Math.min(1, left / DECAL_FADE_MS);
     }
   }
 
-  /** 총알 탄흔 (잔존물) */
-  private readonly bulletMarks: THREE.Mesh[] = [];
+  /** 벽에 꽂힌 화살 */
+  spawnStuckArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number): void {
+    const arrow = new THREE.Group();
+    const material = new THREE.MeshLambertMaterial({
+      color: 0x6b5233,
+      transparent: true,
+      opacity: 1,
+    });
+    arrow.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.6), material));
+    // 촉이 박힌 지점에서 꼬리가 튀어나오도록 뒤로 물림
+    arrow.position.set(x - dx * 0.26, y - dy * 0.26, z - dz * 0.26);
+    arrow.lookAt(x + dx, y + dy, z + dz);
+    this.addDecal('arrow', arrow, material, STUCK_ARROW_MS, 30);
+  }
+
+  /** 총알 탄흔 */
   spawnBulletMark(x: number, y: number, z: number): void {
-    const mark = new THREE.Mesh(
-      new THREE.SphereGeometry(0.07, 6, 5),
-      new THREE.MeshBasicMaterial({ color: 0x121216 }),
-    );
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x121216,
+      transparent: true,
+      opacity: 1,
+    });
+    const mark = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), material);
     mark.position.set(x, y, z);
-    this.scene.add(mark);
-    this.bulletMarks.push(mark);
-    if (this.bulletMarks.length > 40) {
-      const oldest = this.bulletMarks.shift()!;
-      this.scene.remove(oldest);
-      oldest.geometry.dispose();
-      (oldest.material as THREE.Material).dispose();
-    }
+    this.addDecal('mark', mark, material, BULLET_MARK_MS, 40);
   }
 
   /** 수류탄 차징 궤적 미리보기 — 점선. null이면 숨김 */
@@ -1589,6 +1625,7 @@ export class Stage {
     this.updateTracers();
     this.updateParticles();
     this.updateExplosions();
+    this.updateDecals(performance.now());
     this.renderer.render(this.scene, this.camera);
   }
 }
