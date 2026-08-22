@@ -167,6 +167,14 @@ function resolveHammerHit(world: World, heavy: boolean): void {
       enemy.braceTicks = Math.max(enemy.braceTicks ?? 0, sb.braceTicks);
       if (enemy.ai === 'idle') enemy.ai = 'chase';
       if (heavy) {
+        // 마무리 타는 방패째 크게 밀어낸다 — 안 밀리면 제자리에서 무한 연타가 된다.
+        // 밀리는 동안은 버티기 자세도 풀린다 (가드를 잃고 떠밀린다)
+        enemy.braceTicks = 0;
+        const kbTicks = sb.finisherKnockbackTicks;
+        enemy.kbTicks = kbTicks;
+        enemy.kbX = (toX / dist) * (sb.finisherKnockback / kbTicks);
+        enemy.kbZ = (toZ / dist) * (sb.finisherKnockback / kbTicks);
+
         enemy.shieldHits = (enemy.shieldHits ?? 0) + 1;
         if (enemy.shieldHits >= sb.finisherHitsToBreak) {
           enemy.shieldBroken = true;

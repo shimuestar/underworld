@@ -598,7 +598,22 @@ describe('방패병 vs 해머', () => {
     expect(enemy.health).toBe(110); // 피해 없음
     expect(braced).toHaveLength(1);
     expect(enemy.braceTicks).toBe(sb.braceTicks);
-    expect(enemy.kbTicks ?? 0).toBe(0); // 밀리지도 않는다
+    expect(enemy.kbTicks ?? 0).toBe(0); // 1·2타는 밀리지 않는다
+  });
+
+  it('마무리 3타를 방패로 받으면 크게 밀려난다 — 버티기도 풀린다', () => {
+    const enemy = shieldman();
+    swingOnce();
+    swingOnce();
+    const startX = enemy.x;
+    swingOnce(); // 3타
+
+    expect(enemy.braceTicks).toBe(0); // 가드를 잃고 떠밀린다
+    expect(enemy.kbTicks).toBe(sb.finisherKnockbackTicks);
+    for (let i = 0; i < sb.finisherKnockbackTicks; i++) Enemies.tick(world, DT);
+    expect(enemy.x - startX).toBeCloseTo(sb.finisherKnockback, 1);
+    // 밀려난 거리가 해머 사거리 밖이라 연타를 이어갈 수 없다
+    expect(enemy.x - world.player.x).toBeGreaterThan(hammer.range * hammer.combo.rangeMul);
   });
 
   it('버티는 동안 방패병은 아무 행동도 하지 않는다', () => {

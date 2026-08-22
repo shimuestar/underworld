@@ -61,6 +61,14 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   enemy.prevX = enemy.x;
   enemy.prevZ = enemy.z;
 
+  // 넉백 — 떠밀리는 동안은 버티기·경직보다 우선한다 (벽에는 막힘)
+  // 밀려나는 동안은 휘청여서 다른 행동을 못 한다 (벽에는 막힘)
+  if ((enemy.kbTicks ?? 0) > 0) {
+    enemy.kbTicks = (enemy.kbTicks ?? 0) - 1;
+    world.level.slideMove(enemy, def.radius, enemy.kbX ?? 0, enemy.kbZ ?? 0);
+    return;
+  }
+
   // 방패로 버티는 중 — 웅크린 채 아무 행동도 하지 않는다 (해머 연타를 받아내는 동안)
   if ((enemy.braceTicks ?? 0) > 0) {
     enemy.braceTicks = (enemy.braceTicks ?? 0) - 1;
@@ -72,13 +80,6 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   // 상태도 타이머도 진행하지 않으므로 공격이 취소되지 않고 "얼어붙는다"
   if ((enemy.attackFreezeTicks ?? 0) > 0) {
     enemy.attackFreezeTicks = (enemy.attackFreezeTicks ?? 0) - 1;
-    return;
-  }
-
-  // 넉백 — 밀려나는 동안은 휘청여서 다른 행동을 못 한다 (벽에는 막힘)
-  if ((enemy.kbTicks ?? 0) > 0) {
-    enemy.kbTicks = (enemy.kbTicks ?? 0) - 1;
-    world.level.slideMove(enemy, def.radius, enemy.kbX ?? 0, enemy.kbZ ?? 0);
     return;
   }
 
