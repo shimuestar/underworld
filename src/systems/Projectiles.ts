@@ -185,6 +185,18 @@ function moveProjectiles(world: World, dt: number): void {
         });
       }
 
+      // 화염구는 무엇에 닿든 그 자리에서 터진다 (벽·바닥·적 모두)
+      if (proj.kind === 'fireball' && proj.owner === 'player') {
+        explodeFireball(
+          world,
+          proj,
+          proj.x + dirX * hitT,
+          proj.y + dirY * hitT,
+          proj.z + dirZ * hitT,
+          hitEnemy,
+        );
+      }
+
       if (hitPlayer) {
         const p = world.player;
         if (p.iframeTicks <= 0) {
@@ -274,6 +286,54 @@ function applyProjectileHit(
       world.events.emit('friendly_fire_kill', { enemyType: enemy.type });
     }
     world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+  }
+}
+
+/** 화염구 폭발 — 반경 내 적에게 거리 감쇠 피해와 화상, 가까운 적은 크게 날린다.
+ *  직격당한 적(direct)은 이미 본 피해를 받았으므로 폭발 피해에서는 제외한다 */
+function explodeFireball(
+  world: World,
+  proj: (typeof world.projectiles)[number],
+  x: number,
+  y: number,
+  z: number,
+  direct: (typeof world.enemies)[number] | null,
+): void {
+  const fx = sigilDef('sig_fireball').effects;
+  const radius = fx['explodeRadius'] ?? 0;
+  if (radius <= 0) return;
+  const blastRadius = fx['blastRadius'] ?? 0;
+  world.events.emit('explosion', { x, y, z, radius, kind: 'fireball' });
+
+  for (const enemy of world.enemies) {
+    if (!enemy.alive) continue;
+    const dist = Math.hypot(enemy.x - x, enemy.z - z);
+    if (dist > radius) continue;
+
+    // 가까우면 크게 밀려난다 (보스 제외) — 직격 대상 포함
+    if (dist <= blastRadius && !enemyDef(enemy.type).boss) {
+      const away = dist > 0.001 ? dist : 1;
+      const kbTicks = fx['blastKnockbackTicks'] ?? 12;
+      const push = (fx['blastKnockback'] ?? 0) / kbTicks;
+      enemy.kbTicks = kbTicks;
+      enemy.kbX = ((enemy.x - x) / away) * push;
+      enemy.kbZ = ((enemy.z - z) / away) * push;
+    }
+    if (enemy === direct) continue; // 직격 피해와 중복되지 않게
+
+    if (enemy.ai === 'idle') enemy.ai = 'chase';
+    const falloff =
+      1 - (1 - (fx['explodeFalloffMin'] ?? 0.3)) * Math.min(1, dist / radius);
+    const damage = (fx['explodeDamage'] ?? 0) * falloff;
+    // 방어막·장갑은 폭발을 막지 못한다 (화염은 사방에서 온다)
+    enemy.health -= damage;
+    enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
+    if (proj.burnDamagePerTick > 0) enemy.burnDamagePerTick = proj.burnDamagePerTick;
+    if (enemy.health <= 0) {
+      enemy.alive = false;
+      world.events.emit('spell_kill', { enemyType: enemy.type, splash: true });
+      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    }
   }
 }
 

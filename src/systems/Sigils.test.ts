@@ -3,9 +3,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
+import { sigilDef } from '../core/SigilData';
 import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
+import { spawnEnemyAt } from '../level/Spawner';
 import * as Mana from './Mana';
 import * as Projectiles from './Projectiles';
 import * as Sigils from './Sigils';
@@ -202,5 +204,67 @@ describe('화염구', () => {
     for (let i = 0; i < 120 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
     expect(world.projectiles).toHaveLength(0);
     expect(impacts).toBe(1);
+  });
+});
+
+describe('화염구 폭발', () => {
+  const fx = sigilDef('sig_fireball').effects;
+
+  /** 플레이어(6,6)에서 +X로 화염구를 쏴 dist 지점의 적에게 맞힌다 */
+  function castAt(): void {
+    world.sigils.inventory.push('sig_fireball');
+    Sigils.attach(world, 'sig_fireball');
+    world.mana.value = 100;
+    world.player.yaw = -Math.PI / 2;
+    world.input = { ...Input.emptySnapshot(), castPressed: true };
+    Projectiles.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    for (let i = 0; i < 60 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+  }
+
+  it('적중 지점 주변의 다른 적도 피해를 입는다 (거리 감쇠)', () => {
+    const direct = spawnEnemyAt('goblin_runner', 6 + 6, 6, 1);
+    const near = spawnEnemyAt('goblin_runner', 6 + 6, 6 + 1.5, 2); // 폭심에서 1.5
+    const far = spawnEnemyAt('goblin_runner', 6 + 6, 6 + 3.5, 3); // 3.5
+    const outside = spawnEnemyAt('goblin_runner', 6 + 6, 6 + 6, 4); // 반경 밖
+    for (const e of [direct, near, far, outside]) {
+      e.health = 1000;
+      world.enemies.push(e);
+    }
+
+    castAt();
+    expect(direct.health).toBeLessThan(1000); // 직격
+    expect(near.health).toBeLessThan(1000);
+    expect(far.health).toBeLessThan(1000);
+    expect(outside.health).toBe(1000); // 반경 밖은 무사
+    // 가까울수록 크게 다친다
+    expect(1000 - near.health).toBeGreaterThan(1000 - far.health);
+  });
+
+  it('폭심 가까이 있으면 크게 밀려난다', () => {
+    // 사선 위의 적에게 맞혀 그 자리에서 터뜨린다
+    const direct = spawnEnemyAt('goblin_runner', 6 + 6, 6, 1);
+    const near = spawnEnemyAt('goblin_runner', 6 + 6, 6 + 1.6, 2); // 폭심에서 1.6 (blastRadius 안)
+    const far = spawnEnemyAt('goblin_runner', 6 + 6, 6 + 3.5, 3); // 3.5 (밖)
+    for (const e of [direct, near, far]) {
+      e.health = 1000;
+      world.enemies.push(e);
+    }
+
+    castAt();
+    expect(near.kbTicks).toBe(fx['blastKnockbackTicks']);
+    expect(far.kbTicks ?? 0).toBe(0); // blastRadius 밖은 밀리지 않는다
+  });
+
+  it('벽에 맞아도 터진다 — 근처 적이 피해를 입는다', () => {
+    // 사격장 복도 끝 벽까지 날아가 터지게, 벽 앞에 적을 둔다
+    const nearWall = spawnEnemyAt('goblin_runner', 6 + 40, 6 + 1.5, 1);
+    nearWall.health = 1000;
+    world.enemies.push(nearWall);
+    const explosions: unknown[] = [];
+    world.events.on('explosion', (payload) => explosions.push(payload));
+
+    castAt();
+    expect(explosions.length).toBeGreaterThan(0);
   });
 });
