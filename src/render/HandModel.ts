@@ -54,6 +54,7 @@ export class HandModel {
   private readonly grenadeParts: THREE.Mesh[] = [];
   private swingUntil = 0;
   private baseRotX = 0;
+  private activeWeapon: 'hammer' | 'grenade' | 'pistol' = 'pistol';
   private throwUntil = 0;
   private readonly skinMaterials: THREE.MeshLambertMaterial[] = [];
   private corruptionStage = -1;
@@ -131,6 +132,7 @@ export class HandModel {
 
   /** 무기 전환 — 오른손에 들린 모델 교체 */
   setWeapon(kind: 'hammer' | 'grenade' | 'pistol'): void {
+    this.activeWeapon = kind;
     for (const mesh of this.gunParts) mesh.visible = kind === 'pistol';
     for (const mesh of this.hammerParts) mesh.visible = kind === 'hammer';
     for (const mesh of this.grenadeParts) mesh.visible = kind === 'grenade';
@@ -166,9 +168,9 @@ export class HandModel {
   }): void {
     const now = performance.now();
 
-    // 오른팔 목표 포즈
+    // 오른팔 목표 포즈 — 해머는 평상시에도 머리 위로 치켜든 대기 자세
     let targetY = REST_RIGHT.pos.y;
-    let targetRotX = REST_RIGHT.rotX;
+    let targetRotX = this.activeWeapon === 'hammer' ? HAMMER_REST_ROT : REST_RIGHT.rotX;
     if (state.stunned) {
       targetY -= 0.1;
       targetRotX -= 0.55;
@@ -186,12 +188,13 @@ export class HandModel {
       directRot += 0.3 * k;
     }
 
-    // 해머 스윙 — 머리 위로 확 치켜들었다(35%) 격하게 내리찍고(35%) 복귀(30%)
+    // 해머 스윙 — 이미 치켜든 대기 자세에서 격하게 내리찍고(45%) 잠깐 박혔다(25%)
+    // 다시 들어 올린다(30%)
     if (now < this.swingUntil) {
       const t = 1 - (this.swingUntil - now) / 170;
-      if (t < 0.35) directRot += -1.7 * easeOutCubic(t / 0.35);
-      else if (t < 0.7) directRot += -1.7 + 3.0 * easeInCubic((t - 0.35) / 0.35);
-      else directRot += 1.3 * (1 - (t - 0.7) / 0.3);
+      if (t < 0.45) directRot += HAMMER_SMASH_ARC * easeInCubic(t / 0.45);
+      else if (t < 0.7) directRot += HAMMER_SMASH_ARC;
+      else directRot += HAMMER_SMASH_ARC * (1 - (t - 0.7) / 0.3);
     }
     // 수류탄 — 차징 중엔 뒤로 당기고(부드럽게), 투척 시 앞으로 밀기(즉발)
     kickZ += 0.14 * (state.chargeFrac ?? 0);
@@ -230,6 +233,10 @@ export class HandModel {
     }
   }
 }
+
+// 해머 대기(치켜든) 각도와 내리침 호 크기
+const HAMMER_REST_ROT = -1.35;
+const HAMMER_SMASH_ARC = 2.6; // -1.35 → +1.25 (머리 위에서 바닥까지)
 
 // 포즈 정의 (카메라 로컬 좌표)
 const REST_RIGHT = { pos: new THREE.Vector3(0.16, -0.14, -0.5), rotX: 0.06 };
