@@ -199,6 +199,57 @@ describe('공격 상태 머신 타이밍 (goblin_spear: windup 34t)', () => {
   });
 });
 
+describe('적 몸통 충돌', () => {
+  const contact = (world: World): number => {
+    const e = world.enemies[0]!;
+    return Math.hypot(world.player.x - e.x, world.player.z - e.z);
+  };
+
+  it('적을 향해 걸어도 통과하지 못하고 몸통 앞에서 멈춘다', () => {
+    const world = makeWorld();
+    const enemy = makeSpear(14, 10);
+    enemy.ai = 'idle'; // 제자리 (움직이지 않는 벽 역할)
+    world.enemies.push(enemy);
+    world.player.yaw = -Math.PI / 2; // 동쪽(적)을 바라봄
+    const minDist = balance.player.radius + enemyDef('goblin_spear').radius;
+
+    for (let i = 0; i < 180; i++) {
+      world.input = { ...Input.emptySnapshot(), moveForward: 1 };
+      PlayerMove.tick(world, DT);
+      expect(contact(world)).toBeGreaterThanOrEqual(minDist - 0.01);
+    }
+    // 적 앞에 붙어서 멈췄다 (통과하지 못했다)
+    expect(world.player.x).toBeLessThan(enemy.x);
+    expect(contact(world)).toBeLessThan(minDist + 0.2);
+  });
+
+  it('추격하는 적도 플레이어를 파고들지 못한다', () => {
+    const world = makeWorld();
+    const enemy = makeSpear(14, 10);
+    world.enemies.push(enemy);
+    const minDist = balance.player.radius + enemyDef('goblin_spear').radius;
+
+    for (let i = 0; i < 240; i++) {
+      Enemies.tick(world, DT);
+      PlayerMove.tick(world, DT);
+      expect(contact(world)).toBeGreaterThanOrEqual(minDist - 0.01);
+    }
+  });
+
+  it('죽은 적은 통과할 수 있다', () => {
+    const world = makeWorld();
+    const enemy = makeSpear(11, 10);
+    enemy.alive = false;
+    world.enemies.push(enemy);
+    world.player.yaw = -Math.PI / 2;
+    for (let i = 0; i < 60; i++) {
+      world.input = { ...Input.emptySnapshot(), moveForward: 1 };
+      PlayerMove.tick(world, DT);
+    }
+    expect(world.player.x).toBeGreaterThan(enemy.x); // 시체는 막지 않는다
+  });
+});
+
 describe('피격 밀림', () => {
   const kb = balance.playerKnockback;
 

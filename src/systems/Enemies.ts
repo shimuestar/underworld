@@ -251,6 +251,16 @@ function moveAvoiding(
   mx /= len;
   mz /= len;
   world.level.slideMove(enemy, def.radius, mx * step, mz * step);
+
+  // 플레이어 몸통을 통과할 수 없다 — 파고들었으면 자기가 물러난다
+  const p = world.player;
+  const minDist = balance.player.radius + def.radius;
+  const dx = enemy.x - p.x;
+  const dz = enemy.z - p.z;
+  const d = Math.hypot(dx, dz);
+  if (d > 0 && d < minDist) {
+    world.level.slideMove(enemy, def.radius, (dx / d) * (minDist - d), (dz / d) * (minDist - d));
+  }
 }
 
 /** 발사선을 가로막는 아군 — 실제 투사체와 같은 기하로 예측한다 (Projectiles와 동일 규칙) */
