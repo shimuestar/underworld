@@ -587,7 +587,7 @@ function simulate(dt: number): void {
   // 히트스톱 — simulate를 건너뛰되 반응 입력(릴리즈)은 버퍼에 보관 (docs/architecture.md §1)
   if (world.freezeTicks > 0) {
     world.freezeTicks--;
-    if (world.input.reactionReleased) {
+    if (world.input.reactionPressed) {
       world.player.reactionBufferTicks = balance.reaction.inputBufferTicks;
     }
     world.tick++;

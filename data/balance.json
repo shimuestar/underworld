@@ -22,7 +22,6 @@
 
   "reaction": {
     "radius": 4.6,
-    "tapThresholdTicks": 12,
     "windowPerfectTicks": 6,
     "windowNormalTicks": 12,
     "windowDeflectTicks": 8,

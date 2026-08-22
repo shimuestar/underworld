@@ -269,7 +269,10 @@ export class HandModel {
       else if (t < 0.55) swing = 1;
       else swing = 1 - easeInCubic((t - 0.55) / 0.45);
     }
-    this.blockBlend += ((state.blocking ? 1 : 0) - this.blockBlend) * 0.3;
+    // 올릴 때는 즉발에 가깝게(3프레임 내 84%), 내릴 때는 부드럽게 —
+    // 방패가 늦게 나온다는 체감의 절반은 이 보간이 원인이었다
+    const blockTarget = state.blocking ? 1 : 0;
+    this.blockBlend += (blockTarget - this.blockBlend) * (blockTarget > this.blockBlend ? 0.6 : 0.22);
     swing = Math.max(swing, this.blockBlend);
 
     // 처형 강타 — 가드 자세를 기준점으로 삼아 뒤로 당겼다(15%) 앞으로 찍고(35%) 회수

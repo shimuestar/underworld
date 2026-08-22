@@ -1,6 +1,9 @@
 // 단일 반응 버튼 (Space) — docs/systems/combat.md §1, §3.
 // 상황에 따라 자동 분기: 패링 판정 > 반사(투사체) > 처형 > (windup 조기 입력 = 실패).
-// 회피는 Shift+탭 — 명시 입력이라 판정을 거치지 않는다 (빨강 공격 회피용).
+// 회피는 Shift+누르기 — 명시 입력이라 판정을 거치지 않는다 (빨강 공격 회피용).
+//
+// 판정도 방어도 "누르는 순간"이다 (2026-08 개정). 예전엔 뗄 때 판정하고
+// 방어는 12틱 홀드 후에야 켜져서 체감 지연이 300ms를 넘었다.
 //
 // 패링은 "시간"이 아니라 "무기 끝 위치"로 판정한다:
 //   gap = 적까지 거리 - 플레이어 반경 - 무기 끝 거리   (0 = 무기가 몸에 닿는 순간)
@@ -23,19 +26,13 @@ export function tick(world: World, _dt: number): void {
   if (p.iframeTicks > 0) p.iframeTicks--;
   if (p.reactionBufferTicks > 0) p.reactionBufferTicks--;
 
-  // 방어 (Space 홀드) — 탭 임계를 넘긴 뒤에만 발동. 짧은 탭(=패링 시도) 중에는
-  // 방어가 켜지지 않아 브레이서가 두 번 올라가지 않는다. 경직/대시 중 불가.
+  // 방어 (Space 홀드) — 누른 첫 틱부터 즉시 성립한다. 경직/대시 중 불가.
   // 피해 처리는 Enemies/Projectiles가 playerBlocks()로 판정 (정면 한정, 칩 데미지 관통)
-  if (world.input.reactionHeld) p.reactionHeldTicks++;
-  p.blocking =
-    world.input.reactionHeld &&
-    p.reactionHeldTicks > reaction.tapThresholdTicks &&
-    p.stunTicks <= 0 &&
-    p.dodgeTicks <= 0;
+  p.reactionHeldTicks = world.input.reactionHeld ? p.reactionHeldTicks + 1 : 0;
+  p.blocking = world.input.reactionHeld && p.stunTicks <= 0 && p.dodgeTicks <= 0;
 
   if (p.stunTicks > 0) {
     p.stunTicks--;
-    if (world.input.reactionReleased) p.reactionHeldTicks = 0;
     return; // 경직 중에는 반응 불가 (입력은 버려진다)
   }
 
@@ -47,16 +44,13 @@ export function tick(world: World, _dt: number): void {
     return; // 대시 중 추가 반응 불가
   }
 
-  // 패링 판정은 버튼을 "뗄 때" — 짧은 탭(tapThreshold 이내)이었을 때만.
-  // 길게 눌렀다 떼는 것은 방어 해제일 뿐, 공짜 패링이 되지 않는다.
-  const released = world.input.reactionReleased || p.reactionBufferTicks > 0;
-  if (!released) return;
-  const wasTap = p.reactionHeldTicks <= reaction.tapThresholdTicks;
-  p.reactionHeldTicks = 0;
+  // 판정은 버튼을 "누르는 순간" 한 번. 계속 누르고 있어도 다시 판정되지 않는다
+  // (누른 채로 두면 그냥 방어 상태가 유지된다)
+  const pressed = world.input.reactionPressed || p.reactionBufferTicks > 0;
+  if (!pressed) return;
   p.reactionBufferTicks = 0;
-  if (!wasTap) return;
 
-  // Shift+탭 = 명시적 회피 — 판정을 거치지 않고 즉시 발동.
+  // Shift+누르기 = 명시적 회피 — 판정을 거치지 않고 즉시 발동.
   // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다
   if (world.input.sprint) {
     startDodge(world);

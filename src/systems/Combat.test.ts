@@ -68,7 +68,7 @@ function tickUntil(world: World, target: string, maxTicks = 300): number {
 }
 
 function pressReaction(world: World): void {
-  world.input = { ...Input.emptySnapshot(), reactionReleased: true };
+  world.input = { ...Input.emptySnapshot(), reactionPressed: true };
   Reaction.tick(world, DT);
   world.input = Input.emptySnapshot();
 }
@@ -465,7 +465,7 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
 
   it('Shift+탭 = 즉시 회피 (판정 생략)', () => {
     const world = makeWorld();
-    world.input = { ...Input.emptySnapshot(), reactionReleased: true, sprint: true };
+    world.input = { ...Input.emptySnapshot(), reactionPressed: true, sprint: true };
     Reaction.tick(world, DT);
     expect(world.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
     expect(world.player.iframeTicks).toBe(balance.reaction.dodgeIFrameTicks);
@@ -474,7 +474,7 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
     const world2 = makeWorld();
     world2.enemies.push(makeSpear(12, 10));
     tickUntil(world2, 'windup');
-    world2.input = { ...Input.emptySnapshot(), reactionReleased: true, sprint: true };
+    world2.input = { ...Input.emptySnapshot(), reactionPressed: true, sprint: true };
     Reaction.tick(world2, DT);
     expect(world2.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
     expect(world2.player.stunTicks).toBe(0);

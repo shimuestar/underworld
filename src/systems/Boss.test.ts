@@ -63,7 +63,7 @@ function tickEnemiesUntil(predicate: () => boolean, maxTicks = 600): void {
 }
 
 function pressReaction(): void {
-  world.input = { ...Input.emptySnapshot(), reactionReleased: true };
+  world.input = { ...Input.emptySnapshot(), reactionPressed: true };
   Reaction.tick(world, DT);
   world.input = Input.emptySnapshot();
 }
