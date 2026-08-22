@@ -316,7 +316,10 @@ events.on('hammer_swing', () => {
   audio.play('hammer_swing');
   stage.triggerHammerSwing();
 });
-events.on('melee_hit', () => audio.play('melee_hit'));
+events.on('melee_hit', (payload) => {
+  audio.play('melee_hit');
+  stage.flashEnemyHit((payload as { enemyId: number }).enemyId);
+});
 events.on('grenade_thrown', () => {
   audio.play('grenade_throw');
   stage.triggerGrenadeThrow();

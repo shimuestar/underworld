@@ -23,6 +23,9 @@ const ENEMY_BOLT_COLOR = 0xa855f7; // 마법 투사체 색 규약 (balance.teleg
 
 // 텔레그래프 이외 상태 표시색 (텔레그래프 3색과 겹치지 않게 — 색이 곧 문법)
 const STAGGER_COLOR = 0xcc9922; // 스태거 = 처형 가능 표시
+const HIT_FLASH_COLOR = 0xffffff; // 해머 적중 — 새하얗게 명멸
+const HIT_FLASH_MS = 240;
+const HIT_FLASH_HZ = 26; // 초당 명멸 횟수 (아주 빠르게)
 const WINDUP_TINT = 0x0e2440; // 예비 동작의 옅은 예고 (본 섬광은 종료 4t 전)
 const BURN_TINT = 0x8f3300; // 화상 중
 const FIREBALL_COLOR = 0xff7733;
@@ -83,6 +86,8 @@ interface EnemyVisual {
   shieldMaterial?: THREE.MeshLambertMaterial;
   /** 방패의 기준 z — 몸통 전진에 오프셋으로 더한다 */
   shieldBaseZ: number;
+  /** 해머 적중 명멸이 끝나는 시각 */
+  hitFlashUntil: number;
   /** 근접 무기 팔 피벗 — 치켜들었다 내리찍는다 */
   arm?: THREE.Group;
   shieldFlashUntil: number;
@@ -682,6 +687,7 @@ export class Stage {
       torso,
       flashMaterials,
       shieldBaseZ: 0,
+      hitFlashUntil: 0,
       shieldFlashUntil: 0,
       barrierFlashUntil: 0,
       plate,
@@ -831,7 +837,21 @@ export class Stage {
       else if (enemy.ai === 'windup') emissive = WINDUP_TINT;
       else if (enemy.ai === 'staggered') emissive = STAGGER_COLOR;
       else if (enemy.burnTicks > 0) emissive = BURN_TINT;
-      for (const material of visual.flashMaterials) material.emissive.set(emissive);
+
+      // 해머 적중 명멸 — 무엇보다 우선한다. 켜짐/꺼짐을 빠르게 교대해 "번쩍번쩍"
+      const hitLeft = visual.hitFlashUntil - now;
+      let hitIntensity = 0;
+      if (hitLeft > 0) {
+        const on = Math.sin((now / 1000) * HIT_FLASH_HZ * Math.PI * 2) > 0;
+        if (on) {
+          emissive = HIT_FLASH_COLOR;
+          hitIntensity = hitLeft / HIT_FLASH_MS; // 잦아들며 멎는다
+        }
+      }
+      for (const material of visual.flashMaterials) {
+        material.emissive.set(emissive);
+        material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
+      }
 
       // 이름표 — 어그로 후에만. 체력/장갑이 바뀔 때만 다시 그린다
       visual.plate.visible = enemy.ai !== 'idle';
@@ -1073,6 +1093,12 @@ export class Stage {
       });
       this.projectileVisuals.delete(id);
     }
+  }
+
+  /** 해머 적중 — 몸 전체가 아주 빠르게 명멸한다 */
+  flashEnemyHit(enemyId: number): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    if (visual) visual.hitFlashUntil = performance.now() + HIT_FLASH_MS;
   }
 
   /** 방패 파괴 — 판이 조각나 튀고, 화염구가 남긴 불티가 흩날린다 */
