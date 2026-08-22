@@ -80,20 +80,42 @@ describe('해머 (슬롯 1)', () => {
     world.input = Input.emptySnapshot();
   }
 
-  it('전방 부채꼴 적중 — 권총의 60% 피해 + 뒤로 넉백', () => {
+  it('전방 부채꼴 적중 — 권총의 60% 피해. 1타는 밀치지 않고 굳힌다', () => {
     const hammer = balance.weapons.hammer;
     const enemy = spawnEnemyAt('goblin_runner', 6 + hammer.range - 0.2, 6, 1);
+    enemy.ai = 'chase';
     world.enemies.push(enemy);
     const startX = enemy.x;
 
     swing();
     expect(enemy.health).toBe(30 - hammer.damage); // 20 — 러너 2방
     expect(enemy.alive).toBe(true);
+    expect(enemy.kbTicks ?? 0).toBe(0); // 밀려나지 않는다
+    expect(enemy.flinchTicks).toBe(hammer.combo.chainFlinchTicks);
 
-    // 넉백 — 타격 방향(+X)으로 밀려난다
+    // 굳어 있는 동안 제자리 (연속타를 이어갈 수 있게 붙잡아 둔다)
     world.input = Input.emptySnapshot();
-    for (let i = 0; i < hammer.knockbackTicks; i++) Enemies.tick(world, DT);
-    expect(enemy.x).toBeCloseTo(startX + hammer.knockback, 1);
+    for (let i = 0; i < hammer.combo.chainFlinchTicks; i++) Enemies.tick(world, DT);
+    expect(enemy.x).toBeCloseTo(startX, 5);
+  });
+
+  it('마무리 3타에서만 뒤로 밀린다', () => {
+    const hammer = balance.weapons.hammer;
+    const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
+    enemy.health = 1000;
+    world.enemies.push(enemy);
+
+    swing();
+    swing();
+    expect(enemy.kbTicks ?? 0).toBe(0);
+    const startX = enemy.x;
+    swing(); // 3타 강타
+
+    world.input = Input.emptySnapshot();
+    const kbTicks = Math.round(hammer.knockbackTicks * hammer.combo.knockbackTicksMul);
+    expect(enemy.kbTicks).toBe(kbTicks); // 미는 시간도 늘어난다
+    for (let i = 0; i < kbTicks; i++) Enemies.tick(world, DT);
+    expect(enemy.x).toBeCloseTo(startX + hammer.knockback * hammer.combo.knockbackMul, 1);
   });
 
   it('헛스윙은 후딜 추가, 명중은 짧은 연결 쿨다운 (1·2타)', () => {

@@ -147,11 +147,18 @@ function swingHammer(world: World): void {
 
     enemy.health -= damage;
     if (enemy.ai === 'idle') enemy.ai = 'chase';
-    // 넉백 — 타격 방향으로 밀려난다 (보스는 밀리지 않는다)
-    if (!enemyDef(enemy.type).boss) {
-      enemy.kbTicks = hammer.knockbackTicks;
-      enemy.kbX = (toX / dist) * (knockback / hammer.knockbackTicks);
-      enemy.kbZ = (toZ / dist) * (knockback / hammer.knockbackTicks);
+    if (heavy) {
+      // 마무리 강타에서만 밀어낸다 (보스는 밀리지 않는다)
+      if (!def.boss) {
+        // 멀리 밀되 미는 시간도 함께 늘린다 — 같은 속도로 더 멀리 (순간이동 방지)
+        const kbTicks = Math.round(hammer.knockbackTicks * combo.knockbackTicksMul);
+        enemy.kbTicks = kbTicks;
+        enemy.kbX = (toX / dist) * (knockback / kbTicks);
+        enemy.kbZ = (toZ / dist) * (knockback / kbTicks);
+      }
+    } else {
+      // 1·2타는 밀치지 않고 그 자리에 굳힌다 — 밀려나면 연속타가 이어지지 않는다
+      enemy.flinchTicks = Math.max(enemy.flinchTicks ?? 0, combo.chainFlinchTicks);
     }
     hitAny = true;
     world.events.emit('melee_hit', { enemyId: enemy.id, damage, heavy });
