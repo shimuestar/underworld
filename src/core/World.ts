@@ -120,6 +120,11 @@ export interface GroundItemState {
   sigilId?: string;
   /** kind==='gold' 일 때 획득량 */
   amount?: number;
+  /** 자석 흡수 중 — 공중으로 떠서 플레이어에게 날아간다 */
+  magnet?: boolean;
+  /** 비행 중 높이와 현재 속도 (자석 상태에서만 의미 있음) */
+  y?: number;
+  speed?: number;
 }
 
 export interface ManaState {
@@ -272,6 +277,9 @@ export class World {
 
   /** 보유 골드 — 적 처치 드랍으로 모인다 (사용처는 이후 구역) */
   gold = 0;
+
+  /** 누적 경험치 — 적 처치 시 획득 (레벨업은 이후 구역) */
+  xp = 0;
 
   /** 마지막으로 진입한 제단 (리스폰 지점). 없으면 사망 시 완전 재시작 */
   respawn: { x: number; z: number } | null = null;

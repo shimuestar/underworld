@@ -2,11 +2,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { balance } from '../core/Balance';
+import { enemyDef } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Pickups from './Pickups';
+import * as Progression from './Progression';
 import * as Sigils from './Sigils';
 
 const DT = 1 / 60;
@@ -80,39 +82,59 @@ describe('처치 드랍', () => {
   });
 });
 
-describe('자동 획득', () => {
-  it('포션 — 반경 안에 들어가면 즉시 회복, 상한을 넘지 않는다', () => {
+describe('자석 흡수', () => {
+  /** 흡수될 때까지(또는 maxTicks) 돌린다. 걸린 틱 수 반환 */
+  function absorb(maxTicks = 120): number {
+    for (let i = 1; i <= maxTicks; i++) {
+      Pickups.tick(world, DT);
+      if (world.groundItems.length === 0) return i;
+    }
+    return -1;
+  }
+
+  it('포션 — 반경에 들면 떠올라 날아와 회복, 상한을 넘지 않는다', () => {
     world.player.health = balance.player.healthMax - 10; // 회복 여력 10
-    world.groundItems.push({ id: 1, kind: 'potion', x: 10.5, z: 10 });
+    world.groundItems.push({ id: 1, kind: 'potion', x: 12, z: 10 }); // 2m 앞
     const events: unknown[] = [];
     world.events.on('potion_picked', (payload) => events.push(payload));
 
-    Pickups.tick(world, DT);
+    Pickups.tick(world, DT); // 첫 틱 — 자석에 걸려 공중으로
+    const item = world.groundItems[0]!;
+    expect(item.magnet).toBe(true);
+    expect(item.y).toBeGreaterThan(0.5); // 바닥이 아니라 공중
+    expect(world.player.health).toBe(balance.player.healthMax - 10); // 아직 효과 없음
+
+    const ticks = absorb();
+    expect(ticks).toBeGreaterThan(1); // 즉시가 아니라 날아온다
+    expect(ticks).toBeLessThan(20); // 아주 빠르게 (0.33초 이내)
     expect(world.player.health).toBe(balance.player.healthMax);
     expect(events[0]).toMatchObject({ healed: 10 }); // 상한 초과분은 버려진다
-    expect(world.groundItems).toHaveLength(0);
   });
 
-  it('포션 — 체력이 가득이면 줍지 않고 남는다', () => {
+  it('포션 — 체력이 가득이면 걸리지 않고 바닥에 남는다', () => {
     world.groundItems.push({ id: 1, kind: 'potion', x: 10.5, z: 10 });
     Pickups.tick(world, DT);
     expect(world.groundItems).toHaveLength(1);
+    expect(world.groundItems[0]!.magnet).toBeUndefined();
   });
 
-  it('포션 — 반경 밖이면 줍지 않는다', () => {
+  it('반경 밖이면 걸리지 않는다', () => {
     world.player.health = 50;
-    world.groundItems.push({ id: 1, kind: 'potion', x: 10 + cfg.potion.pickupRadius + 0.5, z: 10 });
+    world.groundItems.push({ id: 1, kind: 'potion', x: 10 + cfg.potion.magnetRadius + 0.5, z: 10 });
     Pickups.tick(world, DT);
+    expect(world.groundItems[0]!.magnet).toBeUndefined();
     expect(world.player.health).toBe(50);
-    expect(world.groundItems).toHaveLength(1);
   });
 
-  it('골드 — 반경 안이면 누적되고 한 번만 먹힌다', () => {
-    world.groundItems.push({ id: 1, kind: 'gold', amount: 7, x: 10.5, z: 10 });
-    world.groundItems.push({ id: 2, kind: 'gold', amount: 3, x: 10, z: 10.5 });
+  it('골드 — 날아와 누적되고, 한 번 걸리면 멀어져도 따라온다', () => {
+    world.groundItems.push({ id: 1, kind: 'gold', amount: 7, x: 13, z: 10 });
+    world.groundItems.push({ id: 2, kind: 'gold', amount: 3, x: 10, z: 13 });
     Pickups.tick(world, DT);
-    expect(world.gold).toBe(10);
-    Pickups.tick(world, DT);
+    expect(world.groundItems.every((i) => i.magnet)).toBe(true);
+
+    world.player.x = 40; // 멀리 도망쳐도
+    world.player.z = 40;
+    expect(absorb(600)).toBeGreaterThan(0); // 끝까지 쫓아와 흡수된다
     expect(world.gold).toBe(10);
   });
 
@@ -124,5 +146,26 @@ describe('자동 획득', () => {
     Sigils.tick(world, DT);
     expect(world.groundItems).toHaveLength(0);
     expect(world.sigils.inventory).toContain('sig_fireball');
+  });
+});
+
+describe('경험치', () => {
+  it('처치한 적의 xp 만큼 누적되고 xp_gained 를 발행한다', () => {
+    Progression.init(world);
+    const events: unknown[] = [];
+    world.events.on('xp_gained', (payload) => events.push(payload));
+
+    world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 0, z: 0 });
+    world.events.emit('enemy_died', { enemyType: 'goblin_spear', x: 0, z: 0 });
+    const expected = enemyDef('goblin_runner').xp + enemyDef('goblin_spear').xp;
+    expect(world.xp).toBe(expected);
+    expect(events).toHaveLength(2);
+    expect(events[1]).toMatchObject({ enemyType: 'goblin_spear', total: expected });
+  });
+
+  it('강한 적일수록 많이 준다', () => {
+    expect(enemyDef('goblin_chieftain').xp).toBeGreaterThan(enemyDef('warden').xp);
+    expect(enemyDef('warden').xp).toBeGreaterThan(enemyDef('goblin_spear').xp);
+    expect(enemyDef('goblin_spear').xp).toBeGreaterThan(enemyDef('goblin_runner').xp);
   });
 });

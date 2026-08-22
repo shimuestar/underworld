@@ -1149,12 +1149,15 @@ export class Stage {
         this.groundItemVisuals.set(item.id, group);
         this.scene.add(group);
       }
-      // 골드는 바닥에 깔리고, 각인·포션은 떠서 돈다
+      // 자석에 걸리면 로직이 계산한 높이(item.y)로 날아간다. 아니면 제자리 부유
       const bob =
-        item.kind === 'gold' ? 0.12 : 0.55 + Math.sin(now / 400 + item.id) * 0.1;
+        item.y ?? (item.kind === 'gold' ? 0.12 : 0.55 + Math.sin(now / 400 + item.id) * 0.1);
       group.position.set(item.x, bob, item.z);
       const gem = group.getObjectByName('gem');
-      if (gem) gem.rotation.y = now / (item.kind === 'gold' ? 1400 : 700);
+      // 빨려드는 동안은 빠르게 회전하고 살짝 작아진다 (몸으로 들어가는 느낌)
+      if (gem) gem.rotation.y = now / (item.magnet ? 90 : item.kind === 'gold' ? 1400 : 700);
+      const shrink = item.magnet ? 0.78 : 1;
+      group.scale.setScalar(group.scale.x + (shrink - group.scale.x) * 0.25);
     }
     for (const [id, group] of this.groundItemVisuals) {
       if (seen.has(id)) continue;

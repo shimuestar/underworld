@@ -18,6 +18,7 @@ import * as Weapons from './systems/Weapons';
 import * as Projectiles from './systems/Projectiles';
 import * as Mana from './systems/Mana';
 import * as Pickups from './systems/Pickups';
+import * as Progression from './systems/Progression';
 import * as Sigils from './systems/Sigils';
 import * as Corruption from './systems/Corruption';
 import * as Altar from './systems/Altar';
@@ -230,6 +231,7 @@ for (const name of [
   'potion_picked',
   'gold_dropped',
   'gold_picked',
+  'xp_gained',
   'sigil_acquired',
   'sigil_attached',
   'sigil_detached',
@@ -546,6 +548,7 @@ events.on('corruption_threshold', (payload) => {
 Mana.init(world);
 Sigils.init(world);
 Pickups.init(world);
+Progression.init(world);
 Corruption.init(world);
 Altar.init(world);
 const systems = [
@@ -684,7 +687,7 @@ function render(alpha: number): void {
   const hpFill = document.getElementById('status-hp-fill')!;
   hpFill.style.width = `${hpFrac * 100}%`;
   hpFill.style.background = hpFrac > 0.5 ? '#3fae5a' : hpFrac > 0.25 ? '#c9a227' : '#e04444';
-  document.getElementById('status-gold')!.textContent = `◆ ${world.gold}`;
+  document.getElementById('status-gold')!.textContent = `◆ ${world.gold}   XP ${world.xp}`;
   document.getElementById('slot-hammer')!.className =
     `weapon-slot${wpn.active === 'hammer' ? ' active' : ''}`;
   document.getElementById('slot-grenade')!.className =

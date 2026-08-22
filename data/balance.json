@@ -160,14 +160,23 @@
       "dropChance": 0.18,
       "bossAlways": true,
       "healAmount": 25,
-      "pickupRadius": 1.5
+      "magnetRadius": 3.2
     },
     "gold": {
       "dropChance": 0.65,
       "min": 3,
       "max": 9,
       "bossMul": 12,
-      "pickupRadius": 1.8
+      "magnetRadius": 4.5
+    },
+    "magnet": {
+      "_comment": "반경 안에 들면 공중으로 떠올라 플레이어 몸으로 빨려든다. 한 번 걸리면 계속 따라온다",
+      "popUp": 0.4,
+      "startSpeed": 8,
+      "accel": 95,
+      "maxSpeed": 34,
+      "absorbRadius": 0.5,
+      "targetHeightMul": 0.62
     }
   },
 

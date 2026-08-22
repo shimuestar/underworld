@@ -21,6 +21,8 @@ export interface EnemyDef {
   /** 표시 이름 (이름표) */
   name?: string;
   health: number;
+  /** 처치 시 획득 경험치 */
+  xp: number;
   speed: number;
   damage: number;
   radius: number;
