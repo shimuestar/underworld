@@ -38,6 +38,7 @@
 
   "block": {
     "chipDamageRatio": 0.3,
+    "chipRatioByKind": { "arrow": 0 },
     "speedMul": 0.35,
     "arcDeg": 120
   },

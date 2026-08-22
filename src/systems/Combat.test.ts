@@ -8,6 +8,7 @@ import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Enemies from './Enemies';
+import * as Projectiles from './Projectiles';
 import * as Reaction from './Reaction';
 import * as Sigils from './Sigils';
 
@@ -108,6 +109,40 @@ describe('공격 상태 머신 타이밍 (goblin_spear: windup 34t)', () => {
     tickUntil(world2, 'impact');
     Enemies.tick(world2, DT);
     expect(world2.player.health).toBe(balance.player.healthMax - spearDamage);
+  });
+
+  it('방어 중 화살은 완전 차단(0 데미지), 마법은 칩 데미지', () => {
+    const fire = (world: World, kind: 'arrow' | 'magic', damage: number): void => {
+      world.projectiles.push({
+        id: 99, owner: 'enemy',
+        x: 12, y: 1.2, z: 10, prevX: 12, prevY: 1.2, prevZ: 10,
+        vx: -20, vy: 0, vz: 0, // 동쪽에서 플레이어를 향해
+        lifeTicks: 120, damage, burnTicks: 0, burnDamagePerTick: 0,
+        radius: 0.15, kind,
+      });
+      for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    };
+
+    // 화살 — 정면 방어 시 무피해
+    const world = makeWorld();
+    world.player.yaw = -Math.PI / 2; // 동쪽을 바라봄
+    world.player.blocking = true;
+    fire(world, 'arrow', 10);
+    expect(world.player.health).toBe(balance.player.healthMax);
+
+    // 마법 — 방어해도 칩 데미지는 관통
+    const world2 = makeWorld();
+    world2.player.yaw = -Math.PI / 2;
+    world2.player.blocking = true;
+    fire(world2, 'magic', 10);
+    expect(world2.player.health).toBeCloseTo(
+      balance.player.healthMax - 10 * balance.block.chipDamageRatio,
+    );
+
+    // 방어 없으면 화살도 그대로 맞는다
+    const world3 = makeWorld();
+    fire(world3, 'arrow', 10);
+    expect(world3.player.health).toBe(balance.player.healthMax - 10);
   });
 
   it('회피 무적 중에는 impact가 빗나간다', () => {

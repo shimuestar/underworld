@@ -168,9 +168,12 @@ function moveProjectiles(world: World, dt: number): void {
       if (hitPlayer) {
         const p = world.player;
         if (p.iframeTicks <= 0) {
-          // 방어(정면) — 투사체도 칩 데미지만 관통
+          // 방어(정면) — 투사체는 종류별 칩 비율. 화살은 방패가 완전 차단(비율 0)
           const blocked = playerBlocks(world, proj.x, proj.z, balance.block.arcDeg);
-          const damage = blocked ? proj.damage * balance.block.chipDamageRatio : proj.damage;
+          const chipRatio =
+            (balance.block.chipRatioByKind as Record<string, number>)[proj.kind ?? ''] ??
+            balance.block.chipDamageRatio;
+          const damage = blocked ? proj.damage * chipRatio : proj.damage;
           p.health -= damage;
           if (blocked) world.events.emit('block_hit', { amount: damage });
           world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
