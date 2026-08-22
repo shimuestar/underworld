@@ -46,13 +46,16 @@ export function tick(world: World, _dt: number): void {
 
   // 판정은 버튼을 "누르는 순간" 한 번. 계속 누르고 있어도 다시 판정되지 않는다
   // (누른 채로 두면 그냥 방어 상태가 유지된다)
-  const pressed = world.input.reactionPressed || p.reactionBufferTicks > 0;
-  if (!pressed) return;
+  const freshPress = world.input.reactionPressed || p.reactionBufferTicks > 0;
+  // 조금 이르게 눌렀다면 그 입력을 잠깐 살려둔다 — 무기가 도달하는 순간 성립시킨다
+  const buffered = (p.parryBufferTicks ?? 0) > 0;
+  if (buffered) p.parryBufferTicks = (p.parryBufferTicks ?? 0) - 1;
+  if (!freshPress && !buffered) return;
   p.reactionBufferTicks = 0;
 
   // Shift+누르기 = 명시적 회피 — 판정을 거치지 않고 즉시 발동.
   // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다
-  if (world.input.sprint) {
+  if (freshPress && world.input.sprint) {
     startDodge(world);
     return;
   }
@@ -60,6 +63,7 @@ export function tick(world: World, _dt: number): void {
   // 반경 내 적을 우선순위로 분류 (같은 우선순위면 가장 가까운 적)
   const space = balance.parrySpace;
   let parryTarget: { enemy: EnemyState; gap: number } | null = null;
+  let incoming = false; // 반경 안에서 무기가 날아오는 중인 적이 있는가
   let executeTarget: { enemy: EnemyState; dist: number } | null = null;
   let windupTarget: { enemy: EnemyState; dist: number } | null = null;
 
@@ -72,10 +76,12 @@ export function tick(world: World, _dt: number): void {
     if (enemy.ai === 'active_perfect' || enemy.ai === 'active_normal') {
       // 애초에 나를 향하지 않는 공격은 막을 것도 없다 (옆으로 비켰으면 그냥 빗나간다)
       if (!attackReaches(enemyDef(enemy.type), enemy, attack, p.x, p.z)) continue;
-      // 무기 끝이 가드 안까지 왔는가 — 아직 멀면 그냥 헛손질 (경직 없음)
+      // 무기 끝이 가드 안까지 왔는가
       const gap = dist - balance.player.radius - (enemy.weaponTipDist ?? 0);
       if (gap <= space.guardDepth && (!parryTarget || gap < parryTarget.gap)) {
         parryTarget = { enemy, gap };
+      } else if (gap > space.guardDepth) {
+        incoming = true; // 아직 오는 중 — 이르게 눌렀다면 버퍼로 살려준다
       }
     } else if (enemy.ai === 'staggered') {
       if (!executeTarget || dist < executeTarget.dist) executeTarget = { enemy, dist };
@@ -124,6 +130,7 @@ export function tick(world: World, _dt: number): void {
       enemy.timer = attack.recoverTicks + reaction.parryRecoilTicks;
       enemy.recoiled = true;
     }
+    p.parryBufferTicks = 0;
     world.events.emit('parry_attempt', {
       result: perfect ? 'perfect' : 'normal',
       chain: 0,
@@ -201,7 +208,7 @@ export function tick(world: World, _dt: number): void {
     return;
   }
 
-  if (windupTarget) {
+  if (windupTarget && freshPress) {
     // 조기 입력 — 실패. 경직 20t (마나 절반 소실은 Mana)
     p.stunTicks = reaction.failStunTicks;
     world.events.emit('parry_attempt', {
@@ -212,7 +219,9 @@ export function tick(world: World, _dt: number): void {
     return;
   }
 
-  // 아무것도 없음 — 헛스윙 (회피는 Shift+탭 전용)
+  // 아직 무기가 오는 중이면 이 입력을 잠깐 살려둔다 (도달하는 순간 패링 성립).
+  // 이게 없으면 "조금 일찍 누름"이 전부 헛손질이 되어 타이밍이 가혹해진다
+  if (freshPress && incoming) p.parryBufferTicks = reaction.parryBufferTicks;
 }
 
 /** 회피 스텝 — 이동 입력 방향, 없으면 뒤로 */

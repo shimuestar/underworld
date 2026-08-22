@@ -555,8 +555,8 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
     return world;
   }
 
-  it('창이 아직 멀면 패링되지 않는다 — 경직도 없다 (헛손질)', () => {
-    const world = strikeAt(3.5, 3); // gap ≈ 1.30 > guardDepth
+  it('창이 아직 멀면 그 자리에서는 패링되지 않는다 (경직도 없다)', () => {
+    const world = strikeAt(3.5, 1); // gap ≈ 1.64 > guardDepth
     const results: unknown[] = [];
     world.events.on('parry_attempt', (payload) => results.push(payload));
 
@@ -566,8 +566,35 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
     expect(world.player.stunTicks).toBe(0); // 조기 입력이지만 벌은 없다
   });
 
+  it('조금 이르게 누르면 버퍼에 담겼다가 창이 닿는 순간 성립한다', () => {
+    const world = strikeAt(3.5, 1);
+    const results: { result: string }[] = [];
+    world.events.on('parry_attempt', (payload) => results.push(payload as { result: string }));
+
+    pressReaction(world); // 이른 입력 — 아직 성립하지 않는다
+    expect(results).toHaveLength(0);
+    expect(world.player.parryBufferTicks).toBe(balance.reaction.parryBufferTicks);
+
+    // 버튼에서 손을 떼도, 창이 도달하면 그 입력으로 패링된다
+    for (let i = 0; i < 4 && results.length === 0; i++) {
+      Enemies.tick(world, DT);
+      Reaction.tick(world, DT);
+    }
+    expect(results).toHaveLength(1);
+    expect(world.player.stunTicks).toBe(0);
+  });
+
+  it('예비동작 중 조기 입력은 여전히 벌을 받는다 (버퍼로 봐주지 않는다)', () => {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(13.5, 10));
+    tickUntil(world, 'windup');
+    pressReaction(world);
+    expect(world.player.stunTicks).toBe(balance.reaction.failStunTicks);
+    expect(world.player.parryBufferTicks ?? 0).toBe(0);
+  });
+
   it('창끝이 가드에 들어오면 일반 패링: recover + 히트스톱 2t', () => {
-    const world = strikeAt(3.5, 6); // gap ≈ 0.80 (guardDepth 0.9 안, perfectBand 밖)
+    const world = strikeAt(3.5, 4); // gap ≈ 1.13 (guardDepth 1.3 안, perfectBand 밖)
     pressReaction(world);
     expect(world.enemies[0]!.ai).toBe('recover');
     expect(world.freezeTicks).toBe(balance.reaction.hitstopNormalTicks);

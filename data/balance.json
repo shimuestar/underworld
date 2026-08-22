@@ -29,6 +29,7 @@
     "hitstopPerfectTicks": 4,
     "hitstopExecuteTicks": 8,
     "parryRecoilTicks": 36,
+    "parryBufferTicks": 8,
     "hitstopNormalTicks": 2,
     "staggerTicks": 90,
     "dodgeIFrameTicks": 8,
@@ -39,8 +40,8 @@
 
   "parrySpace": {
     "_comment": "패링은 시간이 아니라 무기 끝 위치로 판정한다. gap = 적거리 - 플레이어반경 - 무기끝거리",
-    "guardDepth": 0.9,
-    "perfectBand": 0.2,
+    "guardDepth": 1.3,
+    "perfectBand": 0.4,
     "pullbackRatio": 0.3
   },
 
