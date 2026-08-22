@@ -132,20 +132,24 @@ events.on('player_died', () => console.log('[metrics] 사망 시점 스냅샷', 
 events.on('zone_cleared', () => console.log('[metrics] 클리어 스냅샷', metrics.snapshot(world)));
 const sigilUI = new SigilUI(world);
 const shopUI = new ShopUI(world);
-shopUI.onClose = () => {
-  world.uiOpen = false;
-};
+/** UI 오버레이 열기/닫기 — 닫을 때 포인터 락을 바로 되찾는다.
+ *  안 그러면 메뉴를 나온 뒤 커서가 남아 화면을 한 번 클릭해야 조작이 돌아온다 */
+function setUiOpen(open: boolean): void {
+  world.uiOpen = open;
+  if (open) document.exitPointerLock();
+  else input.requestLock();
+}
+shopUI.onClose = () => setUiOpen(false);
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Tab') {
     e.preventDefault();
     // 상점에서 Tab — 각인 교체로 넘어간다 (둘이 겹쳐 뜨지 않게)
     if (shopUI.open) {
       shopUI.hide();
-      world.uiOpen = sigilUI.toggle(true);
+      setUiOpen(sigilUI.toggle(true));
       return;
     }
-    world.uiOpen = sigilUI.toggle();
-    if (world.uiOpen) document.exitPointerLock();
+    setUiOpen(sigilUI.toggle());
   }
 });
 let restartConfirmUntil = 0;
@@ -611,8 +615,7 @@ window.addEventListener('keydown', (e) => {
 events.on('altar_entered', () => {
   audio.play('altar_enter');
   shopUI.show(); // 보급 상점 — 무료 보급은 없다. Tab 으로 각인 교체
-  world.uiOpen = true;
-  document.exitPointerLock();
+  setUiOpen(true);
 });
 const SHOP_LABEL: Record<string, string> = {
   heal: '체력', mana: '마나', ammo: '권총탄', grenade: '수류탄', battery: '배터리',

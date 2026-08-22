@@ -58,12 +58,19 @@ export class Input {
 
   constructor(private readonly lockTarget: HTMLElement) {
     // 화면 어디를 클릭하든 락을 시도한다 (일시정지 오버레이 위를 눌러도 재개되도록).
-    // 각인 UI 안을 클릭할 때는 제외 — 거기선 커서를 써야 한다
-    window.addEventListener('click', (e) => {
-      if (this.pointerLocked) return;
-      if ((e.target as HTMLElement | null)?.closest?.('#sigilui')) return;
-      this.tryLock(0);
-    });
+    // 캡처 단계에서 잡는 이유: 상점 줄을 클릭하면 그 핸들러가 목록을 다시 그려
+    // 버블 단계에 도달할 즈음 e.target 이 DOM 에서 떨어져 나간다. 그러면 아래 closest 가
+    // 조상을 못 찾아 오버레이 안 클릭인데도 락을 걸어 커서가 사라진다 (실측으로 확인)
+    window.addEventListener(
+      'click',
+      (e) => {
+        if (this.pointerLocked) return;
+        // UI 오버레이 안을 클릭할 때는 제외 — 거기선 커서를 써야 한다
+        if ((e.target as HTMLElement | null)?.closest?.('#sigilui, #shopui')) return;
+        this.tryLock(0);
+      },
+      { capture: true },
+    );
     document.addEventListener('pointerlockchange', () => {
       if (this.pointerLocked) this.lockRetry = 0; // 성공 — 재시도 중단
     });
@@ -125,6 +132,11 @@ export class Input {
       this.reactionDown = false;
     });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  /** 포인터 락을 다시 잡는다 — 메뉴를 닫았을 때처럼 클릭 없이 조작으로 돌아가야 할 때 */
+  requestLock(): void {
+    this.tryLock(0);
   }
 
   /** 포인터 락 요청. ESC로 빠져나온 직후에는 브라우저가 잠시 거부하므로
