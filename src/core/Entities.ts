@@ -120,7 +120,14 @@ export function attackReaches(
  *  스태거 중이거나 이미 깨졌으면 막지 못한다 — Weapons·Projectiles 공용 규칙 */
 export function shieldBlocks(
   def: EnemyDef,
-  enemy: { x: number; z: number; yaw: number; ai: string; shieldBroken?: boolean },
+  enemy: {
+    x: number;
+    z: number;
+    yaw: number;
+    ai: string;
+    shieldBroken?: boolean;
+    kbTicks?: number;
+  },
   fromX: number,
   fromZ: number,
 ): boolean {
@@ -133,6 +140,30 @@ export function shieldBlocks(
   const len = Math.hypot(toX, toZ);
   const dot = len > 0 ? (facingX * toX + facingZ * toZ) / len : 1;
   return dot >= Math.cos(((def.shieldArcDeg ?? 120) / 2) * (Math.PI / 180));
+}
+
+/** 투사체(총·마법)가 정면 방패에 막히는가. 뒤로 떠밀리는 동안은 가드를 못 잡으므로
+ *  뚫린다 — 해머 3타로 날려 보낸 사이가 총을 박아 넣는 창이다.
+ *
+ *  근접은 이 예외를 쓰지 않는다(shieldBlocks 그대로): 벽에 붙어 밀려나지 못하는
+ *  방패병을 해머로 관통해 "해머는 방패병에게 HP 피해를 주지 않는다" 규칙이 깨진다.
+ *  실제로는 밀려난 적이 해머 사거리 밖이라 눈에 띄지 않는 차이다.
+ *  Stage 의 방패 내림 연출은 이쪽(투사체) 조건과 맞춘다 */
+export function shieldBlocksProjectile(
+  def: EnemyDef,
+  enemy: {
+    x: number;
+    z: number;
+    yaw: number;
+    ai: string;
+    shieldBroken?: boolean;
+    kbTicks?: number;
+  },
+  fromX: number,
+  fromZ: number,
+): boolean {
+  if ((enemy.kbTicks ?? 0) > 0) return false;
+  return shieldBlocks(def, enemy, fromX, fromZ);
 }
 
 export function enemyDef(type: string): EnemyDef {

@@ -371,6 +371,46 @@ describe('방패 파괴 (화염구)', () => {
     expect(enemy.health).toBeLessThan(hpAfterFireball);
   });
 
+  it('뒤로 밀려나는 동안은 방패가 내려가 총알이 박힌다 — 끝나면 다시 막는다', () => {
+    const enemy = shieldman(4);
+    const blocked: unknown[] = [];
+    world.events.on('shot_blocked', (payload) => blocked.push(payload));
+
+    // 평소 — 정면 사격은 막힌다
+    fireAt(4, 1.0);
+    expect(blocked).toHaveLength(1);
+    expect(enemy.health).toBe(1000);
+
+    // 해머 3타로 날아가는 중 (kbTicks > 0) — 가드가 풀려 관통한다
+    enemy.kbTicks = 10;
+    fireAt(4, 1.0);
+    expect(blocked).toHaveLength(1); // 더 막히지 않는다
+    expect(enemy.health).toBeLessThan(1000);
+    expect(enemy.shieldBroken).toBeUndefined(); // 깨진 게 아니라 내려간 것뿐
+
+    // 밀림이 끝나면 즉시 다시 막는다
+    enemy.kbTicks = 0;
+    const hp = enemy.health;
+    fireAt(4, 1.0);
+    expect(blocked).toHaveLength(2);
+    expect(enemy.health).toBe(hp);
+  });
+
+  it('밀려나는 중에도 해머는 여전히 방패에 막힌다 (벽에 붙은 방패병 관통 방지)', () => {
+    const enemy = spawnEnemyAt('goblin_spear', 6 + 2.2, 6, 1);
+    enemy.health = 110;
+    enemy.yaw = Math.atan2(-(6 - enemy.x), -(6 - enemy.z));
+    enemy.kbTicks = 10;
+    world.enemies.push(enemy);
+
+    world.weapon.meleeCooldown = 0;
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    advanceToHammerImpact(world);
+    expect(enemy.health).toBe(110); // HP 피해 없음 — 방패가 받아냈다
+  });
+
   it('등 뒤에서 맞은 화염구는 방패와 무관 — 온전한 피해', () => {
     const enemy = spawnEnemyAt('goblin_spear', 6 + 4, 6, 1);
     enemy.health = 1000;

@@ -3,7 +3,7 @@
 // 시전 시 cast_spell 이벤트 발행 → Mana가 연쇄를 리셋한다.
 
 import { balance } from '../core/Balance';
-import { enemyDef, shieldBlocks } from '../core/Entities';
+import { enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef } from '../core/SigilData';
 import { playerBlocks, pushPlayer, type World } from '../core/World';
@@ -187,6 +187,11 @@ function moveProjectiles(world: World, dt: number): void {
         });
       }
 
+      // 방패 판정은 폭발보다 먼저 확정한다 — 폭풍/흡인이 kbTicks 를 세우면
+      // "밀리는 중이라 가드가 풀렸다"로 오판해 화염구가 방패를 못 깨게 된다
+      const shieldedAtImpact =
+        hitEnemy !== null && shieldBlocksProjectile(enemyDef(hitEnemy.type), hitEnemy, proj.x, proj.z);
+
       // 화염구는 무엇에 닿든 그 자리에서 터진다 (벽·바닥·적 모두)
       if (proj.kind === 'fireball' && proj.owner === 'player') {
         explodeFireball(
@@ -238,7 +243,7 @@ function moveProjectiles(world: World, dt: number): void {
           }
         }
       } else if (hitEnemy) {
-        applyProjectileHit(world, proj, hitEnemy);
+        applyProjectileHit(world, proj, hitEnemy, shieldedAtImpact);
       }
       world.projectiles.splice(i, 1);
       continue;
@@ -254,11 +259,13 @@ function applyProjectileHit(
   world: World,
   proj: (typeof world.projectiles)[number],
   enemy: (typeof world.enemies)[number],
+  /** 착탄 순간의 방패 상태. 폭발이 상태를 바꾸기 전에 확정해 넘긴다 */
+  shielded: boolean,
 ): void {
   const def = enemyDef(enemy.type);
 
   // 정면 방패 — 화염구가 명중하면 방패가 부서진다. 방패가 화염을 일부 먹으므로 피해 감소
-  if (shieldBlocks(def, enemy, proj.x, proj.z)) {
+  if (shielded) {
     if (proj.kind === 'fireball') {
       enemy.shieldBroken = true;
       proj.damage *= balance.shieldBreak.damageRatio;

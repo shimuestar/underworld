@@ -47,6 +47,11 @@ const MUZZLE_OFFSET = { x: -0.17, y: -0.1, z: -0.72 }; // 카메라 로컬: 왼�
 
 // 적 부속물 색
 const SHIELD_COLOR = 0x6f7480;
+const SHIELD_BASE_X = -0.08;
+/** 가드가 풀렸을 때 방패 — 팔이 옆으로 툭 늘어진 그림 (낮게 + 옆으로 + 뉘어서) */
+const SHIELD_DOWN_Y = 0.16;
+const SHIELD_DOWN_X = -0.42;
+const SHIELD_DOWN_TILT = -0.55;
 const SPEAR_TIP = 0x9aa2ad;
 const HEAD_DARKEN = 0.72;
 /** 공격 연출로 전진할 때 적 몸통 표면과 카메라 사이에 남길 여유.
@@ -96,6 +101,8 @@ interface EnemyVisual {
   shieldMaterial?: THREE.MeshLambertMaterial;
   /** 방패의 기준 z — 몸통 전진에 오프셋으로 더한다 */
   shieldBaseZ: number;
+  /** 직전 프레임에 방패가 내려가 있었는가 — 올릴 때 즉시 복귀시키려고 본다 */
+  shieldDown?: boolean;
   /** 방패 균열 (마무리 타를 받아내면 드러난다) */
   shieldCracks?: THREE.Group;
   /** 다음 화상 불티를 낼 시각 */
@@ -857,7 +864,7 @@ export class Stage {
       );
       // 방패도 충돌 경계(반경) 근처까지만 — 더 내밀면 몸이 통과한 것처럼 보인다
       visual.shieldBaseZ = -(def.radius * 0.92);
-      visual.shield.position.set(-0.08, def.height * 0.5, visual.shieldBaseZ);
+      visual.shield.position.set(SHIELD_BASE_X, def.height * 0.5, visual.shieldBaseZ);
       group.add(visual.shield);
 
       // 균열 — 마무리 타를 한 번 받아내면 드러난다. 방패면(-z) 바깥쪽에 얇게 붙인다
@@ -1161,15 +1168,29 @@ export class Stage {
         visual.bow.rotation.x += (bowTilt - visual.bow.rotation.x) * 0.3;
       }
 
-      // 방패 — 피격 시 흰 번쩍, 스태거 중엔 내려가서 열린다
+      // 방패 — 피격 시 흰 번쩍. 스태거·밀림 중엔 팔이 내려가 가드가 풀린다.
+      // 내리는 조건은 Entities.shieldBlocks 와 같아야 한다 (보이는 것 = 막히는 것)
       if (visual.shieldCracks) visual.shieldCracks.visible = (enemy.shieldHits ?? 0) > 0;
       if (visual.shield && visual.shieldMaterial) {
         visual.shieldMaterial.emissive.set(now < visual.shieldFlashUntil ? 0xffffff : 0x000000);
         const def = enemyDef(enemy.type);
+        const shoved = (enemy.kbTicks ?? 0) > 0;
+        const down = shoved || enemy.ai === 'staggered';
         const targetY =
-          (enemy.ai === 'staggered' ? def.height * 0.18 : def.height * 0.5) +
-          visual.torso.position.y; // 움츠릴 때 함께 내려간다
-        visual.shield.position.y += (targetY - visual.shield.position.y) * 0.2;
+          (down ? def.height * SHIELD_DOWN_Y : def.height * 0.5) + visual.torso.position.y;
+        const targetTilt = down ? SHIELD_DOWN_TILT : 0;
+        const targetX = down ? SHIELD_DOWN_X : SHIELD_BASE_X;
+        if (!down && visual.shieldDown) {
+          // 밀림이 끝나는 순간 즉시 다시 든다 — 방어가 켜지는 시점과 그림이 어긋나면 안 된다
+          visual.shield.position.y = targetY;
+          visual.shield.position.x = SHIELD_BASE_X;
+          visual.shield.rotation.x = 0;
+        } else {
+          visual.shield.position.y += (targetY - visual.shield.position.y) * 0.2;
+          visual.shield.position.x += (targetX - visual.shield.position.x) * 0.2;
+          visual.shield.rotation.x += (targetTilt - visual.shield.rotation.x) * 0.25;
+        }
+        visual.shieldDown = down;
         // 몸통 전진/후퇴를 따라간다 (방패는 group 소속이라 자동으로 따라오지 않는다)
         visual.shield.position.z = visual.shieldBaseZ + visual.torso.position.z;
       }

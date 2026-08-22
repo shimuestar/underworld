@@ -4,7 +4,7 @@
 //    두 자원 경제를 분리하는 유일한 규칙이다 — docs/systems/combat.md §5.
 
 import { balance } from '../core/Balance';
-import { enemyDef, shieldBlocks } from '../core/Entities';
+import { enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { RANGED_WEAPONS, type World } from '../core/World';
 
@@ -400,7 +400,7 @@ function fire(world: World): void {
   // 정면 방패 — 전방 호 안에서 맞은 투사체는 무효 (스태거 중에는 방패 무력화)
   if (hit) {
     const def = enemyDef(hit.enemy.type);
-    if (shieldBlocks(def, hit.enemy, p.x, p.z)) {
+    if (shieldBlocksProjectile(def, hit.enemy, p.x, p.z)) {
       world.events.emit('shot_blocked', { enemyId: hit.enemy.id, enemyType: hit.enemy.type });
       world.events.emit('shot_fired', {
         sx: p.x, sy: oy, sz: p.z,
