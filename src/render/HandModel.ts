@@ -14,6 +14,8 @@ const BRACER = 0x555c66;
 const RECOIL_MS = 130;
 const PARRY_SWING_MS = 340;
 const BLOCK_FLASH_MS = 260; // 방어 성공 섬광 (2회 깜빡임)
+const BASH_MS = 420; // 처형 방패 강타
+const BASH_GLOW = 0xfff0c0; // 강타 순간의 백금색 발광
 const SHIELD_ARROW_MS = 4000; // 방패에 꽂힌 화살 유지 시간
 const BLOCK_FLASH_COLOR = 0xbfd4ff;
 
@@ -60,6 +62,7 @@ export class HandModel {
   private activeWeapon: 'hammer' | 'grenade' | 'pistol' = 'pistol';
   private throwUntil = 0;
   private blockFlashUntil = 0;
+  private bashUntil = 0;
   private readonly shieldArrows: { group: THREE.Group; until: number }[] = [];
   private shieldArrowSlot = 0;
   private readonly skinMaterials: THREE.MeshLambertMaterial[] = [];
@@ -188,6 +191,11 @@ export class HandModel {
     }
   }
 
+  /** 처형 방패 강타 — 살짝 당겼다 화면 밖으로 찍어누르듯 밀어친다 */
+  triggerShieldBash(): void {
+    this.bashUntil = performance.now() + BASH_MS;
+  }
+
   triggerParry(result: string): void {
     this.parryUntil = performance.now() + PARRY_SWING_MS;
     this.parryGlow = PARRY_GLOW[result] ?? PARRY_GLOW['fail']!;
@@ -263,10 +271,34 @@ export class HandModel {
     }
     this.blockBlend += ((state.blocking ? 1 : 0) - this.blockBlend) * 0.3;
     swing = Math.max(swing, this.blockBlend);
+
+    // 처형 강타 — 가드 자세를 기준점으로 삼아 뒤로 당겼다(15%) 앞으로 찍고(35%) 회수
+    let bash = 0;
+    if (now < this.bashUntil) {
+      const t = 1 - (this.bashUntil - now) / BASH_MS;
+      if (t < 0.15) bash = -0.35 * easeOutCubic(t / 0.15); // 당김 (뒤로)
+      else if (t < 0.35) bash = -0.35 + 1.35 * easeInCubic((t - 0.15) / 0.2); // 강타
+      else bash = 1.0 * (1 - easeOutCubic((t - 0.35) / 0.65)); // 회수
+      // 강타 내내 팔은 화면 안에 있어야 한다 — 당김 단계가 보이지 않으면 준비 동작이 죽는다
+      const presence = t < 0.35 ? 0.88 : 0.72 + 0.28 * Math.max(0, bash);
+      swing = Math.max(swing, presence);
+    }
+
     this.leftArm.position.lerpVectors(REST_LEFT.pos, GUARD_LEFT.pos, swing);
     this.leftArm.rotation.x = REST_LEFT.rotX + (GUARD_LEFT.rotX - REST_LEFT.rotX) * swing;
     this.leftArm.rotation.y = REST_LEFT.rotY + (GUARD_LEFT.rotY - REST_LEFT.rotY) * swing;
     this.leftArm.rotation.z = REST_LEFT.rotZ + (GUARD_LEFT.rotZ - REST_LEFT.rotZ) * swing;
+    if (bash !== 0) {
+      // 가드 자세에서 화면 안쪽으로 밀어치며 방패면이 정면을 향하도록 비튼다
+      this.leftArm.position.z -= 0.42 * bash;
+      this.leftArm.position.x += 0.1 * bash;
+      this.leftArm.position.y += 0.06 * bash;
+      this.leftArm.rotation.y += 0.55 * bash;
+      this.leftArm.rotation.z -= 0.25 * bash;
+      // 오른팔은 반동으로 뒤로 빠진다
+      this.rightArm.position.z += 0.12 * Math.max(0, bash);
+      this.rightArm.rotation.x -= 0.25 * Math.max(0, bash);
+    }
     if (swing > 0) {
       this.bracerMaterial.emissive.set(this.parryGlow);
       this.bracerMaterial.emissiveIntensity = swing;
@@ -280,6 +312,15 @@ export class HandModel {
       const pulse = Math.abs(Math.sin(t * Math.PI * 2)) * (1 - t * 0.35);
       this.bracerMaterial.emissive.set(BLOCK_FLASH_COLOR);
       this.bracerMaterial.emissiveIntensity = pulse;
+    }
+
+    // 강타 발광 — 당기는 동안 은은히 차오르다 찍는 순간 터진다
+    if (bash < 0) {
+      this.bracerMaterial.emissive.set(BASH_GLOW);
+      this.bracerMaterial.emissiveIntensity = 0.35 * (-bash / 0.35);
+    } else if (bash > 0) {
+      this.bracerMaterial.emissive.set(BASH_GLOW);
+      this.bracerMaterial.emissiveIntensity = bash;
     }
 
     // 방패에 꽂힌 화살 — 시간이 지나면 사라진다

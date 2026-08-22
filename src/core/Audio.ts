@@ -121,8 +121,13 @@ export class GameAudio {
         this.tone(110, 0.22, 'square', 0.8, 0, 55);
         break;
       case 'execute':
-        this.noise(0.18, 0.9, 1200);
-        this.tone(220, 0.25, 'sawtooth', 0.6, 0, 80);
+        // 방패 강타 — 금속 임팩트(즉시) + 뼈 파쇄(35ms) + 서브 붐(꼬리)
+        this.tone(880, 0.1, 'square', 0.85);
+        this.tone(1320, 0.08, 'triangle', 0.5);
+        this.noise(0.06, 0.9, 5200);
+        this.noise(0.14, 0.8, 900, 0.035);
+        this.tone(150, 0.3, 'sawtooth', 0.7, 0.035, 52);
+        this.tone(62, 0.42, 'sine', 0.95, 0.02, 34);
         break;
       case 'shot_blocked':
         // 방패 막힘 — 크고 명확한 금속 클랭 (비화성 배음 + 밝은 스파크)

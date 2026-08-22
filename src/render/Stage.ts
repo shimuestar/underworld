@@ -181,6 +181,13 @@ export class Stage {
   private readonly tracers: Tracer[] = [];
   private readonly particles: Particle[] = [];
   private readonly hands = new HandModel();
+  /** 카메라 충격 (처형 등) — 남은 시간과 세기 */
+  private camKickUntil = 0;
+  private camKickMs = 1;
+  private camKickPower = 0;
+  /** 처형 섬광 — 짧게 터지는 점광 */
+  private readonly executeFlash: THREE.PointLight;
+  private executeFlashUntil = 0;
   private ambientLight: THREE.AmbientLight | null = null;
   private levelAmbient = 0;
 
@@ -234,6 +241,11 @@ export class Stage {
     this.muzzleLight.position.set(MUZZLE_OFFSET.x, MUZZLE_OFFSET.y, MUZZLE_OFFSET.z);
     this.camera.add(this.muzzleLight);
 
+    // 처형 섬광 — 강타 지점에서 순간적으로 터지는 빛 (씬 소속: 적 위치에 놓는다)
+    this.executeFlash = new THREE.PointLight(0xffe6b0, 0, lp.radius * 0.9, 0);
+    this.executeFlash.visible = false;
+    this.scene.add(this.executeFlash);
+
     // 1인칭 뷰모델
     this.camera.add(this.hands.group);
 
@@ -255,6 +267,11 @@ export class Stage {
   /** 방어 성공 — 방패 섬광 + 화살이면 방패에 꽂힘 */
   triggerBlockHit(kind?: string): void {
     this.hands.triggerBlockHit(kind);
+  }
+
+  /** 처형 방패 강타 */
+  triggerShieldBash(): void {
+    this.hands.triggerShieldBash();
   }
 
   triggerGrenadeThrow(): void {
@@ -465,11 +482,45 @@ export class Stage {
     if (handle) handle.rotation.z = -0.5;
   }
 
+  /** 카메라 충격 — 앞으로 훅 밀리며 짧게 흔들린다 (연출 전용, 조준에는 영향 없음) */
+  triggerCameraKick(power = 1, durationMs = 260): void {
+    this.camKickUntil = performance.now() + durationMs;
+    this.camKickMs = durationMs;
+    this.camKickPower = power;
+  }
+
+  /** 처형 섬광 — 지정 위치에서 짧게 터진다 */
+  triggerExecuteFlash(x: number, z: number, height = 1.2): void {
+    this.executeFlash.position.set(x, height, z);
+    this.executeFlashUntil = performance.now() + 200;
+  }
+
   /** 보간된 플레이어 상태를 카메라에 반영 */
   updateCamera(x: number, y: number, z: number, yaw: number, pitch: number): void {
     this.camera.position.set(x, y + this.eyeHeight, z);
     this.camera.rotation.y = yaw;
     this.camera.rotation.x = pitch;
+
+    const now = performance.now();
+    if (now < this.camKickUntil) {
+      // 초반에 크게 튀고 빠르게 잦아든다 + 고주파 진동
+      const k = ((this.camKickUntil - now) / this.camKickMs) * this.camKickPower;
+      const shake = Math.sin(now / 9) * 0.5 + Math.sin(now / 5.5) * 0.5;
+      this.camera.rotation.x += k * (0.09 + 0.035 * shake);
+      this.camera.rotation.z = k * 0.05 * shake;
+      this.camera.rotation.y += k * 0.02 * shake;
+      // 앞으로 밀려나는 느낌 (시선 방향으로 살짝 전진)
+      this.camera.translateZ(-k * 0.22);
+    } else if (this.camera.rotation.z !== 0) {
+      this.camera.rotation.z = 0;
+    }
+
+    const flashLeft = this.executeFlashUntil - now;
+    this.executeFlash.visible = flashLeft > 0;
+    if (flashLeft > 0) {
+      const f = flashLeft / 200;
+      this.executeFlash.intensity = balance.lantern.intensity * 5 * f * f;
+    }
   }
 
   setLanternOn(on: boolean): void {
@@ -982,26 +1033,26 @@ export class Stage {
     }
   }
 
-  /** 적 사망 파편 폭발 — 몸통 색 조각들이 튀어 흩어진다 */
-  spawnDeathBurst(x: number, z: number, enemyType: string): void {
+  /** 적 사망 파편 폭발 — 몸통 색 조각들이 튀어 흩어진다. power>1 이면 더 많이·세게 */
+  spawnDeathBurst(x: number, z: number, enemyType: string, power = 1): void {
     const def = enemyDef(enemyType);
     const color = ENEMY_COLORS[enemyType] ?? ENEMY_COLOR_FALLBACK;
     const now = performance.now();
-    for (let i = 0; i < DEATH_PARTICLE_COUNT; i++) {
-      const size = 0.08 + Math.random() * 0.12;
+    for (let i = 0; i < Math.round(DEATH_PARTICLE_COUNT * power); i++) {
+      const size = (0.08 + Math.random() * 0.12) * (power > 1 ? 1.25 : 1);
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(size, size, size),
         new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 }),
       );
       const angle = Math.random() * Math.PI * 2;
-      const speed = 1.5 + Math.random() * 3.5;
+      const speed = (1.5 + Math.random() * 3.5) * power;
       const particle: Particle = {
         mesh,
         ox: x,
         oy: def.height * (0.3 + Math.random() * 0.6),
         oz: z,
         vx: Math.cos(angle) * speed,
-        vy: 2 + Math.random() * 4,
+        vy: (2 + Math.random() * 4) * power,
         vz: Math.sin(angle) * speed,
         bornMs: now,
       };

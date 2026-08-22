@@ -268,7 +268,22 @@ events.on('parry_attempt', (payload) => {
   else if (result === 'normal') audio.play('parry_normal');
   else audio.play('parry_fail');
 });
-events.on('melee_kill', () => audio.play('execute'));
+// 보스는 boss_execute(타격) 후 치명타면 melee_kill 도 같은 틱에 온다 — 연출 1회만
+let executePresentedTick = -1;
+function presentExecute(power: number, x?: number, z?: number): void {
+  if (executePresentedTick === world.tick) return;
+  executePresentedTick = world.tick;
+  audio.play('execute');
+  stage.triggerShieldBash();
+  stage.triggerCameraKick(power);
+  if (x !== undefined && z !== undefined) stage.triggerExecuteFlash(x, z);
+}
+events.on('boss_execute', () => presentExecute(1.15));
+events.on('melee_kill', (payload) => {
+  // 처형(방패 강타)만 전용 연출 — 해머 처치는 자체 타격음이 이미 난다
+  const kill = payload as { execution: boolean; x?: number; z?: number };
+  if (kill.execution) presentExecute(1, kill.x, kill.z);
+});
 events.on('shot_blocked', () => audio.play('shot_blocked'));
 events.on('dodge_step', () => audio.play('dodge'));
 events.on('cast_spell', () => audio.play('cast_fire'));
@@ -327,10 +342,15 @@ events.on('spell_impact', () => audio.play('spell_impact'));
 events.on('sigil_acquired', () => audio.play('pickup'));
 events.on('reload_started', () => audio.play('reload_start'));
 events.on('reload_finished', () => audio.play('reload_end'));
+let executedThisFrame = false; // 직전 melee_kill 이 처형이었는지 (파편 세기 결정)
+events.on('melee_kill', (payload) => {
+  executedThisFrame = (payload as { execution: boolean }).execution;
+});
 events.on('enemy_died', (payload) => {
   const dead = payload as { enemyType: string; x: number; z: number };
   audio.play('enemy_death');
-  stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType);
+  stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType, executedThisFrame ? 1.8 : 1);
+  executedThisFrame = false;
 });
 events.on('cast_failed', (payload) => {
   audio.play('cast_fizzle');
@@ -369,7 +389,9 @@ events.on('parry_attempt', (payload) => {
   const result = (payload as { result: string }).result;
   showReaction(result === 'perfect' ? '완벽 패링!' : result === 'normal' ? '패링' : '실패 — 경직');
 });
-events.on('melee_kill', () => showReaction('처형'));
+events.on('melee_kill', (payload) => {
+  if ((payload as { execution: boolean }).execution) showReaction('처형!');
+});
 events.on('dodge_step', () => showReaction('회피'));
 events.on('sigil_acquired', (payload) => {
   const id = (payload as { id: string }).id;

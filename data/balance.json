@@ -28,6 +28,7 @@
     "windowDeflectTicks": 8,
     "failStunTicks": 20,
     "hitstopPerfectTicks": 4,
+    "hitstopExecuteTicks": 8,
     "hitstopNormalTicks": 2,
     "staggerTicks": 90,
     "dodgeIFrameTicks": 8,
