@@ -1,4 +1,4 @@
-// 제단·오염 검증 — 상한 SET 보급(반직관 핵심), 공격성 보너스, 우회 계측, 정산·임계, 흉터.
+// 제단·오염 검증 — 골드 상점(무료 보급 폐지), 우회 계측, 정산·임계, 흉터.
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
@@ -42,7 +42,6 @@ function makeWorld(): World {
     enemies: [],
     level,
   });
-  Altar.init(world);
   Corruption.init(world);
   return world;
 }
@@ -58,37 +57,20 @@ beforeEach(() => {
   world = makeWorld();
 });
 
-describe('제단 보급', () => {
-  it('잔탄과 무관하게 상한으로 SET — 더하기가 아니다 (하드 룰)', () => {
-    world.player.x = world.level.altarPos!.x; // 제단 위
-    world.player.z = world.level.altarPos!.z;
-    Altar.tick(world, DT); // 접근 감지
-    pressInteract(world);
-    const pistol = balance.weapons.pistol;
-    expect(world.weapon.mag).toBe(pistol.magSize);
-    expect(world.weapon.reserve).toBe(pistol.ammoMax); // 5+12 잔탄은 그냥 사라진다
-    expect(world.respawn).toEqual(world.level.altarPos);
-  });
+function enterAltar(world: World): void {
+  world.player.x = world.level.altarPos!.x;
+  world.player.z = world.level.altarPos!.z;
+  Altar.tick(world, DT); // 접근 감지
+  pressInteract(world);
+}
 
-  it('공격성 보너스: 근접 위주 + 완벽 패링이면 상한 배율 상승, 진입 후 통계 리셋', () => {
-    const stats = world.combatStats;
-    stats.totalKills = 4;
-    stats.meleeKills = 4; // meleeRatio 1.0 → 0.5
-    stats.perfectParries = 10; // cap 도달 → 0.3
-    stats.encounters = 2;
-    stats.cleanEncounters = 2; // → 0.2
-    expect(Altar.aggressionMultiplier(world)).toBeCloseTo(
-      balance.altar.aggressionBonus.maxMultiplier,
-    );
-
-    world.player.x = world.level.altarPos!.x;
-    world.player.z = world.level.altarPos!.z;
-    Altar.tick(world, DT);
-    pressInteract(world);
-    expect(world.weapon.reserve).toBe(
-      Math.round(balance.weapons.pistol.ammoMax * balance.altar.aggressionBonus.maxMultiplier),
-    );
-    expect(world.combatStats.totalKills).toBe(0); // 누적되지 않는다
+describe('제단 진입', () => {
+  it('무료 보급은 없다 — 잔탄·수류탄이 그대로다 (2026-08 폐지)', () => {
+    enterAltar(world);
+    expect(world.weapon.mag).toBe(5); // 들고 온 그대로
+    expect(world.weapon.reserve).toBe(12);
+    expect(world.weapon.grenades).toBe(3);
+    expect(world.respawn).toEqual(world.level.altarPos); // 세이브는 그대로 동작
   });
 
   it('접근 후 진입 없이 벗어나면 altar_bypassed', () => {
@@ -103,6 +85,81 @@ describe('제단 보급', () => {
     expect(bypassed).toHaveLength(1);
     expect(bypassed[0]).toMatchObject({
       ammoLeftRatio: (5 + 12) / (balance.weapons.pistol.magSize + balance.weapons.pistol.ammoMax),
+    });
+  });
+});
+
+describe('제단 상점', () => {
+  const shop = balance.altar.shop;
+
+  it('골드를 내고 탄약을 산다 — 상한을 넘지 않는다', () => {
+    world.gold = 100;
+    world.weapon.reserve = 12;
+    const bought: unknown[] = [];
+    world.events.on('shop_purchased', (payload) => bought.push(payload));
+
+    expect(Altar.purchase(world, 'ammo')).toBe(true);
+    expect(world.weapon.reserve).toBe(12 + shop.ammo.amount);
+    expect(world.gold).toBe(100 - shop.ammo.price);
+    expect(bought).toHaveLength(1);
+
+    // 상한 근처 — 넘치지 않고 상한에서 멈춘다
+    world.weapon.reserve = balance.weapons.pistol.ammoMax - 3;
+    expect(Altar.purchase(world, 'ammo')).toBe(true);
+    expect(world.weapon.reserve).toBe(balance.weapons.pistol.ammoMax);
+  });
+
+  it('HP·마나·수류탄·배터리도 각각 산다', () => {
+    world.gold = 1000;
+    world.player.health = 40;
+    world.mana.value = 10;
+    world.weapon.grenades = 1;
+    world.lantern.spares = 0;
+
+    expect(Altar.purchase(world, 'heal')).toBe(true);
+    expect(world.player.health).toBe(40 + shop.heal.amount);
+    expect(Altar.purchase(world, 'mana')).toBe(true);
+    expect(world.mana.value).toBe(10 + shop.mana.amount);
+    expect(Altar.purchase(world, 'grenade')).toBe(true);
+    expect(world.weapon.grenades).toBe(1 + shop.grenade.amount);
+    expect(Altar.purchase(world, 'battery')).toBe(true);
+    expect(world.lantern.spares).toBe(shop.battery.amount);
+  });
+
+  it('골드가 모자라면 거절 — 아무것도 소모되지 않는다', () => {
+    world.gold = shop.grenade.price - 1;
+    world.weapon.grenades = 0;
+    const denied: { reason: string }[] = [];
+    world.events.on('shop_denied', (payload) => denied.push(payload as { reason: string }));
+
+    expect(Altar.purchase(world, 'grenade')).toBe(false);
+    expect(world.weapon.grenades).toBe(0);
+    expect(world.gold).toBe(shop.grenade.price - 1);
+    expect(denied[0]!.reason).toBe('no_gold');
+  });
+
+  it('이미 가득 차 있으면 거절 — 골드를 낭비하지 않는다', () => {
+    world.gold = 1000;
+    world.player.health = balance.player.healthMax;
+    const denied: { reason: string }[] = [];
+    world.events.on('shop_denied', (payload) => denied.push(payload as { reason: string }));
+
+    expect(Altar.purchase(world, 'heal')).toBe(false);
+    expect(world.gold).toBe(1000);
+    expect(denied[0]!.reason).toBe('full');
+  });
+
+  it('shopState 가 UI 표시용 보유량·상한·구매 가능 여부를 준다', () => {
+    world.gold = 0;
+    world.weapon.grenades = 2;
+    const s = Altar.shopState(world, 'grenade');
+    expect(s).toMatchObject({
+      price: shop.grenade.price,
+      have: 2,
+      max: balance.weapons.grenade.ammoMax,
+      full: false,
+      poor: true,
+      canBuy: false,
     });
   });
 });

@@ -1,38 +1,17 @@
-// 제단 — 접근 감지, 진입(보급/세이브/정산 트리거), 우회 계측, 공격성 보너스.
+// 제단 — 접근 감지, 진입(세이브/정산 트리거), 우회 계측, 골드 상점.
 // docs/systems/economy.md §1~2.
 //
-// ⚠ 반직관 핵심 규칙: 보급은 잔탄과 무관하게 상한으로 "설정"한다.
-//    ammo += refill 이나 Math.min(ammo + n, max) 형태는 절대 금지 —
-//    30발 남기고 온 플레이어는 30발어치를 버린 것이며, 그것이 의도된 동작이다.
+// ⚠ 2026-08 변경: 무료 보급 폐지. 제단에 들어가도 탄약·수류탄이 저절로 차지 않는다.
+//    전부 골드로 산다 (purchase). 직전 구간 전투 평가 배율(공격성 보너스)도 함께 제거됐다.
+//    되살리려면 git 이력의 aggressionMultiplier / enter()의 상한 SET 블록을 참조할 것.
 
 import { balance } from '../core/Balance';
 import type { World } from '../core/World';
 
-/** 구간 전투 통계 구독. 시작 시 1회 호출 */
-export function init(world: World): void {
-  const stats = world.combatStats;
-  const events = world.events;
+/** 제단 상점 품목 */
+export type ShopItem = 'heal' | 'mana' | 'ammo' | 'grenade' | 'battery';
 
-  events.on('weapon_kill', () => stats.totalKills++);
-  events.on('spell_kill', () => stats.totalKills++);
-  events.on('melee_kill', () => {
-    stats.totalKills++;
-    stats.meleeKills++;
-  });
-  events.on('parry_attempt', (payload) => {
-    if ((payload as { result: string }).result === 'perfect') stats.perfectParries++;
-  });
-  events.on('combat_entered', () => {
-    stats.encounters++;
-    stats.damagedThisEncounter = false;
-  });
-  events.on('player_damaged', () => {
-    stats.damagedThisEncounter = true;
-  });
-  events.on('combat_exited', () => {
-    if (!stats.damagedThisEncounter) stats.cleanEncounters++;
-  });
-}
+export const SHOP_ITEMS: ShopItem[] = ['heal', 'mana', 'ammo', 'grenade', 'battery'];
 
 export function tick(world: World, _dt: number): void {
   const altar = world.level.altarPos;
@@ -61,51 +40,118 @@ function ammoLeftRatio(world: World): number {
   return (world.weapon.mag + world.weapon.reserve) / (pistol.magSize + pistol.ammoMax);
 }
 
-/** 직전 구간 전투 평가 → 해당 구역 한정 탄약 상한 배율 (1.0 ~ maxMultiplier) */
-export function aggressionMultiplier(world: World): number {
-  const ag = balance.altar.aggressionBonus;
-  const stats = world.combatStats;
-  const meleeRatio = stats.totalKills > 0 ? stats.meleeKills / stats.totalKills : 0;
-  const parryScore = Math.min(stats.perfectParries / ag.perfectParryCap, 1);
-  const cleanRatio = stats.encounters > 0 ? stats.cleanEncounters / stats.encounters : 0;
-  const score =
-    meleeRatio * ag.meleeRatioWeight +
-    parryScore * ag.perfectParryWeight +
-    cleanRatio * ag.noDamageRatioWeight;
-  return 1 + Math.min(Math.max(score, 0), 1) * (ag.maxMultiplier - 1);
-}
-
 export function enter(world: World, altar: { x: number; z: number }): void {
-  const ratio = ammoLeftRatio(world);
-  const mul = aggressionMultiplier(world);
-  world.altarBonusMul = mul;
-
-  // 보급 — 상한으로 SET. 잔탄이 얼마였는지는 보지 않는다 (하드 룰)
-  const pistol = balance.weapons.pistol;
-  world.weapon.reserve = Math.round(pistol.ammoMax * mul);
-  world.weapon.mag = pistol.magSize;
-  world.weapon.reloading = 0;
-  world.weapon.grenades = Math.round(balance.weapons.grenade.ammoMax * mul);
-
-  // 세이브/리스폰 지점 등록
+  // 보급 없음 — 상점에서 골드로 산다. 제단은 이제 "쉬는 곳"이 아니라 "쓰는 곳"이다
   world.respawn = { x: altar.x, z: altar.z };
   world.events.emit('respawn_registered', { x: altar.x, z: altar.z });
 
   world.altarEnteredThisApproach = true;
 
-  // 오염 정산은 Corruption이, 각인 교체 UI는 main이 이 이벤트를 구독해 처리
+  // 오염 정산은 Corruption이, 상점 UI는 main이 이 이벤트를 구독해 처리
   world.events.emit('altar_entered', {
-    ammoLeftRatio: ratio,
+    ammoLeftRatio: ammoLeftRatio(world),
     pendingCorruption: world.corruption.pending,
-    multiplier: mul,
+    gold: world.gold,
   });
+}
 
-  // 보너스는 다음 제단에서 재계산. 누적되지 않는다
-  const stats = world.combatStats;
-  stats.meleeKills = 0;
-  stats.totalKills = 0;
-  stats.perfectParries = 0;
-  stats.encounters = 0;
-  stats.cleanEncounters = 0;
-  stats.damagedThisEncounter = false;
+// ---- 상점 ----
+
+export interface ShopState {
+  price: number;
+  /** 이 품목이 늘려주는 양 (HP/마나 회복량, 탄약 발수, 개수) */
+  amount: number;
+  /** 현재 보유량 / 상한 — UI 표시용 */
+  have: number;
+  max: number;
+  /** 이미 가득 차 살 수 없다 */
+  full: boolean;
+  /** 골드가 모자란다 */
+  poor: boolean;
+  canBuy: boolean;
+}
+
+export function shopState(world: World, item: ShopItem): ShopState {
+  const shop = balance.altar.shop;
+  const p = world.player;
+  const w = world.weapon;
+  let price: number;
+  let amount: number;
+  let have: number;
+  let max: number;
+
+  switch (item) {
+    case 'heal':
+      ({ price, amount } = shop.heal);
+      have = Math.round(p.health);
+      max = balance.player.healthMax;
+      break;
+    case 'mana':
+      ({ price, amount } = shop.mana);
+      have = Math.round(world.mana.value);
+      max = balance.mana.max;
+      break;
+    case 'ammo':
+      ({ price, amount } = shop.ammo);
+      have = w.reserve;
+      max = balance.weapons.pistol.ammoMax;
+      break;
+    case 'grenade':
+      ({ price, amount } = shop.grenade);
+      have = w.grenades;
+      max = balance.weapons.grenade.ammoMax;
+      break;
+    case 'battery':
+      ({ price, amount } = shop.battery);
+      have = world.lantern.spares;
+      max = shop.battery.sparesMax;
+      break;
+  }
+
+  const full = have >= max;
+  const poor = world.gold < price;
+  return { price, amount, have, max, full, poor, canBuy: !full && !poor };
+}
+
+/** 구매 시도. 성공하면 true. 실패 사유는 shop_denied 로 알린다 */
+export function purchase(world: World, item: ShopItem): boolean {
+  const state = shopState(world, item);
+  if (!state.canBuy) {
+    world.events.emit('shop_denied', {
+      item,
+      reason: state.full ? 'full' : 'no_gold',
+      price: state.price,
+      gold: world.gold,
+    });
+    return false;
+  }
+
+  world.gold -= state.price;
+  const p = world.player;
+  const w = world.weapon;
+  switch (item) {
+    case 'heal':
+      p.health = Math.min(state.max, p.health + state.amount);
+      break;
+    case 'mana':
+      world.mana.value = Math.min(state.max, world.mana.value + state.amount);
+      break;
+    case 'ammo':
+      w.reserve = Math.min(state.max, w.reserve + state.amount);
+      break;
+    case 'grenade':
+      w.grenades = Math.min(state.max, w.grenades + state.amount);
+      break;
+    case 'battery':
+      world.lantern.spares = Math.min(state.max, world.lantern.spares + state.amount);
+      break;
+  }
+
+  world.events.emit('shop_purchased', {
+    item,
+    price: state.price,
+    amount: state.amount,
+    gold: world.gold,
+  });
+  return true;
 }

@@ -260,14 +260,14 @@
   },
 
   "altar": {
+    "_shopNote": "무료 보급 폐지(2026-08). 제단은 골드 상점이다 — 탄약·수류탄·배터리·HP·마나를 전부 돈으로 산다. 가격 기준: 처치당 평균 골드 ≈ 3.9 (드랍률 0.65 × 3~9골드)",
     "radius": 2.4,
-    "refillToMax": true,
-    "aggressionBonus": {
-      "meleeRatioWeight": 0.5,
-      "perfectParryWeight": 0.3,
-      "perfectParryCap": 10,
-      "noDamageRatioWeight": 0.2,
-      "maxMultiplier": 1.4
+    "shop": {
+      "heal": { "price": 20, "amount": 25 },
+      "mana": { "price": 15, "amount": 35 },
+      "ammo": { "price": 12, "amount": 20 },
+      "grenade": { "price": 25, "amount": 1 },
+      "battery": { "price": 20, "amount": 1, "sparesMax": 4 }
     }
   },
 

@@ -49,16 +49,6 @@ export interface SigilState {
   scars: Record<SigilSlot, number>;
 }
 
-/** 제단 공격성 보너스용 구간 전투 통계. 제단 진입 시 리셋 */
-export interface CombatStats {
-  meleeKills: number;
-  totalKills: number;
-  perfectParries: number;
-  encounters: number;
-  cleanEncounters: number;
-  damagedThisEncounter: boolean;
-}
-
 /** 부착된 각인에서 매번 재계산되는 파생 수치. Sigils가 갱신한다.
  *  (2026-08: 부위 페널티 폐지 — 각인은 순수 강화이고 대가는 오염으로만 치른다) */
 export interface Modifiers {
@@ -332,9 +322,6 @@ export class World {
   /** 이번 접근에서 이미 진입했는가 (우회 판정용) */
   altarEnteredThisApproach = false;
 
-  /** 현 구역 탄약 상한 배율 (제단 공격성 보너스) */
-  altarBonusMul = 1;
-
   /** 오염 25 임계 — 벽의 문자 해독 */
   canReadGlyphs = false;
 
@@ -346,14 +333,6 @@ export class World {
   /** 당겨진 레버 ("row-col") — 레버는 1회용 */
   pulledLevers = new Set<string>();
 
-  combatStats: CombatStats = {
-    meleeKills: 0,
-    totalKills: 0,
-    perfectParries: 0,
-    encounters: 0,
-    cleanEncounters: 0,
-    damagedThisEncounter: false,
-  };
   enemies: EnemyState[];
   level: Level;
 

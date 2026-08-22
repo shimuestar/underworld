@@ -48,7 +48,9 @@ export type SoundName =
   | 'melee_hit'
   | 'grenade_throw'
   | 'explosion'
-  | 'implode';
+  | 'implode'
+  | 'shop_buy'
+  | 'shop_deny';
 
 const MASTER_GAIN = 0.25;
 
@@ -236,6 +238,17 @@ export class GameAudio {
         this.tone(60, 0.7, 'sine', 1.6, 0, 28);
         this.noise(0.5, 1.3, 900);
         this.noise(0.9, 0.5, 300, 0.1);
+        break;
+      case 'shop_buy':
+        // 구매 — 동전이 떨어지는 짧은 2음 상승
+        this.tone(880, 0.07, 'square', 0.16);
+        this.tone(1320, 0.1, 'square', 0.13, 0.05);
+        this.noise(0.06, 0.12, 5000, 0.02);
+        break;
+      case 'shop_deny':
+        // 거절 — 낮은 2음 하강
+        this.tone(220, 0.09, 'square', 0.16);
+        this.tone(160, 0.13, 'square', 0.14, 0.07);
         break;
       case 'implode':
         // 내파 — 빨려드는 상승음 3겹 뒤에 압착. 폭발과 반대로 음이 올라갔다 꺼진다

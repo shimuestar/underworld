@@ -26,6 +26,7 @@ import * as Exit from './systems/Exit';
 import * as Lever from './systems/Lever';
 import * as Lantern from './systems/Lantern';
 import { enemyDef } from './core/Entities';
+import { ShopUI } from './render/ShopUI';
 import { SigilUI } from './render/SigilUI';
 import { sigilDef } from './core/SigilData';
 import levelJson from '../data/levels/z01_f1.json';
@@ -130,9 +131,19 @@ window.addEventListener('keydown', (e) => {
 events.on('player_died', () => console.log('[metrics] 사망 시점 스냅샷', metrics.snapshot(world)));
 events.on('zone_cleared', () => console.log('[metrics] 클리어 스냅샷', metrics.snapshot(world)));
 const sigilUI = new SigilUI(world);
+const shopUI = new ShopUI(world);
+shopUI.onClose = () => {
+  world.uiOpen = false;
+};
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Tab') {
     e.preventDefault();
+    // 상점에서 Tab — 각인 교체로 넘어간다 (둘이 겹쳐 뜨지 않게)
+    if (shopUI.open) {
+      shopUI.hide();
+      world.uiOpen = sigilUI.toggle(true);
+      return;
+    }
     world.uiOpen = sigilUI.toggle();
     if (world.uiOpen) document.exitPointerLock();
   }
@@ -247,6 +258,8 @@ for (const name of [
   'sigil_detached',
   'altar_entered',
   'altar_bypassed',
+  'shop_purchased',
+  'shop_denied',
   'respawn_registered',
   'respawned',
   'corruption_applied',
@@ -595,16 +608,29 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---- 제단 ----
-events.on('altar_entered', (payload) => {
-  const info = payload as { multiplier: number; pendingCorruption: number };
+events.on('altar_entered', () => {
   audio.play('altar_enter');
-  showReaction(
-    `제단 — 탄약 상한 보급 (배율 ×${info.multiplier.toFixed(2)})`,
-    3000,
-  );
-  sigilUI.show(true); // 각인 교체 UI (제단 모드: 해제 가능)
+  shopUI.show(); // 보급 상점 — 무료 보급은 없다. Tab 으로 각인 교체
   world.uiOpen = true;
   document.exitPointerLock();
+});
+const SHOP_LABEL: Record<string, string> = {
+  heal: '체력', mana: '마나', ammo: '권총탄', grenade: '수류탄', battery: '배터리',
+};
+events.on('shop_purchased', (payload) => {
+  const buy = payload as { item: string; price: number; amount: number };
+  audio.play('shop_buy');
+  showReaction(`${SHOP_LABEL[buy.item] ?? buy.item} +${buy.amount}  (◆ ${buy.price})`, 1200);
+});
+events.on('shop_denied', (payload) => {
+  const deny = payload as { item: string; reason: string; price: number };
+  audio.play('shop_deny');
+  showReaction(
+    deny.reason === 'full'
+      ? `${SHOP_LABEL[deny.item] ?? deny.item} — 이미 가득 찼다`
+      : `골드 부족 — ◆ ${deny.price} 필요`,
+    1400,
+  );
 });
 events.on('corruption_applied', (payload) => {
   const info = payload as { from: number; to: number };
@@ -671,7 +697,6 @@ Sigils.init(world);
 Pickups.init(world);
 Progression.init(world);
 Corruption.init(world);
-Altar.init(world);
 const systems = [
   PlayerMove.tick,
   Enemies.tick,
@@ -862,11 +887,9 @@ function render(alpha: number): void {
     world.nearAltar && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
   altarPrompt!.classList.toggle('visible', showAltarPrompt || (nearLever && !world.dead));
   if (showAltarPrompt) {
-    const w2 = world.weapon;
-    const capNow = balance.weapons.pistol.magSize + balance.weapons.pistol.ammoMax;
     altarPrompt!.textContent =
-      `제단 — E 진입\n` +
-      `9mm ${w2.mag + w2.reserve}/${capNow} 보유 중 · 들어가면 상한까지 재보급 (잔탄 무관)\n` +
+      `제단 — E 보급 상점\n` +
+      `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
       `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
   } else if (nearLever) {
     altarPrompt!.textContent = 'E — 레버를 당긴다';
@@ -897,7 +920,7 @@ function render(alpha: number): void {
     `HP ${Math.max(0, Math.round(p.health))}   9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}${p.blocking ? '  [방어]' : ''}\n` +
     `mana ${manaBar} ${mana.value.toFixed(0)}/${balance.mana.max}  chain ×${chainMult}${!mana.inCombat && mana.outOfCombatTicks >= balance.mana.combatExitTicks && mana.value > 0 ? '  [휘발중]' : ''}\n` +
     `spell ${spellHudText()}   각인 ${world.sigils.inventory.length}개 소지\n` +
-    `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}${world.altarBonusMul > 1 ? `  탄약 배율 ×${world.altarBonusMul.toFixed(2)}` : ''}\n` +
+    `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}\n` +
     `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
