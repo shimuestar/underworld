@@ -10,6 +10,10 @@ export interface EnemyAttackDef {
   arcDeg?: number;
   /** 타격 구간 동안 플레이어를 향해 달려드는 속도 (돌격 공격) */
   chargeSpeed?: number;
+  /** 이 공격만의 피해량 (없으면 def.damage) */
+  damage?: number;
+  /** 이 공격만의 플레이어 밀림 거리 (없으면 balance.playerKnockback[type]) */
+  playerKnockback?: number;
   /** 헛쳤을 때의 경직 틱 (없으면 recoverTicks). 그동안 마지막 동작으로 굳는다 */
   whiffRecoverTicks?: number;
   impactRangeMul: number;
@@ -57,6 +61,8 @@ export interface EnemyDef {
   rangedAttack?: EnemyAttackDef;
   /** 돌격 공격 — 멀리 떨어졌을 때 달려들며 찌른다 (창병) */
   chargeAttack?: EnemyAttackDef;
+  /** 방패 밀쳐내기 — 연타를 멈추지 않는 상대를 떼어낸다 (창병) */
+  shieldBash?: EnemyAttackDef;
   parriesToStagger?: number;
   executeDamage?: number;
   armorHealth?: number;
@@ -67,6 +73,7 @@ export function currentAttack(
   def: EnemyDef,
   enemy: { phase?: string; attackMode?: string },
 ): EnemyAttackDef {
+  if (enemy.attackMode === 'bash' && def.shieldBash) return def.shieldBash;
   if (enemy.attackMode === 'charge' && def.chargeAttack) return def.chargeAttack;
   if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
   if (enemy.phase === 'armored' && def.armoredAttack) return def.armoredAttack;

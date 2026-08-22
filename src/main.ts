@@ -258,6 +258,7 @@ for (const name of [
   'shield_broken',
   'shield_cracked',
   'shield_braced',
+  'shield_bash_start',
   'armor_hit',
   'boss_phase',
   'boss_staggered',
@@ -464,6 +465,10 @@ events.on('shield_braced', (payload) => {
   audio.play('shield_brace');
   const p2 = world.player;
   stage.spawnGuardSparks((p2.x + c.x) / 2, (p2.z + c.z) / 2, 1.0, 0xdfe6ef, 0.7);
+});
+events.on('shield_bash_start', () => {
+  audio.play('telegraph_blue');
+  showReaction('방패로 밀쳐낸다!', 900);
 });
 events.on('shield_cracked', (payload) => {
   const info = payload as { enemyId: number; remaining: number };

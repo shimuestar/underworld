@@ -61,6 +61,48 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   enemy.prevX = enemy.x;
   enemy.prevZ = enemy.z;
 
+  // 밀려난 뒤 돌격 — chase 진입을 기다리지 않는다 (공격 도중 밀려나면 그 상태로 남아
+  // 영영 돌격하지 못했다). 밀리는 중에는 판단하지 않는다 — 아직 가까워서 취소돼 버린다
+  if (enemy.wantsCharge && def.chargeAttack && (enemy.kbTicks ?? 0) <= 0) {
+    const cdx = p.x - enemy.x;
+    const cdz = p.z - enemy.z;
+    const cdist = Math.hypot(cdx, cdz);
+    if (cdist < (def.chargeAttack.minRange ?? 0)) {
+      enemy.wantsCharge = false; // 이미 붙었으면 취소
+    } else if (world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)) {
+      enemy.wantsCharge = false;
+      enemy.braceTicks = 0;
+      enemy.attackFreezeTicks = 0;
+      enemy.attackMode = 'charge';
+      enemy.yaw = Math.atan2(-cdx, -cdz);
+      startWindup(world, enemy, def.chargeAttack);
+      world.events.emit('enemy_charge', {
+        enemyId: enemy.id,
+        enemyType: enemy.type,
+        dist: cdist,
+      });
+      return;
+    }
+  }
+
+  // 방패 밀쳐내기 — 버티기보다 우선한다 (웅크린 자세를 풀고 밀어낸다)
+  if (enemy.wantsBash && def.shieldBash) {
+    enemy.wantsBash = false;
+    enemy.braceTicks = 0;
+    enemy.attackFreezeTicks = 0;
+    enemy.attackMode = 'bash';
+    enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));
+    startWindup(world, enemy, def.shieldBash);
+    world.events.emit('shield_bash_start', { enemyId: enemy.id, enemyType: enemy.type });
+    return;
+  }
+
+  // 연타를 멈추면 막아낸 기록이 사라진다 (붙어서 계속 때릴 때만 밀쳐내기가 나간다)
+  if ((enemy.blockedStreakTicks ?? 0) > 0) {
+    enemy.blockedStreakTicks = (enemy.blockedStreakTicks ?? 0) - 1;
+    if (enemy.blockedStreakTicks === 0) enemy.blockedStreak = 0;
+  }
+
   // 넉백 — 떠밀리는 동안은 버티기·경직보다 우선한다 (벽에는 막힘)
   // 밀려나는 동안은 휘청여서 다른 행동을 못 한다 (벽에는 막힘)
   if ((enemy.kbTicks ?? 0) > 0) {
@@ -122,20 +164,6 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         } else if (dist > 0) {
           moveAvoiding(world, enemy, def, distX / dist, distZ / dist, def.speed * dt);
         }
-        break;
-      }
-
-      // 크게 밀려난 뒤 — 걸어서 다가오는 대신 달려들며 찌른다
-      if (
-        enemy.wantsCharge &&
-        def.chargeAttack &&
-        dist >= (def.chargeAttack.minRange ?? 0) &&
-        world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
-      ) {
-        enemy.wantsCharge = false;
-        enemy.attackMode = 'charge';
-        startWindup(world, enemy, def.chargeAttack);
-        world.events.emit('enemy_charge', { enemyId: enemy.id, enemyType: enemy.type, dist });
         break;
       }
 
@@ -219,13 +247,15 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (connected) {
         // 방어(정면) — 칩 데미지만 관통. 피해가 있으므로 연쇄는 여전히 리셋된다
         const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
-        const damage = blocked ? def.damage * balance.block.chipDamageRatio : def.damage;
+        const base = attack.damage ?? def.damage; // 공격별 피해 재정의 (방패 밀쳐내기 등)
+        const damage = blocked ? base * balance.block.chipDamageRatio : base;
         p.health -= damage;
         if (enemy.parryStreak !== undefined) enemy.parryStreak = 0; // 연속 패링 끊김
 
         // 뒤로 밀림 — 무기가 무거울수록 크게. 방어 중이면 버티므로 1/3
         const kb = balance.playerKnockback as unknown as Record<string, number>;
-        const push = (kb[attack.type] ?? kb['contact']!) * (blocked ? kb['blockedMul']! : 1);
+        const pushBase = attack.playerKnockback ?? kb[attack.type] ?? kb['contact']!;
+        const push = pushBase * (blocked ? kb['blockedMul']! : 1);
         pushPlayer(p, p.x - enemy.x, p.z - enemy.z, push, balance.playerKnockback.ticks);
 
         if (blocked) {

@@ -647,6 +647,66 @@ describe('방패병 vs 해머', () => {
     expect(enemy.health).toBe(110); // 방패가 버티는 동안은 HP 무손실
   });
 
+  it('연타를 멈추지 않으면 방패로 밀쳐낸다 (bashAfterBlocks)', () => {
+    const enemy = shieldman();
+    const bashes: unknown[] = [];
+    world.events.on('shield_bash_start', (payload) => bashes.push(payload));
+
+    for (let i = 0; i < sb.bashAfterBlocks - 1; i++) {
+      swingOnce();
+      expect(bashes).toHaveLength(0); // 임계 전에는 웅크리기만
+    }
+    swingOnce(); // 임계 도달
+    Enemies.tick(world, DT); // Enemies 가 실행한다 (Weapons 는 의도만 남긴다)
+    expect(bashes).toHaveLength(1);
+    expect(enemy.attackMode).toBe('bash');
+    expect(enemy.ai).toBe('windup');
+    expect(enemy.braceTicks).toBe(0); // 웅크리기가 풀린다
+  });
+
+  it('연타를 멈추면 막아낸 기록이 사라진다', () => {
+    const enemy = shieldman();
+    swingOnce();
+    swingOnce();
+    expect(enemy.blockedStreak).toBe(2);
+    for (let i = 0; i < sb.blockedStreakDecayTicks + 1; i++) Enemies.tick(world, DT);
+    expect(enemy.blockedStreak).toBe(0);
+  });
+
+  it('방패에 막히면 다음 스윙이 늦어진다 (해머가 튕긴다)', () => {
+    const enemy = shieldman();
+    swingOnce();
+    const blockedCd = world.weapon.meleeCooldown;
+
+    // 방패 없는 적에게 같은 1타를 쳤을 때와 비교
+    const world2 = makeWorld();
+    const naked = spawnEnemyAt('goblin_runner', 6 + 2.2, 6, 2);
+    naked.health = 1000;
+    world2.enemies.push(naked);
+    world2.weapon.meleeCooldown = 0;
+    world2.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world2, DT);
+    world2.input = Input.emptySnapshot();
+    advanceToHammerImpact(world2);
+
+    expect(blockedCd).toBe(world2.weapon.meleeCooldown + sb.blockedRecoilTicks);
+    expect(enemy.health).toBe(110);
+  });
+
+  it('마무리로 밀어낸 뒤에는 반드시 돌격으로 반격한다', () => {
+    const enemy = shieldman();
+    swingOnce();
+    swingOnce();
+    swingOnce(); // 마무리 → 밀려남
+    expect(enemy.wantsCharge).toBe(true);
+
+    const charges: unknown[] = [];
+    world.events.on('enemy_charge', (payload) => charges.push(payload));
+    for (let i = 0; i < sb.finisherKnockbackTicks + 2; i++) Enemies.tick(world, DT);
+    expect(charges).toHaveLength(1); // 밀림이 끝나자마자 달려든다
+    expect(enemy.attackMode).toBe('charge');
+  });
+
   it('방패가 부서진 뒤에는 해머 피해가 들어간다', () => {
     const enemy = shieldman();
     enemy.shieldBroken = true;

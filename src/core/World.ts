@@ -210,7 +210,13 @@ export interface EnemyState {
   armorHealth?: number;
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
-  attackMode?: 'melee' | 'ranged' | 'charge';
+  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash';
+  /** 방패로 밀쳐낼 차례 (Weapons가 켜고 Enemies가 실행한다) */
+  wantsBash?: boolean;
+  /** 연속으로 방패에 막아낸 횟수 — 임계를 넘으면 밀쳐낸다 */
+  blockedStreak?: number;
+  /** 막아낸 기록이 사라지기까지 남은 틱 (연타를 멈추면 초기화) */
+  blockedStreakTicks?: number;
   /** 다음 기회에 돌격을 시도한다 (크게 밀려난 직후 확률적으로 켜진다) */
   wantsCharge?: boolean;
   /** 피탄 경직 잔여 틱 — 발이 묶인다 (공격 진행은 막지 않는다. 총알용) */

@@ -64,7 +64,11 @@
     "braceTicks": 40,
     "_knockbackNote": "마무리 3타를 방패로 받아내면 크게 밀려난다 — 밀리지 않으면 제자리에서 무한 연타가 된다",
     "finisherKnockback": 5.2,
-    "finisherKnockbackTicks": 14
+    "finisherKnockbackTicks": 14,
+    "_bashNote": "연타를 멈추지 않으면 방패로 밀쳐낸다. 막힌 타격은 플레이어 후딜을 늘려 연타 템포도 떨어뜨린다",
+    "bashAfterBlocks": 4,
+    "blockedStreakDecayTicks": 90,
+    "blockedRecoilTicks": 12
   },
 
   "block": {
@@ -308,7 +312,7 @@
     },
     "friendlyFireDamageMul": 0.4,
     "_chargeNote": "크게 밀려난 뒤 확률적으로 달려들며 찌른다 — 멀리서 그냥 걸어오면 위협이 없다",
-    "chargeChanceAfterKnockback": 0.65
+    "chargeChanceAfterKnockback": 1.0
   },
 
   "telegraph": {

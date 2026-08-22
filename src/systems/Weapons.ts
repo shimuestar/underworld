@@ -145,6 +145,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
   const range = heavy ? hammer.range * combo.rangeMul : hammer.range;
   const arcDeg = heavy ? hammer.arcDeg * combo.arcMul : hammer.arcDeg;
   const knockback = heavy ? hammer.knockback * combo.knockbackMul : hammer.knockback;
+  let blockedRecoil = 0; // 방패에 튕긴 만큼 다음 스윙이 늦어진다
 
   const facingX = -Math.sin(p.yaw);
   const facingZ = -Math.cos(p.yaw);
@@ -164,8 +165,22 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     // 버티느라 아무 행동도 못 하고, 마무리 3타만 방패를 깎는다
     if (shieldBlocks(def, enemy, p.x, p.z)) {
       const sb = balance.shieldBreak;
-      enemy.braceTicks = Math.max(enemy.braceTicks ?? 0, sb.braceTicks);
       if (enemy.ai === 'idle') enemy.ai = 'chase';
+
+      blockedRecoil += sb.blockedRecoilTicks; // 아래 후딜 계산에 더한다 (여기서 대입하면 덮어써진다)
+
+      // 연타를 멈추지 않으면 방패로 밀쳐낸다 — 얼굴에 붙어 무한히 때리지 못하게
+      // 마무리 타도 막아낸 것으로 센다 — 콤보를 이어 붙이면 결국 밀쳐낸다
+      enemy.blockedStreak = (enemy.blockedStreak ?? 0) + 1;
+      enemy.blockedStreakTicks = sb.blockedStreakDecayTicks;
+      if (!heavy && enemy.blockedStreak >= sb.bashAfterBlocks && def.shieldBash) {
+        // 실행은 Enemies가 한다 (시스템끼리 직접 부르지 않는다 — World 상태로만 전달)
+        enemy.blockedStreak = 0;
+        enemy.wantsBash = true;
+        hitAny = true;
+        continue;
+      }
+      enemy.braceTicks = Math.max(enemy.braceTicks ?? 0, sb.braceTicks);
       if (heavy) {
         // 마무리 타는 방패째 크게 밀어낸다 — 안 밀리면 제자리에서 무한 연타가 된다.
         // 밀리는 동안은 버티기 자세도 풀린다 (가드를 잃고 떠밀린다)
@@ -251,7 +266,9 @@ function resolveHammerHit(world: World, heavy: boolean): void {
   // 1·2타는 짧은 후딜로 바로 이어칠 수 있게 하고(연결), 마무리 강타만 크게 쉰다.
   // 헛스윙이면 추가 후딜 — 마구 휘두르기 억제
   const base = heavy ? hammer.cooldownTicks * combo.cooldownMul : combo.chainCooldownTicks;
-  w.meleeCooldown = Math.round(hitAny ? base : base + hammer.whiffExtraCooldownTicks);
+  w.meleeCooldown = Math.round(
+    (hitAny ? base : base + hammer.whiffExtraCooldownTicks) + blockedRecoil,
+  );
 
   if (heavy) {
     w.comboStep = 0; // 마무리 — 다음은 다시 1타부터

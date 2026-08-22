@@ -966,6 +966,13 @@ export class Stage {
         leanTarget = striking && isMelee ? -0.42 : inWindup ? 0.28 * windupProgress : 0;
         lungeTarget = striking && isMelee ? -0.5 : 0;
       }
+      // 방패 밀쳐내기 — 몸통째 앞으로 내지른다 (찌르기와 구분되는 짧고 굵은 동작)
+      const bashing = enemy.attackMode === 'bash';
+      if (bashing && striking) {
+        leanTarget = -0.3;
+        lungeTarget = -0.85;
+      }
+
       // 방패로 버티는 중 — 몸을 낮추고 반 걸음 물러서 웅크린다 (해머 연타를 받아내는 자세)
       if ((enemy.braceTicks ?? 0) > 0) {
         leanTarget = 0.12;
@@ -1021,7 +1028,7 @@ export class Stage {
           if (isMelee && inWindup) {
             armZTarget = THRUST_PULL * windupProgress; // 뒤로 당김
             if (trembling) armZTarget += Math.sin(now / 12) * 0.05;
-          } else if (isMelee && striking) {
+          } else if (isMelee && striking && enemy.attackMode !== 'bash') {
             // 창끝의 로컬 위치 = torsoZ + armZ - tipLocal 이 -weaponTipDist 가 되도록
             const tipLocal = (spec?.length ?? 1) + (spec?.tip ? 0.23 : 0);
             armZTarget = -(enemy.weaponTipDist ?? 0) + tipLocal - visual.torso.position.z;
