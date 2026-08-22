@@ -57,8 +57,15 @@ export class Input {
   private cycleRanged = 0;
 
   constructor(private readonly lockTarget: HTMLElement) {
-    lockTarget.addEventListener('click', () => {
-      if (!this.pointerLocked) lockTarget.requestPointerLock();
+    // 화면 어디를 클릭하든 락을 시도한다 (일시정지 오버레이 위를 눌러도 재개되도록).
+    // 각인 UI 안을 클릭할 때는 제외 — 거기선 커서를 써야 한다
+    window.addEventListener('click', (e) => {
+      if (this.pointerLocked) return;
+      if ((e.target as HTMLElement | null)?.closest?.('#sigilui')) return;
+      this.tryLock(0);
+    });
+    document.addEventListener('pointerlockchange', () => {
+      if (this.pointerLocked) this.lockRetry = 0; // 성공 — 재시도 중단
     });
 
     window.addEventListener('keydown', (e) => {
@@ -118,6 +125,31 @@ export class Input {
       this.reactionDown = false;
     });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  /** 포인터 락 요청. ESC로 빠져나온 직후에는 브라우저가 잠시 거부하므로
+   *  (Chrome 약 1.25초) 실패하면 짧은 간격으로 다시 시도한다 */
+  private lockRetry = 0;
+  private tryLock(attempt: number): void {
+    if (this.pointerLocked || attempt > 10) return;
+    this.lockRetry = attempt;
+    let promise: unknown;
+    try {
+      promise = this.lockTarget.requestPointerLock();
+    } catch {
+      promise = undefined;
+    }
+    const retry = (): void => {
+      if (this.pointerLocked) return;
+      window.setTimeout(() => {
+        if (!this.pointerLocked && this.lockRetry === attempt) this.tryLock(attempt + 1);
+      }, 250);
+    };
+    if (promise && typeof (promise as Promise<void>).then === 'function') {
+      (promise as Promise<void>).then(() => undefined).catch(retry);
+    } else {
+      retry(); // 구형 API — 성공했으면 위 pointerlockchange가 재시도를 끊는다
+    }
   }
 
   /** 눌린 상태를 전부 해제 — 일시정지·포커스 상실 시 키가 눌린 채 남지 않게 */

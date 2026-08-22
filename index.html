@@ -70,6 +70,11 @@
       #pause.visible {
         display: flex;
       }
+      /* 클릭을 삼키면 포인터 락을 다시 걸 수 없어 재개가 막힌다 */
+      #pause,
+      #death {
+        pointer-events: none;
+      }
       #pause .hint {
         font-size: 14px;
         color: #98a2b0;
