@@ -186,6 +186,10 @@ export interface EnemyState {
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
   attackMode?: 'melee' | 'ranged';
+  /** 타격 진행도 0~1 (무기가 뻗어나가는 정도) 과 그 시점의 무기 끝 거리(중심 기준).
+   *  패링은 이 값으로 판정한다 — 시간이 아니라 무기가 실제로 닿았는지 */
+  strikeProgress?: number;
+  weaponTipDist?: number;
   /** 캐스터 재배치 — 사선이 아군에 막힌 누적 틱 / 현재 횡이동 방향(+1·-1) */
   strafeBlockedTicks?: number;
   strafeDir?: number;

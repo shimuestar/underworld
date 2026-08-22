@@ -123,8 +123,11 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       break;
     }
 
+    // active_perfect / active_normal 은 이제 "타격 이동 구간"의 앞·뒤 절반일 뿐이다.
+    // 완벽/일반 판정은 상태가 아니라 무기 끝과 가드의 거리(Reaction)가 정한다.
     case 'active_perfect': {
       enemy.timer--;
+      advanceStrike(enemy, def, attack);
       if (enemy.timer <= 0) {
         enemy.ai = 'active_normal';
         enemy.timer = balance.reaction.windowNormalTicks;
@@ -134,6 +137,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
 
     case 'active_normal': {
       enemy.timer--;
+      advanceStrike(enemy, def, attack);
       if (enemy.timer <= 0) enemy.ai = 'impact';
       break;
     }
@@ -280,9 +284,34 @@ function strafeForAngle(
   }
 }
 
+/** 무기가 닿는 최대 거리 (적 중심 기준) — impact 판정 거리와 같아야 한다 */
+export function fullReach(def: ReturnType<typeof enemyDef>, attack: EnemyAttackDef): number {
+  return def.attackRange * attack.impactRangeMul;
+}
+
+/** 타격 진행도에 따라 무기 끝 거리를 갱신. 예비동작에서 당겨진 위치부터 최대 사거리까지 */
+function advanceStrike(
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  attack: EnemyAttackDef,
+): void {
+  const total = balance.reaction.windowPerfectTicks + balance.reaction.windowNormalTicks;
+  const elapsed =
+    enemy.ai === 'active_perfect'
+      ? balance.reaction.windowPerfectTicks - enemy.timer
+      : balance.reaction.windowPerfectTicks + (balance.reaction.windowNormalTicks - enemy.timer);
+  const progress = Math.max(0, Math.min(1, elapsed / total));
+  const reach = fullReach(def, attack);
+  const rest = reach * balance.parrySpace.pullbackRatio;
+  enemy.strikeProgress = progress;
+  enemy.weaponTipDist = rest + (reach - rest) * progress;
+}
+
 function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
   enemy.ai = 'windup';
   enemy.timer = attack.windupTicks;
+  enemy.strikeProgress = 0;
+  enemy.weaponTipDist = fullReach(enemyDef(enemy.type), attack) * balance.parrySpace.pullbackRatio;
   world.events.emit('enemy_windup', {
     enemyId: enemy.id,
     enemyType: enemy.type,

@@ -52,6 +52,7 @@ const MELEE_WEAPONS: Record<
 > = {
   goblin_runner: { length: 1.0, width: 0.11, color: 0x6b5233, style: 'smash' },
   goblin_spear: { length: 2.0, width: 0.07, color: 0x5c4a33, style: 'thrust', tip: true },
+  // tip 이 있으면 창끝이 length + 0.23 지점까지 나온다 (아래 tipLocal 계산)
   goblin_chieftain: { length: 2.0, width: 0.26, color: 0x4a3826, style: 'smash', headSize: 0.5 },
 };
 /** smash 팔 각도: 휴식/치켜듦/내리침.
@@ -63,7 +64,6 @@ const ARM_SMASH = -1.15; // 앞아래로 내리찍음
  *  몸통 rotation.x는 + 가 뒤로 젖힘 / - 가 앞으로 숙임 (피벗이 발밑) */
 const THRUST_LEVEL = 0.02;
 const THRUST_PULL = 0.8; // windup: 창을 뒤로 당김
-const THRUST_LUNGE = -1.35; // 타격: 내지름
 const THRUST_CROUCH = 0.22; // windup: 몸을 낮춰 움츠림
 const THRUST_COIL = 0.25; // windup: 몸을 뒤로 뺌
 const THRUST_COIL_LEAN = 0.1; // windup: 뒤로 살짝 젖힘 (뒷발에 체중)
@@ -799,8 +799,17 @@ export class Stage {
       let crouchTarget = 0;
       if (isThrust && isMelee) {
         // 창: 낮추고 뒤로 움츠렸다가(windup) 몸통째 진격하며 내지른다(strike)
-        leanTarget = striking ? THRUST_LEAN : inWindup ? THRUST_COIL_LEAN * windupProgress : 0;
-        lungeTarget = striking ? THRUST_ADVANCE : inWindup ? THRUST_COIL * windupProgress : 0;
+        const sp = enemy.strikeProgress ?? 0;
+        leanTarget = striking
+          ? THRUST_LEAN * sp
+          : inWindup
+            ? THRUST_COIL_LEAN * windupProgress
+            : 0;
+        lungeTarget = striking
+          ? THRUST_COIL + (THRUST_ADVANCE - THRUST_COIL) * sp // 움츠린 자리에서 진격
+          : inWindup
+            ? THRUST_COIL * windupProgress
+            : 0;
         crouchTarget = inWindup ? -THRUST_CROUCH * windupProgress : 0;
       } else {
         // 치켜들 때 몸을 젖히고(+), 내리칠 때 앞으로 숙인다(-)
@@ -813,11 +822,16 @@ export class Stage {
       visual.torso.position.z += (lungeTarget - visual.torso.position.z) * snap;
       visual.torso.position.y += (crouchTarget - visual.torso.position.y) * snap;
 
-      // 무기 팔 — smash: 치켜들었다 내리침 / thrust: 뒤로 당겼다 내지름
+      // 무기 팔 — smash: 치켜들었다 내리침 / thrust: 뒤로 당겼다 내지름.
+      // 타격 구간에서는 로직이 계산한 무기 끝 거리(enemy.weaponTipDist)를 그대로 따라간다.
+      // 보이는 창끝 = 패링 판정에 쓰이는 창끝 (시간 기반 스냅 애니메이션 금지)
       if (visual.arm) {
-        const style = MELEE_WEAPONS[enemy.type]?.style ?? 'smash';
+        const spec = MELEE_WEAPONS[enemy.type];
+        const style = spec?.style ?? 'smash';
+        const strikeProgress = enemy.strikeProgress ?? 0;
         let armRotTarget: number;
         let armZTarget = 0;
+        let direct = false; // 즉시 반영 (보간하면 판정과 어긋난다)
         if (style === 'thrust') {
           // 몸통 기울기를 상쇄 — 창끝이 위로 쓸리지 않고 계속 플레이어를 겨눈다
           armRotTarget = THRUST_LEVEL - visual.torso.rotation.x;
@@ -825,7 +839,10 @@ export class Stage {
             armZTarget = THRUST_PULL * windupProgress; // 뒤로 당김
             if (trembling) armZTarget += Math.sin(now / 12) * 0.05;
           } else if (isMelee && striking) {
-            armZTarget = THRUST_LUNGE; // 내지름
+            // 창끝의 로컬 위치 = torsoZ + armZ - tipLocal 이 -weaponTipDist 가 되도록
+            const tipLocal = (spec?.length ?? 1) + (spec?.tip ? 0.23 : 0);
+            armZTarget = -(enemy.weaponTipDist ?? 0) + tipLocal - visual.torso.position.z;
+            direct = true;
           }
         } else {
           armRotTarget = ARM_REST;
@@ -833,12 +850,19 @@ export class Stage {
             armRotTarget = ARM_REST + (ARM_RAISED - ARM_REST) * windupProgress;
             if (trembling) armRotTarget += Math.sin(now / 12) * 0.08;
           } else if (isMelee && striking) {
-            armRotTarget = ARM_SMASH;
+            // 호를 그리는 무기는 진행도로 각도를 몰아준다 (도달 시점이 판정과 일치)
+            armRotTarget = ARM_RAISED + (ARM_SMASH - ARM_RAISED) * strikeProgress;
+            direct = true;
           }
         }
-        const armSnap = striking ? 0.6 : 0.25;
-        visual.arm.rotation.x += (armRotTarget - visual.arm.rotation.x) * armSnap;
-        visual.arm.position.z += (armZTarget - visual.arm.position.z) * armSnap;
+        if (direct) {
+          visual.arm.rotation.x = armRotTarget;
+          visual.arm.position.z = armZTarget;
+        } else {
+          const armSnap = striking ? 0.6 : 0.25;
+          visual.arm.rotation.x += (armRotTarget - visual.arm.rotation.x) * armSnap;
+          visual.arm.position.z += (armZTarget - visual.arm.position.z) * armSnap;
+        }
       }
 
       // 시전 충전 구체 — windup 진행에 따라 커진다

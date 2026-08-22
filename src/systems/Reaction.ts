@@ -1,6 +1,11 @@
 // 단일 반응 버튼 (우클릭) — docs/systems/combat.md §1, §3.
 // 상황에 따라 자동 분기: 패링 판정 > 반사(투사체) > 처형 > (windup 조기 입력 = 실패).
 // 회피는 Shift+탭 — 명시 입력이라 판정을 거치지 않는다 (빨강 공격 회피용).
+//
+// 패링은 "시간"이 아니라 "무기 끝 위치"로 판정한다:
+//   gap = 적까지 거리 - 플레이어 반경 - 무기 끝 거리   (0 = 무기가 몸에 닿는 순간)
+//   gap <= perfectBand → 완벽 / gap <= guardDepth → 일반 / 그보다 멀면 헛손질(경직 없음)
+// 따라서 멀리 있는 적일수록 창이 도달하는 데 오래 걸려 패링 타이밍이 늦게 온다.
 // Enemies 뒤에 실행된다 — 적의 공격 상태가 확정된 뒤 판정해야 하기 때문.
 //
 // 보스: 완벽/일반 패링 모두 공격을 끊지만, parriesToStagger 연속 성공해야 스태거.
@@ -59,7 +64,8 @@ export function tick(world: World, _dt: number): void {
   }
 
   // 반경 내 적을 우선순위로 분류 (같은 우선순위면 가장 가까운 적)
-  let parryTarget: { enemy: EnemyState; dist: number } | null = null;
+  const space = balance.parrySpace;
+  let parryTarget: { enemy: EnemyState; gap: number } | null = null;
   let executeTarget: { enemy: EnemyState; dist: number } | null = null;
   let windupTarget: { enemy: EnemyState; dist: number } | null = null;
 
@@ -70,7 +76,11 @@ export function tick(world: World, _dt: number): void {
     const attack = currentAttack(enemyDef(enemy.type), enemy);
 
     if (enemy.ai === 'active_perfect' || enemy.ai === 'active_normal') {
-      if (!parryTarget || dist < parryTarget.dist) parryTarget = { enemy, dist };
+      // 무기 끝이 가드 안까지 왔는가 — 아직 멀면 그냥 헛손질 (경직 없음)
+      const gap = dist - balance.player.radius - (enemy.weaponTipDist ?? 0);
+      if (gap <= space.guardDepth && (!parryTarget || gap < parryTarget.gap)) {
+        parryTarget = { enemy, gap };
+      }
     } else if (enemy.ai === 'staggered') {
       if (!executeTarget || dist < executeTarget.dist) executeTarget = { enemy, dist };
     } else if (enemy.ai === 'windup' && attack.type !== 'projectile') {
@@ -92,7 +102,7 @@ export function tick(world: World, _dt: number): void {
     const enemy = parryTarget.enemy;
     const def = enemyDef(enemy.type);
     const attack = currentAttack(def, enemy);
-    const perfect = enemy.ai === 'active_perfect';
+    const perfect = parryTarget.gap <= space.perfectBand; // 무기가 방패에 닿은 순간
     world.freezeTicks = perfect ? reaction.hitstopPerfectTicks : reaction.hitstopNormalTicks;
 
     if (def.boss && def.parriesToStagger) {

@@ -735,6 +735,7 @@ const loop = new Loop(balance.loop.tickRate, balance.loop.maxFrameClampSec, {
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__world = world;
   (window as unknown as Record<string, unknown>).__input = input;
+  (window as unknown as Record<string, unknown>).__stage = stage; // 씬 그래프 검증용
 }
 
 loop.start();

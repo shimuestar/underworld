@@ -196,11 +196,36 @@ describe('공격 상태 머신 타이밍 (goblin_spear: windup 34t)', () => {
   });
 });
 
-describe('반응 판정 분기', () => {
-  it('active_perfect에 입력 → 완벽 패링: 스태거 + 히트스톱 4t', () => {
+describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
+  /** 창병을 dist 앞에 두고 타격 이동 n틱째까지 진행 (n=0 → 창이 아직 당겨진 상태) */
+  function strikeAt(dist: number, n: number): World {
     const world = makeWorld();
-    world.enemies.push(makeSpear(12, 10));
+    world.enemies.push(makeSpear(10 + dist, 10));
     tickUntil(world, 'active_perfect');
+    for (let i = 0; i < n; i++) Enemies.tick(world, DT);
+    return world;
+  }
+
+  it('창이 아직 멀면 패링되지 않는다 — 경직도 없다 (헛손질)', () => {
+    const world = strikeAt(3.5, 3); // gap ≈ 1.30 > guardDepth
+    const results: unknown[] = [];
+    world.events.on('parry_attempt', (payload) => results.push(payload));
+
+    pressReaction(world);
+    expect(results).toHaveLength(0);
+    expect(world.enemies[0]!.ai).toBe('active_perfect'); // 공격은 계속된다
+    expect(world.player.stunTicks).toBe(0); // 조기 입력이지만 벌은 없다
+  });
+
+  it('창끝이 가드에 들어오면 일반 패링: recover + 히트스톱 2t', () => {
+    const world = strikeAt(3.5, 6); // gap ≈ 0.80 (guardDepth 0.9 안, perfectBand 밖)
+    pressReaction(world);
+    expect(world.enemies[0]!.ai).toBe('recover');
+    expect(world.freezeTicks).toBe(balance.reaction.hitstopNormalTicks);
+  });
+
+  it('창끝이 방패에 닿는 순간 완벽 패링: 스태거 + 히트스톱 4t', () => {
+    const world = strikeAt(3.5, 10); // gap ≈ 0.12 < perfectBand
     const results: unknown[] = [];
     world.events.on('parry_attempt', (payload) => results.push(payload));
 
@@ -210,13 +235,25 @@ describe('반응 판정 분기', () => {
     expect(results[0]).toMatchObject({ result: 'perfect' });
   });
 
-  it('active_normal에 입력 → 일반 패링: recover + 히트스톱 2t', () => {
-    const world = makeWorld();
-    world.enemies.push(makeSpear(12, 10));
-    tickUntil(world, 'active_normal');
-    pressReaction(world);
-    expect(world.enemies[0]!.ai).toBe('recover');
-    expect(world.freezeTicks).toBe(balance.reaction.hitstopNormalTicks);
+  it('같은 틱이라도 적이 멀수록 패링 타이밍이 늦게 온다', () => {
+    const near = strikeAt(2.2, 6); // 이미 창끝이 몸에 닿음
+    pressReaction(near);
+    expect(near.enemies[0]!.ai).toBe('staggered'); // 완벽
+
+    // 예비동작 중 물러나면 창이 도달하는 데 더 걸린다 (적은 사거리까지 걸어오므로
+    // 멀리 배치하는 것으로는 거리를 만들 수 없다 — 플레이어가 빠져야 한다)
+    const far = makeWorld();
+    far.enemies.push(makeSpear(10 + 3.5, 10));
+    tickUntil(far, 'windup');
+    far.player.x -= 0.8; // 거리 4.3
+    tickUntil(far, 'active_perfect');
+    for (let i = 0; i < 6; i++) Enemies.tick(far, DT);
+    pressReaction(far);
+    expect(far.enemies[0]!.ai).toBe('active_normal'); // 아직 판정 없음 — 공격 계속
+
+    for (let i = 0; i < 8; i++) Enemies.tick(far, DT); // 창이 도달할 때까지 기다리면
+    pressReaction(far);
+    expect(['recover', 'staggered']).toContain(far.enemies[0]!.ai);
   });
 
   it('windup에 조기 입력 → 실패: 경직 20t', () => {
@@ -229,9 +266,7 @@ describe('반응 판정 분기', () => {
   });
 
   it('스태거 적에 입력 → 처형', () => {
-    const world = makeWorld();
-    world.enemies.push(makeSpear(12, 10));
-    tickUntil(world, 'active_perfect');
+    const world = strikeAt(3.5, 10);
     pressReaction(world); // 완벽 패링 → 스태거
     const kills: unknown[] = [];
     world.events.on('melee_kill', (payload) => kills.push(payload));

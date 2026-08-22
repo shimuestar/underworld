@@ -36,6 +36,13 @@
     "inputBufferTicks": 4
   },
 
+  "parrySpace": {
+    "_comment": "패링은 시간이 아니라 무기 끝 위치로 판정한다. gap = 적거리 - 플레이어반경 - 무기끝거리",
+    "guardDepth": 0.9,
+    "perfectBand": 0.2,
+    "pullbackRatio": 0.3
+  },
+
   "block": {
     "chipDamageRatio": 0.3,
     "chipRatioByKind": { "arrow": 0 },
