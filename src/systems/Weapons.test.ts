@@ -37,7 +37,7 @@ function makeWorld(): World {
       iframeTicks: 0, reactionBufferTicks: 0, blocking: false, reactionHeldTicks: 0,
     },
     lantern: { on: true, battery: 100, spares: 0 },
-    weapon: { melee: 'hammer', ranged: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0, grenadeCharge: 0, comboStep: 0, comboTimer: 0 },
+    weapon: { melee: 'hammer', ranged: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0, grenadeCharge: 0, comboStep: 0, comboTimer: 0, swingImpact: 0, swingHeavy: false },
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
@@ -73,12 +73,21 @@ function fireAt(dist: number, targetY: number): void {
   world.input = Input.emptySnapshot();
 }
 
+/** 해머 판정은 입력 후 impactTicks 뒤에 일어난다 — 그 시점까지 돌려준다 */
+function advanceToHammerImpact(world: World): void {
+  for (let i = 0; i < 20 && world.weapon.swingImpact > 0; i++) {
+    world.input = Input.emptySnapshot();
+    Weapons.tick(world, DT);
+  }
+}
+
 describe('해머 (슬롯 1)', () => {
   function swing(): void {
     world.weapon.meleeCooldown = 0;
     world.input = { ...Input.emptySnapshot(), meleePressed: true };
     Weapons.tick(world, DT);
     world.input = Input.emptySnapshot();
+    advanceToHammerImpact(world);
   }
 
   it('전방 부채꼴 적중 — 권총의 60% 피해. 1타는 밀치지 않고 굳힌다', () => {
@@ -429,6 +438,7 @@ describe('방어 중 손 역할 분담', () => {
     world.weapon.meleeCooldown = 0;
     world.input = { ...Input.emptySnapshot(), meleePressed: true };
     Weapons.tick(world, DT);
+    advanceToHammerImpact(world);
     expect(enemy.health).toBe(1000 - balance.weapons.hammer.damage);
   });
 
@@ -457,6 +467,7 @@ describe('해머 3타 콤보', () => {
     world.input = { ...Input.emptySnapshot(), meleePressed: true };
     Weapons.tick(world, DT);
     world.input = Input.emptySnapshot();
+    advanceToHammerImpact(world);
     if (typeof off === 'function') off();
     return { damage: hp - enemy.health, heavy };
   }
@@ -526,6 +537,7 @@ describe('체급별 넉백 저항', () => {
       world2.input = { ...Input.emptySnapshot(), meleePressed: true };
       Weapons.tick(world2, DT);
       world2.input = Input.emptySnapshot();
+      advanceToHammerImpact(world2);
       for (let i = 0; i < hammer.combo.chainFlinchTicks; i++) Enemies.tick(world2, DT);
     };
     swing3();
@@ -535,6 +547,7 @@ describe('체급별 넉백 저항', () => {
     world2.input = { ...Input.emptySnapshot(), meleePressed: true };
     Weapons.tick(world2, DT);
     world2.input = Input.emptySnapshot();
+    advanceToHammerImpact(world2);
     for (let i = 0; i < Math.round(hammer.knockbackTicks * hammer.combo.knockbackTicksMul); i++) {
       Enemies.tick(world2, DT);
     }

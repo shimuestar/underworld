@@ -84,6 +84,8 @@ const world = new World(events, {
     grenadeCharge: 0,
     comboStep: 0,
     comboTimer: 0,
+    swingImpact: 0,
+    swingHeavy: false,
   },
   mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
   sigils: {

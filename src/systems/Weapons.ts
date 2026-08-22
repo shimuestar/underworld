@@ -21,6 +21,17 @@ export function tick(world: World, _dt: number): void {
     if (w.comboTimer === 0) w.comboStep = 0;
   }
 
+  // 휘두르는 중 — 해머가 실제로 닿는 틱에 판정한다 (뷰모델과 같은 시점).
+  // 경직에 걸리면 스윙이 취소된다
+  if (w.swingImpact > 0) {
+    if (world.player.stunTicks > 0) {
+      w.swingImpact = 0;
+    } else {
+      w.swingImpact--;
+      if (w.swingImpact === 0) resolveHammerHit(world, w.swingHeavy);
+    }
+  }
+
   // 원거리 무기 교체 (휠) — 장전·차징은 취소된다
   if (world.input.cycleRanged !== 0) {
     const i = RANGED_WEAPONS.indexOf(w.ranged);
@@ -38,8 +49,8 @@ export function tick(world: World, _dt: number): void {
   if (world.player.stunTicks > 0 || world.player.dodgeTicks > 0) return;
 
   // 근접 공격(우클릭, 오른손 해머) — 방어 중에도 나간다. 방패는 왼팔이니까
-  if (world.input.meleePressed && w.meleeCooldown <= 0) {
-    swingHammer(world);
+  if (world.input.meleePressed && w.meleeCooldown <= 0 && w.swingImpact === 0) {
+    startHammerSwing(world);
     w.grenadeCharge = 0; // 근접을 섞으면 차징은 끊긴다
     return;
   }
@@ -104,7 +115,8 @@ export function tick(world: World, _dt: number): void {
 }
 
 /** 해머 — 전방 부채꼴 내리치기. 근접 처치는 마나를 준다 (총과의 결정적 차이) */
-function swingHammer(world: World): void {
+/** 휘두르기 시작 — 모션과 소리만 내고, 실제 판정은 impactTicks 뒤에 한다 */
+function startHammerSwing(world: World): void {
   const hammer = balance.weapons.hammer;
   const combo = hammer.combo;
   const w = world.weapon;
@@ -113,13 +125,26 @@ function swingHammer(world: World): void {
   // 연속타 단계 진행 — 창이 끊겼으면 1타부터
   w.comboStep = (w.comboTimer > 0 ? w.comboStep : 0) + 1;
   const heavy = w.comboStep >= combo.finisherStep;
+  w.swingHeavy = heavy;
+  w.swingImpact = heavy ? combo.heavyImpactTicks : hammer.impactTicks;
+  // 닿기 전에는 다시 휘두를 수 없다 (한 스윙에 두 번 들어가는 것을 막는다)
+  w.meleeCooldown = w.swingImpact;
+
+  world.events.emit('hammer_swing', { heavy, step: w.comboStep });
+  alertNearby(world, p.x, p.z, hammer.noiseRadius * (heavy ? 2 : 1));
+}
+
+/** 해머가 닿는 순간의 판정 — 이 시점의 위치로 다시 잰다 (그 사이 빠져나갔으면 헛침) */
+function resolveHammerHit(world: World, heavy: boolean): void {
+  const hammer = balance.weapons.hammer;
+  const combo = hammer.combo;
+  const w = world.weapon;
+  const p = world.player;
+
   const damage = heavy ? hammer.damage * combo.damageMul : hammer.damage;
   const range = heavy ? hammer.range * combo.rangeMul : hammer.range;
   const arcDeg = heavy ? hammer.arcDeg * combo.arcMul : hammer.arcDeg;
   const knockback = heavy ? hammer.knockback * combo.knockbackMul : hammer.knockback;
-
-  world.events.emit('hammer_swing', { heavy, step: w.comboStep });
-  alertNearby(world, p.x, p.z, hammer.noiseRadius * (heavy ? 2 : 1));
 
   const facingX = -Math.sin(p.yaw);
   const facingZ = -Math.cos(p.yaw);

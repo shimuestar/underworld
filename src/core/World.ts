@@ -171,6 +171,10 @@ export interface WeaponState {
   meleeCooldown: number;
   /** 수류탄 차징 누적 틱 (홀드 중) */
   grenadeCharge: number;
+  /** 휘두른 해머가 닿기까지 남은 틱 (0 = 진행 중인 스윙 없음) */
+  swingImpact: number;
+  /** 진행 중인 스윙이 마무리 강타인가 */
+  swingHeavy: boolean;
   /** 해머 연속타 단계 (0=처음). finisherStep 에 도달하면 강타 */
   comboStep: number;
   /** 연속타가 유지되는 잔여 틱. 0이 되면 단계가 초기화된다 */

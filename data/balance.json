@@ -110,6 +110,8 @@
       "damage": 20,
       "range": 3.1,
       "arcDeg": 100,
+      "_impactNote": "클릭 후 실제로 해머가 닿기까지의 틱 — 뷰모델 애니메이션(감기+베기)과 맞춘 값",
+      "impactTicks": 11,
       "cooldownTicks": 18,
       "whiffExtraCooldownTicks": 20,
       "noiseRadius": 5.0,
@@ -118,7 +120,8 @@
       "combo": {
         "_comment": "연속 3타째가 강타. 1·2타는 밀치지 않고 chainFlinchTicks 만큼 굳혀 붙잡아 두고, 마무리 3타에서만 밀어낸다",
         "finisherStep": 3,
-        "chainCooldownTicks": 10,
+        "chainCooldownTicks": 12,
+        "heavyImpactTicks": 14,
         "chainFlinchTicks": 14,
         "windowTicks": 26,
         "damageMul": 2.4,
