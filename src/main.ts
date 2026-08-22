@@ -204,6 +204,7 @@ for (const name of [
   'enemy_damaged',
   'enemy_alerted',
   'enemy_windup',
+  'enemy_whiffed',
   'telegraph_flash',
   'player_damaged',
   'player_died',
@@ -407,6 +408,10 @@ events.on('potion_picked', (payload) => {
   showReaction(`+${Math.round(info.healed)} HP`, 900);
 });
 events.on('gold_picked', () => audio.play('pickup_gold'));
+events.on('enemy_whiffed', () => {
+  audio.play('enemy_whiff');
+  showReaction('빗나감 — 반격 기회!', 900);
+});
 events.on('shield_broken', (payload) => {
   const info = payload as { enemyId: number };
   audio.play('shield_break');

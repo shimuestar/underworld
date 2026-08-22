@@ -143,7 +143,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     }
 
     case 'impact': {
-      if (dist <= def.attackRange * attack.impactRangeMul && p.iframeTicks <= 0) {
+      const connected = dist <= def.attackRange * attack.impactRangeMul && p.iframeTicks <= 0;
+      if (connected) {
         // 방어(정면) — 칩 데미지만 관통. 피해가 있으므로 연쇄는 여전히 리셋된다
         const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
         const damage = blocked ? def.damage * balance.block.chipDamageRatio : def.damage;
@@ -163,14 +164,26 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           world.events.emit('player_died', { tick: world.tick });
         }
       }
+      // 헛쳤으면 긴 경직 — 마지막 동작 그대로 굳어 무방비가 된다 (반격 창)
       enemy.ai = 'recover';
-      enemy.timer = attack.recoverTicks;
+      enemy.whiffed = !connected && attack.whiffRecoverTicks !== undefined;
+      enemy.timer = enemy.whiffed ? attack.whiffRecoverTicks! : attack.recoverTicks;
+      if (enemy.whiffed) {
+        world.events.emit('enemy_whiffed', {
+          enemyId: enemy.id,
+          enemyType: enemy.type,
+          ticks: enemy.timer,
+        });
+      }
       break;
     }
 
     case 'recover': {
       enemy.timer--;
-      if (enemy.timer <= 0) enemy.ai = 'chase';
+      if (enemy.timer <= 0) {
+        enemy.ai = 'chase';
+        enemy.whiffed = false;
+      }
       break;
     }
 
@@ -316,6 +329,7 @@ function advanceStrike(
 function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
   enemy.ai = 'windup';
   enemy.timer = attack.windupTicks;
+  enemy.whiffed = false;
   enemy.strikeProgress = 0;
   enemy.weaponTipDist = fullReach(enemyDef(enemy.type), attack) * balance.parrySpace.pullbackRatio;
   world.events.emit('enemy_windup', {

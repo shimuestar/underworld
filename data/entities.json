@@ -21,7 +21,7 @@
       "aggroRange": 14, "attackRange": 3.6,
       "behavior": "guard_advance",
       "frontalShieldBlocksProjectiles": true, "shieldArcDeg": 120,
-      "attack": { "type": "thrust", "windupTicks": 34, "recoverTicks": 45, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
+      "attack": { "type": "thrust", "windupTicks": 34, "recoverTicks": 45, "whiffRecoverTicks": 90, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
       "counters": { "pistol": "poor", "rifle": "poor", "grenade": "good", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
       "drops": ["sig_fireball"]
     },

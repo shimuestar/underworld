@@ -870,8 +870,13 @@ export class Stage {
       // 공격 모션 — windup에 무기를 머리 위로 치켜들며 몸을 젖히고,
       // 타격 구간에 격하게 내리찍는다. 섬광 구간(마지막 4틱)에는 부르르 떨림.
       const inWindup = enemy.ai === 'windup';
+      // 헛친 경직 중에는 마지막(내지른) 자세로 굳는다 — 무방비라는 신호
+      const frozenWhiff = enemy.ai === 'recover' && enemy.whiffed === true;
       const striking =
-        enemy.ai === 'active_perfect' || enemy.ai === 'active_normal' || enemy.ai === 'impact';
+        enemy.ai === 'active_perfect' ||
+        enemy.ai === 'active_normal' ||
+        enemy.ai === 'impact' ||
+        frozenWhiff;
       const windupProgress = inWindup ? 1 - enemy.timer / attack.windupTicks : 0;
       const isMelee = attack.type !== 'projectile';
       const trembling = inWindup && enemy.timer <= balance.telegraph.visualLeadTicks;
@@ -900,6 +905,8 @@ export class Stage {
         lungeTarget = striking && isMelee ? -0.5 : 0;
       }
       if (trembling) leanTarget += Math.sin(now / 14) * 0.05;
+      // 굳은 동안 힘겹게 버티는 미세 떨림 (완전 정지는 프리즈처럼 보인다)
+      if (frozenWhiff) leanTarget += Math.sin(now / 55) * 0.012;
       const snap = striking ? 0.55 : 0.3; // 타격은 빠르게, 복귀는 부드럽게
       visual.torso.rotation.x += (leanTarget - visual.torso.rotation.x) * snap;
       visual.torso.position.z += (lungeTarget - visual.torso.position.z) * snap;

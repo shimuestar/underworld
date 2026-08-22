@@ -33,6 +33,7 @@ export type SoundName =
   | 'headshot'
   | 'player_hurt'
   | 'block_hit'
+  | 'enemy_whiff'
   | 'shield_break'
   | 'pickup_potion'
   | 'pickup_gold'
@@ -228,6 +229,11 @@ export class GameAudio {
         this.tone(60, 0.7, 'sine', 1.6, 0, 28);
         this.noise(0.5, 1.3, 900);
         this.noise(0.9, 0.5, 300, 0.1);
+        break;
+      case 'enemy_whiff':
+        // 허공을 가르는 헛창 — 바람 소리만 남고 타격음이 없다
+        this.noise(0.22, 0.5, 2600);
+        this.tone(180, 0.2, 'sine', 0.25, 0.02, 95);
         break;
       case 'shield_break':
         // 방패 파괴 — 금속 갈라짐 + 나무 쪼개짐(40ms) + 화염 삼킴(저음 스윕)

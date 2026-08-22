@@ -266,6 +266,70 @@ describe('피격 밀림', () => {
   });
 });
 
+describe('창병 헛창 경직', () => {
+  const spearAttack = enemyDef('goblin_spear').attack;
+
+  it('빗나가면 whiffRecoverTicks 만큼 굳는다 — 명중하면 평소 후딜', () => {
+    // 빗나감: 예비동작 중 사거리 밖으로 물러난다
+    const miss = makeWorld();
+    miss.enemies.push(makeSpear(13, 10));
+    tickUntil(miss, 'windup');
+    miss.player.x = 4.5; // 멀리 — impact 시 사거리 밖
+    const events: unknown[] = [];
+    miss.events.on('enemy_whiffed', (payload) => events.push(payload));
+    tickUntil(miss, 'recover');
+    expect(miss.enemies[0]!.whiffed).toBe(true);
+    expect(miss.enemies[0]!.timer).toBe(spearAttack.whiffRecoverTicks);
+    expect(events[0]).toMatchObject({ enemyType: 'goblin_spear' });
+    expect(miss.player.health).toBe(balance.player.healthMax); // 안 맞았다
+
+    // 명중: 그 자리에 서 있으면 평소 후딜
+    const hit = makeWorld();
+    hit.enemies.push(makeSpear(13, 10));
+    tickUntil(hit, 'recover');
+    expect(hit.enemies[0]!.whiffed).toBe(false);
+    expect(hit.enemies[0]!.timer).toBe(spearAttack.recoverTicks);
+  });
+
+  it('경직 1.5초 동안 그 자리에 굳어 있고, 끝나면 다시 추격한다', () => {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(13, 10));
+    tickUntil(world, 'windup');
+    world.player.x = 4.5;
+    tickUntil(world, 'recover');
+    const enemy = world.enemies[0]!;
+    const frozen = { x: enemy.x, z: enemy.z };
+
+    expect(spearAttack.whiffRecoverTicks).toBe(90); // 60Hz 기준 1.5초
+    for (let i = 0; i < spearAttack.whiffRecoverTicks! - 1; i++) {
+      Enemies.tick(world, DT);
+      expect(enemy.ai).toBe('recover'); // 내내 굳어 있다
+    }
+    expect(enemy.x).toBeCloseTo(frozen.x, 5); // 한 발짝도 안 움직였다
+    expect(enemy.z).toBeCloseTo(frozen.z, 5);
+
+    Enemies.tick(world, DT);
+    expect(enemy.ai).toBe('chase');
+    expect(enemy.whiffed).toBe(false);
+  });
+
+  it('굳은 동안은 패링 대상이 아니다 — 무기로 때려야 한다', () => {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(13, 10));
+    tickUntil(world, 'windup');
+    world.player.x = 4.5;
+    tickUntil(world, 'recover');
+    world.player.x = 11.5; // 다시 붙는다 (반경 안)
+
+    const results: unknown[] = [];
+    world.events.on('parry_attempt', (payload) => results.push(payload));
+    pressReaction(world);
+    expect(results).toHaveLength(0);
+    expect(world.enemies[0]!.ai).toBe('recover'); // 여전히 굳어 있다
+    expect(world.player.stunTicks).toBe(0); // 헛손질 벌도 없다
+  });
+});
+
 describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
   /** 창병을 dist 앞에 두고 타격 이동 n틱째까지 진행 (n=0 → 창이 아직 당겨진 상태) */
   function strikeAt(dist: number, n: number): World {

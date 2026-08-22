@@ -6,6 +6,8 @@ export interface EnemyAttackDef {
   type: string;
   windupTicks: number;
   recoverTicks: number;
+  /** 헛쳤을 때의 경직 틱 (없으면 recoverTicks). 그동안 마지막 동작으로 굳는다 */
+  whiffRecoverTicks?: number;
   impactRangeMul: number;
   parryable: boolean;
   telegraph?: string;
