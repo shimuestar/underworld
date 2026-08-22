@@ -891,7 +891,7 @@ function render(alpha: number): void {
     );
   });
   const showAltarPrompt =
-    world.nearAltar && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
+    world.altarInView && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
   altarPrompt!.classList.toggle('visible', showAltarPrompt || (nearLever && !world.dead));
   if (showAltarPrompt) {
     altarPrompt!.textContent =

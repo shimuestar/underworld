@@ -323,6 +323,8 @@ export class World {
 
   /** 제단 반경 안 (프롬프트 표시용, Altar가 갱신) */
   nearAltar = false;
+  /** 반경 안 + 제단을 바라보는 중 — E 안내와 진입 조건 */
+  altarInView = false;
   /** 이번 접근에서 이미 진입했는가 (우회 판정용) */
   altarEnteredThisApproach = false;
 

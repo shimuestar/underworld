@@ -17,8 +17,20 @@ export function tick(world: World, _dt: number): void {
   const altar = world.level.altarPos;
   if (!altar) return;
 
-  const dist = Math.hypot(world.player.x - altar.x, world.player.z - altar.z);
+  const p = world.player;
+  const toX = altar.x - p.x;
+  const toZ = altar.z - p.z;
+  const dist = Math.hypot(toX, toZ);
   const near = dist <= balance.altar.radius;
+
+  // 등지고 서 있으면 안내도 진입도 없다 — 시선이 제단을 향해야 한다.
+  // (yaw 기준 전방 벡터. PlayerMove의 이동 기준과 같은 규약)
+  const fx = -Math.sin(p.yaw);
+  const fz = -Math.cos(p.yaw);
+  const facing =
+    dist <= 0.001 ||
+    (toX * fx + toZ * fz) / dist >= Math.cos((balance.altar.facingArcDeg * Math.PI) / 360);
+  world.altarInView = near && facing;
 
   if (near && !world.nearAltar) {
     world.nearAltar = true;
@@ -30,8 +42,8 @@ export function tick(world: World, _dt: number): void {
     }
   }
 
-  if (near && world.input.interactPressed && !world.altarEnteredThisApproach) {
-    enter(world, altar);
+  if (world.altarInView && world.input.interactPressed && !world.altarEnteredThisApproach) {
+    enter(world);
   }
 }
 
@@ -40,10 +52,13 @@ function ammoLeftRatio(world: World): number {
   return (world.weapon.mag + world.weapon.reserve) / (pistol.magSize + pistol.ammoMax);
 }
 
-export function enter(world: World, altar: { x: number; z: number }): void {
-  // 보급 없음 — 상점에서 골드로 산다. 제단은 이제 "쉬는 곳"이 아니라 "쓰는 곳"이다
-  world.respawn = { x: altar.x, z: altar.z };
-  world.events.emit('respawn_registered', { x: altar.x, z: altar.z });
+export function enter(world: World): void {
+  // 보급 없음 — 상점에서 골드로 산다. 제단은 이제 "쉬는 곳"이 아니라 "쓰는 곳"이다.
+  // 부활 지점은 제단 중심이 아니라 "지금 서 있는 자리" — 기둥이 막혀 있어서
+  // 중심 좌표로 되살리면 구조물 안에 파묻힌다
+  const spot = { x: world.player.x, z: world.player.z };
+  world.respawn = spot;
+  world.events.emit('respawn_registered', spot);
 
   world.altarEnteredThisApproach = true;
 

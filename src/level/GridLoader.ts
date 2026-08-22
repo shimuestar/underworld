@@ -31,6 +31,9 @@ export interface LevelDef {
 
 /** 이동을 막는 셀. 잠긴 문(D)과 균열 벽(C)은 열리기 전까지 벽 취급. */
 const SOLID_CHARS = new Set(['#', 'D', 'C']);
+/** 제단 기둥 발자국(가로세로 m). 충돌과 시각 메시가 반드시 같은 값을 쓴다 —
+ *  하나만 고치면 "보이는 것과 부딪히는 것"이 어긋난다 */
+const ALTAR_FOOTPRINT = 1.1;
 
 /** 벽 면에서 살짝 띄우는 수치 오차 방지용 여유 (튜닝값 아님) */
 const SKIN = 1e-3;
@@ -43,6 +46,9 @@ export class Level {
   readonly torches: number[][];
   readonly spawn: { x: number; z: number };
   readonly altarPos: { x: number; z: number } | null;
+
+  /** 그리드 셀이 아닌 막힌 구조물 (제단 기둥). slideMove가 함께 검사한다 */
+  readonly props: { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
   readonly exitPos: { x: number; z: number } | null;
   readonly glyphs: GlyphDef[];
   readonly levers: TriggerDef[];
@@ -64,6 +70,18 @@ export class Level {
       x: (spawn.col + 0.5) * this.cellSize,
       z: (spawn.row + 0.5) * this.cellSize,
     };
+
+    // 셀 전체가 아니라 기둥 발자국만 막는다 — 셀을 통째로 solid 로 두면
+    // 상호작용 반경(altar.radius) 안에 들어갈 수가 없다
+    const half = ALTAR_FOOTPRINT / 2;
+    for (let row = 0; row < this.rows; row++) {
+      for (let col = 0; col < this.cols; col++) {
+        if (this.charAt(col, row) !== 'A') continue;
+        const cx = (col + 0.5) * this.cellSize;
+        const cz = (row + 0.5) * this.cellSize;
+        this.props.push({ minX: cx - half, maxX: cx + half, minZ: cz - half, maxZ: cz + half });
+      }
+    }
 
     const altar = this.findChar('A');
     this.altarPos = altar
@@ -169,6 +187,22 @@ export class Level {
       }
     }
 
+    // 구조물(제단 기둥) — 이동하는 축만 잘라낸다. 반대 축 겹침을 먼저 확인하고,
+    // "원래 바깥에 있었을 때"만 자른다 (이미 파묻힌 몸을 뒤로 끌어당기지 않게)
+    for (const prop of this.props) {
+      if (dx !== 0) {
+        if (Math.max(body.z, nz) - radius >= prop.maxZ) continue;
+        if (Math.min(body.z, nz) + radius <= prop.minZ) continue;
+        if (dx > 0 && body.x + radius <= prop.minX) nx = Math.min(nx, prop.minX - radius - SKIN);
+        else if (dx < 0 && body.x - radius >= prop.maxX) nx = Math.max(nx, prop.maxX + radius + SKIN);
+      } else if (dz !== 0) {
+        if (Math.max(body.x, nx) - radius >= prop.maxX) continue;
+        if (Math.min(body.x, nx) + radius <= prop.minX) continue;
+        if (dz > 0 && body.z + radius <= prop.minZ) nz = Math.min(nz, prop.minZ - radius - SKIN);
+        else if (dz < 0 && body.z - radius >= prop.maxZ) nz = Math.max(nz, prop.maxZ + radius + SKIN);
+      }
+    }
+
     body.x = nx;
     body.z = nz;
   }
@@ -261,7 +295,7 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       const x = (col + 0.5) * cs;
       const z = (row + 0.5) * cs;
       const pillar = new THREE.Mesh(
-        new THREE.BoxGeometry(1.1, 2.1, 1.1),
+        new THREE.BoxGeometry(ALTAR_FOOTPRINT, 2.1, ALTAR_FOOTPRINT),
         new THREE.MeshLambertMaterial({
           color: COLOR_ALTAR,
           emissive: COLOR_ALTAR,

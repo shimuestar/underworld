@@ -57,9 +57,16 @@ beforeEach(() => {
   world = makeWorld();
 });
 
+/** 제단 옆(서쪽 1.2m)에 서서 제단(+X)을 바라본다 */
+function standAtAltar(world: World, lookAway = false): void {
+  const a = world.level.altarPos!;
+  world.player.x = a.x - 1.2;
+  world.player.z = a.z;
+  world.player.yaw = lookAway ? Math.PI / 2 : -Math.PI / 2; // -π/2 = +X 방향
+}
+
 function enterAltar(world: World): void {
-  world.player.x = world.level.altarPos!.x;
-  world.player.z = world.level.altarPos!.z;
+  standAtAltar(world);
   Altar.tick(world, DT); // 접근 감지
   pressInteract(world);
 }
@@ -70,15 +77,48 @@ describe('제단 진입', () => {
     expect(world.weapon.mag).toBe(5); // 들고 온 그대로
     expect(world.weapon.reserve).toBe(12);
     expect(world.weapon.grenades).toBe(3);
-    expect(world.respawn).toEqual(world.level.altarPos); // 세이브는 그대로 동작
+  });
+
+  it('부활 지점은 제단 중심이 아니라 서 있던 자리 — 기둥 안에 되살아나지 않게', () => {
+    enterAltar(world);
+    const a = world.level.altarPos!;
+    expect(world.respawn).toEqual({ x: a.x - 1.2, z: a.z });
+    expect(world.respawn).not.toEqual(a);
+  });
+
+  it('등지고 있으면 안내도 진입도 없다 — 바라봐야 한다', () => {
+    standAtAltar(world, true); // 제단을 등짐
+    Altar.tick(world, DT);
+    expect(world.nearAltar).toBe(true); // 거리는 가깝지만
+    expect(world.altarInView).toBe(false); // 시선이 아니다
+    pressInteract(world);
+    expect(world.respawn).toBeNull(); // E를 눌러도 진입하지 않는다
+
+    standAtAltar(world); // 돌아서면
+    Altar.tick(world, DT);
+    expect(world.altarInView).toBe(true);
+    pressInteract(world);
+    expect(world.respawn).not.toBeNull();
+  });
+
+  it('제단 기둥은 뚫고 지나갈 수 없다', () => {
+    const a = world.level.altarPos!;
+    const body = { x: a.x - 3, z: a.z };
+    world.level.slideMove(body, 0.4, 5, 0); // 제단을 향해 5m 돌진
+    expect(body.x).toBeLessThan(a.x - 0.55 - 0.4 + 0.01); // 기둥 앞에서 막힌다
+    expect(body.x).toBeGreaterThan(a.x - 3); // 그래도 앞으로 가긴 했다
+
+    // 옆으로 비켜 가면 그대로 지나간다 (셀 전체가 막힌 게 아니다)
+    const side = { x: a.x - 3, z: a.z + 1.4 };
+    world.level.slideMove(side, 0.4, 5, 0);
+    expect(side.x).toBeCloseTo(a.x + 2, 1);
   });
 
   it('접근 후 진입 없이 벗어나면 altar_bypassed', () => {
     const bypassed: unknown[] = [];
     world.events.on('altar_bypassed', (payload) => bypassed.push(payload));
 
-    world.player.x = world.level.altarPos!.x;
-    world.player.z = world.level.altarPos!.z;
+    standAtAltar(world);
     Altar.tick(world, DT); // 접근
     world.player.x = 6; // 멀어짐
     Altar.tick(world, DT);
@@ -212,10 +252,7 @@ describe('제단 상점', () => {
 describe('오염 정산과 임계', () => {
   it('제단 진입 시 pending → applied, corruption_applied 발행', () => {
     world.corruption.pending = 13;
-    world.player.x = world.level.altarPos!.x;
-    world.player.z = world.level.altarPos!.z;
-    Altar.tick(world, DT);
-    pressInteract(world);
+    enterAltar(world);
     expect(world.corruption.applied).toBe(13);
     expect(world.corruption.pending).toBe(0);
   });
