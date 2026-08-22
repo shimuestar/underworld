@@ -22,6 +22,36 @@ export function tick(world: World, dt: number): void {
     // 피탄 경직 소진은 행동 뒤에 — 앞에서 줄이면 마지막 틱에 움직여버린다
     if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
   }
+  resolveEnemyOverlaps(world);
+}
+
+/** 서로 파고든 적들을 밀어낸다. 한 틱에 완전히 떼어내지 않고 절반씩 나눠 밀어
+ *  좁은 통로에서 교착되지 않게 한다 (조향만으로는 몸통이 겹쳐 보인다) */
+function resolveEnemyOverlaps(world: World): void {
+  const ratio = balance.enemyAi.separation.pushRatio;
+  const list = world.enemies.filter((e) => e.alive);
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i]!;
+    const ra = enemyDef(a.type).radius;
+    for (let j = i + 1; j < list.length; j++) {
+      const b = list[j]!;
+      const minDist = ra + enemyDef(b.type).radius;
+      let dx = b.x - a.x;
+      let dz = b.z - a.z;
+      let dist = Math.hypot(dx, dz);
+      if (dist >= minDist) continue;
+      if (dist < 1e-4) {
+        dx = 1;
+        dz = 0;
+        dist = 1;
+      }
+      const push = (minDist - dist) * 0.5 * ratio;
+      const nx = (dx / dist) * push;
+      const nz = (dz / dist) * push;
+      world.level.slideMove(a, ra, -nx, -nz);
+      world.level.slideMove(b, enemyDef(b.type).radius, nx, nz);
+    }
+  }
 }
 
 function tickEnemy(world: World, enemy: EnemyState, dt: number): void {

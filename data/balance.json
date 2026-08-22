@@ -298,7 +298,9 @@
     "separation": {
       "_comment": "추격 중 서로 밀어내는 힘 — 일렬로 겹쳐 서는 것을 막는다",
       "radius": 2.2,
-      "strength": 0.85
+      "strength": 0.85,
+      "_pushNote": "겹친 몸통을 실제로 밀어내는 비율. 1이면 한 틱에 완전 분리(통로에서 교착), 낮으면 서서히 비켜선다",
+      "pushRatio": 0.55
     },
     "friendlyFireDamageMul": 0.4
   },
