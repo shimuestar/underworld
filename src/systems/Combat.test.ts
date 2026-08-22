@@ -319,6 +319,66 @@ describe('피격 밀림', () => {
   });
 });
 
+describe('방패 격돌 — 막으면 양쪽이 굳는다', () => {
+  const clash = balance.block;
+
+  function blockedHit(): World {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(13, 10));
+    world.player.yaw = -Math.PI / 2; // 적을 바라봄 (정면 방어)
+    world.player.blocking = true;
+    tickUntil(world, 'impact');
+    Enemies.tick(world, DT); // 타격 → 방패에 막힘
+    return world;
+  }
+
+  it('막으면 플레이어는 짧게, 적은 더 길게 굳는다 (반격 창)', () => {
+    const events: unknown[] = [];
+    const world = makeWorld();
+    world.enemies.push(makeSpear(13, 10));
+    world.player.yaw = -Math.PI / 2;
+    world.player.blocking = true;
+    world.events.on('guard_clash', (payload) => events.push(payload));
+    tickUntil(world, 'impact');
+    Enemies.tick(world, DT);
+
+    const enemy = world.enemies[0]!;
+    expect(events).toHaveLength(1);
+    expect(world.player.stunTicks).toBe(clash.clashPlayerStunTicks);
+    expect(enemy.blockRecoil).toBe(true);
+    expect(enemy.timer).toBe(
+      enemyDef('goblin_spear').attack.recoverTicks + clash.clashEnemyRecoilTicks,
+    );
+    expect(enemy.timer).toBeGreaterThan(world.player.stunTicks); // 적이 더 오래 굳는다
+    expect(world.freezeTicks).toBe(clash.clashHitstopTicks);
+  });
+
+  it('경직이 풀리면 양쪽 다 정상으로 돌아온다', () => {
+    const world = blockedHit();
+    const enemy = world.enemies[0]!;
+    const total = enemyDef('goblin_spear').attack.recoverTicks + clash.clashEnemyRecoilTicks;
+    for (let i = 0; i < total + 2; i++) {
+      Enemies.tick(world, DT);
+      Reaction.tick(world, DT);
+    }
+    expect(world.player.stunTicks).toBe(0);
+    expect(enemy.blockRecoil).toBe(false);
+    expect(enemy.ai).not.toBe('recover'); // 다시 움직인다 (붙어 있으면 바로 다음 공격)
+  });
+
+  it('막지 않고 맞으면 격돌이 없다', () => {
+    const world = makeWorld();
+    world.enemies.push(makeSpear(13, 10));
+    const events: unknown[] = [];
+    world.events.on('guard_clash', (payload) => events.push(payload));
+    tickUntil(world, 'impact');
+    Enemies.tick(world, DT);
+    expect(events).toHaveLength(0);
+    expect(world.enemies[0]!.blockRecoil).toBeFalsy();
+    expect(world.player.health).toBeLessThan(balance.player.healthMax);
+  });
+});
+
 describe('근접 히트박스 방향 판정', () => {
   const spearArc = enemyDef('goblin_spear').attack.arcDeg!;
 

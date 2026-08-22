@@ -892,6 +892,8 @@ export class Stage {
       const inWindup = enemy.ai === 'windup';
       // 헛친 경직 중에는 마지막(내지른) 자세로 굳는다 — 무방비라는 신호
       const frozenWhiff = enemy.ai === 'recover' && enemy.whiffed === true;
+      // 방패에 막혀 튕긴 경직 — 상체가 크게 젖혀진 채 굳는다
+      const recoiled = enemy.ai === 'recover' && enemy.blockRecoil === true;
       const striking =
         enemy.ai === 'active_perfect' ||
         enemy.ai === 'active_normal' ||
@@ -930,6 +932,7 @@ export class Stage {
       if (flinch > 0) leanTarget += 0.16 * Math.min(1, flinch);
       // 굳은 동안 힘겹게 버티는 미세 떨림 (완전 정지는 프리즈처럼 보인다)
       if (frozenWhiff) leanTarget += Math.sin(now / 55) * 0.012;
+      if (recoiled) leanTarget += 0.5 + Math.sin(now / 40) * 0.03; // 뒤로 크게 젖힘
       const snap = striking ? 0.55 : 0.3; // 타격은 빠르게, 복귀는 부드럽게
       visual.torso.rotation.x += (leanTarget - visual.torso.rotation.x) * snap;
       visual.torso.position.z += (lungeTarget - visual.torso.position.z) * snap;
@@ -1093,6 +1096,34 @@ export class Stage {
       });
       this.projectileVisuals.delete(id);
     }
+  }
+
+  /** 방패 격돌 — 부딪힌 지점에서 불꽃이 튀고 짧게 번쩍인다 */
+  spawnGuardSparks(x: number, z: number, height: number): void {
+    const now = performance.now();
+    for (let i = 0; i < 16; i++) {
+      const size = 0.03 + Math.random() * 0.05;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size, size),
+        new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 1 }),
+      );
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.8 + Math.random() * 4.5;
+      this.particles.push({
+        mesh,
+        ox: x,
+        oy: height,
+        oz: z,
+        vx: Math.cos(angle) * speed,
+        vy: 1.2 + Math.random() * 3.5,
+        vz: Math.sin(angle) * speed,
+        bornMs: now,
+        lifeMs: 380,
+        gravity: 11,
+      });
+      this.scene.add(mesh);
+    }
+    this.triggerFlash(x, height, z, 0xfff2c0, 150, 3.2);
   }
 
   /** 해머 적중 — 몸 전체가 아주 빠르게 명멸한다 */

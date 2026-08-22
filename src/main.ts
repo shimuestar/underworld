@@ -206,6 +206,7 @@ for (const name of [
   'enemy_alerted',
   'enemy_windup',
   'enemy_whiffed',
+  'guard_clash',
   'telegraph_flash',
   'player_damaged',
   'player_died',
@@ -408,6 +409,17 @@ events.on('potion_picked', (payload) => {
   showReaction(`+${Math.round(info.healed)} HP`, 900);
 });
 events.on('gold_picked', () => audio.play('pickup_gold'));
+events.on('guard_clash', (payload) => {
+  const c = payload as { x: number; z: number };
+  audio.play('guard_clash');
+  stage.triggerCameraKick(0.75, 200);
+  // 플레이어와 적 사이 — 방패가 부딪힌 지점에서 불꽃
+  const p2 = world.player;
+  const midX = (p2.x + c.x) / 2;
+  const midZ = (p2.z + c.z) / 2;
+  stage.spawnGuardSparks(midX, midZ, balance.player.eyeHeight * 0.72);
+  showReaction('막았다! 반격 기회', 800);
+});
 events.on('enemy_whiffed', () => {
   audio.play('enemy_whiff');
   showReaction('빗나감 — 반격 기회!', 900);

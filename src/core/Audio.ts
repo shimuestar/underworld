@@ -33,6 +33,7 @@ export type SoundName =
   | 'headshot'
   | 'player_hurt'
   | 'block_hit'
+  | 'guard_clash'
   | 'enemy_whiff'
   | 'shield_break'
   | 'pickup_potion'
@@ -229,6 +230,14 @@ export class GameAudio {
         this.tone(60, 0.7, 'sine', 1.6, 0, 28);
         this.noise(0.5, 1.3, 900);
         this.noise(0.9, 0.5, 300, 0.1);
+        break;
+      case 'guard_clash':
+        // 방패 격돌 — 묵직한 충돌(저음) + 금속 마찰 + 여운 있는 링
+        this.tone(90, 0.16, 'sine', 0.95);
+        this.noise(0.06, 0.9, 3800);
+        this.tone(520, 0.14, 'square', 0.6, 0.01);
+        this.tone(1180, 0.3, 'triangle', 0.42, 0.02);
+        this.tone(1760, 0.42, 'sine', 0.24, 0.03);
         break;
       case 'enemy_whiff':
         // 허공을 가르는 헛창 — 바람 소리만 남고 타격음이 없다

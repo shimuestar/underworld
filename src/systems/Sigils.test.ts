@@ -61,8 +61,9 @@ beforeEach(() => {
 });
 
 describe('각인 드랍과 부착', () => {
-  it('창병 처형 → 그 자리에 드랍, 접근하면 획득 (소지만으로는 효과 없음)', () => {
-    world.events.emit('melee_kill', { enemyType: 'goblin_spear', execution: true, x: 14, z: 6 });
+  it('창병은 어떻게 죽이든 드랍 → 그 자리에 놓이고 접근하면 획득', () => {
+    // 처형이 아니어도 (총·해머·오사 무엇이든) 사망하면 떨어진다
+    world.events.emit('enemy_died', { enemyType: 'goblin_spear', x: 14, z: 6 });
     expect(world.groundItems).toHaveLength(1);
     expect(world.sigils.inventory).toHaveLength(0); // 아직 줍지 않음
 
@@ -76,6 +77,12 @@ describe('각인 드랍과 부착', () => {
     expect(world.sigils.inventory).toContain('sig_fireball');
     expect(world.groundItems).toHaveLength(0);
     expect(world.modifiers.reloadTimeMul).toBe(1);
+  });
+
+  it('처형으로 죽여도 한 번만 떨어진다 (melee_kill + enemy_died 중복 방지)', () => {
+    world.events.emit('melee_kill', { enemyType: 'goblin_spear', execution: true, x: 14, z: 6 });
+    world.events.emit('enemy_died', { enemyType: 'goblin_spear', x: 14, z: 6 });
+    expect(world.groundItems).toHaveLength(1);
   });
 
   it('일반 근접 처치는 드랍 없음', () => {

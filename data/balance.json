@@ -61,6 +61,10 @@
   },
 
   "block": {
+    "_clashComment": "근접 공격을 막으면 양쪽 다 잠깐 굳는다. 적 후딜에 더해지는 값 — 막기는 패링·헛치기 유도보다 쉬우므로 보상도 그만큼 작다",
+    "clashPlayerStunTicks": 10,
+    "clashEnemyRecoilTicks": 18,
+    "clashHitstopTicks": 5,
     "chipDamageRatio": 0.3,
     "chipRatioByKind": { "arrow": 0 },
     "speedMul": 0.35,
