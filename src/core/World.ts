@@ -210,7 +210,9 @@ export interface EnemyState {
   armorHealth?: number;
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
-  attackMode?: 'melee' | 'ranged';
+  attackMode?: 'melee' | 'ranged' | 'charge';
+  /** 다음 기회에 돌격을 시도한다 (크게 밀려난 직후 확률적으로 켜진다) */
+  wantsCharge?: boolean;
   /** 피탄 경직 잔여 틱 — 발이 묶인다 (공격 진행은 막지 않는다. 총알용) */
   flinchTicks?: number;
   /** 강한 타격 경직 — 공격 중이라도 그 상태 그대로 굳는다 (해머용) */

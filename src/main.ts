@@ -210,6 +210,7 @@ for (const name of [
   'enemy_alerted',
   'enemy_windup',
   'enemy_whiffed',
+  'enemy_charge',
   'guard_clash',
   'telegraph_flash',
   'player_damaged',
@@ -449,6 +450,10 @@ events.on('guard_clash', (payload) => {
     perfect ? 1.6 : parry ? 1.3 : 1,
   );
   if (!parry) showReaction('막았다! 반격 기회', 800);
+});
+events.on('enemy_charge', () => {
+  audio.play('telegraph_blue');
+  showReaction('창병이 달려든다!', 900);
 });
 events.on('enemy_whiffed', () => {
   audio.play('enemy_whiff');

@@ -170,6 +170,8 @@ function resolveHammerHit(world: World, heavy: boolean): void {
         // 마무리 타는 방패째 크게 밀어낸다 — 안 밀리면 제자리에서 무한 연타가 된다.
         // 밀리는 동안은 버티기 자세도 풀린다 (가드를 잃고 떠밀린다)
         enemy.braceTicks = 0;
+        // 밀려난 뒤 확률적으로 달려들며 반격한다 (멀리서 걸어오면 위협이 없다)
+        enemy.wantsCharge = Math.random() < balance.enemyAi.chargeChanceAfterKnockback;
         const kbTicks = sb.finisherKnockbackTicks;
         enemy.kbTicks = kbTicks;
         enemy.kbX = (toX / dist) * (sb.finisherKnockback / kbTicks);
@@ -215,6 +217,10 @@ function resolveHammerHit(world: World, heavy: boolean): void {
       // 체급이 무거울수록 덜 밀린다 (경량 1.0 / 중량 0.5 / 중장 0.25)
       const byWeight = combo.knockbackByWeight as unknown as Record<string, number>;
       const weightMul = byWeight[def.weight] ?? 1;
+      // 크게 밀려난 적은 확률적으로 달려들며 반격한다 (방패가 깨진 뒤에도 동일)
+      if (def.chargeAttack) {
+        enemy.wantsCharge = Math.random() < balance.enemyAi.chargeChanceAfterKnockback;
+      }
       if (weightMul > 0) {
         // 멀리 밀되 미는 시간도 함께 늘린다 — 같은 속도로 더 멀리 (순간이동 방지)
         const kbTicks = Math.round(hammer.knockbackTicks * combo.knockbackTicksMul);

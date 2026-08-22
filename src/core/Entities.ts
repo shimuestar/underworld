@@ -8,6 +8,8 @@ export interface EnemyAttackDef {
   recoverTicks: number;
   /** 유효 전방 호(도). 없으면 각 제한 없음. 찌르기는 좁고 후려치기는 넓다 */
   arcDeg?: number;
+  /** 타격 구간 동안 플레이어를 향해 달려드는 속도 (돌격 공격) */
+  chargeSpeed?: number;
   /** 헛쳤을 때의 경직 틱 (없으면 recoverTicks). 그동안 마지막 동작으로 굳는다 */
   whiffRecoverTicks?: number;
   impactRangeMul: number;
@@ -53,6 +55,8 @@ export interface EnemyDef {
   armoredAttack?: EnemyAttackDef;
   /** 원거리 보조 공격 (족장 바위 투척 등) */
   rangedAttack?: EnemyAttackDef;
+  /** 돌격 공격 — 멀리 떨어졌을 때 달려들며 찌른다 (창병) */
+  chargeAttack?: EnemyAttackDef;
   parriesToStagger?: number;
   executeDamage?: number;
   armorHealth?: number;
@@ -63,6 +67,7 @@ export function currentAttack(
   def: EnemyDef,
   enemy: { phase?: string; attackMode?: string },
 ): EnemyAttackDef {
+  if (enemy.attackMode === 'charge' && def.chargeAttack) return def.chargeAttack;
   if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
   if (enemy.phase === 'armored' && def.armoredAttack) return def.armoredAttack;
   return def.attack;

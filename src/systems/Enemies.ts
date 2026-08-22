@@ -125,6 +125,20 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         break;
       }
 
+      // 크게 밀려난 뒤 — 걸어서 다가오는 대신 달려들며 찌른다
+      if (
+        enemy.wantsCharge &&
+        def.chargeAttack &&
+        dist >= (def.chargeAttack.minRange ?? 0) &&
+        world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
+      ) {
+        enemy.wantsCharge = false;
+        enemy.attackMode = 'charge';
+        startWindup(world, enemy, def.chargeAttack);
+        world.events.emit('enemy_charge', { enemyId: enemy.id, enemyType: enemy.type, dist });
+        break;
+      }
+
       if (dist <= def.attackRange) {
         enemy.attackMode = 'melee';
         startWindup(world, enemy, currentAttack(def, enemy));
@@ -184,6 +198,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     case 'active_perfect': {
       enemy.timer--;
       advanceStrike(enemy, def, attack);
+      chargeForward(world, enemy, def, attack, distX, distZ, dist, dt);
       if (enemy.timer <= 0) {
         enemy.ai = 'active_normal';
         enemy.timer = balance.reaction.windowNormalTicks;
@@ -194,6 +209,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     case 'active_normal': {
       enemy.timer--;
       advanceStrike(enemy, def, attack);
+      chargeForward(world, enemy, def, attack, distX, distZ, dist, dt);
       if (enemy.timer <= 0) enemy.ai = 'impact';
       break;
     }
@@ -425,6 +441,23 @@ function strafeForAngle(
   if (Math.hypot(enemy.x - beforeX, enemy.z - beforeZ) < step * 0.3) {
     enemy.strafeDir = -dir;
   }
+}
+
+/** 돌격 공격의 타격 구간 — 플레이어를 향해 달려든다. 사거리 안에 들면 멈춘다 */
+function chargeForward(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  attack: EnemyAttackDef,
+  distX: number,
+  distZ: number,
+  dist: number,
+  dt: number,
+): void {
+  if (!attack.chargeSpeed || dist <= 0) return;
+  if (dist <= def.attackRange) return; // 이미 닿는 거리 — 더 파고들지 않는다
+  enemy.yaw = Math.atan2(-distX, -distZ); // 달려드는 동안은 방향을 갱신한다
+  moveAvoiding(world, enemy, def, distX / dist, distZ / dist, attack.chargeSpeed * dt);
 }
 
 /** 무기가 닿는 최대 거리 (적 중심 기준) — impact 판정 거리와 같아야 한다 */

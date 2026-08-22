@@ -481,6 +481,58 @@ describe('근접 히트박스 방향 판정', () => {
   });
 });
 
+describe('창병 돌격 (창 돌격)', () => {
+  const charge = enemyDef('goblin_spear').chargeAttack!;
+
+  it('멀리서 wantsCharge 가 켜지면 걸어오는 대신 달려들며 찌른다', () => {
+    const world = makeWorld();
+    const enemy = makeSpear(10 + 7, 10); // 사거리 3.6 밖
+    enemy.wantsCharge = true;
+    world.enemies.push(enemy);
+    const events: unknown[] = [];
+    world.events.on('enemy_charge', (payload) => events.push(payload));
+
+    Enemies.tick(world, DT);
+    expect(events).toHaveLength(1);
+    expect(enemy.attackMode).toBe('charge');
+    expect(enemy.ai).toBe('windup');
+    expect(enemy.wantsCharge).toBe(false); // 한 번만 쓴다
+
+    // 예비동작 동안은 제자리 (텔레그래프)
+    const xAtWindup = enemy.x;
+    for (let i = 0; i < charge.windupTicks - 1; i++) Enemies.tick(world, DT);
+    expect(enemy.x).toBeCloseTo(xAtWindup, 5);
+
+    // 타격 구간에 달려든다
+    tickUntil(world, 'active_perfect');
+    const xBefore = enemy.x;
+    for (let i = 0; i < 12; i++) Enemies.tick(world, DT);
+    expect(enemy.x).toBeLessThan(xBefore - 1); // 플레이어 쪽으로 크게 이동
+  });
+
+  it('가까우면(minRange 안) 돌격하지 않고 평소 찌르기', () => {
+    const world = makeWorld();
+    const enemy = makeSpear(10 + 3.4, 10); // minRange 4.5 안
+    enemy.wantsCharge = true;
+    world.enemies.push(enemy);
+    Enemies.tick(world, DT);
+    expect(enemy.attackMode).toBe('melee');
+  });
+
+  it('돌격은 사거리에 닿으면 멈춘다 (플레이어를 지나치지 않는다)', () => {
+    const world = makeWorld();
+    const enemy = makeSpear(10 + 7, 10);
+    enemy.wantsCharge = true;
+    world.enemies.push(enemy);
+    tickUntil(world, 'impact', 400);
+    const dist = Math.hypot(enemy.x - world.player.x, enemy.z - world.player.z);
+    expect(dist).toBeGreaterThan(balance.player.radius); // 파묻히지 않는다
+    expect(dist).toBeLessThanOrEqual(
+      enemyDef('goblin_spear').attackRange * charge.impactRangeMul,
+    ); // 닿는 거리까지는 왔다
+  });
+});
+
 describe('창병 헛창 경직', () => {
   const spearAttack = enemyDef('goblin_spear').attack;
 
