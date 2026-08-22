@@ -278,8 +278,9 @@ export class Stage {
     this.hands.setWeapon(kind);
   }
 
-  triggerHammerSwing(heavy = false): void {
-    this.hands.triggerHammerSwing(heavy);
+  /** step: 연속타 단계 (1·2·3) — 단계마다 궤적이 다르다 */
+  triggerHammerSwing(step = 1): void {
+    this.hands.triggerHammerSwing(step);
   }
 
   /** 방어 성공 — 방패 섬광 + 화살이면 방패에 꽂힘 */

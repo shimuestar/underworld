@@ -59,7 +59,8 @@ export class HandModel {
   private readonly hammerParts: THREE.Mesh[] = [];
   private readonly grenadeParts: THREE.Mesh[] = [];
   private swingUntil = 0;
-  private heavySwing = false;
+  private swingStart = 0;
+  private swingIndex = 0;
   private baseRotX = 0;
   /** 왼팔(총) 자세 보간값 — 가드 블렌드와 별도로 유지된다 */
   private gunPoseY = 0;
@@ -181,10 +182,11 @@ export class HandModel {
     for (const mesh of this.grenadeParts) mesh.visible = kind === 'grenade';
   }
 
-  /** heavy = 3타 마무리. 세로 내리침 대신 옆에서 크게 후려친다 */
-  triggerHammerSwing(heavy = false): void {
-    this.heavySwing = heavy;
-    this.swingUntil = performance.now() + (heavy ? HEAVY_SWING_MS : SWING_MS);
+  /** step: 1·2·3 연속타 단계. 단계마다 궤적이 다르다 */
+  triggerHammerSwing(step = 1): void {
+    this.swingIndex = Math.max(0, Math.min(COMBO_SWINGS.length - 1, step - 1));
+    this.swingStart = performance.now();
+    this.swingUntil = this.swingStart + COMBO_SWINGS[this.swingIndex]!.ms;
   }
 
   triggerGrenadeThrow(): void {
@@ -240,58 +242,41 @@ export class HandModel {
 
     // 스윙 — 치켜듦(예비 18%) → 내리침(37%) → 박힘(12%) → 회수(33%).
     // 절대 각도로 지정한다: 대기 각도가 바뀌어도 궤적이 흔들리지 않는다
-    let swingAbs: number | null = null;
-    let sweepYaw: number | null = null; // 강타 전용 수평 궤적
-    let center = 0; // 0 = 어깨 너머 대기 / 1 = 정면으로 모은 타격 자세
-    if (now < this.swingUntil && this.heavySwing) {
-      // 강타 — 오른쪽 뒤로 크게 감았다가(28%) 왼쪽으로 훑고(34%) 버틴 뒤 회수
-      const t = 1 - (this.swingUntil - now) / HEAVY_SWING_MS;
-      if (t < 0.28) {
-        sweepYaw = HEAVY_WINDUP_YAW * easeOutCubic(t / 0.28);
-        swingAbs = HAMMER_REST_ROT + 0.25 * easeOutCubic(t / 0.28);
-      } else if (t < 0.62) {
-        const k = easeInCubic((t - 0.28) / 0.34);
-        sweepYaw = HEAVY_WINDUP_YAW + (HEAVY_SWEEP_YAW - HEAVY_WINDUP_YAW) * k;
-        swingAbs = HAMMER_REST_ROT + 0.25 - 0.85 * k; // 수평에 가깝게 눕힌다
-      } else if (t < 0.74) {
-        sweepYaw = HEAVY_SWEEP_YAW;
-        swingAbs = HAMMER_REST_ROT - 0.6;
-      } else {
-        const k = easeOutCubic((t - 0.74) / 0.26);
-        sweepYaw = HEAVY_SWEEP_YAW * (1 - k);
-        swingAbs = HAMMER_REST_ROT - 0.6 + 0.6 * k;
-      }
-      center = t < 0.74 ? Math.min(1, t / 0.2) : 1 - (t - 0.74) / 0.26;
-      center = Math.max(0, Math.min(1, center));
-    } else if (now < this.swingUntil) {
-      const t = 1 - (this.swingUntil - now) / SWING_MS;
-      const bottom = HAMMER_REST_ROT + HAMMER_SMASH_ARC; // 내리친 끝 각도
-      if (t < 0.18) {
-        swingAbs = HAMMER_REST_ROT + (HAMMER_WINDUP_ROT - HAMMER_REST_ROT) * easeOutCubic(t / 0.18);
-      } else if (t < 0.55) {
-        swingAbs = HAMMER_WINDUP_ROT + (bottom - HAMMER_WINDUP_ROT) * easeInCubic((t - 0.18) / 0.37);
-      } else if (t < 0.67) {
-        swingAbs = bottom;
-      } else {
-        swingAbs = bottom + (HAMMER_REST_ROT - bottom) * easeOutCubic((t - 0.67) / 0.33);
-      }
-      // 정면으로 모았다가 회수하며 대기 자세로 돌아간다
-      center = t < 0.67 ? Math.min(1, t / 0.2) : 1 - (t - 0.67) / 0.33;
-      center = Math.max(0, Math.min(1, center));
+    // 스윙 — 감기(22%) → 베기(33%) → 버팀 → 대기 자세로 복귀
+    let pose: SwingPose | null = null;
+    if (now < this.swingUntil) {
+      const step = COMBO_SWINGS[this.swingIndex]!;
+      const t = (now - this.swingStart) / step.ms;
+      const rest: SwingPose = {
+        rotX: HAMMER_REST_ROT,
+        rotY: REST_RIGHT.rotY,
+        x: REST_RIGHT.pos.x,
+        y: REST_RIGHT.pos.y,
+      };
+      const mix = (a: SwingPose, b: SwingPose, k: number): SwingPose => ({
+        rotX: a.rotX + (b.rotX - a.rotX) * k,
+        rotY: a.rotY + (b.rotY - a.rotY) * k,
+        x: a.x + (b.x - a.x) * k,
+        y: a.y + (b.y - a.y) * k,
+      });
+      const strikeEnd = 0.22 + 0.33;
+      if (t < 0.22) pose = mix(rest, step.windup, easeOutCubic(t / 0.22)); // 감기
+      else if (t < strikeEnd) pose = mix(step.windup, step.strike, easeInCubic((t - 0.22) / 0.33));
+      else if (t < strikeEnd + SWING_HOLD) pose = step.strike; // 버팀
+      else pose = mix(step.strike, rest, easeOutCubic((t - strikeEnd - SWING_HOLD) / (1 - strikeEnd - SWING_HOLD)));
     }
 
-    this.rightArm.position.x =
-      REST_RIGHT.pos.x + (SMASH_RIGHT.x - REST_RIGHT.pos.x) * center;
-    this.rightArm.position.z =
-      REST_RIGHT.pos.z + (SMASH_RIGHT.z - REST_RIGHT.pos.z) * center;
-    const baseY = REST_RIGHT.pos.y + (SMASH_RIGHT.y - REST_RIGHT.pos.y) * center;
-    this.rightArm.position.y += (baseY + (targetY - REST_RIGHT.pos.y) - this.rightArm.position.y) * 0.3;
-    this.rightArm.rotation.y =
-      sweepYaw !== null ? sweepYaw : REST_RIGHT.rotY * (1 - center);
-    this.rightArm.rotation.z = REST_RIGHT.rotZ * (1 - center);
-    if (swingAbs !== null) {
-      this.baseRotX = swingAbs; // 스윙 중에는 보간 없이 커브를 그대로 따른다
+    if (pose) {
+      this.rightArm.position.set(pose.x, pose.y, SMASH_RIGHT.z);
+      this.rightArm.rotation.y = pose.rotY;
+      this.rightArm.rotation.z = 0; // 스윙 중에는 손목 비틀림 없음
+      this.baseRotX = pose.rotX;
     } else {
+      this.rightArm.position.x = REST_RIGHT.pos.x;
+      this.rightArm.position.z = REST_RIGHT.pos.z;
+      this.rightArm.position.y += (targetY - this.rightArm.position.y) * 0.3;
+      this.rightArm.rotation.y = REST_RIGHT.rotY;
+      this.rightArm.rotation.z = REST_RIGHT.rotZ;
       this.baseRotX += (targetRotX - this.baseRotX) * 0.35;
     }
     this.rightArm.rotation.x = this.baseRotX;
@@ -407,12 +392,40 @@ export class HandModel {
 
 // 해머 대기(치켜든) 각도와 내리침 호 크기 (+x 회전 = 무기 끝이 위로)
 const HAMMER_REST_ROT = 0.95; // 헤드가 어깨 위 (완전히 세우면 화면 중앙을 가린다)
-const HAMMER_WINDUP_ROT = 1.35; // 내리치기 직전 살짝 더 치켜든다 (예비 동작)
-const SWING_MS = 210;
-const HEAVY_SWING_MS = 380; // 3타 강타 — 크게 감았다 후려친다
-const HEAVY_WINDUP_YAW = 1.15; // 오른쪽 뒤로 크게 당김
-const HEAVY_SWEEP_YAW = -1.05; // 왼쪽 끝까지 훑는다
-const HAMMER_SMASH_ARC = -1.7; // 대기 0.95 → 바닥 -0.75rad(앞아래 43도). 수직으로 꽂으면 정면을 친 느낌이 안 난다
+// 연속타 안무 — 1타 우상→좌하, 2타 좌하→우상(올려치기), 3타 위→아래(강타).
+// 각도 규약: rotX + = 무기 끝이 위 / rotY + = 왼쪽, − = 오른쪽
+interface SwingPose {
+  rotX: number;
+  rotY: number;
+  x: number;
+  y: number;
+}
+interface SwingStep {
+  ms: number;
+  windup: SwingPose;
+  strike: SwingPose;
+}
+const COMBO_SWINGS: SwingStep[] = [
+  {
+    // 1타 — 오른쪽 위에서 왼쪽 아래로 베어 내린다
+    ms: 220,
+    windup: { rotX: 1.0, rotY: -0.75, x: 0.4, y: -0.2 },
+    strike: { rotX: -0.85, rotY: 0.62, x: -0.06, y: -0.4 },
+  },
+  {
+    // 2타 — 왼쪽 아래에서 오른쪽 위로 올려친다
+    ms: 220,
+    windup: { rotX: -0.8, rotY: 0.62, x: -0.02, y: -0.46 },
+    strike: { rotX: 1.05, rotY: -0.5, x: 0.34, y: -0.16 },
+  },
+  {
+    // 3타 — 머리 위로 치켜들었다 정면 아래로 내리찍는다 (강타)
+    ms: 360,
+    windup: { rotX: 1.6, rotY: 0.02, x: 0.16, y: -0.12 },
+    strike: { rotX: -0.8, rotY: -0.02, x: 0.11, y: -0.42 },
+  },
+];
+const SWING_HOLD = 0.12; // 타격 끝에서 버티는 구간 비율
 
 // 포즈 정의 (카메라 로컬 좌표)
 // 오른팔 대기: 손목은 화면 오른쪽 아래, 해머는 어깨 위로 걸쳐 든다.

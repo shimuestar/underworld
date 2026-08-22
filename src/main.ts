@@ -316,10 +316,10 @@ events.on('block_hit', (payload) => {
 // ---- 무기 — 원거리(좌클릭, 휠 교체) / 근접(우클릭) ----
 events.on('weapon_switched', () => audio.play('weapon_switch'));
 events.on('hammer_swing', (payload) => {
-  const heavy = (payload as { heavy?: boolean }).heavy === true;
-  audio.play(heavy ? 'hammer_heavy' : 'hammer_swing');
-  stage.triggerHammerSwing(heavy);
-  if (heavy) showReaction('강타!', 700);
+  const sw = payload as { heavy?: boolean; step?: number };
+  audio.play(sw.heavy ? 'hammer_heavy' : 'hammer_swing');
+  stage.triggerHammerSwing(sw.step ?? 1);
+  if (sw.heavy) showReaction('강타!', 700);
 });
 events.on('melee_hit', (payload) => {
   const hit = payload as { enemyId: number; heavy?: boolean };
