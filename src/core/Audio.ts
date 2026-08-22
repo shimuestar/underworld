@@ -38,6 +38,8 @@ export type SoundName =
   | 'guard_clash'
   | 'enemy_whiff'
   | 'shield_break'
+  | 'shield_brace'
+  | 'shield_crack'
   | 'pickup_potion'
   | 'pickup_mana'
   | 'pickup_gold'
@@ -259,6 +261,19 @@ export class GameAudio {
         // 허공을 가르는 헛창 — 바람 소리만 남고 타격음이 없다
         this.noise(0.22, 0.5, 2600);
         this.tone(180, 0.2, 'sine', 0.25, 0.02, 95);
+        break;
+      case 'shield_brace':
+        // 방패로 받아냄 — 둔중한 나무·금속 충돌, 여운 짧게
+        this.tone(110, 0.14, 'sine', 0.9);
+        this.tone(430, 0.1, 'square', 0.45);
+        this.noise(0.09, 0.75, 2600);
+        break;
+      case 'shield_crack':
+        // 금이 가는 소리 — 위 충돌음 위에 갈라짐을 얹는다
+        this.tone(95, 0.2, 'sine', 1.0);
+        this.noise(0.13, 0.9, 3400);
+        this.tone(680, 0.22, 'sawtooth', 0.5, 0.03, 240);
+        this.noise(0.26, 0.6, 1100, 0.06);
         break;
       case 'shield_break':
         // 방패 파괴 — 금속 갈라짐 + 나무 쪼개짐(40ms) + 화염 삼킴(저음 스윕)

@@ -111,7 +111,8 @@ describe('해머 (슬롯 1)', () => {
 
   it('공격 중에 맞으면 그 동작 그대로 얼어붙는다 (타이머도 멈춘다)', () => {
     const hammer = balance.weapons.hammer;
-    const enemy = spawnEnemyAt('goblin_spear', 6 + 3, 6, 1);
+    // 방패병은 해머를 방패로 받아내므로 방패 없는 적으로 확인한다
+    const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
     enemy.health = 1000;
     enemy.ai = 'chase';
     world.enemies.push(enemy);
@@ -565,5 +566,83 @@ describe('체급별 넉백 저항', () => {
     for (const type of ['goblin_runner', 'goblin_spear', 'goblin_archer', 'warden', 'goblin_chieftain']) {
       expect(['light', 'medium', 'heavy']).toContain(enemyDef(type).weight);
     }
+  });
+});
+
+describe('방패병 vs 해머', () => {
+  const sb = balance.shieldBreak;
+  const hammer = balance.weapons.hammer;
+
+  function shieldman(): EnemyState {
+    const enemy = spawnEnemyAt('goblin_spear', 6 + 2.2, 6, 1);
+    enemy.health = 110;
+    enemy.ai = 'chase';
+    enemy.yaw = Math.atan2(-(6 - enemy.x), -(6 - enemy.z)); // 플레이어를 정면으로
+    world.enemies.push(enemy);
+    return enemy;
+  }
+  function swingOnce(): void {
+    world.weapon.meleeCooldown = 0;
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    advanceToHammerImpact(world);
+  }
+
+  it('정면 해머는 HP를 깎지 못하고 방패에 막힌다', () => {
+    const enemy = shieldman();
+    const braced: unknown[] = [];
+    world.events.on('shield_braced', (payload) => braced.push(payload));
+
+    swingOnce();
+    expect(enemy.health).toBe(110); // 피해 없음
+    expect(braced).toHaveLength(1);
+    expect(enemy.braceTicks).toBe(sb.braceTicks);
+    expect(enemy.kbTicks ?? 0).toBe(0); // 밀리지도 않는다
+  });
+
+  it('버티는 동안 방패병은 아무 행동도 하지 않는다', () => {
+    const enemy = shieldman();
+    swingOnce();
+    const pos = { x: enemy.x, z: enemy.z };
+    const ai = enemy.ai;
+    for (let i = 0; i < sb.braceTicks - 1; i++) Enemies.tick(world, DT);
+    expect(enemy.ai).toBe(ai); // 공격으로 넘어가지 않는다
+    expect(enemy.x).toBeCloseTo(pos.x, 5);
+    expect(world.player.health).toBe(balance.player.healthMax); // 반격도 없다
+  });
+
+  it('마무리 3타 2번이면 방패가 부서지고, 첫 번째엔 금만 간다', () => {
+    const enemy = shieldman();
+    const cracked: unknown[] = [];
+    const broken: unknown[] = [];
+    world.events.on('shield_cracked', (payload) => cracked.push(payload));
+    world.events.on('shield_broken', (payload) => broken.push(payload));
+
+    for (let n = 0; n < sb.finisherHitsToBreak; n++) {
+      swingOnce();
+      swingOnce();
+      swingOnce(); // 3타 = 마무리
+      for (let i = 0; i < hammer.combo.windowTicks + 20; i++) Weapons.tick(world, DT);
+    }
+    expect(enemy.shieldHits).toBe(sb.finisherHitsToBreak);
+    expect(cracked).toHaveLength(sb.finisherHitsToBreak - 1);
+    expect(broken).toHaveLength(1);
+    expect(enemy.shieldBroken).toBe(true);
+    expect(enemy.health).toBe(110); // 방패가 버티는 동안은 HP 무손실
+  });
+
+  it('방패가 부서진 뒤에는 해머 피해가 들어간다', () => {
+    const enemy = shieldman();
+    enemy.shieldBroken = true;
+    swingOnce();
+    expect(enemy.health).toBe(110 - hammer.damage);
+  });
+
+  it('등 뒤에서 치면 방패와 무관하게 피해가 들어간다', () => {
+    const enemy = shieldman();
+    enemy.yaw = Math.atan2(-(20 - enemy.x), -(6 - enemy.z)); // 반대편을 봄
+    swingOnce();
+    expect(enemy.health).toBe(110 - hammer.damage);
   });
 });

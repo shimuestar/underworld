@@ -61,6 +61,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   enemy.prevX = enemy.x;
   enemy.prevZ = enemy.z;
 
+  // 방패로 버티는 중 — 웅크린 채 아무 행동도 하지 않는다 (해머 연타를 받아내는 동안)
+  if ((enemy.braceTicks ?? 0) > 0) {
+    enemy.braceTicks = (enemy.braceTicks ?? 0) - 1;
+    enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z)); // 방패는 계속 플레이어를 향한다
+    return;
+  }
+
   // 강타 경직 — 예비동작이든 타격 중이든 그 상태 그대로 멈춘다.
   // 상태도 타이머도 진행하지 않으므로 공격이 취소되지 않고 "얼어붙는다"
   if ((enemy.attackFreezeTicks ?? 0) > 0) {

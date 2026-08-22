@@ -90,6 +90,8 @@ interface EnemyVisual {
   shieldMaterial?: THREE.MeshLambertMaterial;
   /** 방패의 기준 z — 몸통 전진에 오프셋으로 더한다 */
   shieldBaseZ: number;
+  /** 방패 균열 (마무리 타를 받아내면 드러난다) */
+  shieldCracks?: THREE.Group;
   /** 해머 적중 명멸이 끝나는 시각 */
   hitFlashUntil: number;
   /** 근접 무기 팔 피벗 — 치켜들었다 내리찍는다 */
@@ -766,6 +768,25 @@ export class Stage {
       visual.shieldBaseZ = -(def.radius * 0.92);
       visual.shield.position.set(-0.08, def.height * 0.5, visual.shieldBaseZ);
       group.add(visual.shield);
+
+      // 균열 — 마무리 타를 한 번 받아내면 드러난다. 방패면(-z) 바깥쪽에 얇게 붙인다
+      const crackMat = new THREE.MeshBasicMaterial({ color: 0x14161a });
+      const w = def.radius * 1.6;
+      const h = def.height * 0.72;
+      const cracks = new THREE.Group();
+      const seg = (len: number, rot: number, x: number, y: number): void => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(len, 0.035, 0.02), crackMat);
+        m.position.set(x, y, -0.056);
+        m.rotation.z = rot;
+        cracks.add(m);
+      };
+      seg(w * 0.55, 0.9, -w * 0.05, h * 0.08);
+      seg(w * 0.4, -0.5, w * 0.12, -h * 0.12);
+      seg(w * 0.32, 1.7, -w * 0.16, -h * 0.05);
+      seg(w * 0.26, 0.2, w * 0.05, h * 0.22);
+      cracks.visible = false;
+      visual.shieldCracks = cracks;
+      visual.shield.add(cracks);
     }
 
     // 근접 무기 — 어깨 피벗 팔에 쥐고 치켜들었다 내리찍는다
@@ -937,6 +958,13 @@ export class Stage {
         leanTarget = striking && isMelee ? -0.42 : inWindup ? 0.28 * windupProgress : 0;
         lungeTarget = striking && isMelee ? -0.5 : 0;
       }
+      // 방패로 버티는 중 — 몸을 낮추고 반 걸음 물러서 웅크린다 (해머 연타를 받아내는 자세)
+      if ((enemy.braceTicks ?? 0) > 0) {
+        leanTarget = 0.12;
+        lungeTarget = 0.14;
+        crouchTarget = -def2.height * 0.1;
+      }
+
       // 연출용 전진이 플레이어를 지나치지 않게 제한한다 — 붙어 있을 때 몸이
       // 관통해 보이던 원인. 멀리서 찌를 때는 그대로 크게 파고든다
       const toPlayer = Math.hypot(
@@ -1026,6 +1054,7 @@ export class Stage {
       }
 
       // 방패 — 피격 시 흰 번쩍, 스태거 중엔 내려가서 열린다
+      if (visual.shieldCracks) visual.shieldCracks.visible = (enemy.shieldHits ?? 0) > 0;
       if (visual.shield && visual.shieldMaterial) {
         visual.shieldMaterial.emissive.set(now < visual.shieldFlashUntil ? 0xffffff : 0x000000);
         const def = enemyDef(enemy.type);

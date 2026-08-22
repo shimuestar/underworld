@@ -160,6 +160,36 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     if (dist > range + def.radius || dist === 0) continue;
     if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
 
+    // 정면 방패 — 해머는 피해를 주지 못하고 방패에 막힌다. 대신 방패병은 웅크려
+    // 버티느라 아무 행동도 못 하고, 마무리 3타만 방패를 깎는다
+    if (shieldBlocks(def, enemy, p.x, p.z)) {
+      const sb = balance.shieldBreak;
+      enemy.braceTicks = Math.max(enemy.braceTicks ?? 0, sb.braceTicks);
+      if (enemy.ai === 'idle') enemy.ai = 'chase';
+      if (heavy) {
+        enemy.shieldHits = (enemy.shieldHits ?? 0) + 1;
+        if (enemy.shieldHits >= sb.finisherHitsToBreak) {
+          enemy.shieldBroken = true;
+          world.events.emit('shield_broken', {
+            enemyId: enemy.id,
+            enemyType: enemy.type,
+            x: enemy.x,
+            z: enemy.z,
+          });
+        } else {
+          world.events.emit('shield_cracked', {
+            enemyId: enemy.id,
+            hits: enemy.shieldHits,
+            remaining: sb.finisherHitsToBreak - enemy.shieldHits,
+          });
+        }
+      } else {
+        world.events.emit('shield_braced', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+      }
+      hitAny = true; // 방패에 맞은 것도 헛스윙은 아니다
+      continue;
+    }
+
     // 상성 — warden 방어막은 근접 무효, 보스 장갑은 실탄 전용
     if (enemyDef(enemy.type).magicBarrier?.blocksMelee && enemy.ai !== 'staggered') {
       world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'melee' });

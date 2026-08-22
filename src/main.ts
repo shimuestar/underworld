@@ -255,6 +255,8 @@ for (const name of [
   'deflect',
   'barrier_blocked',
   'shield_broken',
+  'shield_cracked',
+  'shield_braced',
   'armor_hit',
   'boss_phase',
   'boss_staggered',
@@ -451,6 +453,19 @@ events.on('guard_clash', (payload) => {
 events.on('enemy_whiffed', () => {
   audio.play('enemy_whiff');
   showReaction('빗나감 — 반격 기회!', 900);
+});
+events.on('shield_braced', (payload) => {
+  const c = payload as { x: number; z: number };
+  audio.play('shield_brace');
+  const p2 = world.player;
+  stage.spawnGuardSparks((p2.x + c.x) / 2, (p2.z + c.z) / 2, 1.0, 0xdfe6ef, 0.7);
+});
+events.on('shield_cracked', (payload) => {
+  const info = payload as { enemyId: number; remaining: number };
+  audio.play('shield_crack');
+  stage.flashEnemyHit(info.enemyId);
+  stage.triggerCameraKick(0.6, 180);
+  showReaction(`방패에 금이 갔다 — 한 번 더!`, 1200);
 });
 events.on('shield_broken', (payload) => {
   const info = payload as { enemyId: number };

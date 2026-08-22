@@ -224,8 +224,12 @@ export interface EnemyState {
   recoiled?: boolean;
   /** 헛친 직후인가 — recover 동안 마지막 동작으로 굳고 무방비가 된다 */
   whiffed?: boolean;
-  /** 정면 방패가 부서졌는가 (화염구 명중) — 이후 투사체를 막지 못한다 */
+  /** 정면 방패가 부서졌는가 — 이후 투사체를 막지 못한다 */
   shieldBroken?: boolean;
+  /** 방패가 해머 마무리 타를 받아낸 횟수 (금 → 파괴) */
+  shieldHits?: number;
+  /** 방패로 버티는 중 — 웅크린 채 아무 행동도 하지 않는다 */
+  braceTicks?: number;
   /** 타격 진행도 0~1 (무기가 뻗어나가는 정도) 과 그 시점의 무기 끝 거리(중심 기준).
    *  패링은 이 값으로 판정한다 — 시간이 아니라 무기가 실제로 닿았는지 */
   strikeProgress?: number;
