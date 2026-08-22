@@ -43,6 +43,8 @@ const MUZZLE_OFFSET = { x: -0.17, y: -0.1, z: -0.72 }; // 카메라 로컬: 왼�
 const SHIELD_COLOR = 0x6f7480;
 const SPEAR_TIP = 0x9aa2ad;
 const HEAD_DARKEN = 0.72;
+/** 공격 연출로 전진할 때 플레이어와 유지할 최소 시각 간격 — 이보다 가까이 오면 몸이 관통해 보인다 */
+const VISUAL_BODY_GAP = 0.85;
 
 // 근접 무기 규격 (시각 — 실제 사거리는 entities.json attackRange가 결정)
 // style: smash = 치켜들었다 내리침 / thrust = 수평 견착 후 내지름
@@ -929,6 +931,15 @@ export class Stage {
         leanTarget = striking && isMelee ? -0.42 : inWindup ? 0.28 * windupProgress : 0;
         lungeTarget = striking && isMelee ? -0.5 : 0;
       }
+      // 연출용 전진이 플레이어를 지나치지 않게 제한한다 — 붙어 있을 때 몸이
+      // 관통해 보이던 원인. 멀리서 찌를 때는 그대로 크게 파고든다
+      const toPlayer = Math.hypot(
+        this.camera.position.x - enemy.x,
+        this.camera.position.z - enemy.z,
+      );
+      const maxAdvance = Math.max(0, toPlayer - VISUAL_BODY_GAP);
+      if (lungeTarget < -maxAdvance) lungeTarget = -maxAdvance;
+
       if (trembling) leanTarget += Math.sin(now / 14) * 0.05;
       // 피탄 움찔 — 상체가 짧게 젖혀졌다 돌아온다 (+ = 뒤로). 남은 틱 비율로 감쇠
       const flinch =
