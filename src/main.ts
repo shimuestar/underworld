@@ -659,8 +659,8 @@ function render(alpha: number): void {
     world.weapon.ranged === 'grenade' && world.weapon.grenadeCharge > 0
       ? world.weapon.grenadeCharge / balance.weapons.grenade.maxChargeTicks
       : 0;
-  // 손에 든 것 — 평소엔 장착한 원거리 무기, 근접 스윙 중에는 근접 무기
-  stage.setHandWeapon(world.weapon.meleeCooldown > 0 ? world.weapon.melee : world.weapon.ranged);
+  // 왼손에 든 원거리 무기 (오른손 해머는 항상 보인다)
+  stage.setHandWeapon(world.weapon.ranged);
   stage.updateHands({
     reloading: world.weapon.reloading > 0,
     stunned: p.stunTicks > 0,

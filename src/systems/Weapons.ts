@@ -29,13 +29,19 @@ export function tick(world: World, _dt: number): void {
     }
   }
 
-  // 경직/회피 대시/방어 중에는 공격·장전 불가
-  if (world.player.stunTicks > 0 || world.player.dodgeTicks > 0 || world.player.blocking) return;
+  // 경직/회피 대시 중에는 아무것도 못 한다
+  if (world.player.stunTicks > 0 || world.player.dodgeTicks > 0) return;
 
-  // 근접 공격(좌클릭) — 원거리 상태와 무관하게 항상 쓸 수 있다
+  // 근접 공격(우클릭, 오른손 해머) — 방어 중에도 나간다. 방패는 왼팔이니까
   if (world.input.meleePressed && w.meleeCooldown <= 0) {
     swingHammer(world);
     w.grenadeCharge = 0; // 근접을 섞으면 차징은 끊긴다
+    return;
+  }
+
+  // 원거리(좌클릭)는 왼손 = 방패 손이라 방어 중에는 쓸 수 없다
+  if (world.player.blocking) {
+    w.grenadeCharge = 0;
     return;
   }
 

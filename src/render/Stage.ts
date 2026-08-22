@@ -33,7 +33,7 @@ const GOLD_COLOR = 0xffcc3a; // 골드 더미
 
 // 트레이서 시각 상수 (튜닝값 아님 — 순수 연출)
 const TRACER_COLOR = 0xffe9b8;
-const MUZZLE_OFFSET = { x: 0.16, y: -0.1, z: -0.66 }; // 카메라 로컬: 권총 총구 끝
+const MUZZLE_OFFSET = { x: -0.17, y: -0.1, z: -0.72 }; // 카메라 로컬: 왼손 권총 총구 끝
 
 // 적 부속물 색
 const SHIELD_COLOR = 0x6f7480;

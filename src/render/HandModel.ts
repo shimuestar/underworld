@@ -49,6 +49,7 @@ export class HandModel {
   private readonly rightArm = new THREE.Group();
   private readonly leftArm = new THREE.Group();
   private readonly bracerMaterial: THREE.MeshLambertMaterial;
+  private bracer!: THREE.Mesh;
 
   private recoilUntil = 0;
   private parryUntil = 0;
@@ -59,7 +60,9 @@ export class HandModel {
   private readonly grenadeParts: THREE.Mesh[] = [];
   private swingUntil = 0;
   private baseRotX = 0;
-  private activeWeapon: 'hammer' | 'grenade' | 'pistol' = 'pistol';
+  /** 왼팔(총) 자세 보간값 — 가드 블렌드와 별도로 유지된다 */
+  private gunPoseY = 0;
+  private gunPoseRot = 0;
   private throwUntil = 0;
   private blockFlashUntil = 0;
   private bashUntil = 0;
@@ -69,7 +72,7 @@ export class HandModel {
   private corruptionStage = -1;
 
   constructor() {
-    // ---- 오른팔 + 권총 ----
+    // ---- 오른팔 = 해머 (근접, 우클릭) ----
     const forearm = box(0.045, 0.045, 0.16, SLEEVE);
     forearm.position.set(0.015, -0.035, 0.08);
     forearm.rotation.x = 0.35;
@@ -80,42 +83,21 @@ export class HandModel {
     this.skinMaterials.push(hand.material as THREE.MeshLambertMaterial);
     this.rightArm.add(hand);
 
-    const slide = box(0.03, 0.038, 0.17, GUN_DARK);
-    slide.position.set(0, 0.035, -0.07);
-    this.gunParts.push(slide);
-    this.rightArm.add(slide);
-
-    const grip = box(0.026, 0.07, 0.038, GRIP);
-    grip.position.set(0, -0.022, -0.005);
-    grip.rotation.x = -0.25;
-    this.gunParts.push(grip);
-    this.rightArm.add(grip);
-
-    // 해머 (슬롯 1)
-    const hammerShaft = box(0.035, 0.035, 0.5, 0x5c4a33);
-    hammerShaft.position.set(0, 0.03, -0.2);
-    const hammerHead = box(0.15, 0.1, 0.2, 0x7a7d84);
-    hammerHead.position.set(0, 0.03, -0.46);
+    const hammerShaft = box(0.032, 0.032, 0.42, 0x5c4a33);
+    hammerShaft.position.set(0, 0.03, -0.17);
+    const hammerHead = box(0.13, 0.09, 0.17, 0x7a7d84);
+    hammerHead.position.set(0, 0.03, -0.4);
     this.hammerParts.push(hammerShaft, hammerHead);
     this.rightArm.add(hammerShaft);
     this.rightArm.add(hammerHead);
 
-    // 수류탄 (슬롯 2)
-    const grenadeBall = new THREE.Mesh(
-      new THREE.SphereGeometry(0.05, 8, 8),
-      new THREE.MeshLambertMaterial({ color: 0x3d4a2e }),
-    );
-    grenadeBall.position.set(0, 0.02, -0.06);
-    this.grenadeParts.push(grenadeBall);
-    this.rightArm.add(grenadeBall);
-
-    this.setWeapon('pistol');
-
     this.rightArm.position.copy(REST_RIGHT.pos);
-    this.rightArm.rotation.set(REST_RIGHT.rotX, 0, 0);
+    this.rightArm.rotation.set(HAMMER_REST_ROT, REST_RIGHT.rotY, REST_RIGHT.rotZ);
+    this.baseRotX = HAMMER_REST_ROT;
     this.group.add(this.rightArm);
 
-    // ---- 왼팔 브레이서 (평소엔 화면 밖, 패링 시 올라온다) ----
+    // ---- 왼팔 = 총/수류탄 (원거리, 좌클릭) + 팔뚝 브레이서 (방어·패링) ----
+    // 총을 든 손이 곧 방패 손이라 방어 중에는 사격할 수 없다 (Weapons가 강제)
     const lForearm = box(0.048, 0.048, 0.19, SLEEVE);
     lForearm.position.set(0, 0, 0.015);
     this.leftArm.add(lForearm);
@@ -125,10 +107,34 @@ export class HandModel {
     this.skinMaterials.push(lFist.material as THREE.MeshLambertMaterial);
     this.leftArm.add(lFist);
 
+    const slide = box(0.03, 0.038, 0.17, GUN_DARK);
+    slide.position.set(0, 0.04, -0.17);
+    this.gunParts.push(slide);
+    this.leftArm.add(slide);
+
+    const grip = box(0.026, 0.07, 0.038, GRIP);
+    grip.position.set(0, -0.02, -0.1);
+    grip.rotation.x = -0.25;
+    this.gunParts.push(grip);
+    this.leftArm.add(grip);
+
+    const grenadeBall = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 8, 8),
+      new THREE.MeshLambertMaterial({ color: 0x3d4a2e }),
+    );
+    grenadeBall.position.set(0, 0.03, -0.15);
+    this.grenadeParts.push(grenadeBall);
+    this.leftArm.add(grenadeBall);
+
+    this.setWeapon('pistol');
+
     this.bracerMaterial = new THREE.MeshLambertMaterial({ color: BRACER });
+    // 평소엔 팔뚝 보호대 크기로 접혀 있다가 가드할 때 방패로 펼쳐진다 —
+    // 상시 방패 크기면 총이 가려진다
     // 가로(z 0.21)는 유지, 세로(y)를 크게 — 가드 시 화면을 세로로도 넉넉히 가리도록
     const bracer = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.24, 0.21), this.bracerMaterial);
-    bracer.position.set(-0.038, 0.02, 0);
+    bracer.position.set(-0.05, 0.02, 0);
+    this.bracer = bracer;
     this.leftArm.add(bracer);
 
     // 방패에 꽂히는 화살 3슬롯 — 평소엔 숨김, 화살을 막으면 순환 표시.
@@ -163,11 +169,9 @@ export class HandModel {
     this.recoilUntil = performance.now() + RECOIL_MS;
   }
 
-  /** 무기 전환 — 오른손에 들린 모델 교체 */
+  /** 왼손에 든 원거리 무기 교체 (해머는 항상 오른손에 있다) */
   setWeapon(kind: 'hammer' | 'grenade' | 'pistol'): void {
-    this.activeWeapon = kind;
-    for (const mesh of this.gunParts) mesh.visible = kind === 'pistol';
-    for (const mesh of this.hammerParts) mesh.visible = kind === 'hammer';
+    for (const mesh of this.gunParts) mesh.visible = kind !== 'grenade';
     for (const mesh of this.grenadeParts) mesh.visible = kind === 'grenade';
   }
 
@@ -218,47 +222,52 @@ export class HandModel {
   }): void {
     const now = performance.now();
 
-    // 오른팔 목표 포즈 — 해머는 평상시에도 머리 위로 치켜든 대기 자세
+    // ---- 오른팔 (해머) — 대기는 치켜든 자세, 좌클릭이 아니라 우클릭에 반응한다
     let targetY = REST_RIGHT.pos.y;
-    let targetRotX = this.activeWeapon === 'hammer' ? HAMMER_REST_ROT : REST_RIGHT.rotX;
+    let targetRotX = HAMMER_REST_ROT;
     if (state.stunned) {
       targetY -= 0.1;
       targetRotX -= 0.55;
-    } else if (state.reloading) {
-      targetY -= 0.13;
-      targetRotX -= 0.8;
     }
 
-    // 즉발 오프셋 — 보간을 거치지 않아 스냅이 살아있다 (반동/스윙/투척)
-    let directRot = 0;
-    let kickZ = 0;
-    if (now < this.recoilUntil) {
-      const k = (this.recoilUntil - now) / RECOIL_MS;
-      kickZ = 0.055 * k;
-      directRot += 0.3 * k;
-    }
-
-    // 해머 스윙 — 이미 치켜든 대기 자세에서 격하게 내리찍고(45%) 잠깐 박혔다(25%)
-    // 다시 들어 올린다(30%)
+    let swingRot = 0; // 즉발 오프셋 — 보간을 거치지 않아 스냅이 살아있다
     if (now < this.swingUntil) {
       const t = 1 - (this.swingUntil - now) / 170;
-      if (t < 0.45) directRot += HAMMER_SMASH_ARC * easeInCubic(t / 0.45);
-      else if (t < 0.7) directRot += HAMMER_SMASH_ARC;
-      else directRot += HAMMER_SMASH_ARC * (1 - (t - 0.7) / 0.3);
-    }
-    // 수류탄 — 차징 중엔 뒤로 당기고(부드럽게), 투척 시 앞으로 밀기(즉발)
-    kickZ += 0.14 * (state.chargeFrac ?? 0);
-    targetRotX -= 0.35 * (state.chargeFrac ?? 0);
-    if (now < this.throwUntil) {
-      const t = 1 - (this.throwUntil - now) / 240;
-      kickZ -= 0.2 * Math.sin(t * Math.PI);
-      directRot -= 0.5 * Math.sin(t * Math.PI);
+      if (t < 0.45) swingRot += HAMMER_SMASH_ARC * easeInCubic(t / 0.45);
+      else if (t < 0.7) swingRot += HAMMER_SMASH_ARC;
+      else swingRot += HAMMER_SMASH_ARC * (1 - (t - 0.7) / 0.3);
     }
 
     this.rightArm.position.y += (targetY - this.rightArm.position.y) * 0.25;
-    this.rightArm.position.z = REST_RIGHT.pos.z + kickZ;
     this.baseRotX += (targetRotX - this.baseRotX) * 0.35;
-    this.rightArm.rotation.x = this.baseRotX + directRot;
+    this.rightArm.rotation.x = this.baseRotX + swingRot;
+
+    // ---- 왼팔 (총/수류탄 + 브레이서) — 반동·장전·차징·투척이 여기서 일어난다
+    let gunY = 0;
+    let gunRot = 0;
+    let gunZ = 0;
+    if (state.stunned) {
+      gunY -= 0.1;
+      gunRot -= 0.55;
+    } else if (state.reloading) {
+      gunY -= 0.13;
+      gunRot -= 0.8;
+    }
+    if (now < this.recoilUntil) {
+      const k = (this.recoilUntil - now) / RECOIL_MS;
+      gunZ += 0.055 * k;
+      gunRot += 0.3 * k;
+    }
+    // 수류탄 — 차징 중엔 뒤로 당기고, 투척 시 앞으로 밀기
+    gunZ += 0.14 * (state.chargeFrac ?? 0);
+    gunRot -= 0.35 * (state.chargeFrac ?? 0);
+    if (now < this.throwUntil) {
+      const t = 1 - (this.throwUntil - now) / 240;
+      gunZ -= 0.2 * Math.sin(t * Math.PI);
+      gunRot -= 0.5 * Math.sin(t * Math.PI);
+    }
+    this.gunPoseY += (gunY - this.gunPoseY) * 0.25;
+    this.gunPoseRot += (gunRot - this.gunPoseRot) * 0.35;
 
     // 왼팔 패링 스윙 — 빠르게 올려 가로로 막고(28%), 잠깐 유지(27%), 천천히 내린다.
     // 방어 홀드(C) 중에는 가드 자세를 유지한다
@@ -291,6 +300,15 @@ export class HandModel {
     this.leftArm.rotation.x = REST_LEFT.rotX + (GUARD_LEFT.rotX - REST_LEFT.rotX) * swing;
     this.leftArm.rotation.y = REST_LEFT.rotY + (GUARD_LEFT.rotY - REST_LEFT.rotY) * swing;
     this.leftArm.rotation.z = REST_LEFT.rotZ + (GUARD_LEFT.rotZ - REST_LEFT.rotZ) * swing;
+    // 방패 펼침 — 접힌 상태(0.34)에서 가드 시 전체 크기로
+    const spread = 0.34 + 0.66 * swing;
+    this.bracer.scale.set(1, spread, spread);
+
+    // 사격 자세(반동·장전·차징)는 가드를 올릴수록 옅어진다 — 가드 중엔 못 쏘니까
+    const gunWeight = 1 - swing;
+    this.leftArm.position.y += this.gunPoseY * gunWeight;
+    this.leftArm.position.z += gunZ * gunWeight;
+    this.leftArm.rotation.x += this.gunPoseRot * gunWeight;
     if (bash !== 0) {
       // 가드 자세에서 화면 안쪽으로 밀어치며 방패면이 정면을 향하도록 비튼다
       this.leftArm.position.z -= 0.42 * bash;
@@ -334,12 +352,19 @@ export class HandModel {
 }
 
 // 해머 대기(치켜든) 각도와 내리침 호 크기 (+x 회전 = 무기 끝이 위로)
-const HAMMER_REST_ROT = 1.35; // 헤드가 머리 위
+const HAMMER_REST_ROT = 1.05; // 헤드가 어깨 위 (완전히 세우면 화면 중앙을 가린다)
 const HAMMER_SMASH_ARC = -2.5; // +1.35 → -1.15 (머리 위에서 정면 아래로)
 
 // 포즈 정의 (카메라 로컬 좌표)
-const REST_RIGHT = { pos: new THREE.Vector3(0.16, -0.14, -0.5), rotX: 0.06 };
+// 오른팔 대기: 해머를 오른쪽 어깨 너머로 비껴 든다 (상시 표시라 시야를 최소로 가린다)
+const REST_RIGHT = {
+  pos: new THREE.Vector3(0.38, -0.4, -0.5),
+  rotX: 0.06,
+  rotY: -0.35,
+  rotZ: 0.5,
+};
 // 대기: 화면 왼쪽 아래 밖. 가드: 팔뚝이 화면을 가로로 가로막는다 (rotY로 눕힘, 주먹이 오른쪽)
-const REST_LEFT = { pos: new THREE.Vector3(-0.42, -0.58, -0.5), rotX: 0.35, rotY: -0.15, rotZ: 0.45 };
+// 왼팔 대기: 오른팔을 좌우 반전한 위치에서 총을 들고 있다 (화면 안)
+const REST_LEFT = { pos: new THREE.Vector3(-0.17, -0.15, -0.5), rotX: 0.06, rotY: 0.05, rotZ: 0 };
 // 가드 높이: 조준점(화면 중앙)을 가리지 않도록 하단에 배치 — 시야 확보 피드백
 const GUARD_LEFT = { pos: new THREE.Vector3(0.02, -0.24, -0.44), rotX: 0.12, rotY: -1.3, rotZ: -0.3 };

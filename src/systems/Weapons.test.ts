@@ -359,3 +359,37 @@ describe('피탄 경직', () => {
     expect(enemy.timer).toBe(timerBefore - 1); // 예비동작은 정상 진행
   });
 });
+
+describe('방어 중 손 역할 분담', () => {
+  it('방어 중에는 총을 쏘지 못한다 (왼손이 방패 손)', () => {
+    world.player.blocking = true;
+    const mag0 = world.weapon.mag;
+    fireAt(6, 1.0);
+    expect(world.weapon.mag).toBe(mag0); // 한 발도 안 나갔다
+
+    world.player.blocking = false;
+    fireAt(6, 1.0);
+    expect(world.weapon.mag).toBe(mag0 - 1);
+  });
+
+  it('방어 중에도 해머는 휘두를 수 있다 (오른손은 비어 있다)', () => {
+    const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
+    enemy.health = 1000;
+    world.enemies.push(enemy);
+    world.player.blocking = true;
+    world.weapon.meleeCooldown = 0;
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    expect(enemy.health).toBe(1000 - balance.weapons.hammer.damage);
+  });
+
+  it('방어 중에는 수류탄 차징도 멈춘다', () => {
+    world.weapon.ranged = 'grenade';
+    world.player.blocking = true;
+    world.input = { ...Input.emptySnapshot(), rangedHeld: true, rangedPressed: true };
+    Weapons.tick(world, DT);
+    Weapons.tick(world, DT);
+    expect(world.weapon.grenadeCharge).toBe(0);
+    expect(world.weapon.grenades).toBe(3); // 던져지지도 않았다
+  });
+});
