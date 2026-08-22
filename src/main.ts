@@ -758,6 +758,10 @@ let tpsWindowStart = performance.now();
 let tpsWindowTicks = 0;
 let measuredTps = 0;
 
+const lanternRow = document.getElementById('status-lantern')!;
+const lanternFill = document.getElementById('status-lantern-fill')!;
+const lanternText = document.getElementById('status-lantern-text')!;
+
 function render(alpha: number): void {
   const now = performance.now();
   runDelayedFx(now);
@@ -854,11 +858,13 @@ function render(alpha: number): void {
   const manaFill = document.getElementById('status-mana-fill')!;
   manaFill.style.width = `${manaFrac * 100}%`;
   manaFill.style.background = world.mana.chainIndex > 0 ? '#7fc4ff' : '#4a9eff';
-  // 랜턴 배터리 — HP 바 아래
-  const batt = Math.max(0, Math.round(world.lantern.battery));
-  const battEl = document.getElementById('status-battery')!;
-  battEl.textContent = `랜턴 ${world.lantern.on ? `${batt}%` : 'OFF'}  예비 ${world.lantern.spares}`;
-  battEl.className = batt <= 20 ? 'low' : '';
+  // 랜턴 — HP·마나 바 아래의 얇은 실선 게이지. 오른쪽에 % 와 예비 전지 개수
+  const battFrac = Math.max(0, Math.min(1, world.lantern.battery / balance.lantern.batteryMax));
+  const battPct = Math.round(battFrac * 100);
+  lanternFill.style.width = `${battFrac * 100}%`;
+  lanternText.textContent = `${battPct}% 예비 ${world.lantern.spares}`;
+  lanternRow.className =
+    (battPct <= 20 ? 'low' : '') + (world.lantern.on ? '' : ' off');
   document.getElementById('status-gold')!.textContent = `◆ ${world.gold}   XP ${world.xp}`;
   // 원거리(좌클릭) / 근접(우클릭) 두 슬롯. 원거리는 휠로 교체
   document.getElementById('slot-ranged')!.textContent =

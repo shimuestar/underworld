@@ -19,8 +19,15 @@ export function tick(world: World, _dt: number): void {
   }
 
   if (input.batterySwap && lantern.spares > 0 && lantern.battery < balance.lantern.batteryMax) {
+    // 방전으로 꺼진 랜턴은 교체 즉시 다시 켠다 — 어둠 속에서 F를 또 눌러야 할 이유가 없다.
+    // 직접 끈 경우(배터리가 남아 있는데 off)는 존중해서 그대로 둔다
+    const wasDead = lantern.battery <= 0;
     lantern.spares--;
     lantern.battery = balance.lantern.batteryMax;
+    if (wasDead && !lantern.on) {
+      lantern.on = true;
+      world.events.emit('lantern_toggled', { on: true });
+    }
     world.events.emit('battery_swapped', { spares: lantern.spares });
   }
 
