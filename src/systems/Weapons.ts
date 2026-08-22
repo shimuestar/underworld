@@ -15,6 +15,7 @@ export function tick(world: World, _dt: number): void {
   if (w.muzzleFlash > 0) w.muzzleFlash--;
   if (w.cooldown > 0) w.cooldown--;
   if (w.meleeCooldown > 0) w.meleeCooldown--;
+  if ((w.meleeBufferTicks ?? 0) > 0) w.meleeBufferTicks = (w.meleeBufferTicks ?? 0) - 1;
   // 연속타 유지 시간 — 끊기면 1타부터 다시
   if (w.comboTimer > 0) {
     w.comboTimer--;
@@ -45,14 +46,24 @@ export function tick(world: World, _dt: number): void {
     }
   }
 
-  // 경직/회피 대시 중에는 아무것도 못 한다
-  if (world.player.stunTicks > 0 || world.player.dodgeTicks > 0) return;
+  // 경직/회피 대시 중에는 아무것도 못 한다 (기억해 둔 입력도 버린다)
+  if (world.player.stunTicks > 0 || world.player.dodgeTicks > 0) {
+    w.meleeBufferTicks = 0;
+    return;
+  }
 
-  // 근접 공격(우클릭, 오른손 해머) — 방어 중에도 나간다. 방패는 왼팔이니까
-  if (world.input.meleePressed && w.meleeCooldown <= 0 && w.swingImpact === 0) {
+  // 근접 공격(우클릭, 오른손 해머) — 방어 중에도 나간다. 방패는 왼팔이니까.
+  // 후딜 중에 누른 입력은 버리지 않고 기억했다가 풀리는 즉시 내보낸다 —
+  // 안 그러면 자연스러운 속도로 두 번 클릭했을 때 2타가 통째로 사라진다
+  const wantsMelee = world.input.meleePressed || (w.meleeBufferTicks ?? 0) > 0;
+  if (wantsMelee && w.meleeCooldown <= 0 && w.swingImpact === 0) {
+    w.meleeBufferTicks = 0;
     startHammerSwing(world);
     w.grenadeCharge = 0; // 근접을 섞으면 차징은 끊긴다
     return;
+  }
+  if (world.input.meleePressed) {
+    w.meleeBufferTicks = balance.weapons.hammer.combo.bufferTicks;
   }
 
   // 원거리(좌클릭)는 왼손 = 방패 손이라 방어 중에는 쓸 수 없다
@@ -265,10 +276,15 @@ function resolveHammerHit(world: World, heavy: boolean): void {
 
   // 1·2타는 짧은 후딜로 바로 이어칠 수 있게 하고(연결), 마무리 강타만 크게 쉰다.
   // 헛스윙이면 추가 후딜 — 마구 휘두르기 억제
+  // 헛쳤을 때의 추가 후딜은 마무리 3타에만 크게 붙인다. 1·2타에 그대로 물리면
+  // 후딜이 연결 창보다 길어져 헛친 1타에서 2타가 아예 안 나간다 (실측으로 확인)
   const base = heavy ? hammer.cooldownTicks * combo.cooldownMul : combo.chainCooldownTicks;
-  w.meleeCooldown = Math.round(
-    (hitAny ? base : base + hammer.whiffExtraCooldownTicks) + blockedRecoil,
-  );
+  const whiffExtra = hitAny
+    ? 0
+    : heavy
+      ? hammer.whiffExtraCooldownTicks
+      : combo.chainWhiffExtraTicks;
+  w.meleeCooldown = Math.round(base + whiffExtra + blockedRecoil);
 
   if (heavy) {
     w.comboStep = 0; // 마무리 — 다음은 다시 1타부터

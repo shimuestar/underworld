@@ -155,15 +155,41 @@ describe('해머 (슬롯 1)', () => {
   });
 
   it('헛스윙은 후딜 추가, 명중은 짧은 연결 쿨다운 (1·2타)', () => {
-    const hammer = balance.weapons.hammer;
-    const chain = hammer.combo.chainCooldownTicks;
-    swing(); // 아무도 없음 — 헛스윙
-    expect(world.weapon.meleeCooldown).toBe(chain + hammer.whiffExtraCooldownTicks);
+    const combo = balance.weapons.hammer.combo;
+    const chain = combo.chainCooldownTicks;
+    swing(); // 아무도 없음 — 헛스윙. 1·2타는 연결을 막지 않게 작은 추가 후딜만
+    expect(world.weapon.meleeCooldown).toBe(chain + combo.chainWhiffExtraTicks);
+    // 후딜이 연결 창(windowTicks)보다 짧아야 헛친 1타에서 2타가 나간다
+    expect(chain + combo.chainWhiffExtraTicks).toBeLessThan(chain + combo.windowTicks);
 
     const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
     world.enemies.push(enemy);
     swing(); // 명중 — 바로 다음 타로 이어칠 수 있게 짧다
     expect(world.weapon.meleeCooldown).toBe(chain);
+  });
+
+  it('후딜 중에 누른 근접 입력은 버려지지 않는다 — 풀리는 즉시 이어친다', () => {
+    const combo = balance.weapons.hammer.combo;
+    const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
+    enemy.health = 1000;
+    world.enemies.push(enemy);
+    const swings: { step: number }[] = [];
+    world.events.on('hammer_swing', (payload) => swings.push(payload as { step: number }));
+
+    swing(); // 1타 (impact 까지 진행됨)
+    expect(swings.map((s) => s.step)).toEqual([1]);
+    expect(world.weapon.meleeCooldown).toBeGreaterThan(0);
+
+    // 후딜이 아직 남았는데 누른다 — 예전에는 그냥 사라졌다
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(swings).toHaveLength(1); // 아직 안 나감
+    expect(world.weapon.meleeBufferTicks).toBeGreaterThan(0); // 기억해 뒀다
+
+    // 클릭을 더 하지 않아도 후딜이 풀리는 순간 2타가 나간다
+    for (let i = 0; i < combo.bufferTicks; i++) Weapons.tick(world, DT);
+    expect(swings.map((s) => s.step)).toEqual([1, 2]);
   });
 
   it('처치 시 melee_kill(비처형) → 마나 지급 경로', () => {

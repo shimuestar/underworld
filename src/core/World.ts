@@ -158,6 +158,8 @@ export interface WeaponState {
   grenades: number;
   /** 해머/수류탄 공용 스윙 쿨다운 */
   meleeCooldown: number;
+  /** 후딜 중에 눌린 근접 입력을 기억하는 남은 틱 — 풀리는 즉시 이어 친다 */
+  meleeBufferTicks?: number;
   /** 수류탄 차징 누적 틱 (홀드 중) */
   grenadeCharge: number;
   /** 휘두른 해머가 닿기까지 남은 틱 (0 = 진행 중인 스윙 없음) */

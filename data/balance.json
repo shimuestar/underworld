@@ -131,6 +131,10 @@
       "combo": {
         "_comment": "연속 3타째가 강타. 1·2타는 밀치지 않고 chainFlinchTicks 만큼 굳혀 붙잡아 두고, 마무리 3타에서만 밀어낸다",
         "finisherStep": 3,
+        "_bufferNote": "후딜 중에 누른 근접 입력을 기억하는 틱. 없으면 자연스러운 속도로 두 번 클릭했을 때 두 번째가 통째로 버려져 '연결이 끊긴다'고 느껴진다 (패링의 parryBufferTicks 와 같은 장치)",
+        "bufferTicks": 18,
+        "_whiffNote": "헛친 1·2타는 연결을 막지 않는다 — 큰 추가 후딜은 마무리 3타에만 붙여 마구 휘두르기를 억제한다",
+        "chainWhiffExtraTicks": 6,
         "chainCooldownTicks": 12,
         "heavyImpactTicks": 14,
         "chainFlinchTicks": 14,
