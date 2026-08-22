@@ -135,7 +135,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         const damage = blocked ? def.damage * balance.block.chipDamageRatio : def.damage;
         p.health -= damage;
         if (enemy.parryStreak !== undefined) enemy.parryStreak = 0; // 연속 패링 끊김
-        if (blocked) world.events.emit('block_hit', { amount: damage });
+        if (blocked) world.events.emit('block_hit', { amount: damage, kind: 'melee' });
         world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
         if (p.health <= 0) {
           p.health = 0;

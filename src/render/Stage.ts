@@ -243,6 +243,11 @@ export class Stage {
     this.hands.triggerHammerSwing();
   }
 
+  /** 방어 성공 — 방패 섬광 + 화살이면 방패에 꽂힘 */
+  triggerBlockHit(kind?: string): void {
+    this.hands.triggerBlockHit(kind);
+  }
+
   triggerGrenadeThrow(): void {
     this.hands.triggerGrenadeThrow();
   }

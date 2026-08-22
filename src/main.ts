@@ -278,7 +278,10 @@ events.on('headshot', () => {
   showReaction('헤드샷!', 700);
 });
 
-events.on('block_hit', () => audio.play('block_hit'));
+events.on('block_hit', (payload) => {
+  audio.play('block_hit');
+  stage.triggerBlockHit((payload as { kind?: string }).kind);
+});
 
 // ---- 무기 3종 (1 해머 / 2 수류탄 / 3 권총) ----
 events.on('weapon_switched', (payload) => {

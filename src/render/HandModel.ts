@@ -13,6 +13,9 @@ const BRACER = 0x555c66;
 
 const RECOIL_MS = 130;
 const PARRY_SWING_MS = 340;
+const BLOCK_FLASH_MS = 260; // 방어 성공 섬광 (2회 깜빡임)
+const SHIELD_ARROW_MS = 4000; // 방패에 꽂힌 화살 유지 시간
+const BLOCK_FLASH_COLOR = 0xbfd4ff;
 
 function easeOutCubic(x: number): number {
   return 1 - Math.pow(1 - x, 3);
@@ -56,6 +59,9 @@ export class HandModel {
   private baseRotX = 0;
   private activeWeapon: 'hammer' | 'grenade' | 'pistol' = 'pistol';
   private throwUntil = 0;
+  private blockFlashUntil = 0;
+  private readonly shieldArrows: { group: THREE.Group; until: number }[] = [];
+  private shieldArrowSlot = 0;
   private readonly skinMaterials: THREE.MeshLambertMaterial[] = [];
   private corruptionStage = -1;
 
@@ -122,6 +128,29 @@ export class HandModel {
     bracer.position.set(-0.038, 0.02, 0);
     this.leftArm.add(bracer);
 
+    // 방패에 꽂히는 화살 3슬롯 — 평소엔 숨김, 화살을 막으면 순환 표시.
+    // 가드 자세에서 방패 바깥면(-x)은 카메라 반대쪽이라 그대로 두면 판에 가린다.
+    // tilt(-z 회전)로 샤프트를 위로 세워 방패 위로 솟게 한다.
+    const arrowSpots: [number, number, number][] = [
+      [0.04, -0.06, -0.62], // [높이, 좌우, 기울기]
+      [0.0, 0.02, -0.86],
+      [-0.05, 0.07, -1.04],
+    ];
+    for (const [dy, dz, tilt] of arrowSpots) {
+      const stuck = new THREE.Group();
+      const shaft = box(0.17, 0.016, 0.016, 0x6b5233);
+      shaft.position.set(-0.085, 0, 0); // 꽂힌 지점에서 바깥으로 뻗는다
+      stuck.add(shaft);
+      const fletch = box(0.035, 0.032, 0.007, 0x9b3535);
+      fletch.position.set(-0.155, 0, 0);
+      stuck.add(fletch);
+      stuck.position.set(-0.048, 0.02 + dy, dz);
+      stuck.rotation.z = tilt;
+      stuck.visible = false;
+      this.leftArm.add(stuck);
+      this.shieldArrows.push({ group: stuck, until: 0 });
+    }
+
     this.leftArm.position.copy(REST_LEFT.pos);
     this.leftArm.rotation.set(REST_LEFT.rotX, REST_LEFT.rotY, REST_LEFT.rotZ);
     this.group.add(this.leftArm);
@@ -145,6 +174,18 @@ export class HandModel {
 
   triggerGrenadeThrow(): void {
     this.throwUntil = performance.now() + 240;
+  }
+
+  /** 방어 성공 — 브레이서 섬광, 화살이면 방패에 꽂힌다 */
+  triggerBlockHit(kind?: string): void {
+    const now = performance.now();
+    this.blockFlashUntil = now + BLOCK_FLASH_MS;
+    if (kind === 'arrow') {
+      const slot = this.shieldArrows[this.shieldArrowSlot % this.shieldArrows.length]!;
+      this.shieldArrowSlot++;
+      slot.group.visible = true;
+      slot.until = now + SHIELD_ARROW_MS;
+    }
   }
 
   triggerParry(result: string): void {
@@ -231,6 +272,19 @@ export class HandModel {
       this.bracerMaterial.emissiveIntensity = swing;
     } else {
       this.bracerMaterial.emissive.set(0x000000);
+    }
+
+    // 방어 성공 섬광 — 패링 발광 위에 덮어쓴다. 2회 깜빡이며 잦아든다
+    if (now < this.blockFlashUntil) {
+      const t = 1 - (this.blockFlashUntil - now) / BLOCK_FLASH_MS;
+      const pulse = Math.abs(Math.sin(t * Math.PI * 2)) * (1 - t * 0.35);
+      this.bracerMaterial.emissive.set(BLOCK_FLASH_COLOR);
+      this.bracerMaterial.emissiveIntensity = pulse;
+    }
+
+    // 방패에 꽂힌 화살 — 시간이 지나면 사라진다
+    for (const stuck of this.shieldArrows) {
+      if (stuck.group.visible && now > stuck.until) stuck.group.visible = false;
     }
   }
 }

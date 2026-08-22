@@ -123,12 +123,15 @@ describe('공격 상태 머신 타이밍 (goblin_spear: windup 34t)', () => {
       for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
     };
 
-    // 화살 — 정면 방어 시 무피해
+    // 화살 — 정면 방어 시 무피해, block_hit에 kind가 실린다 (방패 연출용)
     const world = makeWorld();
     world.player.yaw = -Math.PI / 2; // 동쪽을 바라봄
     world.player.blocking = true;
+    const blockHits: unknown[] = [];
+    world.events.on('block_hit', (payload) => blockHits.push(payload));
     fire(world, 'arrow', 10);
     expect(world.player.health).toBe(balance.player.healthMax);
+    expect(blockHits[0]).toMatchObject({ kind: 'arrow' });
 
     // 마법 — 방어해도 칩 데미지는 관통
     const world2 = makeWorld();

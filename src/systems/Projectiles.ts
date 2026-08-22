@@ -175,7 +175,7 @@ function moveProjectiles(world: World, dt: number): void {
             balance.block.chipDamageRatio;
           const damage = blocked ? proj.damage * chipRatio : proj.damage;
           p.health -= damage;
-          if (blocked) world.events.emit('block_hit', { amount: damage });
+          if (blocked) world.events.emit('block_hit', { amount: damage, kind: proj.kind });
           world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
           if (p.health <= 0) {
             p.health = 0;
