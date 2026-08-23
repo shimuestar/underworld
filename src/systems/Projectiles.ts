@@ -95,10 +95,24 @@ function moveProjectiles(world: World, dt: number): void {
     const dirY = stepY / stepLen;
     const dirZ = stepZ / stepLen;
 
-    // 이번 틱 이동 구간의 가장 가까운 충돌 (벽/바닥/천장/표적)
-    let hitT = level.wallRayT(proj.x, proj.z, dirX, dirZ);
-    if (dirY < 0) hitT = Math.min(hitT, (proj.y - 0) / -dirY);
-    else if (dirY > 0) hitT = Math.min(hitT, (level.ceiling - proj.y) / dirY);
+    // 이번 틱 이동 구간의 가장 가까운 충돌 (벽/바닥/천장/표적).
+    // 수류탄은 무엇에 맞았는지로 튕길지 터질지가 갈리므로 종류를 따로 들고 간다
+    const wall = level.wallRayHit(proj.x, proj.z, dirX, dirZ);
+    let hitT = wall.t;
+    let hitSurface: 'wall' | 'floor' | 'ceiling' = 'wall';
+    if (dirY < 0) {
+      const t = proj.y / -dirY;
+      if (t < hitT) {
+        hitT = t;
+        hitSurface = 'floor';
+      }
+    } else if (dirY > 0) {
+      const t = (level.ceiling - proj.y) / dirY;
+      if (t < hitT) {
+        hitT = t;
+        hitSurface = 'ceiling';
+      }
+    }
     let hitEnemy: (typeof world.enemies)[number] | null = null;
     let hitPlayer = false;
 
@@ -158,11 +172,15 @@ function moveProjectiles(world: World, dt: number): void {
     }
 
     if (hitT <= stepLen) {
-      // 수류탄 — 무엇에 닿든 그 자리에서 폭발
+      // 수류탄 — 벽·천장은 튕기고, 바닥에 닿거나 몸에 맞으면 터진다
       if (proj.kind === 'grenade') {
         proj.x += dirX * hitT;
         proj.y += dirY * hitT;
         proj.z += dirZ * hitT;
+        const bodyHit = hitEnemy !== null || hitPlayer;
+        if (!bodyHit && (hitSurface === 'wall' || hitSurface === 'ceiling')) {
+          if (bounceGrenade(world, proj, hitSurface, wall.axis, dirX, dirY, dirZ)) continue;
+        }
         explodeGrenade(world, proj);
         world.projectiles.splice(i, 1);
         continue;
@@ -449,6 +467,48 @@ function implodeBolt(
 }
 
 /** 수류탄 폭발 — 반경 내 전원(플레이어 포함) 거리 감쇠 피해 + 균열 벽 파괴 */
+/** 벽·천장 튕김. 반사에 성공하면 true — 실패(출발점이 이미 벽 안)하면 그 자리에서 터진다.
+ *  충돌 지점에 그대로 두면 다음 틱 DDA 가 벽 셀 안에서 시작해 t=0 으로 다시 맞는다.
+ *  들어온 방향으로 SKIN 만큼 물러선 뒤 반사한다 */
+const BOUNCE_SKIN = 0.06;
+function bounceGrenade(
+  world: World,
+  proj: (typeof world.projectiles)[number],
+  surface: 'wall' | 'ceiling',
+  axis: 'x' | 'z' | null,
+  dirX: number,
+  dirY: number,
+  dirZ: number,
+): boolean {
+  if (surface === 'wall' && axis === null) return false; // 벽 속에서 출발했다
+  const g = balance.weapons.grenade;
+  proj.x -= dirX * BOUNCE_SKIN;
+  proj.y -= dirY * BOUNCE_SKIN;
+  proj.z -= dirZ * BOUNCE_SKIN;
+
+  if (surface === 'ceiling') {
+    proj.vy = -proj.vy * g.bounceRestitution;
+    proj.vx *= g.bounceFriction;
+    proj.vz *= g.bounceFriction;
+  } else if (axis === 'x') {
+    proj.vx = -proj.vx * g.bounceRestitution;
+    proj.vy *= g.bounceFriction;
+    proj.vz *= g.bounceFriction;
+  } else {
+    proj.vz = -proj.vz * g.bounceRestitution;
+    proj.vx *= g.bounceFriction;
+    proj.vy *= g.bounceFriction;
+  }
+
+  world.events.emit('grenade_bounce', {
+    x: proj.x,
+    y: proj.y,
+    z: proj.z,
+    speed: Math.hypot(proj.vx, proj.vy, proj.vz),
+  });
+  return true;
+}
+
 function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]): void {
   const grenade = balance.weapons.grenade;
   world.events.emit('explosion', { x: proj.x, y: proj.y, z: proj.z, radius: grenade.radius });

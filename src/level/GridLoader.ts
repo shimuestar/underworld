@@ -121,7 +121,22 @@ export class Level {
    * 그리드 밖은 벽 취급이므로 반드시 유한한 t를 반환한다.
    */
   wallRayT(ox: number, oz: number, dx: number, dz: number): number {
+    return this.wallRayHit(ox, oz, dx, dz).t;
+  }
+
+  /**
+   * wallRayT 와 같되 부딪힌 면의 축까지 돌려준다. axis 는 "이 축을 넘어가다 벽에
+   * 들어갔다"는 뜻이라 벽의 법선이 그 축을 향한다 ('x' → 법선 ±X). 수류탄 튕김처럼
+   * 반사 방향이 필요한 쪽이 쓴다. 출발점이 이미 벽 안이면 t=0 / axis=null.
+   */
+  wallRayHit(
+    ox: number,
+    oz: number,
+    dx: number,
+    dz: number,
+  ): { t: number; axis: 'x' | 'z' | null } {
     const cs = this.cellSize;
+    let axis: 'x' | 'z' | null = null;
     let col = Math.floor(ox / cs);
     let row = Math.floor(oz / cs);
 
@@ -137,18 +152,20 @@ export class Level {
     let t = 0;
     const maxSteps = this.cols + this.rows + 2;
     for (let i = 0; i <= maxSteps; i++) {
-      if (this.solidAt(col, row)) return t;
+      if (this.solidAt(col, row)) return { t, axis };
       if (tMaxX < tMaxZ) {
         t = tMaxX;
         tMaxX += tDeltaX;
         col += stepCol;
+        axis = 'x';
       } else {
         t = tMaxZ;
         tMaxZ += tDeltaZ;
         row += stepRow;
+        axis = 'z';
       }
     }
-    return t;
+    return { t, axis };
   }
 
   /** (ax,az)에서 (bx,bz)까지 벽에 막히지 않고 보이는가 (XZ 평면) */

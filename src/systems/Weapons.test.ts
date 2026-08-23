@@ -285,6 +285,97 @@ describe('수류탄 (슬롯 2)', () => {
     expect(empty).toHaveLength(1);
   });
 
+  /** 수류탄을 원하는 위치·속도로 직접 놓는다 (투척 각도에 휘둘리지 않게) */
+  function placeGrenade(
+    x: number, y: number, z: number, vx: number, vy: number, vz: number,
+  ): (typeof world.projectiles)[number] {
+    const g = {
+      id: 500, owner: 'player' as const,
+      x, y, z, prevX: x, prevY: y, prevZ: z,
+      vx, vy, vz,
+      lifeTicks: balance.weapons.grenade.fuseTicks,
+      damage: balance.weapons.grenade.damage,
+      burnTicks: 0, burnDamagePerTick: 0, radius: 0.2, kind: 'grenade' as const,
+    };
+    world.projectiles.push(g);
+    return g;
+  }
+  /** 폭발하거나 n틱이 지날 때까지 굴린다 */
+  function roll(ticks: number): { explosions: unknown[]; bounces: unknown[] } {
+    const explosions: unknown[] = [];
+    const bounces: unknown[] = [];
+    world.events.on('explosion', (p) => explosions.push(p));
+    world.events.on('grenade_bounce', (p) => bounces.push(p));
+    for (let i = 0; i < ticks && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    return { explosions, bounces };
+  }
+
+  it('벽에 맞으면 터지지 않고 튕긴다 — 코너에 던져 각을 만들 수 있게', () => {
+    const g = balance.weapons.grenade;
+    // 복도 끝 벽(x=296) 을 향해 수평으로. 바닥에 닿기 전에 벽에 먼저 닿는 거리다
+    const nade = placeGrenade(292, 2, 6, 20, 0, 0);
+    const { explosions, bounces } = roll(20);
+
+    expect(explosions).toHaveLength(0); // 벽은 기폭하지 않는다
+    expect(bounces).toHaveLength(1);
+    expect(world.projectiles).toContain(nade);
+    expect(nade.vx).toBeCloseTo(-20 * g.bounceRestitution, 5); // 법선(X) 방향 반사
+    expect(nade.x).toBeLessThan(296); // 벽에 박히지 않았다
+  });
+
+  it('옆벽도 같은 규칙 — Z 축 벽에서는 Z 속도가 뒤집힌다', () => {
+    const g = balance.weapons.grenade;
+    const nade = placeGrenade(20, 2, 7.5, 0, 0, 12); // 복도 옆벽(z=8)
+    const { explosions, bounces } = roll(20);
+    expect(explosions).toHaveLength(0);
+    expect(bounces).toHaveLength(1);
+    expect(nade.vz).toBeCloseTo(-12 * g.bounceRestitution, 5);
+    expect(nade.vx).toBe(0); // 접선 성분은 마찰만 (0 은 0)
+    expect(nade.z).toBeLessThan(8);
+  });
+
+  it('천장도 튕긴다 — 위로 던져도 공중에서 터지지 않는다', () => {
+    const g = balance.weapons.grenade;
+    const nade = placeGrenade(20, 3.5, 6, 0, 12, 0);
+    const { explosions, bounces } = roll(6);
+    expect(explosions).toHaveLength(0);
+    expect(bounces).toHaveLength(1);
+    expect(nade.vy).toBeLessThan(0); // 아래로 꺾였다
+    // 반사 직후 속도는 충돌 순간의 vy(중력에 이미 깎였다) × restitution 이라
+    // 정확한 값 대신 "던진 속도보다 확실히 느리다" 로 잠근다
+    expect(Math.abs(nade.vy)).toBeLessThan(12 * g.bounceRestitution + 1);
+    expect(Math.abs(nade.vy)).toBeGreaterThan(1);
+  });
+
+  it('바닥에 닿으면 그 자리에서 터진다', () => {
+    const nade = placeGrenade(20, 1, 6, 0, -10, 0);
+    const { explosions, bounces } = roll(30);
+    expect(bounces).toHaveLength(0);
+    expect(explosions).toHaveLength(1);
+    expect(explosions[0]).toMatchObject({ y: expect.any(Number) });
+    expect((explosions[0] as { y: number }).y).toBeCloseTo(0, 1);
+    expect(world.projectiles).not.toContain(nade);
+  });
+
+  it('적에게 직격하면 튕기지 않고 터진다', () => {
+    const enemy = spawnEnemyAt('goblin_runner', 30, 6, 1);
+    enemy.health = 1000;
+    world.enemies.push(enemy);
+    placeGrenade(24, 1.2, 6, 26, 0, 0);
+    const { explosions, bounces } = roll(20);
+    expect(bounces).toHaveLength(0);
+    expect(explosions).toHaveLength(1);
+    expect(enemy.health).toBeLessThan(1000);
+  });
+
+  it('여러 번 튕겨도 벽에 갇히지 않는다 — 결국 바닥에서 터진다', () => {
+    placeGrenade(293, 2.5, 7.5, 18, 0, 9); // 끝벽·옆벽을 함께 노린다
+    const { explosions, bounces } = roll(balance.weapons.grenade.fuseTicks + 5);
+    expect(bounces.length).toBeGreaterThanOrEqual(2);
+    expect(explosions).toHaveLength(1); // 벽 사이에 낀 채 신관만 돌지 않는다
+    expect(world.projectiles).toHaveLength(0);
+  });
+
   it('폭발 — 반경 내 적 피해(거리 감쇠), 신관 만료 시에도 폭발', () => {
     const grenade = balance.weapons.grenade;
     const near = spawnEnemyAt('goblin_runner', 6 + 10, 6, 1);

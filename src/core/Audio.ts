@@ -55,6 +55,7 @@ export type SoundName =
   | 'melee_hit'
   | 'grenade_throw'
   | 'explosion'
+  | 'grenade_bounce'
   | 'implode'
   | 'shop_buy'
   | 'shop_deny'
@@ -237,6 +238,11 @@ export class GameAudio {
         break;
       case 'grenade_throw':
         this.noise(0.12, 0.35, 1200);
+        break;
+      case 'grenade_bounce':
+        // 벽에 튕긴 쇳덩이 — 짧고 마른 딸깍. 폭발과 헷갈리면 안 되므로 아주 가볍게
+        this.tone(430, 0.05, 'square', 0.22, 0, 300);
+        this.noise(0.04, 0.18, 2600);
         break;
       case 'explosion':
         // 폭발 — 깊은 붐 + 파열

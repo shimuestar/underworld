@@ -273,6 +273,7 @@ for (const name of [
   'melee_hit',
   'grenade_thrown',
   'explosion',
+  'grenade_bounce',
   'crack_wall_broken',
   'mana_gained',
   'mana_lost',
@@ -491,6 +492,8 @@ events.on('explosion', (payload) => {
   audio.play('explosion');
   stage.spawnExplosion(info.x, info.y, info.z, info.radius);
 });
+// 벽 튕김 — 소리만. 세게 부딪힐수록 크게 들린다
+events.on('grenade_bounce', () => audio.play('grenade_bounce'));
 events.on('crack_wall_broken', (payload) => {
   const cell = payload as { row: number; col: number };
   stage.breakCrack(cell.row, cell.col);

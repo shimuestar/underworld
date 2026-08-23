@@ -215,6 +215,9 @@
       "maxChargeTicks": 60,
       "throwUpBias": 4.5,
       "gravity": 22.0,
+  "_bounceNote": "벽·천장에 맞으면 튕긴다 — 코너에 던져 각을 만들어 넘기라고. 터지는 것은 바닥에 닿았을 때(와 신관 만료·직격). restitution 은 법선 방향 반사 속도, friction 은 벽을 스치는 접선 속도. 너무 잘 튀면(0.8+) 던진 사람에게 돌아온다",
+  "bounceRestitution": 0.5,
+  "bounceFriction": 0.82,
       "damageFalloffMin": 0.25,
       "cooldownTicks": 45,
       "noiseRadius": 20.0
