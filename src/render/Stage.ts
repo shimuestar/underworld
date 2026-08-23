@@ -151,6 +151,7 @@ const AOE_RING_COLOR = 0xff5a3c;
 const AOE_RING_INNER = 0.9;
 
 const SHIELD_COLOR = 0x6f7480;
+const SHIELD_CRACKED_COLOR = 0x4a4238; // 반파 — 그을리고 쪼개진 판
 const SHIELD_BASE_X = -0.08;
 /** 가드가 풀렸을 때 방패 — 팔이 옆으로 툭 늘어진 그림 (낮게 + 옆으로 + 뉘어서) */
 const SHIELD_DOWN_Y = 0.16;
@@ -1177,7 +1178,7 @@ export class Stage {
       visual.shield.position.set(SHIELD_BASE_X, def.height * 0.5, visual.shieldBaseZ);
       group.add(visual.shield);
 
-      // 균열 — 마무리 타를 한 번 받아내면 드러난다. 방패면(-z) 바깥쪽에 얇게 붙인다
+      // 균열 — 반파(hammerHitsToCrack 대)부터 드러난다. 방패면(-z) 바깥쪽에 얇게 붙인다
       const crackMat = new THREE.MeshBasicMaterial({ color: 0x14161a });
       const w = def.radius * 1.6;
       const h = def.height * 0.72;
@@ -1547,8 +1548,11 @@ export class Stage {
 
       // 방패 — 피격 시 흰 번쩍. 스태거·밀림 중엔 팔이 내려가 가드가 풀린다.
       // 내리는 조건은 Entities.shieldBlocks 와 같아야 한다 (보이는 것 = 막히는 것)
-      if (visual.shieldCracks) visual.shieldCracks.visible = (enemy.shieldHits ?? 0) > 0;
+      // 반파 — 3대째부터 금이 드러나고 판이 그을린다. 6대째에 부서진다
+      const halfBroken = (enemy.shieldHits ?? 0) >= balance.shieldBreak.hammerHitsToCrack;
+      if (visual.shieldCracks) visual.shieldCracks.visible = halfBroken;
       if (visual.shield && visual.shieldMaterial) {
+        visual.shieldMaterial.color.set(halfBroken ? SHIELD_CRACKED_COLOR : SHIELD_COLOR);
         visual.shieldMaterial.emissive.set(now < visual.shieldFlashUntil ? 0xffffff : 0x000000);
         const def = enemyDef(enemy.type);
         const shoved = (enemy.kbTicks ?? 0) > 0;

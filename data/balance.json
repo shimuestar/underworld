@@ -112,9 +112,10 @@
     "hammerHitsToBreak": 6
   },
   "shieldBreak": {
-    "_comment": "정면 방패 파괴. 화염구는 한 번에, 해머는 마무리 3타를 finisherHitsToBreak 번 맞혀야 부서진다",
+    "_comment": "정면 방패 파괴. 화염구·수류탄 폭풍은 한 번에. 해머는 1·2·3타를 가리지 않고 hammerHitsToCrack 대에 반파(금이 드러난다), hammerHitsToBreak 대에 완파 — 즉 6대다",
     "damageRatio": 0.5,
-    "finisherHitsToBreak": 2,
+    "hammerHitsToCrack": 3,
+    "hammerHitsToBreak": 6,
     "braceTicks": 40,
     "_knockbackNote": "마무리 3타를 방패로 받아내면 크게 밀려난다 — 밀리지 않으면 제자리에서 무한 연타가 된다",
     "finisherKnockback": 5.2,

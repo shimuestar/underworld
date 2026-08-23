@@ -1050,24 +1050,38 @@ describe('방패병 vs 해머', () => {
     expect(world.player.health).toBe(balance.player.healthMax); // 반격도 없다
   });
 
-  it('마무리 3타 2번이면 방패가 부서지고, 첫 번째엔 금만 간다', () => {
+  it('해머 3대에 반파, 6대에 완파 — 1·2·3타를 가리지 않는다', () => {
     const enemy = shieldman();
-    const cracked: unknown[] = [];
+    const cracked: { hits: number; remaining: number; half: boolean }[] = [];
     const broken: unknown[] = [];
-    world.events.on('shield_cracked', (payload) => cracked.push(payload));
-    world.events.on('shield_broken', (payload) => broken.push(payload));
+    world.events.on('shield_cracked', (p) => cracked.push(p as (typeof cracked)[number]));
+    world.events.on('shield_broken', (p) => broken.push(p));
 
-    for (let n = 0; n < sb.finisherHitsToBreak; n++) {
+    for (let n = 1; n < sb.hammerHitsToBreak; n++) {
       swingOnce();
-      swingOnce();
-      swingOnce(); // 3타 = 마무리
-      for (let i = 0; i < hammer.combo.windowTicks + 20; i++) Weapons.tick(world, DT);
+      expect(enemy.shieldHits).toBe(n);
+      expect(enemy.shieldBroken).not.toBe(true);
+      expect(broken).toHaveLength(0);
     }
-    expect(enemy.shieldHits).toBe(sb.finisherHitsToBreak);
-    expect(cracked).toHaveLength(sb.finisherHitsToBreak - 1);
-    expect(broken).toHaveLength(1);
+    swingOnce(); // 6대째
+    expect(enemy.shieldHits).toBe(sb.hammerHitsToBreak);
     expect(enemy.shieldBroken).toBe(true);
+    expect(broken).toHaveLength(1);
+
+    // 매 대마다 남은 횟수를 알려 주고, 반파 시점만 half 로 표시한다
+    expect(cracked.map((c) => c.remaining)).toEqual([5, 4, 3, 2, 1]);
+    expect(cracked.filter((c) => c.half).map((c) => c.hits)).toEqual([sb.hammerHitsToCrack]);
     expect(enemy.health).toBe(110); // 방패가 버티는 동안은 HP 무손실
+  });
+
+  it('밀쳐내기로 끊긴 스윙도 방패를 깎는다 — 6대 규칙이 어긋나지 않게', () => {
+    const enemy = shieldman();
+    const bashes: unknown[] = [];
+    world.events.on('shield_bash_start', (p) => bashes.push(p));
+    // bashAfterBlocks 를 넘겨 밀쳐내기를 유발한다 (그 스윙은 아래 분기에서 잘린다)
+    for (let n = 0; n < sb.bashAfterBlocks; n++) swingOnce();
+    expect(enemy.wantsBash).toBe(true);
+    expect(enemy.shieldHits).toBe(sb.bashAfterBlocks); // 끊긴 스윙도 셌다
   });
 
   it('연타를 멈추지 않으면 방패로 밀쳐낸다 (bashAfterBlocks)', () => {

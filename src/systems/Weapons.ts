@@ -209,12 +209,33 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
 
     // 정면 방패 — 해머는 피해를 주지 못하고 방패에 막힌다. 대신 방패병은 웅크려
-    // 버티느라 아무 행동도 못 하고, 마무리 3타만 방패를 깎는다
+    // 버티느라 아무 행동도 못 하고, 방패는 맞은 만큼 깎인다 (3대 반파 → 6대 완파)
     if (shieldBlocks(def, enemy, p.x, p.z)) {
       const sb = balance.shieldBreak;
       if (enemy.ai === 'idle') enemy.ai = 'chase';
 
       blockedRecoil += sb.blockedRecoilTicks; // 아래 후딜 계산에 더한다 (여기서 대입하면 덮어써진다)
+
+      // 1·2·3타를 가리지 않고 한 대씩 깎는다. 밀쳐내기로 끊긴 스윙도 세야
+      // "6대면 부서진다"가 어긋나지 않는다 — 그래서 아래 분기들보다 먼저 센다
+      enemy.shieldHits = (enemy.shieldHits ?? 0) + 1;
+      if (enemy.shieldHits >= sb.hammerHitsToBreak) {
+        enemy.shieldBroken = true;
+        world.events.emit('shield_broken', {
+          enemyId: enemy.id,
+          enemyType: enemy.type,
+          x: enemy.x,
+          z: enemy.z,
+        });
+      } else {
+        world.events.emit('shield_cracked', {
+          enemyId: enemy.id,
+          hits: enemy.shieldHits,
+          remaining: sb.hammerHitsToBreak - enemy.shieldHits,
+          // 반파에 막 들어선 그 한 대 — 금이 드러나는 순간이다
+          half: enemy.shieldHits === sb.hammerHitsToCrack,
+        });
+      }
 
       // 연타를 멈추지 않으면 방패로 밀쳐낸다 — 얼굴에 붙어 무한히 때리지 못하게
       // 마무리 타도 막아낸 것으로 센다 — 콤보를 이어 붙이면 결국 밀쳐낸다
@@ -238,23 +259,6 @@ function resolveHammerHit(world: World, heavy: boolean): void {
         enemy.kbTicks = kbTicks;
         enemy.kbX = (toX / dist) * (sb.finisherKnockback / kbTicks);
         enemy.kbZ = (toZ / dist) * (sb.finisherKnockback / kbTicks);
-
-        enemy.shieldHits = (enemy.shieldHits ?? 0) + 1;
-        if (enemy.shieldHits >= sb.finisherHitsToBreak) {
-          enemy.shieldBroken = true;
-          world.events.emit('shield_broken', {
-            enemyId: enemy.id,
-            enemyType: enemy.type,
-            x: enemy.x,
-            z: enemy.z,
-          });
-        } else {
-          world.events.emit('shield_cracked', {
-            enemyId: enemy.id,
-            hits: enemy.shieldHits,
-            remaining: sb.finisherHitsToBreak - enemy.shieldHits,
-          });
-        }
       } else {
         world.events.emit('shield_braced', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
       }

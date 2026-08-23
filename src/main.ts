@@ -666,11 +666,14 @@ events.on('shield_bash_start', () => {
   showReaction('방패로 밀쳐낸다!', 900);
 });
 events.on('shield_cracked', (payload) => {
-  const info = payload as { enemyId: number; remaining: number };
+  const info = payload as { enemyId: number; remaining: number; half: boolean };
   audio.play('shield_crack');
   stage.flashEnemyHit(info.enemyId);
-  stage.triggerCameraKick(0.6, 180);
-  showReaction(`방패에 금이 갔다 — 한 번 더!`, 1200);
+  stage.triggerCameraKick(info.half ? 0.75 : 0.45, 180);
+  showReaction(
+    info.half ? '방패 반파 — 금이 갈라졌다!' : `방패를 깎았다 — ${info.remaining}대 더`,
+    info.half ? 1400 : 900,
+  );
 });
 // 경직 중 3타 마무리 — 크게 날린다. 무게가 실린 소리와 카메라 킥으로 알린다
 events.on('stagger_fling', () => {
