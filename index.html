@@ -100,6 +100,35 @@
       #altar-prompt.visible {
         display: block;
       }
+      /* 각인 획득 — 화면 가운데 위쪽에 잠깐 뜬다. 각인 색을 그대로 입혀
+         "바닥에서 본 그 색"과 이어지게 한다 */
+      #sigil-toast {
+        position: fixed;
+        top: 26%;
+        left: 50%;
+        transform: translate(-50%, -8px);
+        display: none;
+        text-align: center;
+        font: 15px/1.6 monospace;
+        pointer-events: none;
+        user-select: none;
+        opacity: 0;
+        transition: opacity 180ms linear, transform 180ms ease-out;
+      }
+      #sigil-toast.visible {
+        display: block;
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+      #sigil-toast .name {
+        font-size: 22px;
+        font-weight: bold;
+        letter-spacing: 1px;
+      }
+      #sigil-toast .sub {
+        color: #cfd6df;
+        margin-top: 2px;
+      }
       /* 하단 중앙 상태 표시 — HP + 무기 슬롯 */
       #status {
         position: fixed;
@@ -293,6 +322,7 @@
       <div class="hint">클릭하면 계속 · ESC로 다시 멈춤</div>
     </div>
     <div id="altar-prompt"></div>
+    <div id="sigil-toast"><div class="name"></div><div class="sub"></div></div>
     <div id="web-overlay"></div>
     <div id="status">
       <div id="status-bars">

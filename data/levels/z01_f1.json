@@ -459,7 +459,7 @@
     { "type": "barrel", "cell": [15, 22], "note": "하층 대방 입구" },
     { "type": "barrel", "cell": [6, 25], "note": "동쪽 세로 복도 — 궁수 사선" },
     { "type": "chest", "cell": [1, 24], "note": "초입 오른쪽 방 구석" },
-    { "type": "chest", "cell": [5, 2], "note": "서쪽 세로 복도 끝 — 레버 가는 길" },
+    { "type": "chest", "cell": [18, 24], "note": "보스 방 탈출구 옆 구석 — 족장을 잡고 나가는 길에 챙긴다" },
     { "type": "chest", "cell": [17, 8], "note": "균열 벽(C) 뒤 막다른 방 — 수류탄으로 뚫어야 나온다" }
   ],
   "triggers": [

@@ -594,6 +594,7 @@ events.on('parry_attempt', (payload) => {
 // ---- HUD 반응 결과 표시 ----
 let reactionLabel = '';
 let reactionLabelUntil = 0;
+const SIGIL_TOAST_MS = 2800;
 function showReaction(text: string, durationMs = 1000): void {
   reactionLabel = text;
   reactionLabelUntil = performance.now() + durationMs;
@@ -683,9 +684,32 @@ events.on('shield_broken', (payload) => {
   stage.shatterShield(info.enemyId);
   showReaction('방패 파괴!', 1200);
 });
+// 각인 획득 — 화면 가운데에 각인 색으로 크게 띄운다.
+// 이 시점은 아직 attach 전이라, 슬롯이 비어 있으면 곧 몸에 새겨진다는 뜻이다
+const sigilToast = document.getElementById('sigil-toast')!;
+const sigilToastName = sigilToast.querySelector('.name') as HTMLElement;
+const sigilToastSub = sigilToast.querySelector('.sub') as HTMLElement;
+let sigilToastUntil = 0;
+const SLOT_NAMES: Record<string, string> = {
+  eye: '눈',
+  rightArm: '오른팔',
+  leftArm: '왼팔',
+  heart: '심장',
+  spine: '척추',
+};
 events.on('sigil_acquired', (payload) => {
   const id = (payload as { id: string }).id;
-  showReaction(`각인 각인됨: ${sigilDef(id).name}`, 2500);
+  const def = sigilDef(id);
+  const willAttach = world.sigils.equipped[def.slot] === null;
+  const slot = SLOT_NAMES[def.slot] ?? def.slot;
+  sigilToastName.textContent = `✦ ${def.name}`;
+  sigilToastName.style.color = def.color;
+  sigilToastName.style.textShadow = `0 0 12px ${def.color}`;
+  sigilToastSub.textContent = willAttach
+    ? `${slot}에 새겨졌다`
+    : `${slot} 슬롯이 차 있다 — Tab 에서 교체`;
+  sigilToast.classList.add('visible');
+  sigilToastUntil = performance.now() + SIGIL_TOAST_MS;
 });
 
 events.on('player_died', () => {
@@ -1150,6 +1174,10 @@ function render(alpha: number): void {
   const w = world.weapon;
   const aliveCount = world.enemies.filter((e) => e.alive).length;
   if (performance.now() > reactionLabelUntil) reactionLabel = '';
+  if (sigilToastUntil > 0 && performance.now() > sigilToastUntil) {
+    sigilToast.classList.remove('visible');
+    sigilToastUntil = 0;
+  }
 
   // 보스 체력 바 (어그로 상태일 때만) — 칸(×N)마다 색이 다르다
   const boss = world.enemies.find((e) => e.alive && enemyDef(e.type).boss && e.ai !== 'idle');
