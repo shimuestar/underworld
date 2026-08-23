@@ -216,6 +216,10 @@ export interface EnemyState {
   volleyCooldown?: number;
   /** 거리 조건으로 나가는 돌격의 재사용 대기 (족장) */
   chargeCooldown?: number;
+  /** 돌격이 겨눈 지점 — 예고가 끝나는 순간의 플레이어 좌표로 고정한다.
+   *  달리는 동안 추적하면 이동으로 피할 수가 없다 */
+  chargeTargetX?: number;
+  chargeTargetZ?: number;
   /** 방패로 밀쳐낼 차례 (Weapons가 켜고 Enemies가 실행한다) */
   wantsBash?: boolean;
   /** 연속으로 방패에 막아낸 횟수 — 임계를 넘으면 밀쳐낸다 */

@@ -320,6 +320,47 @@ describe('goblin_chieftain 원거리 공격', () => {
     expect(ch.aoeRadius!).toBeGreaterThan(def.attackRange);
   });
 
+  it('돌격은 예고가 끝난 순간의 좌표로만 달린다 — 옆으로 비키면 헛친다', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + 11, 6, 1);
+    boss.ai = 'chase';
+    world.enemies.push(boss);
+
+    tickEnemiesUntil(() => boss.ai === 'charging', 300);
+    const lockX = boss.chargeTargetX!;
+    const lockZ = boss.chargeTargetZ!;
+    expect(lockX).toBeCloseTo(world.player.x, 5); // 발동 순간의 플레이어 자리
+    expect(lockZ).toBeCloseTo(world.player.z, 5);
+
+    // 플레이어가 옆으로 크게 비킨다
+    world.player.z += 7;
+    const hits: unknown[] = [];
+    world.events.on('player_damaged', (p) => hits.push(p));
+
+    tickEnemiesUntil(() => boss.ai === 'recover', 400);
+    // 목표는 그대로 — 따라오지 않았다
+    expect(boss.chargeTargetX).toBe(lockX);
+    expect(boss.chargeTargetZ).toBe(lockZ);
+    expect(Math.hypot(boss.x - lockX, boss.z - lockZ)).toBeLessThan(1.5); // 찍어둔 자리로 갔다
+    expect(hits).toHaveLength(0); // 비킨 플레이어는 안 맞는다
+    expect(boss.whiffed).toBe(true);
+    expect(boss.timer).toBeGreaterThanOrEqual(
+      enemyDef('goblin_chieftain').chargeAttack!.whiffRecoverTicks!,
+    );
+  });
+
+  it('가만히 서 있으면 돌격이 그대로 꽂힌다', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + 11, 6, 1);
+    boss.ai = 'chase';
+    world.enemies.push(boss);
+    const hits: { amount: number }[] = [];
+    world.events.on('player_damaged', (p) => hits.push(p as { amount: number }));
+
+    tickEnemiesUntil(() => boss.ai === 'charging', 300);
+    tickEnemiesUntil(() => boss.ai === 'recover', 400);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.amount).toBe(enemyDef('goblin_chieftain').damage);
+  });
+
   it('돌격은 방패로 막아도 크게 튕겨 나가고 피해도 들어온다', () => {
     const ch = enemyDef('goblin_chieftain').chargeAttack!;
     const def = enemyDef('goblin_chieftain');

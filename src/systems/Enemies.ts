@@ -271,9 +271,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         enemy.ai = 'recover';
         enemy.timer = attack.recoverTicks;
       } else if (attack.chargeRunTicks) {
-        // 돌격 — 타격 전에 따로 달리는 구간. 붙거나 시간이 다하면 내리친다
+        // 돌격 — 타격 전에 따로 달리는 구간.
+        // 겨냥은 여기서 한 번만 한다: 예고가 끝나는 순간의 플레이어 자리로 고정.
+        // 달리면서 추적하면 옆으로 비켜도 따라와 회피가 성립하지 않는다
         enemy.ai = 'charging';
         enemy.timer = attack.chargeRunTicks;
+        enemy.chargeTargetX = p.x;
+        enemy.chargeTargetZ = p.z;
       } else if (attack.parryable) {
         enemy.ai = 'active_perfect';
         enemy.timer = balance.reaction.windowPerfectTicks;
@@ -309,11 +313,18 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     // 이 구간은 패링 대상이 아니다 (판정은 붙은 뒤 타격 창에서 열린다)
     case 'charging': {
       enemy.timer--;
-      if (dist > 0) {
-        enemy.yaw = Math.atan2(-distX, -distZ);
-        moveAvoiding(world, enemy, def, distX / dist, distZ / dist, attack.chargeSpeed! * dt);
+      // 고정된 목표 지점으로만 달린다 (플레이어를 다시 보지 않는다)
+      const tx = enemy.chargeTargetX ?? p.x;
+      const tz = enemy.chargeTargetZ ?? p.z;
+      const tdx = tx - enemy.x;
+      const tdz = tz - enemy.z;
+      const tdist = Math.hypot(tdx, tdz);
+      if (tdist > 0.01) {
+        enemy.yaw = Math.atan2(-tdx, -tdz);
+        moveAvoiding(world, enemy, def, tdx / tdist, tdz / tdist, attack.chargeSpeed! * dt);
       }
-      if (dist <= def.attackRange || enemy.timer <= 0) {
+      // 겨눈 자리에 닿았거나(몸 반경), 플레이어가 그대로 서 있어 이미 사거리거나, 시간이 다하면 친다
+      if (tdist <= def.radius || dist <= def.attackRange || enemy.timer <= 0) {
         if (attack.parryable) {
           enemy.ai = 'active_perfect';
           enemy.timer = balance.reaction.windowPerfectTicks;
@@ -622,6 +633,9 @@ function chargeForward(
   dt: number,
 ): void {
   if (!attack.chargeSpeed || dist <= 0) return;
+  // 달리기 구간(charging)이 따로 있는 돌격은 거기서 이미 좁혔다. 타격 창에서까지
+  // 플레이어를 향해 움직이면 고정 좌표로 달린 의미가 없어진다 — 비켜도 따라온다
+  if (attack.chargeRunTicks !== undefined) return;
   if (dist <= def.attackRange) return; // 이미 닿는 거리 — 더 파고들지 않는다
   enemy.yaw = Math.atan2(-distX, -distZ); // 달려드는 동안은 방향을 갱신한다
   moveAvoiding(world, enemy, def, distX / dist, distZ / dist, attack.chargeSpeed * dt);
