@@ -335,6 +335,94 @@ describe('goblin_chieftain (1구역 보스)', () => {
   });
 });
 
+describe('날아오는 바위 깨기', () => {
+  /** 플레이어(6,6) 쪽으로 날아오는 바위 하나 */
+  function throwRock(): (typeof world.projectiles)[number] {
+    const rock = enemyDef('goblin_chieftain').rangedAttack!;
+    const proj = {
+      id: 1, owner: 'enemy' as const,
+      x: 16, y: 1.2, z: 6, prevX: 16, prevY: 1.2, prevZ: 6,
+      vx: -(rock.projectileSpeed ?? 18), vy: 0, vz: 0,
+      lifeTicks: 240, damage: 30, burnTicks: 0, burnDamagePerTick: 0,
+      radius: rock.projectileRadius ?? 0.45,
+      kind: 'rock' as const,
+      deflectable: false,
+      breakable: rock.breakable,
+    };
+    world.projectiles.push(proj);
+    return proj;
+  }
+
+  /** 바위 쪽으로 날아가는 플레이어 화염구 */
+  function castFireball(): (typeof world.projectiles)[number] {
+    const proj = {
+      id: 2, owner: 'player' as const,
+      x: 6, y: 1.2, z: 6, prevX: 6, prevY: 1.2, prevZ: 6,
+      vx: 26, vy: 0, vz: 0,
+      lifeTicks: 120, damage: 45, burnTicks: 0, burnDamagePerTick: 0,
+      radius: 0.35, kind: 'fireball' as const,
+    };
+    world.projectiles.push(proj);
+    return proj;
+  }
+
+  it('바위는 반사는 안 되지만 부술 수는 있다', () => {
+    const rock = enemyDef('goblin_chieftain').rangedAttack!;
+    expect(rock.deflectable).toBe(false);
+    expect(rock.breakable).toBe(true);
+  });
+
+  it('화염구로 공중에서 깬다 — 둘 다 사라진다', () => {
+    const rock = throwRock();
+    const fire = castFireball();
+    const broken: { kind?: string }[] = [];
+    world.events.on('projectile_broken', (p) => broken.push(p as { kind?: string }));
+
+    for (let i = 0; i < 40 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(broken).toHaveLength(1);
+    expect(broken[0]!.kind).toBe('rock');
+    expect(world.projectiles).not.toContain(rock);
+    expect(world.projectiles).not.toContain(fire);
+    expect(world.player.health).toBe(100); // 바위가 오지 않았다
+  });
+
+  it('깨지 않으면 그대로 맞는다 — 대조군', () => {
+    throwRock();
+    for (let i = 0; i < 60 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(world.player.health).toBeLessThan(100);
+  });
+
+  it('부술 수 없는 투사체(화살)는 통과한다', () => {
+    const arrow = {
+      id: 3, owner: 'enemy' as const,
+      x: 16, y: 1.2, z: 6, prevX: 16, prevY: 1.2, prevZ: 6,
+      vx: -26, vy: 0, vz: 0,
+      lifeTicks: 240, damage: 12, burnTicks: 0, burnDamagePerTick: 0,
+      radius: 0.15, kind: 'arrow' as const,
+    };
+    world.projectiles.push(arrow);
+    castFireball();
+    const broken: unknown[] = [];
+    world.events.on('projectile_broken', (p) => broken.push(p));
+    for (let i = 0; i < 40 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(broken).toHaveLength(0);
+    expect(world.player.health).toBeLessThan(100); // 화살은 그대로 왔다
+  });
+
+  it('적 투사체끼리는 서로 부수지 않는다', () => {
+    throwRock();
+    world.projectiles.push({
+      id: 4, owner: 'enemy', x: 6, y: 1.2, z: 6, prevX: 6, prevY: 1.2, prevZ: 6,
+      vx: 26, vy: 0, vz: 0, lifeTicks: 120, damage: 10,
+      burnTicks: 0, burnDamagePerTick: 0, radius: 0.3, kind: 'magic', casterId: 99,
+    });
+    const broken: unknown[] = [];
+    world.events.on('projectile_broken', (p) => broken.push(p));
+    for (let i = 0; i < 20; i++) Projectiles.tick(world, DT);
+    expect(broken).toHaveLength(0);
+  });
+});
+
 describe('보스 체력 2칸', () => {
   it('총량을 healthBars 로 나눠 표시한다 — 첫 칸을 다 깎아야 ×1 로 넘어간다', () => {
     const def = enemyDef('goblin_chieftain');

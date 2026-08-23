@@ -11,6 +11,7 @@ import {
   playerBlocks,
   pushPlayer,
   type BarrelState,
+  type ProjectileState,
   type World,
 } from '../core/World';
 
@@ -145,6 +146,29 @@ function moveProjectiles(world: World, dt: number): void {
       }
     }
 
+    // 부술 수 있는 적 투사체 — 화염구·수류탄이 공중에서 맞히면 함께 사라진다.
+    // 히트스캔인 총알은 이 경로를 타지 않는다 (Weapons 는 투사체를 만들지 않는다)
+    let hitProjectile: ProjectileState | null = null;
+    if (proj.owner === 'player') {
+      for (const other of world.projectiles) {
+        if (other === proj || other.owner !== 'enemy' || !other.breakable) continue;
+        const pad = proj.radius + other.radius;
+        const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
+          minX: other.x - pad,
+          minY: other.y - pad,
+          minZ: other.z - pad,
+          maxX: other.x + pad,
+          maxY: other.y + pad,
+          maxZ: other.z + pad,
+        });
+        if (t !== null && t < hitT) {
+          hitT = t;
+          hitProjectile = other;
+          hitBarrelTarget = null; // 돌이 통보다 앞이다
+        }
+      }
+    }
+
     if (proj.owner === 'player') {
       for (const enemy of world.enemies) {
         if (!enemy.alive) continue;
@@ -162,6 +186,7 @@ function moveProjectiles(world: World, dt: number): void {
           hitT = t;
           hitEnemy = enemy;
           hitBarrelTarget = null; // 적이 통보다 앞이다
+          hitProjectile = null;
         }
       }
     } else {
@@ -229,11 +254,21 @@ function moveProjectiles(world: World, dt: number): void {
       }
 
       // 착탄
+      if (hitProjectile) {
+        world.events.emit('projectile_broken', {
+          x: hitProjectile.x,
+          y: hitProjectile.y,
+          z: hitProjectile.z,
+          kind: hitProjectile.kind,
+          radius: hitProjectile.radius,
+        });
+      }
       world.events.emit('spell_impact', {
         x: proj.x + dirX * hitT,
         y: proj.y + dirY * hitT,
         z: proj.z + dirZ * hitT,
-        hitEnemy: hitEnemy !== null || hitPlayer,
+        // 허공이 아니라 무언가에 닿았다 — 착탄 연출이 붙어야 한다
+        hitEnemy: hitEnemy !== null || hitPlayer || hitProjectile !== null,
       });
 
       // 화살은 벽·바닥에 꽂힌 채 남는다 (렌더 전용 잔존물)
@@ -315,6 +350,14 @@ function moveProjectiles(world: World, dt: number): void {
         applyProjectileHit(world, proj, hitEnemy, shieldedAtImpact);
       }
       world.projectiles.splice(i, 1);
+      if (hitProjectile) {
+        // 자기 자신을 먼저 지운 뒤 상대를 지운다 — 인덱스로 지우면 서로 밀린다
+        const j = world.projectiles.indexOf(hitProjectile);
+        if (j >= 0) world.projectiles.splice(j, 1);
+        // 아래쪽 원소가 빠지면 남은 인덱스가 당겨진다. 다음 회차가 배열 밖을
+        // 가리키지 않게 맞춰 준다 (건너뛰거나 두 번 도는 것도 함께 막힌다)
+        i = Math.min(i, world.projectiles.length);
+      }
       continue;
     }
 

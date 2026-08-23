@@ -341,7 +341,8 @@ const BARREL_BAND_COLOR = 0x8a3b2a;
 const BARREL_BAND_IDLE = 0x2a0f0a;
 const BARREL_BAND_LIT = 0xff5a2a;
 const BARREL_FUSE_REF_TICKS = 180; // 가장 긴 도화선(3초) 기준으로 깜빡임 속도를 잡는다
-const BARRIER_SHARD_COUNT = 26; // 방어막 파편 — 사망 파편보다 많게 (막이 통째로 터진다)
+const BARRIER_SHARD_COUNT = 26;
+const PROJECTILE_DEBRIS_COUNT = 16; // 공중에서 깨진 투사체 파편 // 방어막 파편 — 사망 파편보다 많게 (막이 통째로 터진다)
 const DEATH_PARTICLE_LIFE_MS = 650;
 const DEATH_GRAVITY = 14;
 
@@ -1696,6 +1697,36 @@ export class Stage {
   }
 
   /** 격돌 — 부딪힌 지점에서 불꽃이 튀고 짧게 번쩍인다 (막기: 주황 / 패링: 청백) */
+  /** 날아오던 것이 공중에서 깨졌다 — 그 자리에서 파편이 사방으로 흩어진다 */
+  spawnProjectileDebris(x: number, y: number, z: number, radius: number, color: number): void {
+    const now = performance.now();
+    for (let i = 0; i < PROJECTILE_DEBRIS_COUNT; i++) {
+      const size = radius * (0.22 + Math.random() * 0.3);
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size, size),
+        new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 }),
+      );
+      const yaw = Math.random() * Math.PI * 2;
+      const pitch = Math.acos(2 * Math.random() - 1);
+      const speed = 2.2 + Math.random() * 3.4;
+      const particle: Particle = {
+        mesh,
+        ox: x,
+        oy: y,
+        oz: z,
+        vx: Math.sin(pitch) * Math.cos(yaw) * speed,
+        vy: Math.cos(pitch) * speed + 1.2,
+        vz: Math.sin(pitch) * Math.sin(yaw) * speed,
+        bornMs: now,
+        spinX: (Math.random() - 0.5) * 9,
+        spinZ: (Math.random() - 0.5) * 9,
+      };
+      mesh.position.set(x, y, z);
+      this.particles.push(particle);
+      this.scene.add(mesh);
+    }
+  }
+
   /** 방어막 파괴 — 구면을 따라 파편이 터져 나간다 */
   spawnBarrierShatter(x: number, z: number, radius: number, height: number): void {
     const now = performance.now();

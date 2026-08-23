@@ -99,6 +99,8 @@ export interface ProjectileState {
   splash?: ProjectileSplashDef;
   /** 맞은 플레이어가 거미줄에 걸린다 (큰 거미) */
   appliesWeb?: boolean;
+  /** 플레이어 투사체로 공중에서 부술 수 있다 (족장이 던진 바위) */
+  breakable?: boolean;
 }
 
 export interface SpellState {

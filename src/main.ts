@@ -280,6 +280,7 @@ for (const name of [
   'grenade_bounce',
   'barrel_hit',
   'barrel_exploded',
+  'projectile_broken',
   'chest_opened',
   'crack_wall_broken',
   'mana_gained',
@@ -508,6 +509,20 @@ events.on('chest_opened', (payload) => {
   audio.play('chest_opened');
   const sigil = info.sigilId ? ` · ${sigilDef(info.sigilId).name} 각인` : '';
   showReaction(`보물상자 — ◆ ${info.gold}${sigil}`, 2600);
+});
+// 날아오던 것을 공중에서 깼다 — 바위가 파편으로 흩어진다
+const PROJECTILE_DEBRIS_COLORS: Record<string, number> = { rock: 0x6b675e, web: 0xe6e9e0 };
+events.on('projectile_broken', (payload) => {
+  const info = payload as { x: number; y: number; z: number; kind?: string; radius: number };
+  audio.play('rock_shattered');
+  stage.spawnProjectileDebris(
+    info.x,
+    info.y,
+    info.z,
+    info.radius,
+    PROJECTILE_DEBRIS_COLORS[info.kind ?? ''] ?? 0x8a8f9a,
+  );
+  showReaction('바위를 공중에서 깼다!', 1200);
 });
 // 폭발통 — 때리면 통 울리는 소리, 도화선에 불이 붙으면 알려 준다
 events.on('barrel_hit', (payload) => {

@@ -60,6 +60,7 @@ export type SoundName =
   | 'grenade_bounce'
   | 'barrel_hit'
   | 'barrel_armed'
+  | 'rock_shattered'
   | 'chest_opened'
   | 'implode'
   | 'shop_buy'
@@ -261,6 +262,12 @@ export class GameAudio {
         this.tone(660, 0.5, 'sine', 0.4, 0.1);
         this.tone(880, 0.6, 'sine', 0.35, 0.2);
         this.noise(0.35, 0.3, 5200, 0.15);
+        break;
+      case 'rock_shattered':
+        // 바위가 공중에서 깨진다 — 둔탁한 파열 + 자갈 흩어지는 소리
+        this.tone(140, 0.22, 'square', 0.5, 0, 60);
+        this.noise(0.3, 0.7, 1400);
+        this.noise(0.45, 0.3, 3600, 0.06);
         break;
       case 'barrel_hit':
         // 쇠통을 때린 소리 — 속이 빈 둔탁한 울림
