@@ -3,9 +3,8 @@
 //   idle → chase → windup → active_perfect(6t) → active_normal(12t) → impact → recover → chase
 //                                                                  (패링 시 staggered / recover)
 //
-// 패링 불가 공격(적색·보스 armored)은 판정 창 없이 windup → impact.
+// 패링 불가 공격(적색)은 판정 창 없이 windup → impact.
 // 원거리 캐스터(warden)는 windup 종료 시 투사체를 발사하고 recover로 간다.
-// 보스(boss_two_phase)는 melee(청색·패링 가능) ↔ armored(적색·실탄으로 장갑 파괴) 교대.
 // windup 진입 시 enemy_windup(오디오), 종료 visualLeadTicks 전에 telegraph_flash(섬광).
 
 import { balance } from '../core/Balance';
@@ -461,12 +460,6 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     case 'staggered': {
       enemy.timer--;
       if (enemy.timer <= 0) {
-        if (def.boss && enemy.phase === 'melee') {
-          // 보스 — 스태거가 끝나면 장갑 페이즈로 (실탄 구간)
-          enemy.phase = 'armored';
-          enemy.armorHealth = def.armorHealth ?? 0;
-          world.events.emit('boss_phase', { enemyId: enemy.id, phase: 'armored' });
-        }
         enemy.ai = 'recover';
         enemy.timer = attack.recoverTicks;
       }

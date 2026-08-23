@@ -237,13 +237,9 @@ function resolveHammerHit(world: World, heavy: boolean): void {
       continue;
     }
 
-    // 상성 — warden 방어막은 근접 무효, 보스 장갑은 실탄 전용
+    // 상성 — warden 방어막은 근접 무효
     if (enemyDef(enemy.type).magicBarrier?.blocksMelee && enemy.ai !== 'staggered') {
       world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'melee' });
-      continue;
-    }
-    if (enemy.phase === 'armored' && (enemy.armorHealth ?? 0) > 0) {
-      world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'armor' });
       continue;
     }
 
@@ -483,18 +479,6 @@ function fire(world: World): void {
   const damage = pistol.damage * zoneMul * falloffMul;
 
   if (zone === 'head') world.events.emit('headshot', { enemyId: hit.enemy.id });
-
-  // 보스 장갑 페이즈 — 실탄은 장갑을 깎는다. 장갑 파괴 시 melee 페이즈 복귀
-  if (hit.enemy.phase === 'armored' && (hit.enemy.armorHealth ?? 0) > 0) {
-    hit.enemy.armorHealth = (hit.enemy.armorHealth ?? 0) - damage;
-    world.events.emit('armor_hit', { enemyId: hit.enemy.id, armor: hit.enemy.armorHealth });
-    if (hit.enemy.armorHealth <= 0) {
-      hit.enemy.armorHealth = 0;
-      hit.enemy.phase = 'melee';
-      world.events.emit('boss_phase', { enemyId: hit.enemy.id, phase: 'melee' });
-    }
-    return;
-  }
 
   hit.enemy.health -= damage;
   // 피탄 경직 — 잠깐 발이 묶인다. 공격 상태 머신은 그대로 진행되므로

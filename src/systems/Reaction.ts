@@ -193,7 +193,7 @@ export function tick(world: World, _dt: number): void {
     const enemy = executeTarget.enemy;
     const def = enemyDef(enemy.type);
     if (def.boss && def.executeDamage) {
-      // 보스 처형 — 즉사가 아니라 큰 타격. 스태거를 끝내 armored 전환을 유도
+      // 보스 처형 — 즉사가 아니라 큰 타격. 한 번의 스태거는 처형 한 번으로 소모된다
       enemy.health -= def.executeDamage;
       world.freezeTicks = reaction.hitstopExecuteTicks;
       world.executeFocusTicks = reaction.executeFocusTicks;
@@ -209,7 +209,7 @@ export function tick(world: World, _dt: number): void {
         });
         world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
       } else {
-        enemy.timer = 1; // 다음 틱에 스태거 종료 → armored 페이즈로
+        enemy.timer = 1; // 다음 틱에 스태거 종료 → 후딜로 (연속 처형 방지)
       }
       return;
     }

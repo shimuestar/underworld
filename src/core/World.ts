@@ -210,9 +210,7 @@ export interface EnemyState {
   /** 화상 잔여 틱 (Projectiles가 피해 적용) */
   burnTicks: number;
   burnDamagePerTick: number;
-  /** 보스 (boss_two_phase) 전용 */
-  phase?: 'melee' | 'armored';
-  armorHealth?: number;
+  /** 보스 전용 — 연속 패링 누적 (parriesToStagger 도달 시 스태거) */
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
   attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley';

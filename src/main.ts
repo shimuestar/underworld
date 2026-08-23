@@ -312,8 +312,6 @@ for (const name of [
   'shield_cracked',
   'shield_braced',
   'shield_bash_start',
-  'armor_hit',
-  'boss_phase',
   'boss_staggered',
   'boss_execute',
   'exit_locked',
@@ -772,20 +770,11 @@ events.on('barrier_blocked', (payload) => {
   audio.play('barrier_blocked');
   stage.flashBarrier(info.enemyId);
   showReaction(
-    info.kind === 'armor'
-      ? '장갑 — 실탄만 통한다'
-      : info.kind === 'shield'
-        ? '방패에 막혔다 — 화염구로 부술 수 있다'
-        : '방어막 — 9mm만 뚫는다',
+    info.kind === 'shield' ? '방패에 막혔다 — 화염구로 부술 수 있다' : '방어막 — 9mm만 뚫는다',
   );
 });
 events.on('shot_blocked', () => showReaction('방패 — 정면은 막힌다 (화염구로 부술 수 있다)'));
 events.on('boss_staggered', () => showReaction('보스 스태거 — 지금 처형 타격!'));
-events.on('boss_phase', (payload) => {
-  const phase = (payload as { phase: string }).phase;
-  audio.play('boss_phase');
-  showReaction(phase === 'armored' ? '장갑 페이즈 — 실탄으로 파괴하라' : '장갑 파괴 — 패링 구간', 3000);
-});
 events.on('exit_opened', () => {
   audio.play('exit_opened');
   showReaction('족장이 쓰러졌다 — 출구의 봉인이 풀렸다', 3500);
@@ -1098,11 +1087,8 @@ function render(alpha: number): void {
     const def = enemyDef(boss.type);
     const frac = Math.max(0, boss.health / def.health);
     const bar = '█'.repeat(Math.round(frac * 24)).padEnd(24, '░');
-    const phaseLabel =
-      boss.phase === 'armored'
-        ? `장갑 ${Math.max(0, boss.armorHealth ?? 0)}`
-        : `패링 ${boss.parryStreak ?? 0}/${def.parriesToStagger}`;
-    bossLine = `족장 ${bar} ${Math.max(0, Math.round(boss.health))}/${def.health}  [${phaseLabel}]\n`;
+    const streak = `패링 ${boss.parryStreak ?? 0}/${def.parriesToStagger}`;
+    bossLine = `족장 ${bar} ${Math.max(0, Math.round(boss.health))}/${def.health}  [${streak}]\n`;
   }
   const mana = world.mana;
   const chainMult = balance.chain.multipliers[Math.min(mana.chainIndex, balance.chain.multipliers.length - 1)]!;

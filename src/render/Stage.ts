@@ -100,7 +100,6 @@ function buildSpiderBody(
   }
 }
 const BARRIER_COLOR = 0x9db8e8;
-const ARMOR_COLOR = 0x777d88;
 const WEB_COLOR = 0xe6e9e0; // 거미줄 — 희끄무레한 실뭉치
 const WEB_TEAR_SHARDS = 14; // 해머로 걷어낼 때 흩어지는 실 조각
 const WEB_TEAR_MS = 520;
@@ -227,8 +226,6 @@ interface EnemyVisual {
   barrier?: THREE.Mesh;
   barrierMaterial?: THREE.MeshLambertMaterial;
   barrierFlashUntil: number;
-  /** 보스 장갑판 (armored 페이즈에만 표시) */
-  armorPlates?: THREE.Mesh;
   /** 지면 강타 범위 표시 — 예고 중 바닥에 그려지는 원 */
   aoeRing?: THREE.Mesh;
   aoeRingMaterial?: THREE.MeshBasicMaterial;
@@ -248,12 +245,7 @@ interface EnemyVisual {
 const PLATE_W = 256;
 const PLATE_H = 72;
 
-function drawPlate(
-  canvas: HTMLCanvasElement,
-  name: string,
-  healthFrac: number,
-  armorFrac: number | null,
-): void {
+function drawPlate(canvas: HTMLCanvasElement, name: string, healthFrac: number): void {
   const ctx = canvas.getContext('2d')!;
   ctx.clearRect(0, 0, PLATE_W, PLATE_H);
 
@@ -275,14 +267,6 @@ function drawPlate(
   const frac = Math.max(0, Math.min(1, healthFrac));
   ctx.fillStyle = frac > 0.5 ? '#3fae5a' : frac > 0.25 ? '#c9a227' : '#e04444';
   ctx.fillRect(barX, barY, barW * frac, barH);
-
-  // 보스 장갑 바 (armored 페이즈)
-  if (armorFrac !== null) {
-    ctx.fillStyle = 'rgba(0,0,0,0.65)';
-    ctx.fillRect(barX - 2, barY + barH + 4, barW + 4, 10);
-    ctx.fillStyle = '#9aa2ad';
-    ctx.fillRect(barX, barY + barH + 6, barW * Math.max(0, Math.min(1, armorFrac)), 6);
-  }
 }
 const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 그린다 (근접부 왜곡 방지)
 const TRACER_WIDTH = 0.022;
@@ -457,7 +441,7 @@ export class Stage {
     if (visual) visual.shieldFlashUntil = performance.now() + 120;
   }
 
-  /** 방어막/장갑 튕김 번쩍 (7.2 피드백) */
+  /** 방어막 튕김 번쩍 (7.2 피드백) */
   flashBarrier(enemyId: number): void {
     const visual = this.enemyVisuals.get(enemyId);
     if (visual) visual.barrierFlashUntil = performance.now() + 160;
@@ -1043,7 +1027,7 @@ export class Stage {
 
     // 지면 강타 범위 원 — 예고 중에만 보인다. 반경은 매 프레임 attack.aoeRadius 로 맞춘다.
     // 화면 UI 가 아니라 월드 바닥에 놓인 표식이다 (몸이 기울어도 바닥에 붙어 있게 group 소속)
-    if (def.attack.aoeRadius || def.armoredAttack?.aoeRadius) {
+    if (def.attack.aoeRadius) {
       visual.aoeRingMaterial = new THREE.MeshBasicMaterial({
         color: AOE_RING_COLOR,
         transparent: true,
@@ -1106,17 +1090,6 @@ export class Stage {
       );
       visual.barrier.position.y = def.height * 0.55;
       group.add(visual.barrier);
-    }
-
-    if (def.boss) {
-      // 몸통과 같은 8각 기둥 — 박스로 두면 모서리가 충돌 반경 밖으로 크게 삐져나온다
-      visual.armorPlates = new THREE.Mesh(
-        new THREE.CylinderGeometry(def.radius * 1.04, def.radius * 1.04, def.height * 0.9, 8),
-        new THREE.MeshLambertMaterial({ color: ARMOR_COLOR }),
-      );
-      visual.armorPlates.position.y = def.height * 0.5;
-      visual.armorPlates.visible = false;
-      torso.add(visual.armorPlates); // 몸통과 함께 기울어진다
     }
 
     if (def.frontalShieldBlocksProjectiles) {
@@ -1254,19 +1227,13 @@ export class Stage {
         material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
       }
 
-      // 이름표 — 어그로 후에만. 체력/장갑이 바뀔 때만 다시 그린다
+      // 이름표 — 어그로 후에만. 체력이 바뀔 때만 다시 그린다
       visual.plate.visible = enemy.ai !== 'idle';
       if (visual.plate.visible) {
-        const armored = enemy.phase === 'armored' && (enemy.armorHealth ?? 0) > 0;
-        const key = `${Math.ceil(enemy.health)}|${armored ? Math.ceil(enemy.armorHealth ?? 0) : '-'}`;
+        const key = `${Math.ceil(enemy.health)}`;
         if (key !== visual.plateKey) {
           visual.plateKey = key;
-          drawPlate(
-            visual.plateCanvas,
-            def2.name ?? enemy.type,
-            enemy.health / def2.health,
-            armored ? (enemy.armorHealth ?? 0) / (def2.armorHealth ?? 1) : null,
-          );
+          drawPlate(visual.plateCanvas, def2.name ?? enemy.type, enemy.health / def2.health);
           visual.plateTexture.needsUpdate = true;
         }
       }
@@ -1276,16 +1243,6 @@ export class Stage {
         const flashOn = now < visual.barrierFlashUntil;
         visual.barrierMaterial.opacity = flashOn ? 0.55 : 0.18;
         visual.barrierMaterial.emissive.set(flashOn ? BARRIER_COLOR : 0x000000);
-      }
-
-      // 보스 장갑판 — armored 페이즈에만
-      if (visual.armorPlates) {
-        visual.armorPlates.visible = enemy.phase === 'armored' && (enemy.armorHealth ?? 0) > 0;
-        if (now < visual.barrierFlashUntil) {
-          (visual.armorPlates.material as THREE.MeshLambertMaterial).emissive.set(0x444444);
-        } else {
-          (visual.armorPlates.material as THREE.MeshLambertMaterial).emissive.set(0x000000);
-        }
       }
 
       // 공격 모션 — windup에 무기를 머리 위로 치켜들며 몸을 젖히고,

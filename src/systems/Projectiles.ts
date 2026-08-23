@@ -295,12 +295,6 @@ function applyProjectileHit(
     world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'magic' });
     return;
   }
-  // 보스 장갑 페이즈 — 실탄만 유효, 마법은 튕긴다
-  if (enemy.phase === 'armored' && !proj.deflected) {
-    world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'armor' });
-    return;
-  }
-
   // 동료 오사는 위력이 줄어든다 — 사고로 보이되 한 방에 죽지는 않게
   const damage =
     proj.owner === 'enemy' ? proj.damage * balance.enemyAi.friendlyFireDamageMul : proj.damage;
@@ -360,7 +354,7 @@ function explodeFireball(
 
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     const damage = damageAt(dist);
-    // 방어막·장갑은 폭발을 막지 못한다 (화염은 사방에서 온다)
+    // 방어막은 폭발을 막지 못한다 (화염은 사방에서 온다)
     enemy.health -= damage;
     enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
     if (proj.burnDamagePerTick > 0) enemy.burnDamagePerTick = proj.burnDamagePerTick;
@@ -483,15 +477,6 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
       });
     }
 
-    // 폭발은 물리 피해 — 보스 장갑은 깎고, 방어막은 무시한다
-    if (enemy.phase === 'armored' && (enemy.armorHealth ?? 0) > 0) {
-      enemy.armorHealth = Math.max(0, (enemy.armorHealth ?? 0) - damage);
-      if (enemy.armorHealth <= 0) {
-        enemy.phase = 'melee';
-        world.events.emit('boss_phase', { enemyId: enemy.id, phase: 'melee' });
-      }
-      continue;
-    }
     enemy.health -= damage;
     if (enemy.health <= 0) {
       enemy.alive = false;

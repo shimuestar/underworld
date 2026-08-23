@@ -41,11 +41,7 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
     burnTicks: 0,
     burnDamagePerTick: 0,
   };
-  if (def.boss) {
-    enemy.phase = 'melee';
-    enemy.armorHealth = 0;
-    enemy.parryStreak = 0;
-  }
+  if (def.boss) enemy.parryStreak = 0;
   return enemy;
 }
 

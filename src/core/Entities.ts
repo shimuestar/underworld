@@ -99,7 +99,6 @@ export interface EnemyDef {
   kiteMinRange?: number;
   /** 보스 (boss_two_phase) */
   boss?: boolean;
-  armoredAttack?: EnemyAttackDef;
   /** 원거리 보조 공격 (족장 바위 투척 등) */
   rangedAttack?: EnemyAttackDef;
   /** 연사 공격 — 예고 뒤 여러 발을 일정 간격으로 (족장 화살 세례) */
@@ -119,19 +118,14 @@ export interface EnemyDef {
   blockCannotStagger?: boolean;
   parriesToStagger?: number;
   executeDamage?: number;
-  armorHealth?: number;
 }
 
-/** 현재 공격 정의 — 원거리 모드면 rangedAttack, 보스 armored면 armoredAttack */
-export function currentAttack(
-  def: EnemyDef,
-  enemy: { phase?: string; attackMode?: string },
-): EnemyAttackDef {
+/** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격 */
+export function currentAttack(def: EnemyDef, enemy: { attackMode?: string }): EnemyAttackDef {
   if (enemy.attackMode === 'bash' && def.shieldBash) return def.shieldBash;
   if (enemy.attackMode === 'charge' && def.chargeAttack) return def.chargeAttack;
   if (enemy.attackMode === 'volley' && def.volleyAttack) return def.volleyAttack;
   if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
-  if (enemy.phase === 'armored' && def.armoredAttack) return def.armoredAttack;
   return def.attack;
 }
 

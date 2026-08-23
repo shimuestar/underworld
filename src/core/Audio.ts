@@ -8,7 +8,6 @@ export type SoundName =
   | 'telegraph_purple'
   | 'deflect'
   | 'barrier_blocked'
-  | 'boss_phase'
   | 'zone_clear'
   | 'parry_perfect'
   | 'parry_normal'
@@ -115,14 +114,9 @@ export class GameAudio {
         this.noise(0.07, 0.45, 5000, 0.02); // 반짝임
         break;
       case 'barrier_blocked':
-        // 방어막/장갑 튕김 — 마법적 둔탁음
+        // 방어막 튕김 — 마법적 둔탁음
         this.tone(320, 0.16, 'sine', 0.7, 0, 180);
         this.tone(1400, 0.06, 'triangle', 0.35);
-        break;
-      case 'boss_phase':
-        // 페이즈 전환 — 무거운 북
-        this.tone(70, 0.5, 'sine', 1.0, 0, 40);
-        this.noise(0.3, 0.6, 300);
         break;
       case 'zone_clear':
         // 구역 클리어 — 3음 화음 상행

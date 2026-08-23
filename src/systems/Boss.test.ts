@@ -206,16 +206,6 @@ describe('goblin_chieftain (1구역 보스)', () => {
     expect(boss.ai).not.toBe('staggered');
   });
 
-  it('장갑 페이즈 강타도 패링할 수 있다 (완벽만)', () => {
-    const def = enemyDef('goblin_chieftain');
-    expect(def.armoredAttack!.parryable).toBe(true);
-    expect(def.armoredAttack!.telegraph).toBe('blue'); // 색 규약 — 청=패링 가능
-    const boss = makeBoss();
-    boss.phase = 'armored';
-    boss.armorHealth = def.armorHealth!;
-    expect(parryBoss(boss)).toBe('normal');
-  });
-
   it('완벽 대역에 닿아도 일반 패링으로 처리한다 — 히트스톱·마나·연쇄까지', () => {
     const def = enemyDef('goblin_chieftain');
     expect(def.parryAlwaysNormal).toBe(true);
@@ -260,7 +250,7 @@ describe('goblin_chieftain (1구역 보스)', () => {
     expect(world.player.health).toBeLessThan(balance.player.healthMax); // 칩 피해도 받는다
   });
 
-  it('스태거 중 처형 → executeDamage 타격 → 스태거 종료 후 armored 페이즈', () => {
+  it('스태거 중 처형 → executeDamage 타격, 스태거는 그 한 번으로 끝난다', () => {
     const boss = makeBoss();
     const def = enemyDef('goblin_chieftain');
     boss.ai = 'staggered';
@@ -272,51 +262,40 @@ describe('goblin_chieftain (1구역 보스)', () => {
 
     // 처형 연출 동안은 적 전체가 멈춘다 — 그 시간을 지나야 스태거가 끝난다
     for (let i = 0; i < balance.reaction.executeFocusTicks + 1; i++) Enemies.tick(world, DT);
-    expect(boss.phase).toBe('armored');
-    expect(boss.armorHealth).toBe(def.armorHealth);
+    expect(boss.ai).not.toBe('staggered'); // 스태거 소모 — 연속 처형 불가
   });
 
-  it('armored 페이즈: 총알이 장갑을 깎고, 파괴되면 melee 복귀. 마법은 튕긴다', () => {
-    const boss = makeBoss();
+  it('장갑 페이즈는 없다 — 스태거 뒤에도 총알이 그대로 체력을 깎는다', () => {
     const def = enemyDef('goblin_chieftain');
-    boss.phase = 'armored';
-    boss.armorHealth = def.armorHealth!;
+    expect('armoredAttack' in def).toBe(false);
+    expect('armorHealth' in def).toBe(false);
+    const boss = makeBoss();
 
-    // 마법 무효
-    const blocked: unknown[] = [];
-    world.events.on('barrier_blocked', (payload) => blocked.push(payload));
+    boss.ai = 'staggered';
+    boss.timer = 1;
+    Enemies.tick(world, DT); // 스태거 종료
+    expect(boss.ai).toBe('recover');
+
+    // 총알 — 흡수하는 장갑이 없으니 체력이 바로 깎인다
+    const pistol = balance.weapons.pistol;
+    world.weapon.cooldown = 0;
+    world.input = { ...Input.emptySnapshot(), rangedPressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(boss.health).toBeCloseTo(def.health - pistol.damage * pistol.hitZones.bodyMul, 5);
+
+    // 마법도 튕기지 않는다
     world.projectiles.push({
       id: 1, owner: 'player', x: 7, y: 1.2, z: 6, prevX: 7, prevY: 1.2, prevZ: 6,
       vx: 26, vy: 0, vz: 0, lifeTicks: 60, damage: 45,
       burnTicks: 0, burnDamagePerTick: 0, radius: 0.35,
     });
+    const blocked: unknown[] = [];
+    world.events.on('barrier_blocked', (payload) => blocked.push(payload));
+    const before = boss.health;
     for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
-    expect(blocked[0]).toMatchObject({ kind: 'armor' });
-    expect(boss.health).toBe(def.health);
-
-    // 실탄으로 장갑 파괴 — 필요한 발수는 밸런스에서 계산한다 (총 위력을 조정해도 안 깨지게)
-    const pistol = balance.weapons.pistol;
-    const perShot = pistol.damage * pistol.hitZones.bodyMul; // 몸통 판정
-    const shots = Math.ceil(def.armorHealth! / perShot);
-    const phases: unknown[] = [];
-    world.events.on('boss_phase', (payload) => phases.push(payload));
-    for (let shot = 0; shot < shots; shot++) {
-      world.weapon.cooldown = 0;
-      world.input = { ...Input.emptySnapshot(), rangedPressed: true };
-      Weapons.tick(world, DT);
-      world.input = Input.emptySnapshot();
-    }
-    expect(boss.phase).toBe('melee');
-    expect(boss.health).toBe(def.health); // 장갑이 전부 흡수
-    expect(phases).toContainEqual({ enemyId: 1, phase: 'melee' });
-  });
-
-  it('armored 공격은 판정 창 없이 windup → impact (패링 불가)', () => {
-    const boss = makeBoss();
-    boss.phase = 'armored';
-    tickEnemiesUntil(() => boss.ai === 'windup');
-    tickEnemiesUntil(() => boss.ai === 'recover'); // active_* 없이 impact를 거침
-    expect(world.player.health).toBe(100 - enemyDef('goblin_chieftain').damage);
+    expect(blocked).toHaveLength(0);
+    expect(boss.health).toBeLessThan(before);
   });
 });
 
