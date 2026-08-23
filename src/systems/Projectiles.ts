@@ -240,10 +240,8 @@ function moveProjectiles(world: World, dt: number): void {
           if (blocked) world.events.emit('block_hit', { amount: damage, kind: proj.kind });
           // 거미줄 — 막아도 들러붙는다. 방패로는 끈끈이를 못 막는다
           if (proj.appliesWeb) {
-            const web = balance.web;
-            p.webTicks = web.slowTicks;
-            p.webStruggle = 0;
-            world.events.emit('web_caught', { ticks: web.slowTicks });
+            p.webSwingsLeft = balance.web.breakSwings;
+            world.events.emit('web_caught', { swings: p.webSwingsLeft });
           }
           world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
           if (p.health <= 0) {

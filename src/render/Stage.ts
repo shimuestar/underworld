@@ -102,6 +102,8 @@ function buildSpiderBody(
 const BARRIER_COLOR = 0x9db8e8;
 const ARMOR_COLOR = 0x777d88;
 const WEB_COLOR = 0xe6e9e0; // 거미줄 — 희끄무레한 실뭉치
+const WEB_TEAR_SHARDS = 14; // 해머로 걷어낼 때 흩어지는 실 조각
+const WEB_TEAR_MS = 520;
 const ENEMY_BOLT_COLOR = 0xa855f7; // 마법 투사체 색 규약 (balance.telegraph.colorProjectile)
 const IMPLODE_MS = 560; // 내파 연출 길이 (당김 지속 22틱 ≒ 367ms보다 길게 남는다)
 const IMPLODE_SHARDS = 16;
@@ -692,6 +694,45 @@ export class Stage {
     this.explosions.push({ light: flash, shell, bornMs: now, radius });
     // 파편 재활용 — 폭심에서 사방으로
     this.spawnDeathBurst(x, z, 'goblin_chieftain');
+  }
+
+  /** 거미줄을 걷어낼 때 — 눈앞에서 흰 실이 찢겨 흩어진다.
+   *  카메라 바로 앞에 뿌려 "내 몸에 붙은 게 뜯긴다"로 읽히게 한다 */
+  spawnWebTear(): void {
+    const now = performance.now();
+    const cam = this.camera;
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
+    for (let i = 0; i < WEB_TEAR_SHARDS; i++) {
+      const len = 0.06 + Math.random() * 0.13;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(len, 0.012, 0.012),
+        new THREE.MeshBasicMaterial({ color: WEB_COLOR, transparent: true, opacity: 0.95 }),
+      );
+      mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      const spread = (Math.random() - 0.5) * 1.2;
+      const origin = cam.position
+        .clone()
+        .addScaledVector(fwd, 0.75)
+        .addScaledVector(right, spread)
+        .add(new THREE.Vector3(0, (Math.random() - 0.5) * 0.7, 0));
+      mesh.position.copy(origin);
+      this.particles.push({
+        mesh,
+        ox: origin.x,
+        oy: origin.y,
+        oz: origin.z,
+        vx: right.x * spread * 3.2 + (Math.random() - 0.5) * 1.4,
+        vy: 0.8 + Math.random() * 1.6,
+        vz: right.z * spread * 3.2 + (Math.random() - 0.5) * 1.4,
+        gravity: 5.5,
+        lifeMs: WEB_TEAR_MS,
+        bornMs: now,
+        spinX: 7,
+        spinZ: 5,
+      });
+      this.scene.add(mesh);
+    }
   }
 
   /** 마법탄 내파 — 폭발의 역재생. 파편이 가장자리에서 폭심으로 빨려들고 셸이 오므라든다.

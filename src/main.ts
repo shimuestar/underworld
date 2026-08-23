@@ -175,6 +175,12 @@ window.addEventListener('keydown', (e) => {
       );
     }
   }
+  // 테스트용 무적 토글 — HP·마나·탄약·배터리·스태미너가 줄지 않는다 (슬라이스 검증 시 제거)
+  if (e.code === 'KeyG') {
+    world.godMode = !world.godMode;
+    showReaction(world.godMode ? '(테스트) 무적 ON' : '(테스트) 무적 OFF', 1400);
+    console.log('[debug] 무적', world.godMode);
+  }
   // 테스트용 시야 내 몰살 — 진행 속도를 위한 편의 (슬라이스 검증 시 제거).
   // 화면에 들어와 있고 벽에 가리지 않은 적만 죽인다
   if (e.code === 'KeyK' && !world.dead && !world.uiOpen) {
@@ -239,6 +245,7 @@ for (const name of [
   'reload_finished',
   'weapon_empty',
   'web_caught',
+  'web_torn',
   'web_broken',
   'stamina_empty',
   'stamina_recovered',
@@ -385,14 +392,24 @@ events.on('weapon_empty', (payload) => {
     1100,
   );
 });
-events.on('web_caught', () => {
+events.on('web_caught', (payload) => {
+  const info = payload as { swings: number };
   audio.play('web_hit');
-  showReaction('거미줄에 걸렸다 — 움직이고 해머로 끊어라', 2200);
+  showReaction(`거미줄에 걸렸다 — 해머로 ${info.swings}번 걷어내라`, 2400);
 });
-events.on('web_broken', (payload) => {
-  if ((payload as { reason: string }).reason === 'timeout') return; // 저절로 삭은 건 조용히
+events.on('web_torn', (payload) => {
+  const info = payload as { left: number; total: number };
+  if (info.left <= 0) return; // 마지막 한 겹은 web_broken 이 맡는다
+  audio.play('web_tear');
+  stage.spawnWebTear();
+  stage.triggerCameraKick(0.35, 180);
+  showReaction(`거미줄 — ${info.total - info.left}/${info.total}`, 700);
+});
+events.on('web_broken', () => {
   audio.play('web_break');
-  showReaction('거미줄을 끊었다', 900);
+  stage.spawnWebTear();
+  stage.triggerCameraKick(0.5, 220);
+  showReaction('거미줄을 걷어냈다', 900);
 });
 events.on('stamina_empty', () => {
   audio.play('stamina_empty');
@@ -639,6 +656,7 @@ events.on('sigil_acquired', (payload) => {
 });
 
 events.on('player_died', () => {
+  if (world.godMode) return; // 무적 중에는 사망 화면도 뜨지 않는다 (자원은 틱 끝에 되돌아간다)
   deathHint!.textContent = world.respawn ? 'Enter — 제단에서 부활' : 'Enter 키로 재시작';
   deathOverlay.classList.add('visible');
 });
@@ -840,10 +858,45 @@ function simulate(dt: number): void {
   }
 
   if (!world.dead && !world.uiOpen && !world.cleared) {
+    // 무적(테스트) — 시스템을 손대지 않고 한 곳에서 자원만 되돌린다.
+    // HP를 깎는 지점이 여섯 군데라 각각 분기를 심으면 금방 어긋난다
+    const keep = world.godMode ? snapshotResources() : null;
     for (const system of systems) system(world, dt);
+    if (keep) restoreResources(keep);
   }
   world.tick++;
   tpsWindowTicks++;
+}
+
+/** 무적 중 되돌릴 자원 — 골드·경험치는 제외한다 (상점을 시험할 수 없게 된다) */
+function snapshotResources(): {
+  health: number; mana: number; mag: number; reserve: number; grenades: number;
+  battery: number; spares: number; stamina: number; exhausted: boolean;
+} {
+  return {
+    health: world.player.health,
+    mana: world.mana.value,
+    mag: world.weapon.mag,
+    reserve: world.weapon.reserve,
+    grenades: world.weapon.grenades,
+    battery: world.lantern.battery,
+    spares: world.lantern.spares,
+    stamina: world.stamina.value,
+    exhausted: world.stamina.exhausted,
+  };
+}
+
+function restoreResources(keep: ReturnType<typeof snapshotResources>): void {
+  world.player.health = keep.health;
+  world.mana.value = keep.mana;
+  world.weapon.mag = keep.mag;
+  world.weapon.reserve = keep.reserve;
+  world.weapon.grenades = keep.grenades;
+  world.lantern.battery = keep.battery;
+  world.lantern.spares = keep.spares;
+  world.stamina.value = keep.stamina;
+  world.stamina.exhausted = keep.exhausted;
+  world.dead = false; // 이번 틱에 죽었더라도 없던 일로
 }
 
 function spellHudText(): string {
@@ -968,12 +1021,9 @@ function render(alpha: number): void {
   const manaFill = document.getElementById('status-mana-fill')!;
   manaFill.style.width = `${manaFrac * 100}%`;
   manaFill.style.background = world.mana.chainIndex > 0 ? '#7fc4ff' : '#4a9eff';
-  // 거미줄 — 끊을수록 옅어진다 (남은 시간이 아니라 발버둥 진행도를 보여준다)
-  const webbed = (p.webTicks ?? 0) > 0;
-  const webLeft = webbed
-    ? 1 - Math.min(1, (p.webStruggle ?? 0) / balance.web.breakNeeded)
-    : 0;
-  webOverlay.style.opacity = String(webbed ? 0.35 + 0.55 * webLeft : 0);
+  // 거미줄 — 남은 타수만큼 진하다. 한 대 걷어낼 때마다 눈에 띄게 옅어진다
+  const webLeft = (p.webSwingsLeft ?? 0) / balance.web.breakSwings;
+  webOverlay.style.opacity = String(webLeft > 0 ? 0.3 + 0.6 * webLeft : 0);
 
   // 스태미너 — HP·마나 바 바로 아래. 탈진하면 붉게 죽는다
   const stamFrac = Math.max(0, Math.min(1, world.stamina.value / balance.player.stamina.max));
@@ -1065,10 +1115,10 @@ function render(alpha: number): void {
     `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}\n` +
     `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
     bossLine +
-    `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
+    `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     'WASD 이동  Shift 질주  좌클릭 원거리(휠 교체)  우클릭 근접  Space 짧게=패링·꾹=방어  Shift+Space 회피\n' +
-    'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K 테스트';
+    'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트';
 
   stage.render();
 }

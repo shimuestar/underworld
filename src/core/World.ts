@@ -39,10 +39,9 @@ export interface PlayerState {
   kbTicks?: number;
   kbX?: number;
   kbZ?: number;
-  /** 거미줄 — 남은 지속 틱. 0보다 크면 느려진다 */
-  webTicks?: number;
-  /** 거미줄 끊기 진행도 — 이동 거리(PlayerMove)와 해머 타격(Weapons)이 채운다 */
-  webStruggle?: number;
+  /** 거미줄 — 벗겨내는 데 남은 해머 타수. 0보다 크면 걸린 상태(느려진다).
+   *  시간이나 이동으로는 풀리지 않는다 — 오직 해머만 */
+  webSwingsLeft?: number;
 }
 
 export interface SigilState {
@@ -375,6 +374,9 @@ export class World {
   cleared = false;
   /** 출구 접근 중 잠김 안내 중복 방지 */
   exitLockedNotified = false;
+  /** 테스트용 무적 — HP·마나·탄약·배터리·스태미너가 소모되지 않는다 (G 토글) */
+  godMode = false;
+
   /** 출구 개방 여부 — 보스가 죽으면 열린다. 렌더·미니맵이 이 값을 본다 */
   exitOpen = false;
   /** 출구 발판 위에 서 있는가 — 봉인 안내를 계속 띄우기 위한 플래그 */

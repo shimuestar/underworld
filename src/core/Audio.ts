@@ -50,6 +50,7 @@ export type SoundName =
   | 'charge_ready'
   | 'web_hit'
   | 'web_break'
+  | 'web_tear'
   | 'weapon_switch'
   | 'hammer_swing'
   | 'melee_hit'
@@ -363,6 +364,11 @@ export class GameAudio {
         this.noise(0.35, 0.45, 2600);
         this.tone(420, 0.3, 'triangle', 0.22, 0, 180);
         this.noise(0.25, 0.2, 700, 0.12);
+        break;
+      case 'web_tear':
+        // 한 겹 뜯긴다 — 짧고 거친 찢김. 완전히 끊길 때(web_break)보다 둔탁하게
+        this.noise(0.14, 0.38, 3200);
+        this.noise(0.1, 0.2, 900, 0.03);
         break;
       case 'web_break':
         // 줄이 끊긴다 — 짧게 툭 끊기는 고역 + 해방되는 상승음

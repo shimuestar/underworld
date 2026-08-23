@@ -91,16 +91,16 @@ beforeEach(() => {
 
 describe('거미줄', () => {
   it('맞으면 걸리고 느려진다', () => {
-    const caught: { ticks: number }[] = [];
-    world.events.on('web_caught', (p) => caught.push(p as { ticks: number }));
+    const caught: { swings: number }[] = [];
+    world.events.on('web_caught', (p) => caught.push(p as { swings: number }));
 
     const free = walk(world, 10);
     world.player.x = 10;
     world.player.z = 10;
 
     fireWeb(world);
-    expect(world.player.webTicks).toBe(WEB.slowTicks);
-    expect(caught[0]).toMatchObject({ ticks: WEB.slowTicks });
+    expect(world.player.webSwingsLeft).toBe(WEB.breakSwings);
+    expect(caught[0]).toMatchObject({ swings: WEB.breakSwings });
 
     // 피격 밀림이 섞이면 이동 거리가 오염된다 — 걷기 속도만 비교한다
     world.player.kbTicks = 0;
@@ -114,46 +114,50 @@ describe('거미줄', () => {
   it('방패로 막아도 들러붙는다 — 끈끈이는 못 막는다', () => {
     world.player.blocking = true;
     fireWeb(world);
-    expect(world.player.webTicks).toBe(WEB.slowTicks);
+    expect(world.player.webSwingsLeft).toBe(WEB.breakSwings);
   });
 
-  it('계속 움직이면 발버둥으로 끊긴다', () => {
+  it('아무리 움직여도, 시간이 지나도 풀리지 않는다', () => {
     fireWeb(world);
-    const broken: { reason: string }[] = [];
-    world.events.on('web_broken', (p) => broken.push(p as { reason: string }));
+    const broken: unknown[] = [];
+    world.events.on('web_broken', (p) => broken.push(p));
 
-    let ticks = 0;
-    while ((world.player.webTicks ?? 0) > 0 && ticks < WEB.slowTicks) {
+    for (let i = 0; i < 600; i++) {
       walk(world, 1);
-      ticks++;
+      world.player.x = 10; // 벽에 안 막히게 제자리로 되돌리며 계속 이동 입력
+      world.player.z = 10;
     }
-    expect(broken[0]).toMatchObject({ reason: 'struggle' });
-    expect(ticks).toBeLessThan(WEB.slowTicks); // 시간 만료보다 훨씬 빠르다
+    expect(world.player.webSwingsLeft).toBe(WEB.breakSwings);
+    expect(broken).toHaveLength(0);
   });
 
-  it('해머를 휘두르면 몇 대에 끊긴다 — 적을 맞힐 필요는 없다', () => {
+  it('해머로 정확히 breakSwings 번 걷어내야 벗겨진다 — 적을 맞힐 필요는 없다', () => {
     fireWeb(world);
-    const need = Math.ceil(WEB.breakNeeded / WEB.breakPerSwing);
-    for (let i = 0; i < need - 1; i++) {
+    const torn: { left: number; total: number }[] = [];
+    const broken: { reason: string }[] = [];
+    world.events.on('web_torn', (p) => torn.push(p as { left: number; total: number }));
+    world.events.on('web_broken', (p) => broken.push(p as { reason: string }));
+
+    for (let i = 1; i < WEB.breakSwings; i++) {
       swingHammer(world);
-      expect(world.player.webTicks).toBeGreaterThan(0); // 아직
+      expect(world.player.webSwingsLeft).toBe(WEB.breakSwings - i);
+      expect(broken).toHaveLength(0); // 아직
     }
-    const broken: { reason: string }[] = [];
-    world.events.on('web_broken', (p) => broken.push(p as { reason: string }));
     swingHammer(world);
-    expect(world.player.webTicks).toBe(0);
+    expect(world.player.webSwingsLeft).toBe(0);
     expect(broken[0]).toMatchObject({ reason: 'hammer' });
-    expect(world.enemies).toHaveLength(0); // 허공을 휘둘렀는데도 끊겼다
+    // 한 대마다 한 번씩 알려 준다 (마지막 한 대 포함)
+    expect(torn.map((t) => t.left)).toEqual([2, 1, 0]);
+    expect(world.enemies).toHaveLength(0); // 허공을 휘둘렀는데도 벗겨졌다
   });
 
-  it('가만히 있으면 지속시간이 다 흘러야 풀린다', () => {
+  it('벗겨진 뒤에는 해머를 더 휘둘러도 이벤트가 나가지 않는다', () => {
     fireWeb(world);
-    const broken: { reason: string }[] = [];
-    world.events.on('web_broken', (p) => broken.push(p as { reason: string }));
-    for (let i = 0; i < WEB.slowTicks - 1; i++) PlayerMove.tick(world, DT);
-    expect(world.player.webTicks).toBeGreaterThan(0);
-    PlayerMove.tick(world, DT);
-    expect(broken[0]).toMatchObject({ reason: 'timeout' });
+    for (let i = 0; i < WEB.breakSwings; i++) swingHammer(world);
+    const torn: unknown[] = [];
+    world.events.on('web_torn', (p) => torn.push(p));
+    swingHammer(world);
+    expect(torn).toHaveLength(0);
   });
 });
 
