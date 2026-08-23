@@ -252,12 +252,23 @@ function barColor(index: number, frac: number): string {
   return frac > 0.5 ? '#3fae5a' : frac > 0.25 ? '#c9a227' : '#e04444';
 }
 
+/** 패링 카운터 — 체력 바 오른쪽에 붙는 칸. 채워질수록 스태거가 가깝다 */
+interface ParryPips {
+  streak: number;
+  total: number;
+  /** 스태거 중 — 전부 금색으로 켜서 "지금 처형" 을 알린다 */
+  staggered: boolean;
+}
+const PIP_ON = '#bfe0ff'; // 패링 청백색 (격돌 불꽃과 같은 계열)
+const PIP_STAGGER = '#ffb648';
+
 function drawPlate(
   canvas: HTMLCanvasElement,
   name: string,
   healthFrac: number,
   barIndex = 1,
   barCount = 1,
+  parry: ParryPips | null = null,
 ): void {
   const ctx = canvas.getContext('2d')!;
   ctx.clearRect(0, 0, PLATE_W, PLATE_H);
@@ -271,11 +282,14 @@ function drawPlate(
   ctx.fillStyle = '#e8e8ee';
   ctx.fillText(label, 128, 18);
 
-  // HP 바
+  // HP 바 — 패링 카운터가 붙으면 그만큼 자리를 내준다
   const barX = 28;
-  const barW = 200;
   const barY = 40;
   const barH = 16;
+  const pipW = 14;
+  const pipGap = 5;
+  const pipsW = parry ? parry.total * pipW + (parry.total - 1) * pipGap : 0;
+  const barW = parry ? 200 - pipsW - 10 : 200;
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
   const frac = Math.max(0, Math.min(1, healthFrac));
@@ -287,6 +301,20 @@ function drawPlate(
     ctx.fillRect(barX - 2, barY + barH + 3, barW + 4, 5);
     ctx.fillStyle = barColor(barIndex - 1, 1);
     ctx.fillRect(barX, barY + barH + 4, barW, 3);
+  }
+
+  // 패링 카운터 — 바 오른쪽에 total 칸. 연속 성공한 만큼 켜지고, 스태거면 전부 금색.
+  // HUD 구석의 [패링 n/3] 을 안 보고도 머리 위에서 바로 읽히게 한다
+  if (parry) {
+    const pipX = barX + barW + 10;
+    for (let i = 0; i < parry.total; i++) {
+      const x = pipX + i * (pipW + pipGap);
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(x - 1, barY - 1, pipW + 2, barH + 2);
+      const on = parry.staggered || i < parry.streak;
+      ctx.fillStyle = on ? (parry.staggered ? PIP_STAGGER : PIP_ON) : '#39424d';
+      ctx.fillRect(x, barY, pipW, barH);
+    }
   }
 }
 const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 그린다 (근접부 왜곡 방지)
@@ -1248,14 +1276,25 @@ export class Stage {
         material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
       }
 
-      // 이름표 — 어그로 후에만. 체력이 바뀔 때만 다시 그린다
+      // 이름표 — 어그로 후에만. 체력·패링 카운터가 바뀔 때만 다시 그린다
       visual.plate.visible = enemy.ai !== 'idle';
       if (visual.plate.visible) {
-        const key = `${Math.ceil(enemy.health)}`;
+        const staggered = enemy.ai === 'staggered';
+        const parry = def2.parriesToStagger
+          ? { streak: enemy.parryStreak ?? 0, total: def2.parriesToStagger, staggered }
+          : null;
+        const key = `${Math.ceil(enemy.health)}|${parry ? `${parry.streak}${staggered ? 'S' : ''}` : ''}`;
         if (key !== visual.plateKey) {
           visual.plateKey = key;
           const hb = healthBarState(def2, enemy.health);
-          drawPlate(visual.plateCanvas, def2.name ?? enemy.type, hb.frac, hb.index, hb.count);
+          drawPlate(
+            visual.plateCanvas,
+            def2.name ?? enemy.type,
+            hb.frac,
+            hb.index,
+            hb.count,
+            parry,
+          );
           visual.plateTexture.needsUpdate = true;
         }
       }
