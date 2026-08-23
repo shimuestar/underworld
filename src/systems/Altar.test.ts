@@ -6,6 +6,7 @@ import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World } from '../core/World';
 import { Level } from '../level/GridLoader';
+import { spawnEnemies } from '../level/Spawner';
 import * as Altar from './Altar';
 import * as Corruption from './Corruption';
 import * as Sigils from './Sigils';
@@ -126,6 +127,29 @@ describe('제단 진입', () => {
     expect(bypassed[0]).toMatchObject({
       ammoLeftRatio: (5 + 12) / (balance.weapons.pistol.magSize + balance.weapons.pistol.ammoMax),
     });
+  });
+});
+
+describe('제단 안전 반경', () => {
+  it('제단 주변에는 적이 스폰되지 않는다 — 부활 지점이라 즉시 전투가 붙으면 안 된다', () => {
+    const level = world.level;
+    const a = level.altarPos!;
+    const cs = level.cellSize;
+    const cell = (x: number, z: number): number[] => [Math.floor(z / cs), Math.floor(x / cs)];
+
+    const onAltar = cell(a.x, a.z);
+    const far = cell(a.x + balance.altar.safeRadius + cs * 2, a.z);
+    const spawned = spawnEnemies(
+      [
+        { type: 'goblin_runner', cell: onAltar }, // 제단 바로 위
+        { type: 'goblin_runner', cell: far }, // 반경 밖
+      ],
+      level,
+    );
+    expect(spawned).toHaveLength(1);
+    expect(Math.hypot(spawned[0]!.x - a.x, spawned[0]!.z - a.z)).toBeGreaterThan(
+      balance.altar.safeRadius,
+    );
   });
 });
 

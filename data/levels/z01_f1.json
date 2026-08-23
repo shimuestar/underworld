@@ -13,10 +13,10 @@
     "##.######........########.#",
     "#L.....##....############.#",
     "#......####.....#########.#",
-    "#......####..A....#######.#",
-    "#........##.....#.#######.#",
-    "#......#.##.....#.#######.#",
-    "#......#.L#######.#######.#",
+    "#......####.......#######.#",
+    "#........##.....#.#..A..#.#",
+    "#......#.##.....#.#.....#.#",
+    "#......#.L#######.###.###.#",
     "########..................#",
     "#############D########.####",
     "##########...............##",
@@ -27,88 +27,585 @@
     "###########################"
   ],
   "legend": {
-    "#": "wall", ".": "floor", "S": "spawn", "A": "altar",
-    "L": "lever", "D": "door_locked", "C": "crack_wall",
-    "P": "pit_trap", "X": "exit"
+    "#": "wall",
+    ".": "floor",
+    "S": "spawn",
+    "A": "altar",
+    "L": "lever",
+    "D": "door_locked",
+    "C": "crack_wall",
+    "P": "pit_trap",
+    "X": "exit"
   },
   "_layout": "북서 스폰 → 아레나A(기둥 홀, 러너) → 잠긴 보물방(주술사2) / 서쪽 주술사 방(레버2) / 중앙 제단(우회 가능) / 남부 복도(매복조) → 보스 아레나(지름길 문 + 동쪽 상시 입구) → 출구",
   "entities": [
-    { "type": "goblin_runner", "cell": [2, 8], "note": "초입 단독조우 — 스폰 안전지대 밖" },
-    { "type": "goblin_runner", "cell": [1, 13] },
-    { "type": "goblin_runner", "cell": [3, 10] },
-    { "type": "goblin_runner", "cell": [3, 15] },
-    { "type": "goblin_runner", "cell": [5, 13] },
-    { "type": "goblin_runner", "cell": [6, 11] },
-    { "type": "goblin_spear",  "cell": [4, 12], "note": "아레나 A 창병" },
-    { "type": "goblin_archer", "cell": [1, 15], "note": "아레나 A 후방 궁수" },
-    { "type": "goblin_spear",  "cell": [7, 11] },
-    { "type": "goblin_spear",  "cell": [9, 16], "note": "제단 동쪽 입구 경비" },
-    { "type": "goblin_spear",  "cell": [13, 16] },
-    { "type": "goblin_runner", "cell": [13, 13] },
-    { "type": "goblin_archer", "cell": [11, 25], "note": "동쪽 세로 복도 저격수" },
-    { "type": "goblin_archer", "cell": [13, 24], "note": "보스 아레나 입구 앞" },
-    { "type": "warden",        "cell": [9, 3] },
-    { "type": "goblin_runner", "cell": [8, 4], "note": "주술사 호위" },
-    { "type": "goblin_runner", "cell": [11, 2], "note": "주술사 호위" },
-    { "type": "goblin_runner", "cell": [12, 5], "note": "주술사 호위" },
-    { "type": "warden",        "cell": [2, 21], "note": "보물방 수문장" },
-    { "type": "goblin_spear",  "cell": [3, 19], "note": "보물방 경비" },
-    { "type": "goblin_runner", "cell": [13, 10] },
-    { "type": "goblin_chieftain", "cell": [17, 18], "note": "보스 아레나" },
-    { "type": "goblin_runner", "cell": [16, 20], "note": "보스 부하" },
-    { "type": "goblin_runner", "cell": [18, 14], "note": "보스 부하" },
-    { "type": "goblin_runner", "cell": [19, 20], "note": "보스 부하" },
-    { "type": "goblin_archer", "cell": [15, 23], "note": "보스 아레나 후방 궁수" },
-    { "type": "goblin_archer", "cell": [1, 9] },
-    { "type": "goblin_archer", "cell": [6, 15] },
-    { "type": "goblin_archer", "cell": [6, 12], "note": "아레나 A 남측 (스폰 방에서 이동)" },
-    { "type": "goblin_archer", "cell": [1, 20], "note": "보물방" },
-    { "type": "goblin_archer", "cell": [4, 22], "note": "보물방" },
-    { "type": "goblin_archer", "cell": [7, 5], "note": "주술사 방" },
-    { "type": "goblin_archer", "cell": [11, 4], "note": "주술사 방" },
-    { "type": "goblin_archer", "cell": [7, 10], "note": "제단 북쪽 복도" },
-    { "type": "goblin_archer", "cell": [10, 8], "note": "서쪽 세로 복도" },
-    { "type": "goblin_archer", "cell": [13, 9], "note": "남부 복도 서단" },
-    { "type": "goblin_archer", "cell": [13, 18], "note": "남부 복도 중앙" },
-    { "type": "goblin_archer", "cell": [5, 25], "note": "동쪽 세로 복도 북단" },
-    { "type": "goblin_archer", "cell": [9, 25], "note": "동쪽 세로 복도 중단" },
-    { "type": "goblin_archer", "cell": [15, 12], "note": "보스 아레나 서측" },
-    { "type": "goblin_archer", "cell": [18, 21], "note": "보스 아레나 동측" },
-    { "type": "goblin_archer", "cell": [19, 11], "note": "보스 아레나 남서" },
-    { "type": "goblin_runner", "cell": [13, 19], "group": "amb01" },
-    { "type": "spider_large",  "cell": [22, 2],  "note": "거미 둥지 — 문 너머 방. 흰 거미가 묶고 검은 거미가 달려든다" },
-    { "type": "spider_small",  "cell": [19, 1],  "note": "거미 둥지" },
-    { "type": "spider_small",  "cell": [21, 1],  "note": "거미 둥지" },
-    { "type": "spider_small",  "cell": [19, 3],  "note": "거미 둥지" },
-    { "type": "spider_small",  "cell": [21, 4],  "note": "거미 둥지" },
-    { "type": "spider_small",  "cell": [23, 3],  "note": "거미 둥지" },
-    { "type": "spider_small",  "cell": [19, 13], "note": "본길 복도 — 거미를 먼저 한 번 만나 본다" },
-    { "type": "spider_small",  "cell": [22, 13], "note": "본길 복도" },
-    { "type": "goblin_runner", "cell": [13, 20], "group": "amb01" },
-    { "type": "goblin_runner", "cell": [13, 21], "group": "amb01" }
+    {
+      "type": "goblin_runner",
+      "cell": [
+        2,
+        8
+      ],
+      "note": "초입 단독조우 — 스폰 안전지대 밖"
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        1,
+        13
+      ]
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        3,
+        10
+      ]
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        3,
+        15
+      ]
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        5,
+        13
+      ]
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        6,
+        11
+      ]
+    },
+    {
+      "type": "goblin_spear",
+      "cell": [
+        4,
+        12
+      ],
+      "note": "아레나 A 창병"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        1,
+        15
+      ],
+      "note": "아레나 A 후방 궁수"
+    },
+    {
+      "type": "goblin_spear",
+      "cell": [
+        7,
+        11
+      ]
+    },
+    {
+      "type": "goblin_spear",
+      "cell": [
+        9,
+        16
+      ],
+      "note": "제단 동쪽 입구 경비"
+    },
+    {
+      "type": "goblin_spear",
+      "cell": [
+        13,
+        16
+      ]
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        13,
+        13
+      ]
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        11,
+        25
+      ],
+      "note": "동쪽 세로 복도 저격수"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        13,
+        24
+      ],
+      "note": "보스 아레나 입구 앞"
+    },
+    {
+      "type": "warden",
+      "cell": [
+        9,
+        3
+      ]
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        8,
+        4
+      ],
+      "note": "주술사 호위"
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        11,
+        2
+      ],
+      "note": "주술사 호위"
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        12,
+        5
+      ],
+      "note": "주술사 호위"
+    },
+    {
+      "type": "warden",
+      "cell": [
+        2,
+        21
+      ],
+      "note": "보물방 수문장"
+    },
+    {
+      "type": "goblin_spear",
+      "cell": [
+        3,
+        19
+      ],
+      "note": "보물방 경비"
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        13,
+        10
+      ]
+    },
+    {
+      "type": "goblin_chieftain",
+      "cell": [
+        17,
+        18
+      ],
+      "note": "보스 아레나"
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        16,
+        20
+      ],
+      "note": "보스 부하"
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        18,
+        14
+      ],
+      "note": "보스 부하"
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        19,
+        20
+      ],
+      "note": "보스 부하"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        15,
+        23
+      ],
+      "note": "보스 아레나 후방 궁수"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        1,
+        9
+      ]
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        6,
+        15
+      ]
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        6,
+        12
+      ],
+      "note": "아레나 A 남측 (스폰 방에서 이동)"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        1,
+        20
+      ],
+      "note": "보물방"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        4,
+        22
+      ],
+      "note": "보물방"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        7,
+        5
+      ],
+      "note": "주술사 방"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        11,
+        4
+      ],
+      "note": "주술사 방"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        7,
+        10
+      ],
+      "note": "제단 북쪽 복도"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        10,
+        8
+      ],
+      "note": "서쪽 세로 복도"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        13,
+        9
+      ],
+      "note": "남부 복도 서단"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        13,
+        18
+      ],
+      "note": "남부 복도 중앙"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        5,
+        25
+      ],
+      "note": "동쪽 세로 복도 북단"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        9,
+        25
+      ],
+      "note": "동쪽 세로 복도 중단"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        15,
+        12
+      ],
+      "note": "보스 아레나 서측"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        18,
+        21
+      ],
+      "note": "보스 아레나 동측"
+    },
+    {
+      "type": "goblin_archer",
+      "cell": [
+        19,
+        11
+      ],
+      "note": "보스 아레나 남서"
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        13,
+        19
+      ],
+      "group": "amb01"
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        13,
+        20
+      ],
+      "group": "amb01"
+    },
+    {
+      "type": "goblin_runner",
+      "cell": [
+        13,
+        21
+      ],
+      "group": "amb01"
+    },
+    {
+      "type": "spider_large",
+      "cell": [
+        2,
+        22
+      ],
+      "note": "거미 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        1,
+        19
+      ],
+      "note": "거미 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        1,
+        21
+      ],
+      "note": "거미 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        3,
+        19
+      ],
+      "note": "거미 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        4,
+        21
+      ],
+      "note": "거미 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        3,
+        23
+      ],
+      "note": "거미 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        13,
+        15
+      ],
+      "note": "본길 복도 — 거미를 먼저 한 번 만나 본다"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        13,
+        18
+      ],
+      "note": "본길 복도 — 거미를 먼저 한 번 만나 본다"
+    }
   ],
   "triggers": [
-    { "type": "lever", "cell": [12, 9], "opens": [14, 13],
-      "note": "보스 아레나 북쪽 지름길 문" },
-    { "type": "lever", "cell": [7, 1], "opens": [2, 17],
-      "note": "주술사 방 구석 — 북동 보물방 개방" },
-    { "type": "ambush", "cell": [13, 17], "spawns": "amb01",
-      "note": "남부 복도 매복. 트리거 시스템은 미구현 — 대기" },
-    { "type": "crack_wall", "cell": [16, 9], "reward": "ammo_cache",
-      "note": "수류탄으로만 개방 (슬라이스 밖)" }
+    {
+      "type": "lever",
+      "cell": [
+        12,
+        9
+      ],
+      "opens": [
+        14,
+        13
+      ],
+      "note": "보스 아레나 북쪽 지름길 문"
+    },
+    {
+      "type": "lever",
+      "cell": [
+        7,
+        1
+      ],
+      "opens": [
+        2,
+        17
+      ],
+      "note": "주술사 방 구석 — 북동 보물방 개방"
+    },
+    {
+      "type": "ambush",
+      "cell": [
+        13,
+        17
+      ],
+      "spawns": "amb01",
+      "note": "남부 복도 매복. 트리거 시스템은 미구현 — 대기"
+    },
+    {
+      "type": "crack_wall",
+      "cell": [
+        16,
+        9
+      ],
+      "reward": "ammo_cache",
+      "note": "수류탄으로만 개방 (슬라이스 밖)"
+    }
   ],
-  "altar": { "cell": [9, 13], "bypassRoute": [[13, 8], [13, 25]],
-    "note": "남부 가로 복도가 제단을 밟지 않는 우회로. 스크립트 검증 완료" },
-  "lighting": { "ambient": 0.04, "torches": [
-    [2, 2], [2, 12], [2, 23], [5, 10],
-    [8, 2], [8, 25], [9, 14], [9, 17], [11, 8],
-    [13, 12], [13, 23],
-    [16, 12], [16, 22], [18, 17]
-  ] },
+  "altar": {
+    "cell": [
+      9,
+      13
+    ],
+    "bypassRoute": [
+      [
+        13,
+        8
+      ],
+      [
+        13,
+        25
+      ]
+    ],
+    "note": "남부 가로 복도가 제단을 밟지 않는 우회로. 스크립트 검증 완료"
+  },
+  "lighting": {
+    "ambient": 0.04,
+    "torches": [
+      [
+        2,
+        2
+      ],
+      [
+        2,
+        12
+      ],
+      [
+        2,
+        23
+      ],
+      [
+        5,
+        10
+      ],
+      [
+        8,
+        2
+      ],
+      [
+        8,
+        25
+      ],
+      [
+        9,
+        14
+      ],
+      [
+        9,
+        17
+      ],
+      [
+        11,
+        8
+      ],
+      [
+        13,
+        12
+      ],
+      [
+        13,
+        23
+      ],
+      [
+        16,
+        12
+      ],
+      [
+        16,
+        22
+      ],
+      [
+        18,
+        17
+      ]
+    ]
+  },
   "glyphs": [
-    { "cell": [1, 2], "dir": "N", "text": "빛은 굶주림을 부른다" },
-    { "cell": [8, 13], "dir": "N", "text": "제단은 잔탄을 세지 않는다" },
-    { "cell": [13, 10], "dir": "N", "text": "우회는 자유, 굶주림도 자유" },
-    { "cell": [13, 22], "dir": "N", "text": "족장은 열린 문 뒤에 있다" }
+    {
+      "cell": [
+        1,
+        2
+      ],
+      "dir": "N",
+      "text": "빛은 굶주림을 부른다"
+    },
+    {
+      "cell": [
+        8,
+        13
+      ],
+      "dir": "N",
+      "text": "제단은 잔탄을 세지 않는다"
+    },
+    {
+      "cell": [
+        13,
+        10
+      ],
+      "dir": "N",
+      "text": "우회는 자유, 굶주림도 자유"
+    },
+    {
+      "cell": [
+        13,
+        22
+      ],
+      "dir": "N",
+      "text": "족장은 열린 문 뒤에 있다"
+    }
   ]
 }

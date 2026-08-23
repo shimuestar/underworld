@@ -1,6 +1,7 @@
 // 레벨 정의의 entities 목록 → World 적 상태 배열.
 // group이 붙은 개체는 매복 트리거가 활성화할 때까지 스폰하지 않는다 (트리거는 후속 작업).
 
+import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
 import type { EnemyState } from '../core/World';
 import type { Level } from './GridLoader';
@@ -51,6 +52,7 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
 export function spawnEnemies(placements: EntityPlacement[], level: Level): EnemyState[] {
   const enemies: EnemyState[] = [];
   let nextId = 1;
+  let skippedNearAltar = 0;
 
   for (const placement of placements) {
     if (placement.group) continue; // 매복 대기조
@@ -60,14 +62,27 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
     }
     const [row, col] = placement.cell;
     if (row === undefined || col === undefined) continue;
+    // 제단 주변은 비워 둔다 — 부활 지점이라 되살아나자마자 전투가 붙으면 안 된다
+    const x = (col + 0.5) * level.cellSize;
+    const z = (row + 0.5) * level.cellSize;
+    if (level.altarPos) {
+      const d = Math.hypot(x - level.altarPos.x, z - level.altarPos.z);
+      if (d <= balance.altar.safeRadius) {
+        skippedNearAltar++;
+        continue;
+      }
+    }
     enemies.push(
       spawnEnemyAt(
         placement.type,
-        (col + 0.5) * level.cellSize,
-        (row + 0.5) * level.cellSize,
+        x,
+        z,
         nextId++,
       ),
     );
+  }
+  if (skippedNearAltar > 0) {
+    console.warn(`[spawn] 제단 안전 반경 안이라 ${skippedNearAltar}마리를 건너뛰었다`);
   }
 
   return enemies;
