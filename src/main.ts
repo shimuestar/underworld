@@ -955,10 +955,7 @@ function render(alpha: number): void {
   } else if (nearLever) {
     altarPrompt!.textContent = 'E — 레버를 당긴다';
   } else if (onSealedExit) {
-    const boss = world.enemies.find((e) => e.alive && enemyDef(e.type).boss);
-    altarPrompt!.textContent =
-      `출구가 봉인되어 있다\n` +
-      `${boss ? (enemyDef(boss.type).name ?? '족장') : '족장'}을 쓰러뜨려야 발판이 열린다`;
+    altarPrompt!.textContent = '출구가 봉인되어 있다';
   }
 
   const w = world.weapon;
