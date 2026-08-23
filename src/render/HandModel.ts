@@ -198,20 +198,23 @@ export class HandModel {
     this.leftArm.add(bracer);
 
     // 방패에 꽂히는 화살 3슬롯 — 평소엔 숨김, 화살을 막으면 순환 표시.
-    // 가드 자세에서 방패 바깥면(-x)은 카메라 반대쪽이라 그대로 두면 판에 가린다.
-    // tilt(-z 회전)로 샤프트를 위로 세워 방패 위로 솟게 한다.
+    // 가드 자세에서 방패 바깥면(-x)은 카메라 반대쪽이라 판 뒤로 숨는다.
+    // 그래서 판 위쪽 가장자리(y ≒ +0.14)에 꽂고 tilt 로 샤프트를 세워 위로 솟게 한다 —
+    // 기울기가 얕으면(-0.6 대) 커진 방패에 통째로 먹힌다 (실측으로 확인)
     const arrowSpots: [number, number, number][] = [
-      [0.04, -0.06, -0.62], // [높이, 좌우, 기울기]
-      [0.0, 0.02, -0.86],
-      [-0.05, 0.07, -1.04],
+      [0.06, -0.07, -1.0], // [높이, 좌우, 기울기]
+      [0.09, 0.0, -1.22],
+      [0.05, 0.075, -0.86],
     ];
     for (const [dy, dz, tilt] of arrowSpots) {
       const stuck = new THREE.Group();
-      const shaft = box(0.17, 0.016, 0.016, 0x6b5233);
-      shaft.position.set(-0.085, 0, 0); // 꽂힌 지점에서 바깥으로 뻗는다
+      // 박힌 화살이라 대부분 판에 먹혀 있다 — 뒷동강만 보인다.
+      // 온전한 길이(0.17)면 조준점 높이까지 솟아 시야를 가린다
+      const shaft = box(0.1, 0.016, 0.016, 0x6b5233);
+      shaft.position.set(-0.05, 0, 0); // 꽂힌 지점에서 바깥으로 뻗는다
       stuck.add(shaft);
       const fletch = box(0.035, 0.032, 0.007, 0x9b3535);
-      fletch.position.set(-0.155, 0, 0);
+      fletch.position.set(-0.092, 0, 0);
       stuck.add(fletch);
       stuck.position.set(-0.048, 0.02 + dy, dz);
       stuck.rotation.z = tilt;
