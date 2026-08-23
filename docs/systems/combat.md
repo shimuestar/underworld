@@ -147,6 +147,17 @@ gap ≤ parrySpace.guardDepth  → 일반    (가드 안까지 들어옴)
 > **먼저** 확정해 `applyProjectileHit` 에 넘긴다. 안 그러면 화염구가 자기 폭풍 때문에
 > "가드 풀림"으로 오판해 방패를 못 깬다.
 
+## 3.2 족장 지면 강타 (aoeRadius)
+
+`goblin_chieftain.attack.aoeRadius` 3.6 / `armoredAttack` 4.0. 해머로 땅을 내리쳐
+**각과 무관한 원형 판정** — 옆으로 비켜도 소용없고 반경 밖으로 물러나야 한다.
+
+- `attackReaches` 안에서 처리한다. `aoeRadius` 가 있으면 `arcDeg`·`impactRangeMul` 을
+  건너뛰고 거리만 본다. **Reaction(패링)과 Enemies(피해)가 같은 함수를 쓰므로**
+  "호 밖이라 못 막는데 원 안이라 맞는" 구멍이 생기지 않는다.
+- 예고 중 바닥에 붉은 원이 그려진다(`aoeRing`). 화면 UI가 아니라 월드 바닥 표식이고,
+  반경은 판정값 그대로다. 예고가 진행될수록 진해지고 내리치는 순간 가장 진하다.
+
 ## 3.3 족장 화살 세례 (volleyAttack)
 
 `goblin_chieftain.volleyAttack`. 예고 0.9초 → **0.5초 간격으로 10발**, 발당 12 피해.
@@ -159,8 +170,12 @@ gap ≤ parrySpace.guardDepth  → 일반    (가드 안까지 들어옴)
 - 화살은 `deflectable: false` → 반사 불가, 회피/엄폐 전용 (적색 텔레그래프 규약).
 - 한 발이 약한 이유는 `attack.damage` 재정의 — `fireProjectile` 이 근접과 같은 규약으로
   `attack.damage ?? def.damage` 를 쓴다. (예전에는 def.damage 만 봐서 발당 30이었다)
-- 예고는 UI가 아니라 **동작·발광·소리**로만 준다: 적색 텔레그래프 섬광 + 시위 당기는
-  소리(`boss_volley_draw`) + "화살 세례 — 10발이 온다!".
+- 예고는 UI가 아니라 **동작·발광·소리**로만 준다: 적색 텔레그래프 섬광 + 무기를 몸 앞으로
+  가로질러 당기는 자세 + 시위 당기는 소리(`boss_volley_draw`) + "화살 세례 — 10발이 온다!".
+  자세를 높이 치켜드는 안(팔 1.45rad)은 랜턴 조명 밖으로 나가 캄캄해서 폐기했다 —
+  몸통 높이에서 옆으로 당긴다.
+- 화살은 **무기 든 손**에서 나간다 (`muzzleSideMul` 0.85 × radius, `muzzleHeightMul`
+  0.72 × height — Stage 의 팔 피벗과 같은 값).
 
 ## 3.4 피격 밀림과 이동
 
@@ -181,6 +196,8 @@ gap ≤ parrySpace.guardDepth  → 일반    (가드 안까지 들어옴)
   질주로 1.6 → 0.25 까지 상쇄돼 밀림이 거의 무의미했다).
 - **방패로 막으면 다르다** — 격돌 경직(`block.clashPlayerStunTicks`) 동안 이동 입력이
   통째로 막히므로 밀림이 온전히 들어간다. 대신 밀림 자체가 `blockedMul`(0.33) 배다.
+- **종류별 예외** `blockedMulByKind` — 던진 바위는 1.0 이라 방패로 받아도 그대로 민다
+  (1.8m). 무게가 실린 물건은 막았다고 안 밀릴 수 없다.
 - 회피 대시 중에도 같은 이유로 이동 입력이 막힌다.
 
 ## 3.5 스태미너

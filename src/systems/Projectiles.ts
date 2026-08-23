@@ -231,7 +231,10 @@ function moveProjectiles(world: World, dt: number): void {
 
           // 뒤로 밀림 — 날아온 방향으로. 마법이 가장 세고 화살은 거의 없다
           const kb = balance.playerKnockback as unknown as Record<string, number>;
-          const push = (kb[proj.kind ?? 'arrow'] ?? kb['arrow']!) * (blocked ? kb['blockedMul']! : 1);
+          // 방어 감쇠는 종류별 예외를 먼저 본다 — 던진 바위는 방패로 받아도 그대로 민다
+          const byKind = balance.playerKnockback.blockedMulByKind as Record<string, number>;
+          const blockedMul = byKind[proj.kind ?? ''] ?? kb['blockedMul']!;
+          const push = (kb[proj.kind ?? 'arrow'] ?? kb['arrow']!) * (blocked ? blockedMul : 1);
           pushPlayer(p, dirX, dirZ, push, balance.playerKnockback.ticks);
 
           if (blocked) world.events.emit('block_hit', { amount: damage, kind: proj.kind });

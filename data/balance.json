@@ -64,6 +64,8 @@
     "ticks": 8,
     "moveSpeedMul": 0.5,
     "blockedMul": 0.33,
+    "_blockedByKindNote": "종류별 방어 시 밀림 배율 예외. 던진 바위는 방패로 받아도 무게가 그대로 실린다",
+    "blockedMulByKind": { "rock": 1.0 },
     "arrow": 0.35,
     "contact": 0.8,
     "thrust": 1.6,

@@ -903,3 +903,53 @@ describe('피격 밀림 중 이동', () => {
     expect(walk(world, 5)).toBeCloseTo(walk(plain, 5), 4);
   });
 });
+
+describe('던진 바위 — 방패로 막아도 밀린다', () => {
+  function throwRock(world: World, blocking: boolean): number {
+    world.player.yaw = -Math.PI / 2; // +X 를 본다
+    world.player.blocking = blocking;
+    world.projectiles.push({
+      id: 77, owner: 'enemy',
+      x: world.player.x + 6, y: 1.2, z: world.player.z,
+      prevX: world.player.x + 6, prevY: 1.2, prevZ: world.player.z,
+      vx: -20, vy: 0, vz: 0,
+      lifeTicks: 120, damage: 30, burnTicks: 0, burnDamagePerTick: 0,
+      radius: 0.45, kind: 'rock',
+    });
+    for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    return world.player.kbX !== undefined ? Math.abs(world.player.kbX) * world.player.kbTicks! : 0;
+  }
+
+  it('막아도 밀림이 줄지 않는다 (blockedMulByKind.rock = 1)', () => {
+    const kb = balance.playerKnockback;
+    const blockedMul = (kb.blockedMulByKind as Record<string, number>)['rock'];
+    expect(blockedMul).toBe(1);
+
+    const open = makeWorld();
+    const openPush = throwRock(open, false);
+    const guard = makeWorld();
+    const guardPush = throwRock(guard, true);
+
+    expect(openPush).toBeCloseTo(kb.rock, 4);
+    expect(guardPush).toBeCloseTo(openPush, 4); // 방패를 들어도 그대로
+    expect(guard.player.health).toBeLessThan(balance.player.healthMax); // 칩 데미지는 들어간다
+  });
+
+  it('화살은 여전히 방패로 막으면 거의 안 밀린다 (기존 규칙 유지)', () => {
+    const kb = balance.playerKnockback;
+    const world = makeWorld();
+    world.player.yaw = -Math.PI / 2;
+    world.player.blocking = true;
+    world.projectiles.push({
+      id: 78, owner: 'enemy',
+      x: world.player.x + 6, y: 1.2, z: world.player.z,
+      prevX: world.player.x + 6, prevY: 1.2, prevZ: world.player.z,
+      vx: -20, vy: 0, vz: 0,
+      lifeTicks: 120, damage: 12, burnTicks: 0, burnDamagePerTick: 0,
+      radius: 0.15, kind: 'arrow',
+    });
+    for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    const push = Math.abs(world.player.kbX!) * world.player.kbTicks!;
+    expect(push).toBeCloseTo(kb.arrow * kb.blockedMul, 4);
+  });
+});

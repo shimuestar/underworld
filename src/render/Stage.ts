@@ -55,6 +55,10 @@ const DECAL_FADE_MS = 2000;
 
 const EXIT_FLASH_MS = 900; // 출구가 열리는 순간의 섬광
 
+/** 지면 강타 범위 원 — 예고 중 바닥에 그려진다. 안쪽 반지름은 바깥 대비 비율 */
+const AOE_RING_COLOR = 0xff5a3c;
+const AOE_RING_INNER = 0.9;
+
 const SHIELD_COLOR = 0x6f7480;
 const SHIELD_BASE_X = -0.08;
 /** 가드가 풀렸을 때 방패 — 팔이 옆으로 툭 늘어진 그림 (낮게 + 옆으로 + 뉘어서) */
@@ -90,6 +94,13 @@ const MELEE_WEAPONS: Record<
 const ARM_REST = -0.45; // 무기를 내려 든 대기
 const ARM_RAISED = 2.0; // 머리 위로 치켜듦
 const ARM_SMASH = -1.15; // 앞아래로 내리찍음
+/** 화살 세례 — 무기를 몸 앞으로 가로질러 당겼다(예고) 한 발마다 앞으로 튕긴다.
+ *  높이 치켜들면(1.4대) 랜턴 조명 밖으로 나가 캄캄해서 안 보인다 — 몸통 높이로 잡는다 */
+const ARM_VOLLEY_DRAW = 0.42; // 거의 수평
+const ARM_VOLLEY_SWING = 1.05; // 몸을 가로지르게 옆으로 (rotation.y)
+const VOLLEY_PULL = 0.5; // 팔을 뒤로 당김 (armZ)
+const VOLLEY_LEAN = 0.34; // 상체 젖힘
+const VOLLEY_SNAP = 0.25; // 발사 직후 앞으로 튕기는 구간 비율
 /** thrust: 창끝은 항상 수평(플레이어를 겨눔). 움츠렸다 진격하며 내지른다.
  *  몸통 rotation.x는 + 가 뒤로 젖힘 / - 가 앞으로 숙임 (피벗이 발밑) */
 const THRUST_LEVEL = 0.02;
@@ -127,6 +138,9 @@ interface EnemyVisual {
   barrierFlashUntil: number;
   /** 보스 장갑판 (armored 페이즈에만 표시) */
   armorPlates?: THREE.Mesh;
+  /** 지면 강타 범위 표시 — 예고 중 바닥에 그려지는 원 */
+  aoeRing?: THREE.Mesh;
+  aoeRingMaterial?: THREE.MeshBasicMaterial;
   /** 시전 충전 구체 (warden) */
   chargeOrb?: THREE.Mesh;
   chargeOrbLight?: THREE.PointLight;
@@ -893,6 +907,26 @@ export class Stage {
       plateKey: '',
     };
 
+    // 지면 강타 범위 원 — 예고 중에만 보인다. 반경은 매 프레임 attack.aoeRadius 로 맞춘다.
+    // 화면 UI 가 아니라 월드 바닥에 놓인 표식이다 (몸이 기울어도 바닥에 붙어 있게 group 소속)
+    if (def.attack.aoeRadius || def.armoredAttack?.aoeRadius) {
+      visual.aoeRingMaterial = new THREE.MeshBasicMaterial({
+        color: AOE_RING_COLOR,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      visual.aoeRing = new THREE.Mesh(
+        new THREE.RingGeometry(AOE_RING_INNER, 1, 48),
+        visual.aoeRingMaterial,
+      );
+      visual.aoeRing.rotation.x = -Math.PI / 2;
+      visual.aoeRing.position.y = 0.03;
+      visual.aoeRing.visible = false;
+      group.add(visual.aoeRing);
+    }
+
     // 시전 충전 구체 (마법 투사체 캐스터) —
     // 위치·크기·색을 발사 지점(Enemies.fireProjectile)과 정확히 맞춘다.
     // torso에 달면 시전 중 상체가 기울 때 구체가 끌려가 "다른 데서 튀어나오는" 그림이 된다.
@@ -1159,6 +1193,14 @@ export class Stage {
         leanTarget = striking && isMelee ? -0.42 : inWindup ? 0.28 * windupProgress : 0;
         lungeTarget = striking && isMelee ? -0.5 : 0;
       }
+      // 화살 세례 — 예고부터 발사 내내 상체를 젖힌 채 버틴다 (바위 투척과 구분되는 자세)
+      const volleying =
+        enemy.attackMode === 'volley' && (inWindup || enemy.ai === 'volley');
+      if (volleying) {
+        leanTarget = inWindup ? VOLLEY_LEAN * windupProgress : VOLLEY_LEAN;
+        lungeTarget = 0;
+      }
+
       // 방패 밀쳐내기 — 몸통째 앞으로 내지른다 (찌르기와 구분되는 짧고 굵은 동작)
       const bashing = enemy.attackMode === 'bash';
       if (bashing && striking) {
@@ -1214,6 +1256,7 @@ export class Stage {
         const strikeProgress = enemy.strikeProgress ?? 0;
         let armRotTarget: number;
         let armZTarget = 0;
+        let armYawTarget = 0; // 연사만 쓴다 — 나머지 동작은 수직면 안에서만 움직인다
         let direct = false; // 즉시 반영 (보간하면 판정과 어긋난다)
         if (style === 'thrust') {
           // 몸통 기울기를 상쇄 — 창끝이 위로 쓸리지 않고 계속 플레이어를 겨눈다
@@ -1226,6 +1269,22 @@ export class Stage {
             const tipLocal = (spec?.length ?? 1) + (spec?.tip ? 0.23 : 0);
             armZTarget = -(enemy.weaponTipDist ?? 0) + tipLocal - visual.torso.position.z;
             direct = true;
+          }
+        } else if (volleying) {
+          // 예고: 무기를 몸 앞으로 가로질러 당긴다 / 발사: 한 발마다 앞으로 짧게 튕긴다
+          if (inWindup) {
+            armRotTarget = ARM_REST + (ARM_VOLLEY_DRAW - ARM_REST) * windupProgress;
+            armYawTarget = ARM_VOLLEY_SWING * windupProgress;
+            armZTarget = VOLLEY_PULL * windupProgress;
+            if (trembling) armYawTarget += Math.sin(now / 10) * 0.08;
+          } else {
+            const interval = attack.shotIntervalTicks ?? 30;
+            const since = 1 - Math.min(1, enemy.timer / interval); // 0 = 방금 쏨
+            const snapK = since < VOLLEY_SNAP ? 1 - since / VOLLEY_SNAP : 0;
+            armRotTarget = ARM_VOLLEY_DRAW - 0.3 * snapK;
+            armYawTarget = ARM_VOLLEY_SWING * (1 - snapK * 0.85);
+            armZTarget = VOLLEY_PULL * (1 - snapK);
+            direct = true; // 발사 순간과 그림이 어긋나지 않게
           }
         } else {
           armRotTarget = ARM_REST;
@@ -1240,11 +1299,25 @@ export class Stage {
         }
         if (direct) {
           visual.arm.rotation.x = armRotTarget;
+          visual.arm.rotation.y = armYawTarget;
           visual.arm.position.z = armZTarget;
         } else {
           const armSnap = striking ? 0.6 : 0.25;
           visual.arm.rotation.x += (armRotTarget - visual.arm.rotation.x) * armSnap;
+          visual.arm.rotation.y += (armYawTarget - visual.arm.rotation.y) * armSnap;
           visual.arm.position.z += (armZTarget - visual.arm.position.z) * armSnap;
+        }
+      }
+
+      // 지면 강타 범위 원 — 예고 내내 보이고 진행할수록 진해진다. 반경은 실제 판정과 같다
+      if (visual.aoeRing && visual.aoeRingMaterial) {
+        const aoe = attack.aoeRadius;
+        const show = aoe !== undefined && (inWindup || striking);
+        visual.aoeRing.visible = show;
+        if (show) {
+          visual.aoeRing.scale.set(aoe!, aoe!, 1);
+          // 예고 중엔 차오르고, 내리치는 순간 가장 진하다
+          visual.aoeRingMaterial.opacity = inWindup ? 0.18 + 0.42 * windupProgress : 0.75;
         }
       }
 

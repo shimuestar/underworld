@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
+import { attackReaches, enemyDef } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World } from '../core/World';
@@ -301,6 +301,33 @@ describe('goblin_chieftain 원거리 공격', () => {
     world.enemies.push(boss);
     tickEnemiesUntil(() => boss.ai === 'windup');
     expect(boss.attackMode).toBe('ranged'); // 바위 투척으로 대체
+  });
+
+  it('해머 지면 강타는 원형 범위 — 옆으로 비켜도 맞고, 반경 밖이면 안 맞는다', () => {
+    const def = enemyDef('goblin_chieftain');
+    const aoe = def.attack.aoeRadius!;
+    expect(aoe).toBeGreaterThan(0);
+    const boss = { x: 10, z: 10, yaw: 0 }; // −Z 를 본다
+
+    // 정면 (기존과 동일)
+    expect(attackReaches(def, boss, def.attack, 10, 10 - aoe + 0.2)).toBe(true);
+    // 완전히 옆 — 호(110°) 밖이지만 원 안이라 맞는다
+    expect(attackReaches(def, boss, def.attack, 10 + aoe - 0.2, 10)).toBe(true);
+    // 등 뒤도 원 안이면 맞는다
+    expect(attackReaches(def, boss, def.attack, 10, 10 + aoe - 0.2)).toBe(true);
+    // 반경 밖은 어느 방향이든 안 맞는다
+    expect(attackReaches(def, boss, def.attack, 10, 10 - aoe - 0.3)).toBe(false);
+    expect(attackReaches(def, boss, def.attack, 10 + aoe + 0.3, 10)).toBe(false);
+  });
+
+  it('원형 범위여도 패링 판정은 같은 함수를 쓴다 — 못 막는데 맞는 구멍이 없다', () => {
+    const def = enemyDef('goblin_chieftain');
+    const aoe = def.attack.aoeRadius!;
+    const boss = spawnEnemyAt('goblin_chieftain', 10, 10, 1);
+    boss.yaw = 0;
+    // 호 밖(정옆)에 서 있어도 Reaction 이 대상으로 잡을 수 있어야 한다
+    const sideX = 10 + aoe - 0.4;
+    expect(attackReaches(def, boss, def.attack, sideX, 10)).toBe(true);
   });
 
   it('근접 거리에서는 기존 스매시 (melee 모드)', () => {

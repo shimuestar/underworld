@@ -589,7 +589,9 @@ function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): v
 function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
   const def = enemyDef(enemy.type);
   const p = world.player;
-  const originY = def.height * 0.7;
+  // 무기 든 손 높이/옆 오프셋 — Stage 의 팔 피벗(radius×0.85, height×0.72)과 같은 값을
+  // 데이터로 받는다. 없으면 예전처럼 몸 중심에서 나간다
+  const originY = def.height * (attack.muzzleHeightMul ?? 0.7);
   const targetY = p.y + balance.player.eyeHeight * 0.8;
   const dx = p.x - enemy.x;
   const dy = targetY - originY;
@@ -601,8 +603,11 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
   // 시전자 몸 밖에서 출발 — 밀착한 아군이 발사 즉시 삼키는 것을 막는다
   const radius = attack.projectileRadius ?? 0.3;
   const muzzle = def.radius + radius;
-  const originX = enemy.x + (dx / len) * muzzle;
-  const originZ = enemy.z + (dz / len) * muzzle;
+  // 정면(dx,dz) 기준 오른쪽 = (-dz, dx) — 무기를 쥔 손 쪽으로 밀어낸다
+  const flat = Math.hypot(dx, dz) || 1;
+  const side = def.radius * (attack.muzzleSideMul ?? 0);
+  const originX = enemy.x + (dx / len) * muzzle + (-dz / flat) * side;
+  const originZ = enemy.z + (dz / len) * muzzle + (dx / flat) * side;
 
   world.projectiles.push({
     id: nextProjectileId++,

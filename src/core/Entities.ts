@@ -28,6 +28,11 @@ export interface EnemyAttackDef {
   damage?: number;
   /** 이 공격만의 플레이어 밀림 거리 (없으면 balance.playerKnockback[type]) */
   playerKnockback?: number;
+  /** 지면 강타 — 각과 무관한 원형 판정 반경(m). 있으면 arcDeg·impactRangeMul 대신 쓴다 */
+  aoeRadius?: number;
+  /** 투사체 발사 위치 — 무기 든 손에서 나가게 (def.radius/def.height 배율) */
+  muzzleSideMul?: number;
+  muzzleHeightMul?: number;
   /** 헛쳤을 때의 경직 틱 (없으면 recoverTicks). 그동안 마지막 동작으로 굳는다 */
   whiffRecoverTicks?: number;
   impactRangeMul: number;
@@ -104,8 +109,10 @@ export function currentAttack(
   return def.attack;
 }
 
-/** 이 근접 공격의 유효 범위(사거리 × impactRangeMul, 전방 arcDeg) 안에 (x,z)가 있는가.
- *  적은 예비동작에 들어가면 방향을 고정하므로, 옆으로 비키면 빗나간다 */
+/** 이 근접 공격의 유효 범위 안에 (x,z)가 있는가.
+ *  기본은 사거리 × impactRangeMul + 전방 arcDeg — 예비동작에 방향이 고정되므로 옆으로
+ *  비키면 빗나간다. aoeRadius 가 있으면 각을 무시한 원형 판정(지면 강타)이다.
+ *  Reaction(패링)과 Enemies(피해)가 같은 함수를 쓴다 — 갈리면 "못 막는데 맞는" 구멍이 난다 */
 export function attackReaches(
   def: EnemyDef,
   enemy: { x: number; z: number; yaw: number },
@@ -116,6 +123,7 @@ export function attackReaches(
   const dx = x - enemy.x;
   const dz = z - enemy.z;
   const dist = Math.hypot(dx, dz);
+  if (attack.aoeRadius !== undefined) return dist <= attack.aoeRadius;
   if (dist > def.attackRange * attack.impactRangeMul) return false;
   if (attack.arcDeg === undefined || dist === 0) return true;
   const facingX = -Math.sin(enemy.yaw);
