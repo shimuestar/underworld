@@ -1173,10 +1173,14 @@ export class Stage {
         new THREE.BoxGeometry(def.radius * 1.6, def.height * 0.72, 0.09),
         visual.shieldMaterial,
       );
-      // 방패도 충돌 경계(반경) 근처까지만 — 더 내밀면 몸이 통과한 것처럼 보인다
-      visual.shieldBaseZ = -(def.radius * 0.92);
+      // 판 뒷면이 몸통 표면(반경)에 딱 닿게 — 0.92 배로 당겨 두면 판이 몸에
+      // 절반쯤 파묻힌 채로 시작한다 (두께의 절반만 더 내민다)
+      visual.shieldBaseZ = -(def.radius + 0.045);
       visual.shield.position.set(SHIELD_BASE_X, def.height * 0.5, visual.shieldBaseZ);
-      group.add(visual.shield);
+      // group 이 아니라 torso 에 매단다 — 찌르기·밀쳐내기에서 상체가 앞으로 기울면
+      // (rotation.x) 가슴이 height×sin(각) 만큼 나오는데, group 소속이면 방패는
+      // 위치(z)만 따라가고 기울기는 못 따라가 몸이 판을 뚫고 나온다
+      torso.add(visual.shield);
 
       // 균열 — 반파(hammerHitsToCrack 대)부터 드러난다. 방패면(-z) 바깥쪽에 얇게 붙인다
       const crackMat = new THREE.MeshBasicMaterial({ color: 0x14161a });
@@ -1244,7 +1248,7 @@ export class Stage {
       if (!visual) {
         visual = this.buildEnemyVisual(enemy.type);
         if (enemy.shieldBroken && visual.shield) {
-          visual.group.remove(visual.shield);
+          visual.torso.remove(visual.shield);
           visual.shield = undefined;
         }
         this.enemyVisuals.set(enemy.id, visual);
@@ -1557,8 +1561,9 @@ export class Stage {
         const def = enemyDef(enemy.type);
         const shoved = (enemy.kbTicks ?? 0) > 0;
         const down = shoved || enemy.ai === 'staggered';
-        const targetY =
-          (down ? def.height * SHIELD_DOWN_Y : def.height * 0.5) + visual.torso.position.y;
+        // torso 의 자식이라 웅크림(position.y)·전진(z)·기울기(rotation.x)는
+        // 부모가 이미 반영한다 — 여기서 다시 더하면 두 번 움직인다
+        const targetY = down ? def.height * SHIELD_DOWN_Y : def.height * 0.5;
         const targetTilt = down ? SHIELD_DOWN_TILT : 0;
         const targetX = down ? SHIELD_DOWN_X : SHIELD_BASE_X;
         if (!down && visual.shieldDown) {
@@ -1572,8 +1577,6 @@ export class Stage {
           visual.shield.rotation.x += (targetTilt - visual.shield.rotation.x) * 0.25;
         }
         visual.shieldDown = down;
-        // 몸통 전진/후퇴를 따라간다 (방패는 group 소속이라 자동으로 따라오지 않는다)
-        visual.shield.position.z = visual.shieldBaseZ + visual.torso.position.z;
       }
     }
 
@@ -1796,7 +1799,7 @@ export class Stage {
 
     // 방패 본체 제거 — 이후 업데이트에서도 건너뛴다
     this.scene.remove(shield);
-    visual.group.remove(shield);
+    visual.torso.remove(shield);
     shield.geometry.dispose();
     visual.shieldMaterial?.dispose();
     visual.shield = undefined;
