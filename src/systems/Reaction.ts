@@ -51,8 +51,11 @@ export function tick(world: World, _dt: number): void {
   // 조금 이르게 눌렀다면 그 입력을 잠깐 살려둔다 — 무기가 도달하는 순간 성립시킨다
   const buffered = (p.parryBufferTicks ?? 0) > 0;
   if (buffered) p.parryBufferTicks = (p.parryBufferTicks ?? 0) - 1;
-  if (!freshPress && !buffered) return;
-  p.reactionBufferTicks = 0;
+  // 처형은 근접 키로도 나간다 — 스태거를 보고 "때린다"가 자연스럽다.
+  // 패링·방어·회피·반사는 여전히 반응 버튼 전용이라 아래에서 freshPress 로 가른다
+  const executePress = world.input.meleePressed;
+  if (!freshPress && !buffered && !executePress) return;
+  if (freshPress) p.reactionBufferTicks = 0;
 
   // Shift+누르기 = 명시적 회피 — 판정을 거치지 않고 즉시 발동.
   // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다
@@ -113,7 +116,7 @@ export function tick(world: World, _dt: number): void {
     if (!deflectTarget || dist < deflectTarget.dist) deflectTarget = { proj, dist };
   }
 
-  if (parryTarget) {
+  if (parryTarget && (freshPress || buffered)) {
     const enemy = parryTarget.enemy;
     const def = enemyDef(enemy.type);
     const attack = currentAttack(def, enemy);
@@ -163,7 +166,7 @@ export function tick(world: World, _dt: number): void {
     return;
   }
 
-  if (deflectTarget) {
+  if (deflectTarget && (freshPress || buffered)) {
     // 반사 — 투사체 반전, 위력 ×1.5, 방어막 무시. 마나·연쇄는 Mana가 구독
     const proj = deflectTarget.proj;
     const caster = world.enemies.find((e) => e.id === proj.casterId && e.alive);
@@ -192,6 +195,10 @@ export function tick(world: World, _dt: number): void {
   if (executeTarget) {
     const enemy = executeTarget.enemy;
     const def = enemyDef(enemy.type);
+    // 근접 키로 들어왔으면 그 입력은 여기서 쓴다 — 같은 틱에 해머까지 휘두르면
+    // 처형 연출을 스윙이 덮어쓰고 스태미너도 이중으로 나간다.
+    // (Weapons 는 이 뒤에 돈다 — 입력 스냅샷을 비워 두면 버퍼에도 안 남는다)
+    if (executePress) world.input.meleePressed = false;
     if (def.boss && def.executeDamage) {
       // 보스 처형 — 즉사가 아니라 큰 타격. 한 번의 스태거는 처형 한 번으로 소모된다
       enemy.health -= def.executeDamage;

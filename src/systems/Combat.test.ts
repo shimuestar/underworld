@@ -707,6 +707,39 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
     expect(kills[0]).toMatchObject({ enemyType: 'goblin_spear', execution: true });
   });
 
+  it('근접 키(해머)로도 처형이 나간다', () => {
+    const world = strikeAt(3.5, 10);
+    pressReaction(world); // 완벽 패링 → 스태거
+    expect(world.enemies[0]!.ai).toBe('staggered');
+    const kills: unknown[] = [];
+    world.events.on('melee_kill', (payload) => kills.push(payload));
+
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Reaction.tick(world, DT);
+    expect(world.enemies[0]!.alive).toBe(false);
+    expect(kills[0]).toMatchObject({ execution: true });
+    // 그 입력은 처형이 가져간다 — 뒤에 도는 Weapons 가 같은 틱에 해머까지 휘두르면
+    // 처형 연출을 스윙이 덮어쓰고 스태미너도 이중으로 나간다
+    expect(world.input.meleePressed).toBe(false);
+  });
+
+  it('근접 키는 패링·회피·반사에는 쓰이지 않는다 — 처형 전용', () => {
+    const world = strikeAt(3.5, 10); // 무기 끝이 완벽 대역에 들어온 순간
+    const attempts: unknown[] = [];
+    world.events.on('parry_attempt', (payload) => attempts.push(payload));
+
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Reaction.tick(world, DT);
+    expect(attempts).toHaveLength(0); // 패링 성립 안 함
+    expect(world.enemies[0]!.ai).not.toBe('staggered');
+    expect(world.input.meleePressed).toBe(true); // 아무것도 안 했으니 해머로 넘어간다
+
+    // Shift+근접도 회피가 아니다
+    world.input = { ...Input.emptySnapshot(), meleePressed: true, sprint: true };
+    Reaction.tick(world, DT);
+    expect(world.player.dodgeTicks).toBe(0);
+  });
+
   it('Shift+탭 = 즉시 회피 (판정 생략)', () => {
     const world = makeWorld();
     world.input = { ...Input.emptySnapshot(), reactionPressed: true, sprint: true };
