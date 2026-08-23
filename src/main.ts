@@ -8,7 +8,7 @@ import { Loop } from './core/Loop';
 import { World } from './core/World';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
-import { spawnBarrels, spawnEnemies, spawnEnemyAt } from './level/Spawner';
+import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt } from './level/Spawner';
 import { Minimap } from './render/Minimap';
 import { Stage } from './render/Stage';
 import { grenadeThrowSpeed } from './systems/Weapons';
@@ -24,6 +24,7 @@ import * as Stamina from './systems/Stamina';
 import * as Corruption from './systems/Corruption';
 import * as Altar from './systems/Altar';
 import * as Barrels from './systems/Barrels';
+import * as Chest from './systems/Chest';
 import * as Exit from './systems/Exit';
 import * as Lever from './systems/Lever';
 import * as Lantern from './systems/Lantern';
@@ -100,6 +101,7 @@ const world = new World(events, {
   corruption: { applied: 0, pending: 0 },
   enemies: spawnEnemies(levelJson.entities, level),
   barrels: spawnBarrels(levelJson.entities, level),
+  chests: spawnChests(levelJson.entities, level),
   level,
 });
 
@@ -278,6 +280,7 @@ for (const name of [
   'grenade_bounce',
   'barrel_hit',
   'barrel_exploded',
+  'chest_opened',
   'crack_wall_broken',
   'mana_gained',
   'mana_lost',
@@ -499,6 +502,13 @@ events.on('explosion', (payload) => {
   audio.play('explosion');
   stage.spawnExplosion(info.x, info.y, info.z, info.radius);
 });
+// 보물상자 — 골드 무더기와 각인 하나가 쏟아진다
+events.on('chest_opened', (payload) => {
+  const info = payload as { gold: number; sigilId: string | null };
+  audio.play('chest_opened');
+  const sigil = info.sigilId ? ` · ${sigilDef(info.sigilId).name} 각인` : '';
+  showReaction(`보물상자 — ◆ ${info.gold}${sigil}`, 2600);
+});
 // 폭발통 — 때리면 통 울리는 소리, 도화선에 불이 붙으면 알려 준다
 events.on('barrel_hit', (payload) => {
   const info = payload as { hits: number; fuse: number };
@@ -712,6 +722,9 @@ function respawnAtAltar(): void {
   // 폭발통도 되살린다 — 남은 차단 블록을 먼저 걷어내야 유령 벽이 쌓이지 않는다
   for (const barrel of world.barrels) if (barrel.blocker) level.removeBlocker(barrel.blocker);
   world.barrels = spawnBarrels(levelJson.entities, level);
+  for (const chest of world.chests) if (chest.blocker) level.removeBlocker(chest.blocker);
+  world.chests = spawnChests(levelJson.entities, level);
+  world.chestInView = null;
   world.projectiles.length = 0;
   world.groundItems.length = 0;
   world.freezeTicks = 0;
@@ -871,6 +884,7 @@ const systems = [
   Mana.tick,
   Altar.tick,
   Lever.tick,
+  Chest.tick,
   Exit.tick,
   Lantern.tick,
   Stamina.tick, // 소모하는 쪽(PlayerMove·Reaction) 뒤에서 회복한다
@@ -998,6 +1012,7 @@ function render(alpha: number): void {
   stage.syncProjectiles(world.projectiles, alpha);
   stage.syncGroundItems(world.groundItems);
   stage.syncBarrels(world.barrels);
+  stage.syncChests(world.chests);
   const chargeFrac =
     world.weapon.ranged === 'grenade' && world.weapon.grenadeCharge > 0
       ? world.weapon.grenadeCharge / balance.weapons.grenade.maxChargeTicks
@@ -1114,15 +1129,18 @@ function render(alpha: number): void {
   // 출구 발판 위 — 서 있는 동안 계속 띄운다 (3초 뒤 사라지면 못 보고 지나친다).
   // 봉인 중이면 이유를, 열렸으면 나가는 방법을 알린다
   const onExit = world.onExitPad && !world.dead && !world.uiOpen && !world.cleared;
+  const nearChest = world.chestInView !== null && !world.dead && !world.uiOpen;
   altarPrompt!.classList.toggle(
     'visible',
-    showAltarPrompt || (nearLever && !world.dead) || onExit,
+    showAltarPrompt || (nearLever && !world.dead) || onExit || nearChest,
   );
   if (showAltarPrompt) {
     altarPrompt!.textContent =
       `제단 — E 보급 상점\n` +
       `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
       `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
+  } else if (nearChest) {
+    altarPrompt!.textContent = 'E — 보물상자를 연다';
   } else if (nearLever) {
     altarPrompt!.textContent = 'E — 레버를 당긴다';
   } else if (onExit) {

@@ -3,7 +3,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import type { BarrelState, EnemyState } from '../core/World';
+import type { BarrelState, ChestState, EnemyState } from '../core/World';
 import type { Level } from './GridLoader';
 
 export interface EntityPlacement {
@@ -43,6 +43,27 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
   };
   if (def.boss) enemy.parryStreak = 0;
   return enemy;
+}
+
+/** 레벨의 chest 배치 → 보물상자. 통과 마찬가지로 몸으로 막는다 */
+export function spawnChests(placements: EntityPlacement[], level: Level): ChestState[] {
+  const chests: ChestState[] = [];
+  let nextId = 1;
+  for (const placement of placements) {
+    if (placement.type !== 'chest') continue;
+    const [row, col] = placement.cell;
+    if (row === undefined || col === undefined) continue;
+    if (level.solidAt(col, row)) {
+      console.warn(`[Spawner] 벽 안의 보물상자 건너뜀: [${row}, ${col}]`);
+      continue;
+    }
+    const x = (col + 0.5) * level.cellSize;
+    const z = (row + 0.5) * level.cellSize;
+    const chest: ChestState = { id: nextId++, x, z, opened: false };
+    chest.blocker = level.addBlocker(x, z, balance.chest.collisionRadius);
+    chests.push(chest);
+  }
+  return chests;
 }
 
 /** 레벨의 barrel 배치 → 폭발통 상태. 몸으로 막게 차단 블록도 함께 등록한다 */

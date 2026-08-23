@@ -60,6 +60,7 @@ export type SoundName =
   | 'grenade_bounce'
   | 'barrel_hit'
   | 'barrel_armed'
+  | 'chest_opened'
   | 'implode'
   | 'shop_buy'
   | 'shop_deny'
@@ -253,6 +254,13 @@ export class GameAudio {
         break;
       case 'grenade_throw':
         this.noise(0.12, 0.35, 1200);
+        break;
+      case 'chest_opened':
+        // 낡은 경첩이 삐걱 열리고 금붙이가 쏟아진다
+        this.tone(180, 0.35, 'sawtooth', 0.22, 0, 90);
+        this.tone(660, 0.5, 'sine', 0.4, 0.1);
+        this.tone(880, 0.6, 'sine', 0.35, 0.2);
+        this.noise(0.35, 0.3, 5200, 0.15);
         break;
       case 'barrel_hit':
         // 쇠통을 때린 소리 — 속이 빈 둔탁한 울림

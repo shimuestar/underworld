@@ -6,7 +6,13 @@ import { balance } from '../core/Balance';
 import { currentAttack, enemyDef, healthBarState } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, glyphTexture } from '../level/GridLoader';
-import type { BarrelState, EnemyState, GroundItemState, ProjectileState } from '../core/World';
+import type {
+  BarrelState,
+  ChestState,
+  EnemyState,
+  GroundItemState,
+  ProjectileState,
+} from '../core/World';
 import { FINISHER_CONTACT_MS, HandModel } from './HandModel';
 
 // 적 타입별 몸통 색 (시각 팔레트 — 튜닝값 아님)
@@ -323,6 +329,12 @@ const TRACER_WIDTH = 0.022;
 
 // 사망 파편 (시각 상수)
 const DEATH_PARTICLE_COUNT = 14;
+const CHEST_WOOD = 0x6b4a2a;
+const CHEST_TRIM = 0xe8c76a; // 금속 띠 — 바닥 각인과 같은 금색 계열
+const CHEST_W = 1.05;
+const CHEST_D = 0.7;
+const CHEST_H = 0.62;
+const CHEST_LID_OPEN = 1.9; // rad — 뒤로 완전히 젖힌다
 const BARREL_COLOR = 0x5a4436; // 나무통 — 어두운 갈색
 const BARREL_BAND_COLOR = 0x8a3b2a;
 const BARREL_BAND_IDLE = 0x2a0f0a;
@@ -372,6 +384,7 @@ export class Stage {
   private readonly heldVictims = new Map<number, number>();
   private readonly projectileVisuals = new Map<number, THREE.Group>();
   private readonly groundItemVisuals = new Map<number, THREE.Group>();
+  private readonly chestVisuals = new Map<number, { group: THREE.Group; lid: THREE.Object3D }>();
   private readonly barrelVisuals = new Map<
     number,
     { group: THREE.Group; band: THREE.MeshLambertMaterial; light: THREE.PointLight }
@@ -2036,6 +2049,62 @@ export class Stage {
       });
       this.groundItemVisuals.delete(id);
     }
+  }
+
+  /** 보물상자 — 열면 뚜껑이 젖혀지고 속에서 금빛이 새어 나온다 */
+  syncChests(chests: ChestState[]): void {
+    for (const chest of chests) {
+      let visual = this.chestVisuals.get(chest.id);
+      if (!visual) {
+        visual = this.makeChest();
+        visual.group.position.set(chest.x, 0, chest.z);
+        this.chestVisuals.set(chest.id, visual);
+        this.scene.add(visual.group);
+      }
+      // 뚜껑은 열림 상태로 부드럽게 젖혀진다 (한 번 열리면 되돌아오지 않는다)
+      const target = chest.opened ? -CHEST_LID_OPEN : 0;
+      visual.lid.rotation.x += (target - visual.lid.rotation.x) * 0.18;
+      const glow = visual.group.getObjectByName('glow') as THREE.PointLight | undefined;
+      if (glow) glow.intensity = chest.opened ? 0.35 : 1.1;
+    }
+  }
+
+  private makeChest(): { group: THREE.Group; lid: THREE.Object3D } {
+    const group = new THREE.Group();
+    const w = CHEST_W;
+    const d = CHEST_D;
+    const h = CHEST_H;
+    const wood = new THREE.MeshLambertMaterial({ color: CHEST_WOOD });
+    const trim = new THREE.MeshLambertMaterial({
+      color: CHEST_TRIM,
+      emissive: CHEST_TRIM,
+      emissiveIntensity: 0.35,
+    });
+
+    const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wood);
+    box.position.y = h / 2;
+    group.add(box);
+    // 금속 띠 — 어둠 속에서 상자를 상자로 읽게 하는 단서
+    const band = new THREE.Mesh(new THREE.BoxGeometry(w * 1.04, h * 0.16, d * 1.04), trim);
+    band.position.y = h * 0.5;
+    group.add(band);
+
+    // 뚜껑 — 뒤쪽 모서리를 축으로 젖혀지도록 피벗을 따로 둔다
+    const lid = new THREE.Group();
+    lid.position.set(0, h, -d / 2);
+    const lidMesh = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.28, d), wood);
+    lidMesh.position.set(0, h * 0.14, d / 2);
+    lid.add(lidMesh);
+    const lidBand = new THREE.Mesh(new THREE.BoxGeometry(w * 1.04, h * 0.1, d * 0.3), trim);
+    lidBand.position.set(0, h * 0.28, d / 2);
+    lid.add(lidBand);
+    group.add(lid);
+
+    const glow = new THREE.PointLight(CHEST_TRIM, 1.1, 6, 0);
+    glow.name = 'glow';
+    glow.position.y = h * 0.8;
+    group.add(glow);
+    return { group, lid };
   }
 
   /** 폭발통 — 도화선이 돌면 띠가 점점 빠르게 붉게 깜빡인다.

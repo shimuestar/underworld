@@ -106,6 +106,15 @@ export interface SpellState {
 }
 
 /** 바닥에 떨어진 각인. 접근하면 획득 */
+/** 보물상자 — E로 한 번 열면 골드 무더기와 각인 하나가 쏟아진다 */
+export interface ChestState {
+  id: number;
+  x: number;
+  z: number;
+  opened: boolean;
+  blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
 /** 폭발통 — 총·해머로 여러 대 때리면 도화선이 짧아지고, 화염구·수류탄은 즉발 */
 export interface BarrelState {
   id: number;
@@ -380,6 +389,12 @@ export class World {
   /** 폭발통 — Barrels 가 도화선을 돌리고 터뜨린다 */
   barrels: BarrelState[] = [];
 
+  /** 보물상자 — Chest 가 연다 */
+  chests: ChestState[] = [];
+
+  /** 지금 바라보고 있는 열 수 있는 상자 (없으면 null) — HUD 안내가 읽는다 */
+  chestInView: ChestState | null = null;
+
   /** 보유 골드 — 적 처치 드랍으로 모인다 (사용처는 이후 구역) */
   /** 스태미너 — 질주로 닳고 회피로 크게 깎인다. 0이 되면 지쳐서 질주 불가 */
   stamina = { value: 0, regenDelay: 0, exhausted: false };
@@ -446,6 +461,7 @@ export class World {
       enemies: EnemyState[];
       /** 폭발통 — 없는 레벨(테스트 아레나 등)에서는 생략한다 */
       barrels?: BarrelState[];
+      chests?: ChestState[];
       level: Level;
     },
   ) {
@@ -459,6 +475,7 @@ export class World {
     this.corruption = init.corruption;
     this.enemies = init.enemies;
     if (init.barrels) this.barrels = init.barrels;
+    if (init.chests) this.chests = init.chests;
     this.level = init.level;
   }
 }
