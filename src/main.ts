@@ -1104,16 +1104,15 @@ function render(alpha: number): void {
     const streak = `패링 ${boss.parryStreak ?? 0}/${def.parriesToStagger}`;
     bossLine = `족장${stage2} ${bar} ${Math.max(0, Math.round(boss.health))}/${def.health}  [${streak}]\n`;
   }
+  // HP·마나·랜턴은 하단 게이지가 이미 보여 준다 — 위에서 숫자로 겹쳐 읽지 않는다.
+  // 연쇄 배율만은 어디에도 안 나오므로 spell 줄로 옮겨 살려 둔다
   const mana = world.mana;
   const chainMult = balance.chain.multipliers[Math.min(mana.chainIndex, balance.chain.multipliers.length - 1)]!;
-  const manaBar = '█'.repeat(Math.round((mana.value / balance.mana.max) * 20)).padEnd(20, '░');
   const hudText =
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
-    `HP ${Math.max(0, Math.round(p.health))}   9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}${p.blocking ? '  [방어]' : ''}\n` +
-    `mana ${manaBar} ${mana.value.toFixed(0)}/${balance.mana.max}  chain ×${chainMult}${!mana.inCombat && mana.outOfCombatTicks >= balance.mana.combatExitTicks && mana.value > 0 ? '  [휘발중]' : ''}\n` +
-    `spell ${spellHudText()}   각인 ${world.sigils.inventory.length}개 소지\n` +
+    `9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}${p.blocking ? '  [방어]' : ''}\n` +
+    `spell ${spellHudText()}   각인 ${world.sigils.inventory.length}개 소지   chain ×${chainMult}\n` +
     `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}\n` +
-    `lantern ${world.lantern.on ? 'ON ' : 'OFF'}  battery ${world.lantern.battery.toFixed(0)}%  spares ${world.lantern.spares}\n` +
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
