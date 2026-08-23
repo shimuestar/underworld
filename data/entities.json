@@ -96,6 +96,7 @@
       "volleyAttack": { "type": "projectile", "windupTicks": 54, "recoverTicks": 70, "impactRangeMul": 1, "parryable": false, "deflectable": false, "telegraph": "red", "projectileSpeed": 26, "projectileRadius": 0.15, "damage": 12, "muzzleSideMul": 0.85, "muzzleHeightMul": 0.72, "shots": 10, "shotIntervalTicks": 29, "minRange": 5, "abortRange": 4.5, "cooldownTicks": 600 },
       "_parryNote": "족장은 완벽 패링만 받는다 — 일반 패링 대역에서 눌러도 성립하지 않고, 무기 끝이 방패에 닿는 순간에만 성립한다. 방패막기로는 공격을 끊을 수 없다",
       "perfectParryOnly": true,
+    "parryAlwaysNormal": true,
       "blockCannotStagger": true,
       "parriesToStagger": 3, "executeDamage": 60, "armorHealth": 120,
       "phases": [

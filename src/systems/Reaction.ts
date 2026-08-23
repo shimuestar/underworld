@@ -117,7 +117,10 @@ export function tick(world: World, _dt: number): void {
     const enemy = parryTarget.enemy;
     const def = enemyDef(enemy.type);
     const attack = currentAttack(def, enemy);
-    const perfect = parryTarget.gap <= space.perfectBand; // 무기가 방패에 닿은 순간
+    // 무기가 방패에 닿은 순간 = 완벽. 단 parryAlwaysNormal(족장)은 완벽 대역에서만
+    // 패링이 성립하므로(perfectParryOnly) 매번 완벽 판정이 나온다 — 그러면 "완벽"이
+    // 특별하지 않고, 연쇄·마나까지 매 패링마다 최대로 붙는다. 결과는 일반 패링으로 낮춘다
+    const perfect = parryTarget.gap <= space.perfectBand && !def.parryAlwaysNormal;
     world.freezeTicks = perfect ? reaction.hitstopPerfectTicks : reaction.hitstopNormalTicks;
 
     if (def.boss && def.parriesToStagger) {

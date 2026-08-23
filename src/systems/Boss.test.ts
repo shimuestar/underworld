@@ -10,6 +10,7 @@ import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
 import * as Exit from './Exit';
+import * as Mana from './Mana';
 import * as Projectiles from './Projectiles';
 import * as Reaction from './Reaction';
 import * as Sigils from './Sigils';
@@ -156,7 +157,8 @@ describe('goblin_chieftain (1구역 보스)', () => {
     return boss;
   }
 
-  /** 족장은 완벽 대역에서만 성립한다 — 창이 열린 뒤 매 틱 눌러 닿는 순간을 잡는다 */
+  /** 족장은 완벽 대역에서만 성립하되 결과는 늘 'normal' 이다 (parryAlwaysNormal).
+   *  창이 열린 뒤 매 틱 눌러 닿는 순간을 잡는다 */
   function parryBoss(boss: ReturnType<typeof spawnEnemyAt>): string {
     tickEnemiesUntil(() => boss.ai === 'active_perfect');
     const results: string[] = [];
@@ -177,7 +179,7 @@ describe('goblin_chieftain (1구역 보스)', () => {
     const def = enemyDef('goblin_chieftain');
 
     for (let n = 1; n <= def.parriesToStagger!; n++) {
-      expect(parryBoss(boss)).toBe('perfect'); // 보스는 완벽만 성립한다
+      expect(parryBoss(boss)).toBe('normal'); // 완벽 대역에서만 성립하되 보상은 일반
       if (n < def.parriesToStagger!) {
         expect(boss.ai).toBe('recover');
         expect(boss.parryStreak).toBe(n);
@@ -211,7 +213,32 @@ describe('goblin_chieftain (1구역 보스)', () => {
     const boss = makeBoss();
     boss.phase = 'armored';
     boss.armorHealth = def.armorHealth!;
-    expect(parryBoss(boss)).toBe('perfect');
+    expect(parryBoss(boss)).toBe('normal');
+  });
+
+  it('완벽 대역에 닿아도 일반 패링으로 처리한다 — 히트스톱·마나·연쇄까지', () => {
+    const def = enemyDef('goblin_chieftain');
+    expect(def.parryAlwaysNormal).toBe(true);
+    Mana.init(world);
+    const boss = makeBoss();
+    tickEnemiesUntil(() => boss.ai === 'active_perfect');
+
+    // 무기 끝을 완벽 대역 한복판에 놓고 누른다 — 일반 적이라면 'perfect' 가 나올 자리
+    boss.weaponTipDist =
+      Math.hypot(boss.x - world.player.x, boss.z - world.player.z) -
+      balance.player.radius -
+      balance.parrySpace.perfectBand * 0.5;
+    const results: { result: string }[] = [];
+    const clashes: { kind: string }[] = [];
+    world.events.on('parry_attempt', (p) => results.push(p as { result: string }));
+    world.events.on('guard_clash', (p) => clashes.push(p as { kind: string }));
+    pressReaction();
+
+    expect(results[0]!.result).toBe('normal');
+    expect(clashes[0]!.kind).toBe('parry_normal');
+    expect(world.freezeTicks).toBe(balance.reaction.hitstopNormalTicks);
+    expect(world.mana.value).toBe(balance.mana.gain.parryNormal);
+    expect(world.mana.chainIndex).toBe(0); // 연쇄는 오르지 않는다
   });
 
   it('방패로 막아도 보스는 끊기지 않는다 — 플레이어만 굳는다', () => {
