@@ -6,7 +6,7 @@
 import { balance } from '../core/Balance';
 import { enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { RANGED_WEAPONS, type World } from '../core/World';
+import { RANGED_WEAPONS, spendStamina, type World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   const w = world.weapon;
@@ -16,11 +16,13 @@ export function tick(world: World, _dt: number): void {
   if (w.cooldown > 0) w.cooldown--;
   if (w.meleeCooldown > 0) w.meleeCooldown--;
   if ((w.meleeBufferTicks ?? 0) > 0) w.meleeBufferTicks = (w.meleeBufferTicks ?? 0) - 1;
-  if ((w.meleeRushTicks ?? 0) > 0) w.meleeRushTicks = (w.meleeRushTicks ?? 0) - 1;
   // 연속타 유지 시간 — 끊기면 1타부터 다시
   if (w.comboTimer > 0) {
     w.comboTimer--;
-    if (w.comboTimer === 0) w.comboStep = 0;
+    if (w.comboTimer === 0) {
+      w.comboStep = 0;
+      w.meleeRush = false; // 연결이 끊겼으니 다음 1타는 원속도부터
+    }
   }
 
   // 휘두르는 중 — 해머가 실제로 닿는 틱에 판정한다 (뷰모델과 같은 시점).
@@ -140,7 +142,7 @@ function startHammerSwing(world: World): void {
   w.swingHeavy = heavy;
   // 적중 가속 — 직전 타가 실제로 적을 때렸으면 예비동작이 짧아진다.
   // 뷰모델도 같은 배율로 빨라져야 해머가 닿는 시점과 그림이 어긋나지 않는다
-  const rush = (w.meleeRushTicks ?? 0) > 0;
+  const rush = w.meleeRush === true;
   const speedMul = rush ? 1 / combo.hitImpactMul : 1;
   const impact = heavy ? combo.heavyImpactTicks : hammer.impactTicks;
   w.swingImpact = rush ? Math.max(1, Math.round(impact * combo.hitImpactMul)) : impact;
@@ -156,6 +158,12 @@ function startHammerSwing(world: World): void {
       total: balance.web.breakSwings,
     });
     if (p.webSwingsLeft <= 0) world.events.emit('web_broken', { reason: 'hammer' });
+  }
+
+  // 휘두르면 닳는다 — 맞히든 헛치든. 모자라도 스윙은 막지 않는다(거미줄 해제 수단)
+  const stam = balance.player.stamina;
+  if (spendStamina(world.stamina, heavy ? stam.hammerHeavyCost : stam.hammerCost, stam.regenDelayTicks)) {
+    world.events.emit('stamina_empty', {});
   }
 
   world.events.emit('hammer_swing', { heavy, step: w.comboStep, speedMul, rush });
@@ -299,10 +307,12 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     : heavy
       ? hammer.whiffExtraCooldownTicks
       : combo.chainWhiffExtraTicks;
-  // 적중 가속 — 때린 만큼 후딜이 줄고, 그 상태가 rushWindowTicks 동안 이어진다.
-  // 놓치면 즉시 원속도로 (때리는 손맛만 빨라지고 헛손질은 벌을 그대로 받는다)
-  w.meleeRushTicks = damagedAny ? combo.rushWindowTicks : 0;
-  const rushMul = damagedAny ? combo.hitCooldownMul : 1;
+  // 적중 가속 — 때린 만큼 후딜이 줄지만 연결 안에서만이다.
+  // 마무리 3타를 친 뒤에는 다시 1타부터라 원속도로 돌려놓는다 (1→2→3 만 빨라진다).
+  // 놓치면 즉시 끝 — 때리는 손맛만 빨라지고 헛손질은 벌을 그대로 받는다
+  const rushNext = damagedAny && !heavy;
+  w.meleeRush = rushNext;
+  const rushMul = rushNext ? combo.hitCooldownMul : 1;
   w.meleeCooldown = Math.round(base * rushMul + whiffExtra + blockedRecoil);
 
   if (heavy) {

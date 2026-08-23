@@ -640,73 +640,91 @@ describe('해머 3타 콤보', () => {
     expect(c.heavy).toBe(true);
     expect(a.damage).toBe(hammer.damage);
     expect(c.damage).toBeCloseTo(hammer.damage * combo.damageMul, 5);
-    // 강타도 적중하면 가속을 받는다 — 마무리를 맞힌 쪽이 다시 붙기 쉽다
-    expect(world.weapon.meleeCooldown).toBe(
-      Math.round(hammer.cooldownTicks * combo.cooldownMul * combo.hitCooldownMul),
-    );
+    // 마무리 후딜은 감면하지 않는다 — 다음은 다시 1타부터라 원속도로 돌아간다
+    expect(world.weapon.meleeCooldown).toBe(Math.round(hammer.cooldownTicks * combo.cooldownMul));
     expect(world.weapon.comboStep).toBe(0); // 마무리 후 초기화
   });
+
+  /** 한 번 휘두르고, 이번 스윙의 예비동작 틱과 뷰모델 배속을 돌려준다 */
+  function swingMeasured(): { impact: number; speedMul: number } {
+    const swings: { speedMul: number }[] = [];
+    const off = world.events.on('hammer_swing', (p) => swings.push(p as { speedMul: number }));
+    world.weapon.meleeCooldown = 0;
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    const impact = world.weapon.swingImpact;
+    advanceToHammerImpact(world);
+    if (typeof off === 'function') off();
+    return { impact, speedMul: swings[0]!.speedMul };
+  }
 
   it('적중하면 다음 타가 빨라진다 — 예비동작·후딜이 함께 줄고 뷰모델도 배속', () => {
     const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
     enemy.health = 100000;
     world.enemies.push(enemy);
 
-    /** 한 번 휘두르고, 이번 스윙의 예비동작 틱과 뷰모델 배속을 돌려준다 */
-    function swingMeasured(): { impact: number; speedMul: number } {
-      const swings: { speedMul: number }[] = [];
-      const off = world.events.on('hammer_swing', (p) => swings.push(p as { speedMul: number }));
-      world.weapon.meleeCooldown = 0;
-      world.input = { ...Input.emptySnapshot(), meleePressed: true };
-      Weapons.tick(world, DT);
-      world.input = Input.emptySnapshot();
-      const impact = world.weapon.swingImpact;
-      advanceToHammerImpact(world);
-      if (typeof off === 'function') off();
-      return { impact, speedMul: swings[0]!.speedMul };
-    }
-
-    // 첫 타 — 가속 없음. 로직 예비동작과 뷰모델 배속이 기본값이다
+    // 1타 — 가속 없음. 로직 예비동작과 뷰모델 배속이 기본값이다
     const first = swingMeasured();
     expect(first.impact).toBe(hammer.impactTicks);
     expect(first.speedMul).toBe(1);
-    expect(world.weapon.meleeRushTicks).toBe(combo.rushWindowTicks);
+    expect(world.weapon.meleeRush).toBe(true);
 
-    // 맞혔으니 다음 타는 짧아진다 — 그림도 같은 배율로 빨라져야 판정 시점과 안 어긋난다
+    // 2타 — 맞혔으니 짧아진다. 그림도 같은 배율로 빨라져야 판정 시점과 안 어긋난다
     const second = swingMeasured();
     expect(second.impact).toBe(Math.round(hammer.impactTicks * combo.hitImpactMul));
     expect(second.impact).toBeLessThan(first.impact);
     expect(second.speedMul).toBeCloseTo(1 / combo.hitImpactMul, 5);
 
-    // 헛치면 즉시 원속도로 돌아간다 — 단 이미 나간 스윙은 앞선 적중으로 번 속도를 쓴다
-    enemy.x = 6 + 40;
-    const third = swingMeasured(); // 3타 = 강타, 아직 가속 중
+    // 3타(마무리)도 가속 — 여기까지가 연결이다
+    const third = swingMeasured();
     expect(third.impact).toBe(Math.round(combo.heavyImpactTicks * combo.hitImpactMul));
-    expect(world.weapon.meleeRushTicks).toBe(0); // 헛쳤으니 여기서 끊긴다
+    expect(third.speedMul).toBeCloseTo(1 / combo.hitImpactMul, 5);
+
+    // 마무리를 쳤으면 다시 1타부터 — 적중했더라도 원속도로 돌아간다
+    expect(world.weapon.meleeRush).toBe(false);
+    expect(world.weapon.comboStep).toBe(0);
+    expect(world.weapon.meleeCooldown).toBe(
+      Math.round(hammer.cooldownTicks * combo.cooldownMul), // 마무리 후딜도 감면 없음
+    );
     const fourth = swingMeasured();
     expect(fourth.impact).toBe(hammer.impactTicks);
     expect(fourth.speedMul).toBe(1);
   });
 
-  it('적중 가속은 rushWindowTicks 가 지나면 사라진다', () => {
+  it('1타를 헛쳐도 2타가 맞으면 3타까지 빨라진다', () => {
+    const enemy = spawnEnemyAt('goblin_runner', 6 + 40, 6, 1); // 사거리 밖
+    enemy.health = 100000;
+    world.enemies.push(enemy);
+
+    const first = swingMeasured(); // 헛침
+    expect(first.impact).toBe(hammer.impactTicks);
+    expect(world.weapon.meleeRush).toBe(false);
+
+    enemy.x = 6 + 2; // 붙었다
+    const second = swingMeasured(); // 적중 — 이 스윙 자체는 아직 원속도
+    expect(second.impact).toBe(hammer.impactTicks);
+    expect(second.speedMul).toBe(1);
+    expect(world.weapon.meleeRush).toBe(true);
+
+    const third = swingMeasured(); // 3타만 가속
+    expect(third.impact).toBe(Math.round(combo.heavyImpactTicks * combo.hitImpactMul));
+    expect(world.weapon.meleeRush).toBe(false); // 마무리 — 다시 1타부터
+  });
+
+  it('연결 창이 끊기면 가속도 함께 끝난다', () => {
     const enemy = spawnEnemyAt('goblin_runner', 6 + 2, 6, 1);
     enemy.health = 100000;
     world.enemies.push(enemy);
-    world.weapon.meleeCooldown = 0;
-    world.input = { ...Input.emptySnapshot(), meleePressed: true };
-    Weapons.tick(world, DT);
-    world.input = Input.emptySnapshot();
-    advanceToHammerImpact(world);
-    expect(world.weapon.meleeRushTicks).toBe(combo.rushWindowTicks);
+    swingMeasured();
+    expect(world.weapon.meleeRush).toBe(true);
 
-    for (let i = 0; i < combo.rushWindowTicks; i++) Weapons.tick(world, DT);
-    expect(world.weapon.meleeRushTicks).toBe(0);
-
-    world.weapon.meleeCooldown = 0;
-    world.input = { ...Input.emptySnapshot(), meleePressed: true };
-    Weapons.tick(world, DT);
-    world.input = Input.emptySnapshot();
-    expect(world.weapon.swingImpact).toBe(hammer.impactTicks); // 다시 원속도
+    // 아무것도 안 하고 연결 창이 닫힐 때까지 기다린다
+    const wait = world.weapon.comboTimer + 1; // 루프 안에서 읽으면 줄어드는 값을 쫓게 된다
+    for (let i = 0; i < wait; i++) Weapons.tick(world, DT);
+    expect(world.weapon.comboStep).toBe(0);
+    expect(world.weapon.meleeRush).toBe(false);
+    expect(swingMeasured().impact).toBe(hammer.impactTicks); // 다시 원속도
   });
 
   it('시간이 지나 창이 끊기면 1타부터 다시 센다', () => {
@@ -910,7 +928,7 @@ describe('방패병 vs 해머', () => {
 
     // 방패에 튕기면 적중 가속이 붙지 않는다 — 후딜 감면 없이 반동만 더해진다
     expect(blockedCd).toBe(balance.weapons.hammer.combo.chainCooldownTicks + sb.blockedRecoilTicks);
-    expect(world.weapon.meleeRushTicks).toBe(0);
+    expect(world.weapon.meleeRush).toBe(false);
     expect(blockedCd).toBeGreaterThan(world2.weapon.meleeCooldown);
     expect(enemy.health).toBe(110);
   });

@@ -143,6 +143,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (dist <= def.aggroRange && world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)) {
         enemy.ai = 'chase';
         world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type });
+        // 보스가 깨면 포효로 방 전체가 함께 깬다 — 벽 너머라도 소리는 들린다
+        if (def.boss) wakeAround(world, enemy, balance.enemyAi.bossAlertRadius);
       }
       break;
     }
@@ -465,6 +467,17 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
       break;
     }
+  }
+}
+
+/** 포효 — 반경 안에서 자고 있던 적을 전부 깨운다. 시야는 보지 않는다(소리로 듣는다).
+ *  보스 조우가 곧 방 전체와의 조우가 되게 하는 장치다 */
+function wakeAround(world: World, source: EnemyState, radius: number): void {
+  for (const other of world.enemies) {
+    if (other === source || !other.alive || other.ai !== 'idle') continue;
+    if (Math.hypot(other.x - source.x, other.z - source.z) > radius) continue;
+    other.ai = 'chase';
+    world.events.emit('enemy_alerted', { enemyId: other.id, enemyType: other.type });
   }
 }
 

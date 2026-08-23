@@ -299,6 +299,47 @@ describe('goblin_chieftain (1구역 보스)', () => {
   });
 });
 
+describe('보스 포효 — 주변을 함께 깨운다', () => {
+  it('보스가 플레이어를 알아채면 반경 안의 잠든 적이 전부 함께 달려든다', () => {
+    const radius = balance.enemyAi.bossAlertRadius;
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + 10, 6, 1); // aggroRange(18) 안
+    const near = spawnEnemyAt('goblin_runner', boss.x + radius - 2, boss.z, 2);
+    const far = spawnEnemyAt('goblin_runner', boss.x + radius + 5, boss.z, 3);
+    // 벽 너머라도 소리는 들린다 — 시야를 막아도 깨어야 한다
+    const blind = spawnEnemyAt('goblin_runner', boss.x, boss.z + 6, 4);
+    for (const e of [boss, near, far, blind]) {
+      e.ai = 'idle';
+      world.enemies.push(e);
+    }
+    const alerted: { enemyId: number }[] = [];
+    world.events.on('enemy_alerted', (p) => alerted.push(p as { enemyId: number }));
+
+    Enemies.tick(world, DT);
+
+    expect(boss.ai).toBe('chase');
+    expect(near.ai).toBe('chase');
+    expect(blind.ai).toBe('chase');
+    expect(far.ai).toBe('idle'); // 반경 밖은 그대로 잔다
+    expect(alerted.map((a) => a.enemyId).sort()).toEqual([boss.id, near.id, blind.id].sort());
+  });
+
+  it('보스가 아니면 주변을 깨우지 않는다', () => {
+    const runner = spawnEnemyAt('goblin_runner', 6 + 5, 6, 1);
+    const other = spawnEnemyAt('goblin_runner', 6 + 8, 6, 2);
+    for (const e of [runner, other]) {
+      e.ai = 'idle';
+      world.enemies.push(e);
+    }
+    Enemies.tick(world, DT);
+    expect(runner.ai).toBe('chase');
+    expect(other.ai).toBe('chase'); // 얘는 제 aggroRange 로 스스로 깬 것
+    other.ai = 'idle';
+    other.x = 6 + enemyDef('goblin_runner').aggroRange + 10; // 제 힘으로는 못 깨는 거리
+    Enemies.tick(world, DT);
+    expect(other.ai).toBe('idle');
+  });
+});
+
 describe('goblin_chieftain 원거리 공격', () => {
   it('원거리(minRange 이상)에서는 바위 투척 — 반사 불가 투사체', () => {
     const boss = spawnEnemyAt('goblin_chieftain', 18, 6, 1); // dist 12 ≥ minRange 7

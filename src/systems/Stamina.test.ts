@@ -10,6 +10,7 @@ import * as PlayerMove from './PlayerMove';
 import * as Reaction from './Reaction';
 import * as Sigils from './Sigils';
 import * as Stamina from './Stamina';
+import * as Weapons from './Weapons';
 
 const DT = 1 / 60;
 const CFG = balance.player.stamina;
@@ -194,6 +195,50 @@ describe('질주', () => {
     const mid = world.stamina.value;
     Stamina.tick(world, DT);
     expect(world.stamina.value).toBeCloseTo(mid + CFG.regenPerTick, 5);
+  });
+});
+
+describe('해머', () => {
+  /** 한 번 휘두르고 해머가 닿을 때까지 진행한다 */
+  function swing(): void {
+    world.weapon.meleeCooldown = 0;
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    for (let i = 0; i < 20 && world.weapon.swingImpact > 0; i++) Weapons.tick(world, DT);
+  }
+
+  it('휘두르면 닳는다 — 마무리 3타가 더 크게', () => {
+    swing();
+    expect(world.stamina.value).toBe(CFG.max - CFG.hammerCost);
+    swing();
+    expect(world.stamina.value).toBe(CFG.max - CFG.hammerCost * 2);
+    swing(); // 3타 = 강타
+    expect(world.weapon.swingHeavy).toBe(true);
+    expect(world.stamina.value).toBe(CFG.max - CFG.hammerCost * 2 - CFG.hammerHeavyCost);
+    expect(CFG.hammerHeavyCost).toBeGreaterThan(CFG.hammerCost);
+  });
+
+  it('헛쳐도 낸다 — 휘두른 값이다', () => {
+    expect(world.enemies).toHaveLength(0);
+    swing();
+    expect(world.stamina.value).toBe(CFG.max - CFG.hammerCost);
+  });
+
+  it('모자라도 스윙 자체는 막지 않는다 — 거미줄을 걷어낼 유일한 수단이라', () => {
+    world.stamina.value = 1;
+    const empty: unknown[] = [];
+    world.events.on('stamina_empty', () => empty.push(1));
+
+    swing();
+    expect(world.weapon.swingImpact).toBe(0); // 스윙이 끝까지 나갔다
+    expect(world.stamina.value).toBe(0);
+    expect(world.stamina.exhausted).toBe(true);
+    expect(empty).toHaveLength(1);
+
+    swing(); // 탈진 중에도 계속 휘두를 수는 있다
+    expect(world.stamina.value).toBe(0);
+    expect(empty).toHaveLength(1); // 알림은 한 번만
   });
 });
 
