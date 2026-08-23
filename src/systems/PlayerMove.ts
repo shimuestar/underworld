@@ -17,7 +17,9 @@ export function tick(world: World, dt: number): void {
   p.prevY = p.y;
   p.prevZ = p.z;
 
-  // 피격 밀림 — 입력·경직과 무관하게 먼저 적용된다. 벽에 막히면 거기서 멈춘다
+  // 피격 밀림 — 입력·경직과 무관하게 먼저 적용된다. 벽에 막히면 거기서 멈춘다.
+  // (감산 전에 기억해 둔다 — 마지막 한 틱도 감속 대상이다)
+  const shoved = (p.kbTicks ?? 0) > 0;
   if ((p.kbTicks ?? 0) > 0) {
     p.kbTicks = (p.kbTicks ?? 0) - 1;
     world.level.slideMove(p, balance.player.radius, p.kbX ?? 0, p.kbZ ?? 0);
@@ -56,6 +58,8 @@ export function tick(world: World, dt: number): void {
   }
   let speed = sprinting ? balance.player.sprintSpeed : balance.player.moveSpeed;
   if (st.exhausted) speed *= stam.exhaustedSpeedMul; // 숨이 차 제대로 못 걷는다
+  // 밀리는 동안은 발이 안 붙는다 — 밀림과 이동이 더해지는 구조라 배율로 눌러 준다
+  if (shoved) speed *= balance.playerKnockback.moveSpeedMul;
   if (p.blocking) speed *= balance.block.speedMul; // 방어 중 감속 페널티
   world.level.slideMove(p, balance.player.radius, wx * speed * dt, wz * speed * dt);
   resolveEnemyOverlap(world);

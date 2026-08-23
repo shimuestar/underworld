@@ -843,3 +843,63 @@ describe('마법탄 내파 (수호주술사)', () => {
     expect(dist).toBeLessThan(splash.radius);
   });
 });
+
+describe('피격 밀림 중 이동', () => {
+  const kb = balance.playerKnockback;
+
+  /** 밀림 없이 n틱 걷는다 (yaw −π/2 → +X) */
+  function walk(world: World, ticks: number): number {
+    const from = { x: world.player.x, z: world.player.z };
+    for (let i = 0; i < ticks; i++) {
+      world.input = { ...Input.emptySnapshot(), moveForward: 1 };
+      PlayerMove.tick(world, DT);
+      world.input = Input.emptySnapshot();
+    }
+    return Math.hypot(world.player.x - from.x, world.player.z - from.z);
+  }
+
+  function setup(): World {
+    const world = makeWorld();
+    world.player.yaw = -Math.PI / 2; // +X 를 본다
+    return world;
+  }
+
+  it('밀리는 동안 이동 입력이 절반으로 줄어든다', () => {
+    const plain = setup();
+    const normal = walk(plain, kb.ticks);
+
+    const shoved = setup();
+    shoved.player.kbTicks = kb.ticks;
+    shoved.player.kbX = 0; // 밀림 자체는 0 으로 두고 이동분만 잰다
+    shoved.player.kbZ = 0;
+    const slowed = walk(shoved, kb.ticks);
+
+    expect(slowed).toBeCloseTo(normal * kb.moveSpeedMul, 4);
+  });
+
+  it('밀림과 이동은 여전히 더해진다 — 달려들면 거리가 줄지만 멈추지는 않는다', () => {
+    const world = setup();
+    const dist = kb.thrust;
+    world.player.kbTicks = kb.ticks;
+    world.player.kbX = -dist / kb.ticks; // −X 로 밀린다
+    world.player.kbZ = 0;
+    const x0 = world.player.x;
+    walk(world, kb.ticks); // 밀림 반대 방향(+X)으로 달려든다
+
+    const pushed = x0 - world.player.x;
+    expect(pushed).toBeGreaterThan(0); // 그래도 뒤로 밀린다
+    expect(pushed).toBeLessThan(dist); // 다만 덜 밀린다
+  });
+
+  it('밀림이 끝나면 즉시 원래 속도로 돌아온다', () => {
+    const world = setup();
+    world.player.kbTicks = 1;
+    world.player.kbX = 0;
+    world.player.kbZ = 0;
+    walk(world, 1); // 마지막 밀림 틱 — 여기까지는 감속
+    expect(world.player.kbTicks).toBe(0);
+
+    const plain = setup();
+    expect(walk(world, 5)).toBeCloseTo(walk(plain, 5), 4);
+  });
+});

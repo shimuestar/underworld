@@ -60,7 +60,9 @@
 
   "playerKnockback": {
     "_comment": "피격 시 뒤로 밀리는 거리(m). 공격 종류별로 체감이 다르다. 방어 중에는 blockedMul 배",
+    "_moveNote": "밀리는 동안의 이동 입력 배율. 밀림과 이동은 더해지므로 1.0이면 달려들어 밀림을 거의 상쇄할 수 있었다",
     "ticks": 8,
+    "moveSpeedMul": 0.5,
     "blockedMul": 0.33,
     "arrow": 0.35,
     "contact": 0.8,
