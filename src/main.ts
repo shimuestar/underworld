@@ -310,6 +310,7 @@ for (const name of [
   'deflect',
   'barrier_blocked',
   'shield_broken',
+  'stagger_fling',
   'shield_cracked',
   'shield_braced',
   'shield_bash_start',
@@ -644,6 +645,12 @@ events.on('shield_cracked', (payload) => {
   stage.flashEnemyHit(info.enemyId);
   stage.triggerCameraKick(0.6, 180);
   showReaction(`방패에 금이 갔다 — 한 번 더!`, 1200);
+});
+// 경직 중 3타 마무리 — 크게 날린다. 무게가 실린 소리와 카메라 킥으로 알린다
+events.on('stagger_fling', () => {
+  audio.play('hammer_heavy');
+  stage.triggerCameraKick(1.1, 260);
+  showReaction('강타 — 날려 버렸다!', 900);
 });
 events.on('shield_broken', (payload) => {
   const info = payload as { enemyId: number };

@@ -264,6 +264,22 @@ describe('goblin_chieftain (1구역 보스)', () => {
     expect(boss.ai).toBe('recover');
   });
 
+  it('처형은 보스를 뒤로 크게 날린다 — 다시 붙어야 한다', () => {
+    const boss = makeBoss();
+    boss.ai = 'staggered';
+    boss.timer = balance.reaction.staggerTicks;
+    world.enemies.push(boss);
+    const before = Math.hypot(boss.x - world.player.x, boss.z - world.player.z);
+
+    pressReaction();
+    expect(boss.kbTicks).toBe(balance.reaction.executeKnockbackTicks);
+    // 처형 연출 동안은 적이 통째로 멈춘다 — 연출이 끝난 뒤에 날아간다
+    const wait = balance.reaction.executeFocusTicks + balance.reaction.executeKnockbackTicks;
+    for (let i = 0; i < wait; i++) Enemies.tick(world, DT);
+    const after = Math.hypot(boss.x - world.player.x, boss.z - world.player.z);
+    expect(after - before).toBeCloseTo(balance.reaction.executeKnockback, 1);
+  });
+
   it('한 번의 스태거에 처형은 한 번 — 연타해도 두 번째는 안 들어간다', () => {
     const boss = makeBoss();
     const def = enemyDef('goblin_chieftain');

@@ -783,6 +783,57 @@ describe('해머 3타 콤보', () => {
     expect(fourth.speedMul).toBe(1);
   });
 
+  it('경직한 적에게 3타를 모두 맞히면 체급을 무시하고 크게 날린다', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + 2.5, 6, 1);
+    boss.health = 1e6;
+    boss.ai = 'staggered';
+    boss.timer = 100000;
+    world.enemies.push(boss);
+    const flings: { distance: number }[] = [];
+    world.events.on('stagger_fling', (p) => flings.push(p as { distance: number }));
+
+    swingMeasured(); // 1타
+    swingMeasured(); // 2타
+    expect(flings).toHaveLength(0); // 마무리 전에는 안 날아간다
+    swingMeasured(); // 3타 마무리
+
+    expect(flings[0]).toMatchObject({ distance: combo.staggerFullKnockback });
+    expect(boss.kbTicks).toBe(combo.staggerFullKnockbackTicks);
+    const perTick = Math.hypot(boss.kbX!, boss.kbZ!);
+    expect(perTick * combo.staggerFullKnockbackTicks).toBeCloseTo(combo.staggerFullKnockback, 5);
+    // 중장(heavy) 배율로 밀렸을 때보다 훨씬 멀다
+    const byWeight = combo.knockbackByWeight as unknown as Record<string, number>;
+    expect(combo.staggerFullKnockback).toBeGreaterThan(
+      hammer.knockback * combo.knockbackMul * byWeight.heavy!,
+    );
+    // 경직 중에는 돌격 예약을 걸지 않는다 — 밀림이 끝나자마자 경직을 털고 나온다
+    expect(boss.wantsCharge).not.toBe(true);
+  });
+
+  it('한 대라도 헛치면 평소 마무리 넉백이다 — 3타 모두 적중일 때만', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + 2.5, 6, 1);
+    boss.health = 1e6;
+    boss.ai = 'staggered';
+    boss.timer = 100000;
+    world.enemies.push(boss);
+    const flings: unknown[] = [];
+    world.events.on('stagger_fling', (p) => flings.push(p));
+
+    boss.x = 6 + 40; // 1타는 헛친다
+    swingMeasured();
+    boss.x = 6 + 2.5;
+    swingMeasured(); // 2타 적중
+    swingMeasured(); // 3타 적중 — 그래도 '모두 적중'은 아니다
+
+    expect(flings).toHaveLength(0);
+    const byWeight = combo.knockbackByWeight as unknown as Record<string, number>;
+    const perTick = Math.hypot(boss.kbX!, boss.kbZ!);
+    expect(perTick * boss.kbTicks!).toBeCloseTo(
+      hammer.knockback * combo.knockbackMul * byWeight.heavy!,
+      5,
+    );
+  });
+
   it('1타를 헛쳐도 2타가 맞으면 3타까지 빨라진다', () => {
     const enemy = spawnEnemyAt('goblin_runner', 6 + 40, 6, 1); // 사거리 밖
     enemy.health = 100000;

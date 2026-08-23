@@ -723,6 +723,24 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
     expect(world.input.meleePressed).toBe(false);
   });
 
+  it('해머를 휘두르는 중이면 근접 키가 처형으로 가로채지 않는다', () => {
+    const world = strikeAt(3.5, 10);
+    pressReaction(world); // 완벽 패링 → 스태거
+    expect(world.enemies[0]!.ai).toBe('staggered');
+
+    // 연결이 열려 있는 상태 — 반응 반경(4.6)이 해머 사거리보다 넓어서
+    // 이 예외가 없으면 경직한 적을 해머로 두들기는 선택지가 사라진다
+    world.weapon.comboTimer = 20;
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Reaction.tick(world, DT);
+    expect(world.enemies[0]!.alive).toBe(true); // 처형 안 됨
+    expect(world.input.meleePressed).toBe(true); // 입력은 해머로 넘어간다
+
+    // 반응 버튼은 연결 중이라도 언제나 처형이다
+    pressReaction(world);
+    expect(world.enemies[0]!.alive).toBe(false);
+  });
+
   it('근접 키는 패링·회피·반사에는 쓰이지 않는다 — 처형 전용', () => {
     const world = strikeAt(3.5, 10); // 무기 끝이 완벽 대역에 들어온 순간
     const attempts: unknown[] = [];

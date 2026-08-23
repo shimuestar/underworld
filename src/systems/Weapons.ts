@@ -21,6 +21,7 @@ export function tick(world: World, _dt: number): void {
     w.comboTimer--;
     if (w.comboTimer === 0) {
       w.comboStep = 0;
+      w.comboHits = 0;
       w.meleeRush = false; // 연결이 끊겼으니 다음 1타는 원속도부터
     }
   }
@@ -188,6 +189,9 @@ function resolveHammerHit(world: World, heavy: boolean): void {
   const arcCos = Math.cos(((arcDeg / 2) * Math.PI) / 180);
   let hitAny = false;
   let damagedAny = false; // 방패에 튕긴 것은 제외 — 적중 가속은 살을 때렸을 때만
+  // 앞선 두 타가 모두 들어갔는가 — 이번 마무리까지 맞으면 '3타 모두 적중'이다.
+  // 경직한 적에게 이걸 채우면 체급을 무시하고 크게 날린다
+  const chainFull = heavy && (w.comboHits ?? 0) >= combo.finisherStep - 1;
 
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
@@ -261,20 +265,36 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     enemy.health -= damage;
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     if (heavy) {
-      // 마무리 강타에서만 밀어낸다 (보스는 밀리지 않는다)
-      // 체급이 무거울수록 덜 밀린다 (경량 1.0 / 중량 0.5 / 중장 0.25)
-      const byWeight = combo.knockbackByWeight as unknown as Record<string, number>;
-      const weightMul = byWeight[def.weight] ?? 1;
-      // 크게 밀려난 적은 확률적으로 달려들며 반격한다 (방패가 깨진 뒤에도 동일)
-      if (def.chargeAttack) {
+      // 경직한 적에게 3타를 모두 꽂았다 — 체급을 무시하고 크게 날린다.
+      // 경직은 유지된다(밀리는 동안 타이머가 멈춘다) — 쫓아가 처형할 수 있다
+      const flingStaggered = chainFull && enemy.ai === 'staggered';
+      // 크게 밀려난 적은 확률적으로 달려들며 반격한다 (방패가 깨진 뒤에도 동일).
+      // 경직 중에는 걸지 않는다 — 밀림이 끝나자마자 돌격으로 경직을 털고 나온다
+      if (def.chargeAttack && enemy.ai !== 'staggered') {
         enemy.wantsCharge = Math.random() < balance.enemyAi.chargeChanceAfterKnockback;
       }
-      if (weightMul > 0) {
-        // 멀리 밀되 미는 시간도 함께 늘린다 — 같은 속도로 더 멀리 (순간이동 방지)
-        const kbTicks = Math.round(hammer.knockbackTicks * combo.knockbackTicksMul);
+      if (flingStaggered) {
+        const kbTicks = combo.staggerFullKnockbackTicks;
         enemy.kbTicks = kbTicks;
-        enemy.kbX = (toX / dist) * ((knockback * weightMul) / kbTicks);
-        enemy.kbZ = (toZ / dist) * ((knockback * weightMul) / kbTicks);
+        enemy.kbX = (toX / dist) * (combo.staggerFullKnockback / kbTicks);
+        enemy.kbZ = (toZ / dist) * (combo.staggerFullKnockback / kbTicks);
+        world.events.emit('stagger_fling', {
+          enemyId: enemy.id,
+          enemyType: enemy.type,
+          distance: combo.staggerFullKnockback,
+        });
+      } else {
+        // 마무리 강타에서만 밀어낸다. 체급이 무거울수록 덜 밀린다
+        // (경량 1.0 / 중량 0.5 / 중장 0.25)
+        const byWeight = combo.knockbackByWeight as unknown as Record<string, number>;
+        const weightMul = byWeight[def.weight] ?? 1;
+        if (weightMul > 0) {
+          // 멀리 밀되 미는 시간도 함께 늘린다 — 같은 속도로 더 멀리 (순간이동 방지)
+          const kbTicks = Math.round(hammer.knockbackTicks * combo.knockbackTicksMul);
+          enemy.kbTicks = kbTicks;
+          enemy.kbX = (toX / dist) * ((knockback * weightMul) / kbTicks);
+          enemy.kbZ = (toZ / dist) * ((knockback * weightMul) / kbTicks);
+        }
       }
     } else {
       // 1·2타는 밀치지 않고 그 자리에 굳힌다 — 밀려나면 연속타가 이어지지 않는다.
@@ -310,6 +330,9 @@ function resolveHammerHit(world: World, heavy: boolean): void {
   // 적중 가속 — 때린 만큼 후딜이 줄지만 연결 안에서만이다.
   // 마무리 3타를 친 뒤에는 다시 1타부터라 원속도로 돌려놓는다 (1→2→3 만 빨라진다).
   // 놓치면 즉시 끝 — 때리는 손맛만 빨라지고 헛손질은 벌을 그대로 받는다
+  // 3타 모두 적중 집계 — 한 대라도 헛치면 끊긴다
+  w.comboHits = damagedAny ? (w.comboHits ?? 0) + 1 : 0;
+
   const rushNext = damagedAny && !heavy;
   w.meleeRush = rushNext;
   const rushMul = rushNext ? combo.hitCooldownMul : 1;
@@ -318,6 +341,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
   if (heavy) {
     w.comboStep = 0; // 마무리 — 다음은 다시 1타부터
     w.comboTimer = 0;
+    w.comboHits = 0;
     if (hitAny) world.freezeTicks = Math.max(world.freezeTicks, combo.hitstopTicks);
   } else {
     // 다음 타를 이어갈 수 있는 시간 (후딜이 끝난 뒤부터 세는 게 아니라 총 여유)

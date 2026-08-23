@@ -52,8 +52,13 @@ export function tick(world: World, _dt: number): void {
   const buffered = (p.parryBufferTicks ?? 0) > 0;
   if (buffered) p.parryBufferTicks = (p.parryBufferTicks ?? 0) - 1;
   // 처형은 근접 키로도 나간다 — 스태거를 보고 "때린다"가 자연스럽다.
-  // 패링·방어·회피·반사는 여전히 반응 버튼 전용이라 아래에서 freshPress 로 가른다
-  const executePress = world.input.meleePressed;
+  // 패링·방어·회피·반사는 여전히 반응 버튼 전용이라 아래에서 freshPress 로 가른다.
+  //
+  // 단 이미 해머를 휘두르는 중이면 처형으로 가로채지 않는다. 반응 반경(4.6)이
+  // 해머 사거리(3.9)보다 넓어 "경직한 적을 해머로 두들긴다"가 아예 불가능해지기
+  // 때문 — 연결을 시작했으면 3타까지 이어 칠 수 있어야 한다. Space 는 항상 처형이다
+  const swinging = world.weapon.comboTimer > 0 || world.weapon.swingImpact > 0;
+  const executePress = world.input.meleePressed && !swinging;
   if (!freshPress && !buffered && !executePress) return;
   if (freshPress) p.reactionBufferTicks = 0;
 
@@ -222,6 +227,9 @@ export function tick(world: World, _dt: number): void {
         // 연타하면 한 번의 스태거에 처형이 6번 들어가 840이 통째로 날아갔다(실측)
         enemy.ai = 'recover';
         enemy.timer = currentAttack(def, enemy).recoverTicks;
+        // 한 방에 250을 꽂는다 — 몸이 안 움직이면 무게가 안 실린다. 뒤로 크게 날린다.
+        // 밀리는 동안은 아무것도 못 하므로(Enemies 가 넉백을 최우선으로 처리) 다시 붙을 틈은 준다
+        pushEnemyBack(world, enemy, reaction.executeKnockback, reaction.executeKnockbackTicks);
       }
       return;
     }
@@ -254,6 +262,24 @@ export function tick(world: World, _dt: number): void {
   // 아직 무기가 오는 중이면 이 입력을 잠깐 살려둔다 (도달하는 순간 패링 성립).
   // 이게 없으면 "조금 일찍 누름"이 전부 헛손질이 되어 타이밍이 가혹해진다
   if (freshPress && incoming) p.parryBufferTicks = reaction.parryBufferTicks;
+}
+
+/** 적을 플레이어 반대 방향으로 밀어낸다. 미는 시간을 함께 늘려야 순간이동처럼
+ *  보이지 않는다 (Weapons 의 마무리 넉백과 같은 규약) */
+function pushEnemyBack(
+  world: World,
+  enemy: EnemyState,
+  distance: number,
+  ticks: number,
+): void {
+  const p = world.player;
+  const dx = enemy.x - p.x;
+  const dz = enemy.z - p.z;
+  const len = Math.hypot(dx, dz);
+  if (len === 0 || ticks <= 0) return;
+  enemy.kbTicks = ticks;
+  enemy.kbX = (dx / len) * (distance / ticks);
+  enemy.kbZ = (dz / len) * (distance / ticks);
 }
 
 /** 회피 스텝 — 이동 입력 방향, 없으면 뒤로 */
