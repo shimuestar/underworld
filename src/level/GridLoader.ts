@@ -227,6 +227,9 @@ const COLOR_ALTAR = 0xd8c9a0;
 const COLOR_ALTAR_LIGHT = 0xe0d0a0;
 const COLOR_LEVER = 0xc9a227;
 const COLOR_EXIT = 0x3fae5a;
+/** 봉인된 출구 — 꺼진 돌바닥. 열린 초록과 한눈에 구분돼야 한다 */
+export const COLOR_EXIT_LOCKED = 0x3a3f44;
+export const COLOR_EXIT_OPEN = 0x3fae5a;
 const GLYPH_RUNES = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
 
 export interface TorchParams {
@@ -359,9 +362,11 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
         );
         pad.rotation.x = -Math.PI / 2;
         pad.position.set(x, 0.02, z);
+        pad.name = 'exitPad'; // Stage가 잠김/열림에 따라 색을 바꾼다
         group.add(pad);
         const light = new THREE.PointLight(COLOR_EXIT, 0.9, 7, 0);
         light.position.set(x, 1.5, z);
+        light.name = 'exitLight';
         group.add(light);
       }
     }

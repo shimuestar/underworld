@@ -339,6 +339,8 @@ export class World {
   cleared = false;
   /** 출구 접근 중 잠김 안내 중복 방지 */
   exitLockedNotified = false;
+  /** 출구 개방 여부 — 보스가 죽으면 열린다. 렌더·미니맵이 이 값을 본다 */
+  exitOpen = false;
 
   /** 당겨진 레버 ("row-col") — 레버는 1회용 */
   pulledLevers = new Set<string>();

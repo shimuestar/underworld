@@ -277,6 +277,39 @@ describe('출구 (7.4)', () => {
     expect(events).toEqual(['locked', 'cleared']);
     expect(world.cleared).toBe(true);
   });
+
+  it('exitOpen 은 출구에서 멀리 있어도 갱신된다 — 보스가 죽는 순간 exit_opened 1회', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 8, 6, 1);
+    world.enemies.push(boss);
+    const opened: unknown[] = [];
+    world.events.on('exit_opened', (payload) => opened.push(payload));
+
+    world.player.x = 6; // 출구에서 멀리
+    world.player.z = 6;
+    Exit.tick(world, DT);
+    expect(world.exitOpen).toBe(false); // 봉인 — 밟지 않아도 상태가 잡힌다
+    expect(opened).toHaveLength(0);
+
+    boss.alive = false;
+    Exit.tick(world, DT);
+    expect(world.exitOpen).toBe(true);
+    expect(opened).toHaveLength(1);
+
+    Exit.tick(world, DT); // 계속 돌아도 한 번만
+    expect(opened).toHaveLength(1);
+  });
+
+  it('보스가 되살아나면 다시 봉인된다 (부활로 적이 재스폰될 때)', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 8, 6, 1);
+    boss.alive = false;
+    world.enemies.push(boss);
+    Exit.tick(world, DT);
+    expect(world.exitOpen).toBe(true);
+
+    boss.alive = true;
+    Exit.tick(world, DT);
+    expect(world.exitOpen).toBe(false);
+  });
 });
 
 describe('캐스터 재배치 — 아군이 사선을 막을 때', () => {

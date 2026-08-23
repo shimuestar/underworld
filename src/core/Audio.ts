@@ -51,7 +51,8 @@ export type SoundName =
   | 'implode'
   | 'shop_buy'
   | 'shop_deny'
-  | 'dry_fire';
+  | 'dry_fire'
+  | 'exit_opened';
 
 const MASTER_GAIN = 0.25;
 
@@ -239,6 +240,13 @@ export class GameAudio {
         this.tone(60, 0.7, 'sine', 1.6, 0, 28);
         this.noise(0.5, 1.3, 900);
         this.noise(0.9, 0.5, 300, 0.1);
+        break;
+      case 'exit_opened':
+        // 봉인 해제 — 낮게 깔린 돌 갈림 뒤에 위로 열리는 화음
+        this.noise(0.5, 0.5, 320);
+        this.tone(150, 0.5, 'triangle', 0.5, 0.12, 300);
+        this.tone(300, 0.7, 'sine', 0.45, 0.24, 450);
+        this.tone(450, 0.9, 'sine', 0.3, 0.36, 600);
         break;
       case 'dry_fire':
         // 불발 — 공이가 빈 약실을 때리는 금속 딸깍. 저음을 넣으면 발사음처럼 들리므로

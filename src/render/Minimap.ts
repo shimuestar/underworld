@@ -21,6 +21,7 @@ const PLAYER = '#9fe870';
 const ENEMY = '#e04444';
 const ENEMY_IDLE = 'rgba(224,68,68,0.35)';
 const ENEMY_STAGGERED = '#cc9922';
+const EXIT_LOCKED = '#3a3f44'; // 봉인된 출구 (월드의 COLOR_EXIT_LOCKED 와 같은 색)
 
 export class Minimap {
   private readonly canvas: HTMLCanvasElement;
@@ -89,12 +90,20 @@ export class Minimap {
     this.legend.style.display = this.visible ? 'block' : 'none';
   }
 
-  update(player: PlayerState, enemies: EnemyState[], alpha: number): void {
+  update(player: PlayerState, enemies: EnemyState[], alpha: number, exitOpen = true): void {
     if (!this.visible) return;
     const ctx = this.ctx;
     const s = PX_PER_UNIT;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.drawImage(this.base, 0, 0);
+
+    // 봉인된 출구는 회색으로 덮는다 — 지도에서도 "아직 못 나간다"가 보여야 한다
+    if (!exitOpen && this.level.exitPos) {
+      const col = Math.floor(this.level.exitPos.x / this.level.cellSize);
+      const row = Math.floor(this.level.exitPos.z / this.level.cellSize);
+      ctx.fillStyle = EXIT_LOCKED;
+      ctx.fillRect(col * this.cellPx, row * this.cellPx, this.cellPx, this.cellPx);
+    }
 
     // 적 — 어그로 상태는 선명하게, idle은 흐리게. 스태거는 처형 가능 색
     for (const enemy of enemies) {

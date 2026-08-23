@@ -281,6 +281,7 @@ for (const name of [
   'boss_staggered',
   'boss_execute',
   'exit_locked',
+  'exit_opened',
   'zone_cleared',
   'lever_pulled',
 ]) {
@@ -688,6 +689,10 @@ events.on('boss_phase', (payload) => {
   showReaction(phase === 'armored' ? '장갑 페이즈 — 실탄으로 파괴하라' : '장갑 파괴 — 패링 구간', 3000);
 });
 events.on('exit_locked', () => showReaction('출구가 봉인되어 있다 — 족장이 살아 있다', 3000));
+events.on('exit_opened', () => {
+  audio.play('exit_opened');
+  showReaction('족장이 쓰러졌다 — 출구의 봉인이 풀렸다', 3500);
+});
 events.on('lever_pulled', (payload) => {
   const info = payload as { lever: { row: number; col: number }; door: { row: number; col: number } };
   audio.play('lever_pull');
@@ -865,7 +870,8 @@ function render(alpha: number): void {
     stage.updateThrowArc(null);
   }
   stage.setCorruptionStage(Math.floor(world.corruption.applied / 12.5));
-  minimap.update(p, world.enemies, alpha);
+  stage.setExitOpen(world.exitOpen);
+  minimap.update(p, world.enemies, alpha, world.exitOpen);
 
   // 하단 중앙 상태 표시 — HP 바 + 무기 슬롯
   const wpn = world.weapon;

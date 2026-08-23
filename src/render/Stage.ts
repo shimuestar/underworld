@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
 import { currentAttack, enemyDef } from '../core/Entities';
-import { glyphTexture } from '../level/GridLoader';
+import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, glyphTexture } from '../level/GridLoader';
 import type { EnemyState, GroundItemState, ProjectileState } from '../core/World';
 import { FINISHER_CONTACT_MS, HandModel } from './HandModel';
 
@@ -50,6 +50,8 @@ const MUZZLE_OFFSET = { x: -0.17, y: -0.1, z: -0.72 }; // 카메라 로컬: 왼�
 const STUCK_ARROW_MS = 14000;
 const BULLET_MARK_MS = 10000;
 const DECAL_FADE_MS = 2000;
+
+const EXIT_FLASH_MS = 900; // 출구가 열리는 순간의 섬광
 
 const SHIELD_COLOR = 0x6f7480;
 const SHIELD_BASE_X = -0.08;
@@ -369,6 +371,38 @@ export class Stage {
     this.levelAmbient = ambientIntensity;
     this.ambientLight = new THREE.AmbientLight(0xffffff, ambientIntensity);
     this.scene.add(this.ambientLight);
+    this.exitPad = group.getObjectByName('exitPad') as THREE.Mesh | undefined;
+    this.exitLight = group.getObjectByName('exitLight') as THREE.PointLight | undefined;
+    this.exitOpen = true; // 아래 호출이 실제로 반영되도록 반대값에서 시작
+    this.setExitOpen(false);
+  }
+
+  private exitPad?: THREE.Mesh;
+  private exitLight?: THREE.PointLight;
+  private exitOpen = true;
+  private exitFlashUntil = 0;
+
+  /** 출구 개방 — 봉인 중엔 꺼진 돌바닥, 열리면 초록으로 켜진다.
+   *  "늘 열려 있는 초록 바닥"으로 보이던 문제를 여기서 잡는다 */
+  setExitOpen(open: boolean): void {
+    if (open === this.exitOpen) return;
+    this.exitOpen = open;
+    const mat = this.exitPad?.material as THREE.MeshLambertMaterial | undefined;
+    if (mat) {
+      mat.color.setHex(open ? COLOR_EXIT_OPEN : COLOR_EXIT_LOCKED);
+      mat.emissive.setHex(open ? COLOR_EXIT_OPEN : COLOR_EXIT_LOCKED);
+      mat.emissiveIntensity = open ? 0.5 : 0.06;
+      mat.opacity = open ? 0.85 : 0.55;
+    }
+    if (this.exitLight) this.exitLight.intensity = open ? 0.9 : 0;
+    // 열리는 순간 한 번 크게 번쩍인다 — 멀리서도 보이도록
+    if (open) this.exitFlashUntil = performance.now() + EXIT_FLASH_MS;
+  }
+
+  private updateExitLight(now: number): void {
+    if (!this.exitLight || !this.exitOpen) return;
+    const left = this.exitFlashUntil - now;
+    this.exitLight.intensity = left > 0 ? 0.9 + 5 * (left / EXIT_FLASH_MS) : 0.9;
   }
 
   /** 암시야 각인 — ambient 가산. boost 0 = 레벨 기본값 */
@@ -1631,6 +1665,7 @@ export class Stage {
     this.updateParticles();
     this.updateExplosions();
     this.updateDecals(performance.now());
+    this.updateExitLight(performance.now());
     this.renderer.render(this.scene, this.camera);
   }
 }
