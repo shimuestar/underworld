@@ -941,11 +941,12 @@ function render(alpha: number): void {
   });
   const showAltarPrompt =
     world.altarInView && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
-  // 봉인된 출구 발판 위 — 서 있는 동안 계속 띄운다 (3초 뒤 사라지면 못 보고 지나친다)
-  const onSealedExit = world.onExitPad && !world.exitOpen && !world.dead && !world.uiOpen;
+  // 출구 발판 위 — 서 있는 동안 계속 띄운다 (3초 뒤 사라지면 못 보고 지나친다).
+  // 봉인 중이면 이유를, 열렸으면 나가는 방법을 알린다
+  const onExit = world.onExitPad && !world.dead && !world.uiOpen && !world.cleared;
   altarPrompt!.classList.toggle(
     'visible',
-    showAltarPrompt || (nearLever && !world.dead) || onSealedExit,
+    showAltarPrompt || (nearLever && !world.dead) || onExit,
   );
   if (showAltarPrompt) {
     altarPrompt!.textContent =
@@ -954,8 +955,8 @@ function render(alpha: number): void {
       `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
   } else if (nearLever) {
     altarPrompt!.textContent = 'E — 레버를 당긴다';
-  } else if (onSealedExit) {
-    altarPrompt!.textContent = '출구가 봉인되어 있다';
+  } else if (onExit) {
+    altarPrompt!.textContent = world.exitOpen ? 'E — 구역을 벗어난다' : '출구가 봉인되어 있다';
   }
 
   const w = world.weapon;

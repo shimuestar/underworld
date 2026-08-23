@@ -1,4 +1,5 @@
-// 출구 — 보스가 살아 있으면 잠김, 처치 후 밟으면 구역 클리어.
+// 출구 — 보스가 살아 있으면 잠김, 처치 후 발판 위에서 E 를 눌러야 구역 클리어.
+// 밟기만 해도 끝나면 교전 중에 발을 잘못 디뎌 구역이 끝나 버린다.
 
 import { enemyDef } from '../core/Entities';
 import type { World } from '../core/World';
@@ -32,6 +33,9 @@ export function tick(world: World, _dt: number): void {
     }
     return;
   }
+
+  // 밟는 것만으로는 끝나지 않는다 — 명시적으로 E 를 눌러야 나간다
+  if (!world.input.interactPressed) return;
 
   world.cleared = true;
   world.events.emit('zone_cleared', { tick: world.tick });

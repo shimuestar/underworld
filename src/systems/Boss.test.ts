@@ -259,7 +259,7 @@ describe('goblin_chieftain 원거리 공격', () => {
 });
 
 describe('출구 (7.4)', () => {
-  it('보스 생존 시 잠김, 처치 후 밟으면 zone_cleared', () => {
+  it('보스 생존 시 잠김, 처치 후 발판 위에서 E 를 눌러야 zone_cleared', () => {
     const boss = spawnEnemyAt('goblin_chieftain', 8, 6, 1);
     world.enemies.push(boss);
     const events: string[] = [];
@@ -272,10 +272,27 @@ describe('출구 (7.4)', () => {
     expect(events).toEqual(['locked']);
     expect(world.cleared).toBe(false);
 
+    // 보스를 잡아도 밟는 것만으로는 끝나지 않는다
     boss.alive = false;
     Exit.tick(world, DT);
+    expect(world.cleared).toBe(false);
+    expect(events).toEqual(['locked']);
+
+    // E 를 눌러야 나간다
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    Exit.tick(world, DT);
+    world.input = Input.emptySnapshot();
     expect(events).toEqual(['locked', 'cleared']);
     expect(world.cleared).toBe(true);
+  });
+
+  it('발판 밖에서 E 를 눌러도 클리어되지 않는다', () => {
+    world.player.x = 6; // 출구에서 멀리
+    world.player.z = 6;
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    Exit.tick(world, DT);
+    expect(world.cleared).toBe(false);
+    expect(world.onExitPad).toBe(false);
   });
 
   it('exitOpen 은 출구에서 멀리 있어도 갱신된다 — 보스가 죽는 순간 exit_opened 1회', () => {
