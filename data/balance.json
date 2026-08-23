@@ -66,7 +66,7 @@
 
   "web": {
     "_comment": "거미줄에 걸리면 느려진다. 시간이 지나도, 아무리 움직여도 안 풀린다 — 해머로 breakSwings 번 걷어내야만 벗겨진다",
-    "moveSpeedMul": 0.42,
+    "moveSpeedMul": 0.336,
     "breakSwings": 3
   },
   "playerKnockback": {
@@ -85,6 +85,10 @@
     "magic": 2.8
   },
 
+  "barrierBreak": {
+    "_comment": "수호주술사 마법 방어막 — 실탄만 통하던 것을 해머로도 깰 수 있게. 1·2·3타 구분 없이 hammerHitsToBreak 방이면 깨진다(약 2연결). 깨지기 전까지 해머 피해는 여전히 0이고, 남은 내구가 방어막 투명도로 보인다",
+    "hammerHitsToBreak": 6
+  },
   "shieldBreak": {
     "_comment": "정면 방패 파괴. 화염구는 한 번에, 해머는 마무리 3타를 finisherHitsToBreak 번 맞혀야 부서진다",
     "damageRatio": 0.5,

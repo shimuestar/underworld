@@ -214,6 +214,12 @@ export interface EnemyState {
   ai: EnemyAiState;
   /** 현재 ai 상태의 남은 틱 */
   timer: number;
+  /** 도약 중 지면에서 뜬 높이(m). 렌더 전용 — 판정은 XZ 평면 그대로다 */
+  jumpY?: number;
+  prevJumpY?: number;
+  /** 마법 방어막에 해머를 맞은 횟수 / 깨졌는가 (warden) */
+  barrierHits?: number;
+  barrierBroken?: boolean;
   /** 화상 잔여 틱 (Projectiles가 피해 적용) */
   burnTicks: number;
   burnDamagePerTick: number;

@@ -309,6 +309,8 @@ for (const name of [
   'enemy_repositioning',
   'deflect',
   'barrier_blocked',
+  'barrier_cracked',
+  'barrier_broken',
   'shield_broken',
   'stagger_fling',
   'shield_cracked',
@@ -782,6 +784,21 @@ events.on('barrier_blocked', (payload) => {
   showReaction(
     info.kind === 'shield' ? '방패에 막혔다 — 화염구로 부술 수 있다' : '방어막 — 9mm만 뚫는다',
   );
+});
+// 마법 방어막 — 해머로 두들기면 금이 가고, 끝내 터진다
+events.on('barrier_cracked', (payload) => {
+  const info = payload as { enemyId: number; remaining: number };
+  audio.play('barrier_cracked');
+  stage.flashBarrier(info.enemyId);
+  showReaction(`방어막에 금이 간다 — ${info.remaining}대 더`, 900);
+});
+events.on('barrier_broken', (payload) => {
+  const info = payload as { enemyType: string; x: number; z: number };
+  const def = enemyDef(info.enemyType);
+  audio.play('barrier_broken');
+  stage.spawnBarrierShatter(info.x, info.z, def.radius + 0.7, def.height * 0.55);
+  stage.triggerCameraKick(0.6, 220);
+  showReaction('방어막이 부서졌다!', 1600);
 });
 events.on('shot_blocked', () => showReaction('방패 — 정면은 막힌다 (화염구로 부술 수 있다)'));
 events.on('boss_staggered', () => showReaction('보스 스태거 — 지금 처형! (Space·우클릭)'));

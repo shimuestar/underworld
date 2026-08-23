@@ -3,7 +3,7 @@
 // 시전 시 cast_spell 이벤트 발행 → Mana가 연쇄를 리셋한다.
 
 import { balance } from '../core/Balance';
-import { enemyDef, shieldBlocksProjectile } from '../core/Entities';
+import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef } from '../core/SigilData';
 import { playerBlocks, pushPlayer, type World } from '../core/World';
@@ -309,7 +309,7 @@ function applyProjectileHit(
   }
 
   // 마법 방어막(warden) — 반사된 투사체가 아니면 무효 (7.2 피드백)
-  if (def.magicBarrier?.blocksMagic && !proj.deflected) {
+  if (def.magicBarrier?.blocksMagic && barrierUp(def, enemy) && !proj.deflected) {
     world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'magic' });
     return;
   }

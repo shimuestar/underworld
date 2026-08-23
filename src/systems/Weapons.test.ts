@@ -257,6 +257,50 @@ describe('해머 (슬롯 1)', () => {
     expect(warden.health).toBe(90);
     expect(blocked[0]).toMatchObject({ kind: 'melee' });
   });
+
+  it('해머로 정확히 hammerHitsToBreak 방이면 방어막이 깨진다 — 그 전까지 피해 0', () => {
+    const need = balance.barrierBreak.hammerHitsToBreak;
+    const warden = spawnEnemyAt('warden', 6 + 2, 6, 1);
+    warden.health = 90;
+    world.enemies.push(warden);
+    const cracked: { remaining: number }[] = [];
+    const broken: unknown[] = [];
+    world.events.on('barrier_cracked', (p) => cracked.push(p as { remaining: number }));
+    world.events.on('barrier_broken', (p) => broken.push(p));
+
+    for (let i = 1; i < need; i++) {
+      swing();
+      expect(warden.barrierHits).toBe(i);
+      expect(warden.health).toBe(90); // 아직 한 점도 안 깎인다
+      expect(broken).toHaveLength(0);
+    }
+    swing(); // 마지막 한 대
+    expect(warden.barrierBroken).toBe(true);
+    expect(broken).toHaveLength(1);
+    expect(warden.health).toBe(90); // 깨는 그 타격까지는 피해가 없다
+    // 남은 횟수를 매번 알려 준다 (5,4,3,2,1)
+    expect(cracked.map((c) => c.remaining)).toEqual([5, 4, 3, 2, 1]);
+
+    swing(); // 이제 해머가 통한다
+    expect(warden.health).toBeLessThan(90);
+  });
+
+  it('방어막이 깨지면 마법도 통한다', () => {
+    const warden = spawnEnemyAt('warden', 6 + 2, 6, 1);
+    warden.health = 90;
+    warden.barrierBroken = true;
+    world.enemies.push(warden);
+    const blocked: unknown[] = [];
+    world.events.on('barrier_blocked', (payload) => blocked.push(payload));
+    world.projectiles.push({
+      id: 1, owner: 'player', x: 6, y: 1.2, z: 6, prevX: 6, prevY: 1.2, prevZ: 6,
+      vx: 26, vy: 0, vz: 0, lifeTicks: 60, damage: 40,
+      burnTicks: 0, burnDamagePerTick: 0, radius: 0.35,
+    });
+    for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(blocked).toHaveLength(0);
+    expect(warden.health).toBeLessThan(90);
+  });
 });
 
 describe('수류탄 (슬롯 2)', () => {

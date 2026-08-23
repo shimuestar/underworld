@@ -65,6 +65,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
 
   enemy.prevX = enemy.x;
   enemy.prevZ = enemy.z;
+  enemy.prevJumpY = enemy.jumpY ?? 0;
 
   // 밀려난 뒤 돌격 — chase 진입을 기다리지 않는다 (공격 도중 밀려나면 그 상태로 남아
   // 영영 돌격하지 못했다). 밀리는 중에는 판단하지 않는다 — 아직 가까워서 취소돼 버린다
@@ -314,6 +315,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     // 이 구간은 패링 대상이 아니다 (판정은 붙은 뒤 타격 창에서 열린다)
     case 'charging': {
       enemy.timer--;
+      // 도약 — 달리는 구간 내내 포물선으로 뜬다. 착지(t=1)에 정확히 0이 되게
+      // 4t(1-t) 를 쓴다. 판정은 XZ 그대로라 높이는 순전히 "몸을 던진다"는 그림이다
+      if (attack.leapHeight) {
+        const total = attack.chargeRunTicks ?? 1;
+        const t = Math.min(1, Math.max(0, 1 - enemy.timer / total));
+        enemy.jumpY = attack.leapHeight * 4 * t * (1 - t);
+      }
       // 고정된 목표 지점으로만 달린다 (플레이어를 다시 보지 않는다)
       const tx = enemy.chargeTargetX ?? p.x;
       const tz = enemy.chargeTargetZ ?? p.z;
@@ -326,6 +334,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
       // 겨눈 자리에 닿았거나(몸 반경), 플레이어가 그대로 서 있어 이미 사거리거나, 시간이 다하면 친다
       if (tdist <= def.radius || dist <= def.attackRange || enemy.timer <= 0) {
+        enemy.jumpY = 0; // 착지 — 몸통 박치기는 땅에 닿는 순간 들어간다
         if (attack.parryable) {
           enemy.ai = 'active_perfect';
           enemy.timer = balance.reaction.windowPerfectTicks;

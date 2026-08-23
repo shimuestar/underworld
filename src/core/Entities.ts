@@ -24,6 +24,9 @@ export interface EnemyAttackDef {
   arcDeg?: number;
   /** 타격 구간 동안 플레이어를 향해 달려드는 속도 (돌격 공격) */
   chargeSpeed?: number;
+  /** 도약 — 달리는 구간 동안 이 높이까지 포물선을 그리며 뜬다(m).
+   *  없으면 바닥을 그대로 달린다. 판정은 XZ 평면 그대로라 높이는 연출이자 회피 단서다 */
+  leapHeight?: number;
   /** 예고 뒤 따로 달리는 구간(틱). 있으면 이 동안 chargeSpeed 로 달린 뒤 타격한다.
    *  없으면 타격 창(0.3초) 동안만 파고들어 3~4m 밖에 못 좁힌다 */
   chargeRunTicks?: number;
@@ -194,6 +197,13 @@ export function shieldBlocks(
   const len = Math.hypot(toX, toZ);
   const dot = len > 0 ? (facingX * toX + facingZ * toZ) / len : 1;
   return dot >= Math.cos(((def.shieldArcDeg ?? 120) / 2) * (Math.PI / 180));
+}
+
+/** 마법 방어막이 아직 서 있는가 (warden). 해머로 barrierBreak.hammerHitsToBreak 방을
+ *  맞으면 깨지고, 그 뒤로는 근접도 마법도 그대로 통한다.
+ *  Weapons·Projectiles·Stage 가 같은 함수를 쓴다 — 갈리면 "안 보이는데 막히는" 구멍이 난다 */
+export function barrierUp(def: EnemyDef, enemy: { barrierBroken?: boolean }): boolean {
+  return def.magicBarrier !== undefined && enemy.barrierBroken !== true;
 }
 
 /** 투사체(총·마법)가 정면 방패에 막히는가. 뒤로 떠밀리는 동안은 가드를 못 잡으므로

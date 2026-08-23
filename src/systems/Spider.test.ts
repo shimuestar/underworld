@@ -181,6 +181,28 @@ describe('검은 거미 (근접·도약)', () => {
     expect(hits).toHaveLength(0);
   });
 
+  it('공중으로 뛰어올라 몸을 던진다 — 착지하는 순간 판정', () => {
+    const leap = enemyDef('spider_small').chargeAttack!;
+    expect(leap.leapHeight).toBeGreaterThan(0);
+    const mid = ((leap.minRange ?? 0) + leap.maxRange!) / 2;
+    const spider: EnemyState = spawnEnemyAt('spider_small', 10 + mid, 10, 1);
+    spider.ai = 'chase';
+    world.enemies.push(spider);
+
+    for (let i = 0; i < 300 && (spider.ai as string) !== 'charging'; i++) Enemies.tick(world, DT);
+    expect(spider.jumpY ?? 0).toBe(0); // 예고 중에는 땅에 붙어 있다
+
+    let peak = 0;
+    for (let i = 0; i < 300 && (spider.ai as string) === 'charging'; i++) {
+      Enemies.tick(world, DT);
+      peak = Math.max(peak, spider.jumpY ?? 0);
+      expect(spider.jumpY ?? 0).toBeGreaterThanOrEqual(0); // 땅 밑으로 꺼지지 않는다
+    }
+    expect(peak).toBeGreaterThan(leap.leapHeight! * 0.7); // 실제로 꽤 뜬다
+    expect(peak).toBeLessThanOrEqual(leap.leapHeight!);
+    expect(spider.jumpY).toBe(0); // 타격 시점엔 착지해 있다
+  });
+
   it('가벼워서 해머 마무리에 잘 날아간다', () => {
     expect(enemyDef('spider_small').weight).toBe('light');
     expect(balance.weapons.hammer.combo.knockbackByWeight.light).toBe(1);

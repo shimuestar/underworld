@@ -322,6 +322,7 @@ const TRACER_WIDTH = 0.022;
 
 // 사망 파편 (시각 상수)
 const DEATH_PARTICLE_COUNT = 14;
+const BARRIER_SHARD_COUNT = 26; // 방어막 파편 — 사망 파편보다 많게 (막이 통째로 터진다)
 const DEATH_PARTICLE_LIFE_MS = 650;
 const DEATH_GRAVITY = 14;
 
@@ -1226,9 +1227,11 @@ export class Stage {
         this.scene.add(visual.group);
       }
 
+      // 도약 중이면 지면에서 뜬다 (검은 거미의 몸통 박치기)
+      const jumpY = (enemy.prevJumpY ?? 0) + ((enemy.jumpY ?? 0) - (enemy.prevJumpY ?? 0)) * alpha;
       visual.group.position.set(
         enemy.prevX + (enemy.x - enemy.prevX) * alpha,
-        0,
+        jumpY,
         enemy.prevZ + (enemy.z - enemy.prevZ) * alpha,
       );
       visual.group.rotation.y = enemy.yaw;
@@ -1301,8 +1304,15 @@ export class Stage {
 
       // warden 방어막 — 튕김 시 번쩍
       if (visual.barrier && visual.barrierMaterial) {
+        // 깨진 방어막은 사라진다. 남은 내구가 옅어지는 막으로 보인다 —
+        // 몇 대 더 때리면 되는지 눈으로 읽히게
+        visual.barrier.visible = enemy.barrierBroken !== true;
+        const left = Math.max(
+          0,
+          1 - (enemy.barrierHits ?? 0) / balance.barrierBreak.hammerHitsToBreak,
+        );
         const flashOn = now < visual.barrierFlashUntil;
-        visual.barrierMaterial.opacity = flashOn ? 0.55 : 0.18;
+        visual.barrierMaterial.opacity = flashOn ? 0.55 : 0.06 + 0.12 * left;
         visual.barrierMaterial.emissive.set(flashOn ? BARRIER_COLOR : 0x000000);
       }
 
@@ -1656,6 +1666,39 @@ export class Stage {
   }
 
   /** 격돌 — 부딪힌 지점에서 불꽃이 튀고 짧게 번쩍인다 (막기: 주황 / 패링: 청백) */
+  /** 방어막 파괴 — 구면을 따라 파편이 터져 나간다 */
+  spawnBarrierShatter(x: number, z: number, radius: number, height: number): void {
+    const now = performance.now();
+    for (let i = 0; i < BARRIER_SHARD_COUNT; i++) {
+      const size = 0.07 + Math.random() * 0.13;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size * 1.8, size * 0.3),
+        new THREE.MeshBasicMaterial({ color: BARRIER_COLOR, transparent: true, opacity: 0.9 }),
+      );
+      // 구면 위 한 점에서 바깥으로 — 막이 통째로 터져 나가는 그림
+      const yaw = Math.random() * Math.PI * 2;
+      const pitch = Math.acos(2 * Math.random() - 1);
+      const sx = Math.sin(pitch) * Math.cos(yaw);
+      const sy = Math.cos(pitch);
+      const sz = Math.sin(pitch) * Math.sin(yaw);
+      const speed = 3.5 + Math.random() * 3;
+      const particle: Particle = {
+        mesh,
+        ox: x + sx * radius,
+        oy: height + sy * radius,
+        oz: z + sz * radius,
+        vx: sx * speed,
+        vy: sy * speed + 1.5,
+        vz: sz * speed,
+        bornMs: now,
+      };
+      mesh.position.set(particle.ox, particle.oy, particle.oz);
+      mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      this.particles.push(particle);
+      this.scene.add(mesh);
+    }
+  }
+
   spawnGuardSparks(x: number, z: number, height: number, color = 0xfff0b0, power = 1): void {
     const now = performance.now();
     for (let i = 0; i < Math.round(16 * power); i++) {

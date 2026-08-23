@@ -4,7 +4,7 @@
 //    두 자원 경제를 분리하는 유일한 규칙이다 — docs/systems/combat.md §5.
 
 import { balance } from '../core/Balance';
-import { enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
+import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { RANGED_WEAPONS, spendStamina, type World } from '../core/World';
 
@@ -256,10 +256,29 @@ function resolveHammerHit(world: World, heavy: boolean): void {
       continue;
     }
 
-    // 상성 — warden 방어막은 근접 무효
-    if (enemyDef(enemy.type).magicBarrier?.blocksMelee && enemy.ai !== 'staggered') {
-      world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'melee' });
-      continue;
+    // 상성 — warden 방어막은 근접 피해를 막지만, 해머로 두들기면 깨진다.
+    // 스태거 중에는 방어막이 풀려 있으므로 그대로 통과한다
+    if (def.magicBarrier?.blocksMelee && barrierUp(def, enemy) && enemy.ai !== 'staggered') {
+      const need = balance.barrierBreak.hammerHitsToBreak;
+      enemy.barrierHits = (enemy.barrierHits ?? 0) + 1;
+      hitAny = true; // 방어막을 때린 것도 헛스윙은 아니다 (방패와 같은 규약)
+      if (enemy.barrierHits >= need) {
+        enemy.barrierBroken = true;
+        world.events.emit('barrier_broken', {
+          enemyId: enemy.id,
+          enemyType: enemy.type,
+          x: enemy.x,
+          z: enemy.z,
+        });
+      } else {
+        world.events.emit('barrier_cracked', {
+          enemyId: enemy.id,
+          hits: enemy.barrierHits,
+          remaining: need - enemy.barrierHits,
+        });
+        world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'melee' });
+      }
+      continue; // 깨지는 그 타격까지는 피해가 들어가지 않는다
     }
 
     enemy.health -= damage;

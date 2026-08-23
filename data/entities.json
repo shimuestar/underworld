@@ -36,8 +36,8 @@
       "aggroRange": 16, "attackRange": 1.7,
       "behavior": "swarm",
       "attack": { "type": "contact", "arcDeg": 150, "windupTicks": 13, "recoverTicks": 18, "whiffRecoverTicks": 42, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
-      "_leapNote": "도약 — 26틱 × 15 = 6.5m. 예고 시점 좌표로만 날아가므로 옆으로 비키면 헛짚는다",
-      "chargeAttack": { "type": "contact", "arcDeg": 150, "chargeSpeed": 15, "chargeRunTicks": 26, "minRange": 3.2, "maxRange": 7, "windupTicks": 20, "recoverTicks": 30, "whiffRecoverTicks": 75, "impactRangeMul": 1.25, "playerKnockback": 0.9, "parryable": true, "telegraph": "blue", "cooldownTicks": 200 },
+      "_leapNote": "도약 — 26틱 × 15 = 6.5m. 예고 시점 좌표로만 날아가므로 옆으로 비키면 헛짚는다. leapHeight 만큼 공중으로 포물선을 그리며 몸을 던진다 — 바닥을 기어가는 돌진이 아니다",
+      "chargeAttack": { "type": "contact", "arcDeg": 150, "leapHeight": 1.9, "chargeSpeed": 15, "chargeRunTicks": 26, "minRange": 3.2, "maxRange": 7, "windupTicks": 20, "recoverTicks": 30, "whiffRecoverTicks": 75, "impactRangeMul": 1.25, "playerKnockback": 0.9, "parryable": true, "telegraph": "blue", "cooldownTicks": 200 },
       "counters": { "pistol": "good", "rifle": "good", "grenade": "best", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
       "drops": []
     },

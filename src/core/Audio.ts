@@ -8,6 +8,8 @@ export type SoundName =
   | 'telegraph_purple'
   | 'deflect'
   | 'barrier_blocked'
+  | 'barrier_cracked'
+  | 'barrier_broken'
   | 'zone_clear'
   | 'parry_perfect'
   | 'parry_normal'
@@ -113,6 +115,17 @@ export class GameAudio {
         this.tone(2349, 0.4, 'sine', 0.45, 0.12); // 종 (D7)
         this.tone(3136, 0.35, 'sine', 0.3, 0.15); // 종 (G7)
         this.noise(0.07, 0.45, 5000, 0.02); // 반짝임
+        break;
+      case 'barrier_cracked':
+        // 금이 간다 — 막힘음보다 높고 짧게, 유리에 실금이 가는 느낌
+        this.tone(880, 0.09, 'triangle', 0.5, 0, 1500);
+        this.noise(0.05, 0.3, 4200);
+        break;
+      case 'barrier_broken':
+        // 막이 터진다 — 유리 파열. 저역 붐 없이 고역만 흩어지게
+        this.tone(1600, 0.12, 'triangle', 0.6, 0, 400);
+        this.noise(0.35, 0.9, 3200);
+        this.noise(0.5, 0.35, 6000, 0.05);
         break;
       case 'barrier_blocked':
         // 방어막 튕김 — 마법적 둔탁음
