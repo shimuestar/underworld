@@ -149,10 +149,15 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         Math.sin(((world.tick + enemy.id * 37) / scan.scanTicks) * Math.PI * 2) *
           ((scan.scanArcDeg * Math.PI) / 360);
 
-      if (dist <= def.aggroRange && seesPlayer(enemy, dist, distX, distZ) &&
-          world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)) {
+      // 랜턴 빔에 잡히면 시야각과 무관하게 즉시 알아챈다 — 어둠 속에서 빛을
+      // 든 쪽이 먼저 들킨다. 벽 너머는 안 보이므로 시야선은 그대로 요구한다
+      const lit = litByLantern(world, dist, distX, distZ);
+      if (
+        (lit || (dist <= def.aggroRange && seesPlayer(enemy, dist, distX, distZ))) &&
+        world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
+      ) {
         enemy.ai = 'chase';
-        world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type });
+        world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, lantern: lit });
         // 보스가 깨면 포효로 방 전체가 함께 깬다 — 벽 너머라도 소리는 들린다
         if (def.boss) wakeAround(world, enemy, balance.enemyAi.bossAlertRadius);
       }
@@ -503,6 +508,22 @@ function seesPlayer(
   const facingZ = -Math.cos(enemy.yaw);
   const dot = (facingX * distX + facingZ * distZ) / dist;
   return dot >= Math.cos((vision.arcDeg * Math.PI) / 360);
+}
+
+/** 플레이어의 랜턴 빔이 이 적을 비추고 있는가.
+ *  빔 축은 시선(yaw) — 위아래(pitch)는 보지 않는다. 빔이 세로로도 퍼지고
+ *  적은 키가 있어서, 고개를 조금 숙였다고 안 비친 것으로 치면 어색하다 */
+function litByLantern(world: World, dist: number, distX: number, distZ: number): boolean {
+  const lp = balance.lantern;
+  const lantern = world.lantern;
+  if (!lantern.on || lantern.battery <= 0) return false;
+  if (dist > lp.noticeRange || dist <= 0.001) return false;
+  const p = world.player;
+  const beamX = -Math.sin(p.yaw);
+  const beamZ = -Math.cos(p.yaw);
+  // distX/distZ 는 적 → 플레이어 방향이므로 뒤집어서 쓴다
+  const dot = (beamX * -distX + beamZ * -distZ) / dist;
+  return dot >= Math.cos((lp.angleDeg * Math.PI) / 180);
 }
 
 /** 포효 — 반경 안에서 자고 있던 적을 전부 깨운다. 시야는 보지 않는다(소리로 듣는다).

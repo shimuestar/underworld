@@ -318,7 +318,9 @@
     "penumbra": 0.45,
     "spillIntensity": 0.4,
     "spillRadius": 5.0,
-    "flickerWarnSec": 5,
+    "_noticeNote": "랜턴 빔에 잡히면 적이 시야각과 무관하게 즉시 알아챈다 — 어둠 속에서 빛을 든 쪽이 먼저 들킨다. 각은 빔과 같은 angleDeg 를 쓰고(보이는 빔 = 들키는 빔), 거리는 따로 둔다 — radius(30m) 끝자락은 너무 흐려 들킬 만큼 밝지 않다. 랜턴을 끄면(F) 이 경로가 통째로 꺼진다",
+ "noticeRange": 20.0,
+ "flickerWarnSec": 5,
     "attractsCasterRangeMul": 1.8
   },
 

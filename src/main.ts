@@ -440,8 +440,14 @@ events.on('enemy_cast', (payload) => {
   if (boss?.ai === 'volley') audio.play('bow_twang');
 });
 // 보스가 처음 알아채는 순간 — 포효로 조우를 알린다
+// 랜턴에 들킨 첫 순간만 알려 준다 — 한 마리씩 깰 때마다 뜨면 잔소리가 된다
+let lanternSpottedUntil = 0;
 events.on('enemy_alerted', (payload) => {
-  const info = payload as { enemyType: string };
+  const info = payload as { enemyType: string; lantern?: boolean };
+  if (info.lantern && performance.now() > lanternSpottedUntil) {
+    lanternSpottedUntil = performance.now() + 4000;
+    showReaction('랜턴 불빛에 들켰다', 1400);
+  }
   if (!enemyDef(info.enemyType).boss) return;
   audio.play('boss_roar');
   stage.triggerCameraKick(0.7, 420);
