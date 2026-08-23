@@ -34,6 +34,7 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
     prevX: x,
     prevZ: z,
     yaw: 0,
+    homeYaw: 0,
     health: def.health,
     alive: true,
     ai: 'idle',

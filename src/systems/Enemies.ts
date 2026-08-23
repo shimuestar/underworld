@@ -141,7 +141,16 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
 
   switch (enemy.ai) {
     case 'idle': {
-      if (dist <= def.aggroRange && world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)) {
+      // 가만히 서 있어도 천천히 좌우를 살핀다 — 사각이 고정되면 한 자리에서
+      // 영영 안 들킨다. id 로 위상을 흩어 전원이 같은 방향을 보지 않게 한다
+      const scan = balance.enemyAi.vision;
+      enemy.yaw =
+        (enemy.homeYaw ?? 0) +
+        Math.sin(((world.tick + enemy.id * 37) / scan.scanTicks) * Math.PI * 2) *
+          ((scan.scanArcDeg * Math.PI) / 360);
+
+      if (dist <= def.aggroRange && seesPlayer(enemy, dist, distX, distZ) &&
+          world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)) {
         enemy.ai = 'chase';
         world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type });
         // 보스가 깨면 포효로 방 전체가 함께 깬다 — 벽 너머라도 소리는 들린다
@@ -477,6 +486,23 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       break;
     }
   }
+}
+
+/** 대기 중인 적이 플레이어를 '보는가' — 전방 시야각 안이거나 코앞이면 본다.
+ *  소리(총성·폭발·포효)는 이 함수를 거치지 않는다. 각과 무관하게 깨우는 게 맞다 */
+function seesPlayer(
+  enemy: EnemyState,
+  dist: number,
+  distX: number,
+  distZ: number,
+): boolean {
+  const vision = balance.enemyAi.vision;
+  if (dist <= vision.noticeRadius) return true; // 등에 붙어 있으면 인기척으로 안다
+  if (dist <= 0.001) return true;
+  const facingX = -Math.sin(enemy.yaw);
+  const facingZ = -Math.cos(enemy.yaw);
+  const dot = (facingX * distX + facingZ * distZ) / dist;
+  return dot >= Math.cos((vision.arcDeg * Math.PI) / 360);
 }
 
 /** 포효 — 반경 안에서 자고 있던 적을 전부 깨운다. 시야는 보지 않는다(소리로 듣는다).

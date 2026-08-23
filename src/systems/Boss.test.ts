@@ -372,6 +372,81 @@ describe('보스 체력 2칸', () => {
   });
 });
 
+describe('시야 — 등 뒤에서는 못 알아챈다', () => {
+  const vision = balance.enemyAi.vision;
+
+  /** 적을 (거리, 각도)에 놓고 n틱 돌린 뒤 깨어났는지 본다.
+   *  angle 0 = 적이 플레이어를 정면으로 본다 / π = 등을 돌리고 있다 */
+  function watch(dist: number, angle: number, ticks = 4): boolean {
+    const p = world.player;
+    const enemy = spawnEnemyAt('goblin_runner', p.x + dist, p.z, 1);
+    enemy.ai = 'idle';
+    // 플레이어를 향한 방향에서 angle 만큼 돌려 세운다
+    enemy.homeYaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z)) + angle;
+    world.enemies.push(enemy);
+    for (let i = 0; i < ticks; i++) Enemies.tick(world, DT);
+    return enemy.ai !== 'idle';
+  }
+
+  it('정면이면 알아챈다', () => {
+    expect(watch(8, 0)).toBe(true);
+  });
+
+  it('등 뒤에 있으면 못 알아챈다 — 사거리 안이어도', () => {
+    const def = enemyDef('goblin_runner');
+    expect(8).toBeLessThan(def.aggroRange); // 거리 조건은 충족한다
+    expect(watch(8, Math.PI)).toBe(false);
+  });
+
+  it('시야각 경계 — 훑는 폭까지 더해서 판단한다', () => {
+    // 실제 시야 = 고정 시야각 ± 훑는 폭. 그 안쪽은 언제 봐도 보이고,
+    // 바깥쪽은 한 바퀴를 다 훑어도 안 보인다
+    const half = (vision.arcDeg * Math.PI) / 360;
+    const scanHalf = (vision.scanArcDeg * Math.PI) / 360;
+    expect(watch(8, half - scanHalf - 0.15)).toBe(true); // 확실히 안쪽
+    world.enemies.length = 0;
+    expect(watch(8, half + scanHalf + 0.15, vision.scanTicks + 5)).toBe(false); // 확실히 바깥
+  });
+
+  it('코앞이면 각과 무관하게 안다 — 등에 붙어 서 있는데 모르는 건 이상하다', () => {
+    expect(watch(vision.noticeRadius - 0.5, Math.PI)).toBe(true);
+  });
+
+  it('대기 중에는 천천히 좌우를 살핀다 — 사각이 고정되지 않는다', () => {
+    const enemy = spawnEnemyAt('goblin_runner', 100, 100, 1); // 아무도 못 보는 곳
+    enemy.ai = 'idle';
+    enemy.homeYaw = 0;
+    world.enemies.push(enemy);
+    const seen = new Set<string>();
+    for (let i = 0; i < vision.scanTicks; i++) {
+      Enemies.tick(world, DT);
+      world.tick++;
+      seen.add(enemy.yaw.toFixed(3));
+    }
+    expect(seen.size).toBeGreaterThan(50); // 계속 움직인다
+    const half = (vision.scanArcDeg * Math.PI) / 360;
+    const yaws = [...seen].map(Number);
+    expect(Math.max(...yaws)).toBeLessThanOrEqual(half + 1e-6);
+    expect(Math.min(...yaws)).toBeGreaterThanOrEqual(-half - 1e-6);
+  });
+
+  it('소리는 각을 가리지 않는다 — 등 뒤에서 쏴도 깬다', () => {
+    const p = world.player;
+    const enemy = spawnEnemyAt('goblin_runner', p.x + 8, p.z, 1);
+    enemy.ai = 'idle';
+    enemy.homeYaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z)) + Math.PI; // 등을 돌림
+    world.enemies.push(enemy);
+    Enemies.tick(world, DT);
+    expect(enemy.ai).toBe('idle'); // 보고는 모른다
+
+    world.weapon.cooldown = 0;
+    world.input = { ...Input.emptySnapshot(), rangedPressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(enemy.ai).toBe('chase'); // 총성은 등 뒤에도 들린다
+  });
+});
+
 describe('보스 포효 — 주변을 함께 깨운다', () => {
   it('보스가 플레이어를 알아채면 반경 안의 잠든 적이 전부 함께 달려든다', () => {
     const radius = balance.enemyAi.bossAlertRadius;
@@ -384,6 +459,9 @@ describe('보스 포효 — 주변을 함께 깨운다', () => {
       e.ai = 'idle';
       world.enemies.push(e);
     }
+    // 보스는 플레이어를 보고 있어야 알아챈다 (시야각) — 깨우는 쪽 규칙은 소리라
+    // 나머지는 등을 돌린 채 둔다
+    boss.homeYaw = Math.atan2(-(world.player.x - boss.x), -(world.player.z - boss.z));
     const alerted: { enemyId: number }[] = [];
     world.events.on('enemy_alerted', (p) => alerted.push(p as { enemyId: number }));
 
@@ -401,6 +479,7 @@ describe('보스 포효 — 주변을 함께 깨운다', () => {
     const other = spawnEnemyAt('goblin_runner', 6 + 8, 6, 2);
     for (const e of [runner, other]) {
       e.ai = 'idle';
+      e.homeYaw = Math.atan2(-(world.player.x - e.x), -(world.player.z - e.z));
       world.enemies.push(e);
     }
     Enemies.tick(world, DT);
