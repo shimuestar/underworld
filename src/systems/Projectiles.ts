@@ -6,7 +6,13 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef } from '../core/SigilData';
-import { playerBlocks, pushPlayer, type World } from '../core/World';
+import {
+  igniteBarrel,
+  playerBlocks,
+  pushPlayer,
+  type BarrelState,
+  type World,
+} from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -116,6 +122,29 @@ function moveProjectiles(world: World, dt: number): void {
     let hitEnemy: (typeof world.enemies)[number] | null = null;
     let hitPlayer = false;
 
+    // 폭발통 — 플레이어 투사체만 반응한다. 화염구가 통에 닿으면 즉발,
+    // 수류탄은 통에 부딪혀 터지고(바닥 규칙과 별개) 그 폭풍이 통을 잇는다
+    let hitBarrelTarget: BarrelState | null = null;
+    if (proj.owner === 'player') {
+      const bcfg = balance.barrel;
+      for (const barrel of world.barrels) {
+        if (!barrel.alive) continue;
+        const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
+          minX: barrel.x - bcfg.collisionRadius - proj.radius,
+          minY: -proj.radius,
+          minZ: barrel.z - bcfg.collisionRadius - proj.radius,
+          maxX: barrel.x + bcfg.collisionRadius + proj.radius,
+          maxY: bcfg.height + proj.radius,
+          maxZ: barrel.z + bcfg.collisionRadius + proj.radius,
+        });
+        if (t !== null && t < hitT) {
+          hitT = t;
+          hitBarrelTarget = barrel;
+          hitSurface = 'wall'; // 수류탄은 벽처럼 취급하지 않는다 — 아래에서 따로 가른다
+        }
+      }
+    }
+
     if (proj.owner === 'player') {
       for (const enemy of world.enemies) {
         if (!enemy.alive) continue;
@@ -132,6 +161,7 @@ function moveProjectiles(world: World, dt: number): void {
         if (t !== null && t < hitT) {
           hitT = t;
           hitEnemy = enemy;
+          hitBarrelTarget = null; // 적이 통보다 앞이다
         }
       }
     } else {
@@ -172,12 +202,12 @@ function moveProjectiles(world: World, dt: number): void {
     }
 
     if (hitT <= stepLen) {
-      // 수류탄 — 벽·천장은 튕기고, 바닥에 닿거나 몸에 맞으면 터진다
+      // 수류탄 — 벽·천장은 튕기고, 바닥에 닿거나 몸(·폭발통)에 맞으면 터진다
       if (proj.kind === 'grenade') {
         proj.x += dirX * hitT;
         proj.y += dirY * hitT;
         proj.z += dirZ * hitT;
-        const bodyHit = hitEnemy !== null || hitPlayer;
+        const bodyHit = hitEnemy !== null || hitPlayer || hitBarrelTarget !== null;
         if (!bodyHit && (hitSurface === 'wall' || hitSurface === 'ceiling')) {
           if (bounceGrenade(world, proj, hitSurface, wall.axis, dirX, dirY, dirZ)) continue;
         }
@@ -185,6 +215,19 @@ function moveProjectiles(world: World, dt: number): void {
         world.projectiles.splice(i, 1);
         continue;
       }
+      // 폭발통에 꽂혔다 — 마법·화염구는 즉발이다 (총·해머의 누적 규칙과 다르다)
+      if (hitBarrelTarget) {
+        igniteBarrel(hitBarrelTarget);
+        world.events.emit('spell_impact', {
+          x: proj.x + dirX * hitT,
+          y: proj.y + dirY * hitT,
+          z: proj.z + dirZ * hitT,
+          hitEnemy: true,
+        });
+        world.projectiles.splice(i, 1);
+        continue;
+      }
+
       // 착탄
       world.events.emit('spell_impact', {
         x: proj.x + dirX * hitT,
@@ -557,6 +600,13 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
       world.dead = true;
       world.events.emit('player_died', { tick: world.tick });
     }
+  }
+
+  // 폭발통 — 폭풍에 닿으면 함께 터진다 (즉발)
+  for (const barrel of world.barrels) {
+    if (!barrel.alive) continue;
+    if (Math.hypot(barrel.x - proj.x, barrel.z - proj.z) > grenade.radius) continue;
+    igniteBarrel(barrel);
   }
 
   // 균열 벽(C) 파괴

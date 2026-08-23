@@ -106,6 +106,20 @@ export interface SpellState {
 }
 
 /** 바닥에 떨어진 각인. 접근하면 획득 */
+/** 폭발통 — 총·해머로 여러 대 때리면 도화선이 짧아지고, 화염구·수류탄은 즉발 */
+export interface BarrelState {
+  id: number;
+  x: number;
+  z: number;
+  alive: boolean;
+  /** 총·해머로 맞은 누적 횟수 */
+  hits: number;
+  /** 점화됐으면 0 이상 — 0이 되는 틱에 터진다. -1 은 아직 멀쩡 */
+  fuseTicks: number;
+  /** 몸으로 막는 등록 핸들 (터질 때 뺀다) */
+  blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
@@ -301,6 +315,22 @@ export function spendStamina(
   return true;
 }
 
+/** 폭발통에 총·해머가 한 대 들어갔다. 맞은 수만큼 도화선이 짧아진다 —
+ *  이미 더 짧은 도화선이 돌고 있으면 늘리지 않는다.
+ *  balance 는 호출하는 시스템이 읽어 넘긴다 (pushPlayer 와 같은 규약) */
+export function hitBarrel(barrel: BarrelState, fuseByHits: readonly number[]): void {
+  if (!barrel.alive) return;
+  barrel.hits++;
+  const fuse = fuseByHits[Math.min(barrel.hits, fuseByHits.length) - 1] ?? 0;
+  barrel.fuseTicks = barrel.fuseTicks < 0 ? fuse : Math.min(barrel.fuseTicks, fuse);
+}
+
+/** 즉발 — 화염구·수류탄·다른 통의 폭발 */
+export function igniteBarrel(barrel: BarrelState): void {
+  if (!barrel.alive) return;
+  barrel.fuseTicks = 0;
+}
+
 /** (sourceX, sourceZ)에서 오는 공격을 방어 중인가 — 정면 arcDeg 안일 때만 */
 export function playerBlocks(
   world: World,
@@ -346,6 +376,9 @@ export class World {
   projectiles: ProjectileState[] = [];
   spell: SpellState = { cooldown: 0 };
   groundItems: GroundItemState[] = [];
+
+  /** 폭발통 — Barrels 가 도화선을 돌리고 터뜨린다 */
+  barrels: BarrelState[] = [];
 
   /** 보유 골드 — 적 처치 드랍으로 모인다 (사용처는 이후 구역) */
   /** 스태미너 — 질주로 닳고 회피로 크게 깎인다. 0이 되면 지쳐서 질주 불가 */
@@ -411,6 +444,8 @@ export class World {
       modifiers: Modifiers;
       corruption: CorruptionState;
       enemies: EnemyState[];
+      /** 폭발통 — 없는 레벨(테스트 아레나 등)에서는 생략한다 */
+      barrels?: BarrelState[];
       level: Level;
     },
   ) {
@@ -423,6 +458,7 @@ export class World {
     this.modifiers = init.modifiers;
     this.corruption = init.corruption;
     this.enemies = init.enemies;
+    if (init.barrels) this.barrels = init.barrels;
     this.level = init.level;
   }
 }

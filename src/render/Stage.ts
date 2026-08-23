@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { currentAttack, enemyDef, healthBarState } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, glyphTexture } from '../level/GridLoader';
-import type { EnemyState, GroundItemState, ProjectileState } from '../core/World';
+import type { BarrelState, EnemyState, GroundItemState, ProjectileState } from '../core/World';
 import { FINISHER_CONTACT_MS, HandModel } from './HandModel';
 
 // 적 타입별 몸통 색 (시각 팔레트 — 튜닝값 아님)
@@ -323,6 +323,11 @@ const TRACER_WIDTH = 0.022;
 
 // 사망 파편 (시각 상수)
 const DEATH_PARTICLE_COUNT = 14;
+const BARREL_COLOR = 0x5a4436; // 나무통 — 어두운 갈색
+const BARREL_BAND_COLOR = 0x8a3b2a;
+const BARREL_BAND_IDLE = 0x2a0f0a;
+const BARREL_BAND_LIT = 0xff5a2a;
+const BARREL_FUSE_REF_TICKS = 180; // 가장 긴 도화선(3초) 기준으로 깜빡임 속도를 잡는다
 const BARRIER_SHARD_COUNT = 26; // 방어막 파편 — 사망 파편보다 많게 (막이 통째로 터진다)
 const DEATH_PARTICLE_LIFE_MS = 650;
 const DEATH_GRAVITY = 14;
@@ -367,6 +372,10 @@ export class Stage {
   private readonly heldVictims = new Map<number, number>();
   private readonly projectileVisuals = new Map<number, THREE.Group>();
   private readonly groundItemVisuals = new Map<number, THREE.Group>();
+  private readonly barrelVisuals = new Map<
+    number,
+    { group: THREE.Group; band: THREE.MeshLambertMaterial; light: THREE.PointLight }
+  >();
   private readonly tracers: Tracer[] = [];
   private readonly particles: Particle[] = [];
   private readonly hands = new HandModel();
@@ -2027,6 +2036,77 @@ export class Stage {
       });
       this.groundItemVisuals.delete(id);
     }
+  }
+
+  /** 폭발통 — 도화선이 돌면 띠가 점점 빠르게 붉게 깜빡인다.
+   *  터진 통은 사라진다 (폭발 연출은 explosion 이벤트가 따로 낸다) */
+  syncBarrels(barrels: BarrelState[]): void {
+    const now = performance.now();
+    const cfg = balance.barrel;
+    const seen = new Set<number>();
+    for (const barrel of barrels) {
+      if (!barrel.alive) continue;
+      seen.add(barrel.id);
+      let visual = this.barrelVisuals.get(barrel.id);
+      if (!visual) {
+        visual = this.makeBarrel(cfg.collisionRadius, cfg.height);
+        visual.group.position.set(barrel.x, 0, barrel.z);
+        this.barrelVisuals.set(barrel.id, visual);
+        this.scene.add(visual.group);
+      }
+      // 점화 전에는 잠잠하고, 도화선이 짧을수록 빨리 깜빡인다 (3초 → 1초 → 즉발)
+      if (barrel.fuseTicks < 0) {
+        visual.band.emissive.set(BARREL_BAND_IDLE);
+        visual.band.emissiveIntensity = 0.25;
+        visual.light.intensity = 0;
+        continue;
+      }
+      const hz = 3 + 9 * (1 - Math.min(1, barrel.fuseTicks / BARREL_FUSE_REF_TICKS));
+      const on = Math.sin((now / 1000) * hz * Math.PI * 2) > 0;
+      visual.band.emissive.set(on ? BARREL_BAND_LIT : BARREL_BAND_IDLE);
+      visual.band.emissiveIntensity = on ? 1.4 : 0.3;
+      visual.light.intensity = on ? 1.6 : 0.15;
+    }
+    for (const [id, visual] of this.barrelVisuals) {
+      if (seen.has(id)) continue;
+      this.scene.remove(visual.group);
+      visual.group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          (obj.material as THREE.Material).dispose();
+        }
+      });
+      this.barrelVisuals.delete(id);
+    }
+  }
+
+  private makeBarrel(
+    radius: number,
+    height: number,
+  ): { group: THREE.Group; band: THREE.MeshLambertMaterial; light: THREE.PointLight } {
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius, radius * 0.92, height, 10),
+      new THREE.MeshLambertMaterial({ color: BARREL_COLOR }),
+    );
+    body.position.y = height / 2;
+    group.add(body);
+    // 경고 띠 — 어둠 속에서 "저건 터진다"를 알리는 유일한 단서다
+    const band = new THREE.MeshLambertMaterial({
+      color: BARREL_BAND_COLOR,
+      emissive: BARREL_BAND_IDLE,
+      emissiveIntensity: 0.25,
+    });
+    const ring = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius * 1.03, radius * 1.03, height * 0.2, 10),
+      band,
+    );
+    ring.position.y = height * 0.62;
+    group.add(ring);
+    const light = new THREE.PointLight(BARREL_BAND_LIT, 0, 5.5, 0);
+    light.position.y = height * 0.62;
+    group.add(light);
+    return { group, band, light };
   }
 
   private onResize = (): void => {

@@ -85,6 +85,19 @@
     "magic": 2.8
   },
 
+  "barrel": {
+    "_comment": "폭발통 — 총알·해머는 한 방에 터뜨리지 못한다. 맞은 수만큼 도화선이 짧아진다(fuseByHits: 1대=3초, 2대=1초, 3대=즉발). 화염구·수류탄·다른 통의 폭발은 즉발. 피해는 적·플레이어를 가리지 않는다 — 엄폐물 뒤에서 쏘는 무기다",
+    "radius": 4.5,
+    "damage": 84,
+    "damageFalloffMin": 0.25,
+    "_damageNote": "수류탄(120)의 70%. 반경은 수류탄(5.0)보다 조금 좁게 둬서 수류탄의 자리를 뺏지 않는다",
+    "fuseByHits": [180, 60, 0],
+    "playerKnockback": 3.2,
+    "playerKnockbackTicks": 12,
+    "collisionRadius": 0.46,
+    "height": 1.3,
+    "noiseRadius": 22
+  },
   "barrierBreak": {
     "_comment": "수호주술사 마법 방어막 — 실탄만 통하던 것을 해머로도 깰 수 있게. 1·2·3타 구분 없이 hammerHitsToBreak 방이면 깨진다(약 2연결). 깨지기 전까지 해머 피해는 여전히 0이고, 남은 내구가 방어막 투명도로 보인다",
     "hammerHitsToBreak": 6

@@ -99,6 +99,25 @@ export class Level {
     );
   }
 
+  /** 몸으로 막는 물체를 추가한다 (폭발통 등). 반환값을 removeBlocker 로 되돌린다.
+   *  셀을 solid 로 만들지 않고 발자국만 막는다 — 레이캐스트(총알)는 그대로 통과하고
+   *  맞히는 판정은 그 물체를 가진 시스템이 따로 한다 */
+  addBlocker(x: number, z: number, half: number): {
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+  } {
+    const blocker = { minX: x - half, maxX: x + half, minZ: z - half, maxZ: z + half };
+    this.props.push(blocker);
+    return blocker;
+  }
+
+  removeBlocker(blocker: { minX: number; maxX: number; minZ: number; maxZ: number }): void {
+    const i = this.props.indexOf(blocker);
+    if (i >= 0) this.props.splice(i, 1);
+  }
+
   /** 셀을 바닥으로 연다 (문 개방 등). 이후 solidAt이 통과를 허용한다 */
   openCell(col: number, row: number): void {
     const line = this.grid[row];

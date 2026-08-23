@@ -8,7 +8,7 @@ import { Loop } from './core/Loop';
 import { World } from './core/World';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
-import { spawnEnemies, spawnEnemyAt } from './level/Spawner';
+import { spawnBarrels, spawnEnemies, spawnEnemyAt } from './level/Spawner';
 import { Minimap } from './render/Minimap';
 import { Stage } from './render/Stage';
 import { grenadeThrowSpeed } from './systems/Weapons';
@@ -23,6 +23,7 @@ import * as Sigils from './systems/Sigils';
 import * as Stamina from './systems/Stamina';
 import * as Corruption from './systems/Corruption';
 import * as Altar from './systems/Altar';
+import * as Barrels from './systems/Barrels';
 import * as Exit from './systems/Exit';
 import * as Lever from './systems/Lever';
 import * as Lantern from './systems/Lantern';
@@ -98,6 +99,7 @@ const world = new World(events, {
   modifiers: Sigils.defaultModifiers(),
   corruption: { applied: 0, pending: 0 },
   enemies: spawnEnemies(levelJson.entities, level),
+  barrels: spawnBarrels(levelJson.entities, level),
   level,
 });
 
@@ -274,6 +276,8 @@ for (const name of [
   'grenade_thrown',
   'explosion',
   'grenade_bounce',
+  'barrel_hit',
+  'barrel_exploded',
   'crack_wall_broken',
   'mana_gained',
   'mana_lost',
@@ -495,6 +499,15 @@ events.on('explosion', (payload) => {
   audio.play('explosion');
   stage.spawnExplosion(info.x, info.y, info.z, info.radius);
 });
+// 폭발통 — 때리면 통 울리는 소리, 도화선에 불이 붙으면 알려 준다
+events.on('barrel_hit', (payload) => {
+  const info = payload as { hits: number; fuse: number };
+  audio.play('barrel_hit');
+  if (info.fuse < 0) return;
+  audio.play('barrel_armed');
+  const sec = (info.fuse / 60).toFixed(info.fuse >= 60 ? 0 : 1);
+  showReaction(info.fuse === 0 ? '폭발통 — 터진다!' : `폭발통 점화 — ${sec}초`, 1200);
+});
 // 벽 튕김 — 소리만. 세게 부딪힐수록 크게 들린다
 events.on('grenade_bounce', () => audio.play('grenade_bounce'));
 events.on('crack_wall_broken', (payload) => {
@@ -696,6 +709,9 @@ function respawnAtAltar(): void {
   world.mana.outOfCombatTicks = 0;
   world.mana.inCombat = false;
   world.enemies = spawnEnemies(levelJson.entities, level); // 구간 진행도 초기화
+  // 폭발통도 되살린다 — 남은 차단 블록을 먼저 걷어내야 유령 벽이 쌓이지 않는다
+  for (const barrel of world.barrels) if (barrel.blocker) level.removeBlocker(barrel.blocker);
+  world.barrels = spawnBarrels(levelJson.entities, level);
   world.projectiles.length = 0;
   world.groundItems.length = 0;
   world.freezeTicks = 0;
@@ -851,6 +867,7 @@ const systems = [
   Pickups.tick,
   Weapons.tick,
   Projectiles.tick,
+  Barrels.tick, // 같은 틱에 쏜 화염구·던진 수류탄이 통을 터뜨릴 수 있게 뒤에 둔다
   Mana.tick,
   Altar.tick,
   Lever.tick,
@@ -980,6 +997,7 @@ function render(alpha: number): void {
   stage.syncEnemies(world.enemies, alpha);
   stage.syncProjectiles(world.projectiles, alpha);
   stage.syncGroundItems(world.groundItems);
+  stage.syncBarrels(world.barrels);
   const chargeFrac =
     world.weapon.ranged === 'grenade' && world.weapon.grenadeCharge > 0
       ? world.weapon.grenadeCharge / balance.weapons.grenade.maxChargeTicks

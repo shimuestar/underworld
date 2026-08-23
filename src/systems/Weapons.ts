@@ -6,7 +6,13 @@
 import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { RANGED_WEAPONS, spendStamina, type World } from '../core/World';
+import {
+  hitBarrel,
+  RANGED_WEAPONS,
+  spendStamina,
+  type BarrelState,
+  type World,
+} from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   const w = world.weapon;
@@ -349,6 +355,25 @@ function resolveHammerHit(world: World, heavy: boolean): void {
   // 적중 가속 — 때린 만큼 후딜이 줄지만 연결 안에서만이다.
   // 마무리 3타를 친 뒤에는 다시 1타부터라 원속도로 돌려놓는다 (1→2→3 만 빨라진다).
   // 놓치면 즉시 끝 — 때리는 손맛만 빨라지고 헛손질은 벌을 그대로 받는다
+  // 폭발통 — 해머도 총알과 같은 규약(맞은 수만큼 도화선 단축). 부채꼴 안이면 친다
+  for (const barrel of world.barrels) {
+    if (!barrel.alive) continue;
+    const toX = barrel.x - p.x;
+    const toZ = barrel.z - p.z;
+    const dist = Math.hypot(toX, toZ);
+    if (dist > range + balance.barrel.collisionRadius || dist === 0) continue;
+    if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
+    hitBarrel(barrel, balance.barrel.fuseByHits);
+    hitAny = true; // 통을 때린 것도 헛스윙은 아니다
+    world.events.emit('barrel_hit', {
+      id: barrel.id,
+      hits: barrel.hits,
+      fuse: barrel.fuseTicks,
+      x: barrel.x,
+      z: barrel.z,
+    });
+  }
+
   // 3타 모두 적중 집계 — 한 대라도 헛치면 끊긴다
   w.comboHits = damagedAny ? (w.comboHits ?? 0) + 1 : 0;
 
@@ -470,7 +495,36 @@ function fire(world: World): void {
     if (t !== null && t < wallT && (!hit || t < hit.t)) hit = { enemy, t };
   }
 
-  if (hit) hitT = hit.t;
+  // 폭발통 — 적보다 앞에 있으면 총알을 대신 받는다. 한 방에 터지지 않고
+  // 맞은 수만큼 도화선이 짧아진다 (balance.barrel.fuseByHits)
+  const bcfg = balance.barrel;
+  let barrelHit: { barrel: BarrelState; t: number } | null = null;
+  for (const barrel of world.barrels) {
+    if (!barrel.alive) continue;
+    const t = rayVsAabb(p.x, oy, p.z, dx, dy, dz, {
+      minX: barrel.x - bcfg.collisionRadius,
+      minY: 0,
+      minZ: barrel.z - bcfg.collisionRadius,
+      maxX: barrel.x + bcfg.collisionRadius,
+      maxY: bcfg.height,
+      maxZ: barrel.z + bcfg.collisionRadius,
+    });
+    if (t !== null && t < wallT && (!barrelHit || t < barrelHit.t)) barrelHit = { barrel, t };
+  }
+  if (barrelHit && (!hit || barrelHit.t < hit.t)) {
+    hit = null; // 통이 적보다 앞 — 총알은 여기서 멈춘다
+    hitBarrel(barrelHit.barrel, bcfg.fuseByHits);
+    world.events.emit('barrel_hit', {
+      id: barrelHit.barrel.id,
+      hits: barrelHit.barrel.hits,
+      fuse: barrelHit.barrel.fuseTicks,
+      x: barrelHit.barrel.x,
+      z: barrelHit.barrel.z,
+    });
+    hitT = barrelHit.t;
+  } else if (hit) {
+    hitT = hit.t;
+  }
 
   // 소음 전파 — 총성(사수 위치)과 착탄 지점 주변의 대기 중인 적들이 나를 인지한다.
   // 맞은 적은 거리와 무관하게 무조건 인지.

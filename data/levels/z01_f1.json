@@ -450,7 +450,14 @@
         18
       ],
       "note": "본길 복도 — 거미를 먼저 한 번 만나 본다"
-    }
+    },
+    { "type": "barrel", "cell": [2, 9], "note": "초입 복도 — 러너 무리 옆" },
+    { "type": "barrel", "cell": [2, 19], "note": "오른쪽 방 — 주술사·거미 둥지 길목" },
+    { "type": "barrel", "cell": [8, 3], "note": "왼쪽 방 — 레버 가는 길" },
+    { "type": "barrel", "cell": [9, 15], "note": "중앙 통로 — 창병 자리" },
+    { "type": "barrel", "cell": [16, 12], "note": "하층 서쪽 — 궁수 시야" },
+    { "type": "barrel", "cell": [15, 22], "note": "하층 대방 입구" },
+    { "type": "barrel", "cell": [6, 25], "note": "동쪽 세로 복도 — 궁수 사선" }
   ],
   "triggers": [
     {
