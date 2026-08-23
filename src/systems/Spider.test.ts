@@ -223,6 +223,28 @@ describe('흰 거미 (거미줄 시전)', () => {
     expect(web.deflectable).toBe(false);
   });
 
+  it('발사 간격은 예고+후딜 그대로 — 피할 틈이 있어야 한다', () => {
+    const def = enemyDef('spider_large');
+    const spider = spawnEnemyAt('spider_large', 10 + 10, 10, 1);
+    spider.ai = 'chase';
+    world.enemies.push(spider);
+    const shots: number[] = [];
+    let t = 0;
+    world.events.on('enemy_cast', () => shots.push(t));
+    for (; t < 400; t++) {
+      spider.x = 10 + 10; // 카이팅으로 거리가 변하면 간격이 흔들린다 — 고정하고 잰다
+      spider.z = 10;
+      Enemies.tick(world, DT);
+      world.projectiles.length = 0;
+    }
+    const gaps = shots.slice(1).map((v, i) => v - shots[i]!);
+    const cycle = def.attack.windupTicks + 1 + def.attack.recoverTicks;
+    expect(gaps.length).toBeGreaterThan(1);
+    expect(new Set(gaps).size).toBe(1); // 일정하다
+    expect(gaps[0]).toBe(cycle);
+    expect(cycle / 60).toBeGreaterThan(1.8); // 1.8초 밑으로 내려가면 회피가 안 된다
+  });
+
   it('플레이어가 붙으면 물러난다 (kiteMinRange)', () => {
     const def = enemyDef('spider_large');
     const spider = spawnEnemyAt('spider_large', 10 + 3, 10, 1); // kiteMinRange 안

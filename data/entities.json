@@ -48,8 +48,8 @@
       "radius": 0.85, "height": 1.25,
       "aggroRange": 20, "attackRange": 15, "kiteMinRange": 7,
       "behavior": "caster_kite",
-      "_webNote": "거미줄 — 피해는 거의 없고 묶는 게 목적이다. 반사 불가라 회피/엄폐로만 피한다",
-      "attack": { "type": "projectile", "windupTicks": 34, "recoverTicks": 62, "impactRangeMul": 1, "parryable": false, "deflectable": false, "telegraph": "red", "projectileSpeed": 17, "projectileRadius": 0.26, "projectileKind": "web", "appliesWeb": true },
+      "_webNote": "거미줄 — 피해는 거의 없고 묶는 게 목적이다. 반사 불가라 회피/엄폐로만 피한다. 발사 간격 = windup + 1 + recover 로, 34/62(97틱 1.62초)는 피할 틈이 없었다. 예고와 후딜을 함께 15% 늘려 111틱(1.85초)",
+      "attack": { "type": "projectile", "windupTicks": 39, "recoverTicks": 71, "impactRangeMul": 1, "parryable": false, "deflectable": false, "telegraph": "red", "projectileSpeed": 17, "projectileRadius": 0.26, "projectileKind": "web", "appliesWeb": true },
       "counters": { "pistol": "best", "rifle": "best", "grenade": "good", "flash": "good", "melee": "good", "magic": "good", "deflect": "none" },
       "drops": []
     },
