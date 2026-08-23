@@ -24,6 +24,10 @@ export interface EnemyAttackDef {
   arcDeg?: number;
   /** 타격 구간 동안 플레이어를 향해 달려드는 속도 (돌격 공격) */
   chargeSpeed?: number;
+  /** 타격 구간에서 무기 끝이 뻗어 나가는 가속 곡선. 1(기본)이면 등속,
+   *  클수록 앞쪽에서 확 뻗고 끝에서 천천히 민다 — progress = 1 − (1−t)^ease.
+   *  판정 창 길이는 그대로 두고 "찌르는 속도"만 바꾸는 손잡이다 */
+  strikeEase?: number;
   /** 도약 — 달리는 구간 동안 이 높이까지 포물선을 그리며 뜬다(m).
    *  없으면 바닥을 그대로 달린다. 판정은 XZ 평면 그대로라 높이는 연출이자 회피 단서다 */
   leapHeight?: number;

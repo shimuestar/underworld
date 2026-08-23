@@ -344,7 +344,10 @@ describe('패링 격돌 — 적만 굳는다', () => {
   });
 
   it('일반 패링 — 스태거는 없지만 후딜이 크게 붙고, 플레이어는 멀쩡하다', () => {
-    const world = parryAt(3.5, 6);
+    // 창끝이 일반 대역(guardDepth)에는 들어왔지만 완벽 대역(perfectBand)에는
+    // 아직인 시점. strikeEase 1.8 로 창이 앞쪽에서 확 뻗으므로 이 구간은
+    // 3.5m 기준 대략 2~5틱이다 (등속이던 시절엔 3~8틱)
+    const world = parryAt(3.5, 2);
     const enemy = world.enemies[0]!;
     expect(enemy.ai).toBe('recover');
     expect(enemy.timer).toBe(
@@ -570,7 +573,7 @@ describe('창병 헛창 경직', () => {
     const enemy = world.enemies[0]!;
     const frozen = { x: enemy.x, z: enemy.z };
 
-    expect(spearAttack.whiffRecoverTicks).toBe(90); // 60Hz 기준 1.5초
+    expect(spearAttack.whiffRecoverTicks).toBe(63); // 60Hz 기준 1.05초
     for (let i = 0; i < spearAttack.whiffRecoverTicks! - 1; i++) {
       Enemies.tick(world, DT);
       expect(enemy.ai).toBe('recover'); // 내내 굳어 있다
@@ -666,6 +669,29 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
     expect(results[0]).toMatchObject({ result: 'perfect' });
   });
 
+  it('창은 앞쪽에서 확 뻗는다 (strikeEase) — 판정 창 길이는 그대로', () => {
+    const def = enemyDef('goblin_spear');
+    const ease = def.attack.strikeEase!;
+    expect(ease).toBeGreaterThan(1); // 등속이 아니다
+
+    const world = makeWorld();
+    world.enemies.push(makeSpear(13.5, 10));
+    const enemy = world.enemies[0]!;
+    tickUntil(world, 'active_perfect');
+
+    const reach = def.attackRange * def.attack.impactRangeMul;
+    const rest = reach * balance.parrySpace.pullbackRatio;
+    const total = balance.reaction.windowPerfectTicks + balance.reaction.windowNormalTicks;
+    for (let k = 1; k <= 6; k++) Enemies.tick(world, DT);
+    const eased = ((enemy.weaponTipDist ?? 0) - rest) / (reach - rest);
+    expect(eased).toBeCloseTo(1 - Math.pow(1 - 6 / total, ease), 5);
+    expect(eased).toBeGreaterThan(6 / total + 0.15); // 등속보다 확실히 앞서 나갔다
+
+    // 판정 창 자체는 건드리지 않았다 — 6+12틱 뒤에 impact
+    tickUntil(world, 'impact', 40);
+    expect(enemy.weaponTipDist).toBeCloseTo(reach, 5); // 끝에는 최대 사거리
+  });
+
   it('같은 틱이라도 적이 멀수록 패링 타이밍이 늦게 온다', () => {
     const near = strikeAt(2.2, 6); // 이미 창끝이 몸에 닿음
     pressReaction(near);
@@ -678,11 +704,11 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
     tickUntil(far, 'windup');
     far.player.x -= 0.8; // 거리 4.3
     tickUntil(far, 'active_perfect');
-    for (let i = 0; i < 6; i++) Enemies.tick(far, DT);
+    for (let i = 0; i < 3; i++) Enemies.tick(far, DT);
     pressReaction(far);
-    expect(far.enemies[0]!.ai).toBe('active_normal'); // 아직 판정 없음 — 공격 계속
+    expect(far.enemies[0]!.ai).toBe('active_perfect'); // 아직 판정 없음 — 공격 계속
 
-    for (let i = 0; i < 8; i++) Enemies.tick(far, DT); // 창이 도달할 때까지 기다리면
+    for (let i = 0; i < 11; i++) Enemies.tick(far, DT); // 창이 도달할 때까지 기다리면
     pressReaction(far);
     expect(['recover', 'staggered']).toContain(far.enemies[0]!.ai);
   });

@@ -676,7 +676,11 @@ function advanceStrike(
     enemy.ai === 'active_perfect'
       ? balance.reaction.windowPerfectTicks - enemy.timer
       : balance.reaction.windowPerfectTicks + (balance.reaction.windowNormalTicks - enemy.timer);
-  const progress = Math.max(0, Math.min(1, elapsed / total));
+  const t = Math.max(0, Math.min(1, elapsed / total));
+  // 가속 곡선 — 판정 창(6+12틱)은 건드리지 않고 뻗는 속도만 바꾼다.
+  // ease>1 이면 앞쪽에서 확 뻗으므로 창끝이 패링 대역에 일찍 들어와 더 오래 머문다
+  const ease = attack.strikeEase ?? 1;
+  const progress = ease === 1 ? t : 1 - Math.pow(1 - t, ease);
   const reach = fullReach(def, attack);
   const rest = reach * balance.parrySpace.pullbackRatio;
   enemy.strikeProgress = progress;
