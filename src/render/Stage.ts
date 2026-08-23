@@ -1686,32 +1686,45 @@ export class Stage {
       group.add(body);
       group.add(new THREE.PointLight(color, 0.8, 4.5, 0));
     } else if (kind === 'food') {
-      // 음식 — 약병과 헷갈리지 않게 뼈다귀 고기. 살점 덩어리 + 튀어나온 뼈
+      // 음식 — 약병과 헷갈리지 않게 뼈다귀 고기. 뼈가 살점을 관통해 한 덩어리로 보인다.
+      // 회전·축소는 'gem' 그룹에만 걸린다 — 살점의 납작한 비율(scale)이 뼈까지
+      // 일그러뜨리지 않게 살점과 뼈를 형제로 둔다
+      const piece = new THREE.Group();
+      piece.name = 'gem';
+
       const meat = new THREE.Mesh(
-        new THREE.SphereGeometry(0.15, 8, 6),
+        new THREE.SphereGeometry(0.15, 10, 8),
         new THREE.MeshLambertMaterial({
           color: FOOD_COLOR,
           emissive: FOOD_COLOR,
           emissiveIntensity: 0.3,
         }),
       );
-      meat.scale.set(1.05, 0.85, 0.9);
-      meat.name = 'gem';
+      meat.scale.set(1.0, 0.82, 0.86);
+      piece.add(meat);
+
+      // 뼈 — 자기 축(+Y)으로 만들고 마디를 양 끝에 붙인 뒤 통째로 눕힌다.
+      // 마디를 회전 뒤 좌표로 따로 놓으면 축 계산이 어긋나 뼈에서 떨어져 보인다
       const boneMat = new THREE.MeshLambertMaterial({
         color: FOOD_BONE,
         emissive: FOOD_BONE,
         emissiveIntensity: 0.18,
       });
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.26, 6), boneMat);
-      shaft.rotation.z = Math.PI / 2 - 0.5; // 살점에서 비스듬히 튀어나온다
-      shaft.position.set(0.14, 0.08, 0);
-      meat.add(shaft);
-      for (const side of [-1, 1]) {
-        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 5), boneMat);
-        knob.position.set(0.14 + side * 0.11 * Math.sin(0.5), 0.08 + side * 0.11 * Math.cos(0.5), 0);
-        meat.add(knob);
+      // 살점 지름(0.3)보다 충분히 길어야 대(shaft)가 밖으로 드러난다 —
+      // 짧으면 대가 살점에 다 묻혀 마디만 둥둥 떠 보인다 (실측으로 확인)
+      const bone = new THREE.Group();
+      const boneLen = 0.56;
+      bone.add(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, boneLen, 6), boneMat));
+      for (const end of [-1, 1]) {
+        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.055, 7, 6), boneMat);
+        knob.position.y = (end * boneLen) / 2;
+        knob.scale.set(1, 0.82, 1);
+        bone.add(knob);
       }
-      group.add(meat);
+      bone.rotation.z = Math.PI / 2 - 0.42; // 살점을 비스듬히 꿰뚫는다
+      piece.add(bone);
+
+      group.add(piece);
       group.add(new THREE.PointLight(FOOD_COLOR, 0.45, 3.5, 0));
     } else if (kind === 'gold') {
       const pile = new THREE.Mesh(
