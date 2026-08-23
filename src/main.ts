@@ -20,6 +20,7 @@ import * as Mana from './systems/Mana';
 import * as Pickups from './systems/Pickups';
 import * as Progression from './systems/Progression';
 import * as Sigils from './systems/Sigils';
+import * as Stamina from './systems/Stamina';
 import * as Corruption from './systems/Corruption';
 import * as Altar from './systems/Altar';
 import * as Exit from './systems/Exit';
@@ -237,6 +238,9 @@ for (const name of [
   'reload_started',
   'reload_finished',
   'weapon_empty',
+  'stamina_empty',
+  'stamina_recovered',
+  'stamina_blocked',
   'weapon_kill',
   'enemy_died',
   'enemy_damaged',
@@ -373,6 +377,14 @@ events.on('weapon_empty', (payload) => {
     info.weapon === 'grenade' ? '수류탄 없음' : '탄약 없음 — 제단에서 사야 한다',
     1100,
   );
+});
+events.on('stamina_empty', () => {
+  audio.play('stamina_empty');
+  showReaction('숨이 찼다 — 질주 불가', 1200);
+});
+events.on('stamina_blocked', () => {
+  audio.play('stamina_empty');
+  showReaction('스태미너 부족 — 회피 불가', 1000);
 });
 events.on('shot_blocked', () => audio.play('shot_blocked'));
 events.on('dodge_step', () => audio.play('dodge'));
@@ -746,6 +758,7 @@ Sigils.init(world);
 Pickups.init(world);
 Progression.init(world);
 Corruption.init(world);
+Stamina.init(world);
 const systems = [
   PlayerMove.tick,
   Enemies.tick,
@@ -759,6 +772,7 @@ const systems = [
   Lever.tick,
   Exit.tick,
   Lantern.tick,
+  Stamina.tick, // 소모하는 쪽(PlayerMove·Reaction) 뒤에서 회복한다
 ];
 
 function simulate(dt: number): void {
@@ -800,6 +814,8 @@ let tpsWindowStart = performance.now();
 let tpsWindowTicks = 0;
 let measuredTps = 0;
 
+const staminaRow = document.getElementById('status-stamina')!;
+const staminaFill = document.getElementById('status-stamina-fill')!;
 const lanternRow = document.getElementById('status-lantern')!;
 const lanternFill = document.getElementById('status-lantern-fill')!;
 const lanternText = document.getElementById('status-lantern-text')!;
@@ -901,6 +917,10 @@ function render(alpha: number): void {
   const manaFill = document.getElementById('status-mana-fill')!;
   manaFill.style.width = `${manaFrac * 100}%`;
   manaFill.style.background = world.mana.chainIndex > 0 ? '#7fc4ff' : '#4a9eff';
+  // 스태미너 — HP·마나 바 바로 아래. 탈진하면 붉게 죽는다
+  const stamFrac = Math.max(0, Math.min(1, world.stamina.value / balance.player.stamina.max));
+  staminaFill.style.width = `${stamFrac * 100}%`;
+  staminaRow.className = world.stamina.exhausted ? 'spent' : '';
   // 랜턴 — HP·마나 바 아래의 얇은 실선 게이지. 오른쪽에 % 와 예비 전지 개수
   const battFrac = Math.max(0, Math.min(1, world.lantern.battery / balance.lantern.batteryMax));
   const battPct = Math.round(battFrac * 100);

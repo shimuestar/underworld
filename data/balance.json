@@ -16,6 +16,15 @@
     "moveSpeed": 6.0,
     "sprintSpeed": 9.0,
     "eyeHeight": 1.6,
+    "_staminaNote": "질주는 움직이는 동안만 닳는다. 0이 되면 exhaustRecoverTo 까지 차야 다시 질주할 수 있다 — 안 그러면 쉬프트를 톡톡 눌러 무한 질주가 된다",
+    "stamina": {
+      "max": 100,
+      "sprintDrainPerTick": 0.35,
+      "dodgeCost": 25,
+      "regenPerTick": 0.7,
+      "regenDelayTicks": 45,
+      "exhaustRecoverTo": 25
+    },
     "radius": 0.4,
     "height": 1.8
   },

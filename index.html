@@ -139,6 +139,29 @@
       #status-mana-fill {
         background: #4a9eff;
       }
+      /* 스태미너 — HP·마나 바 바로 아래, 같은 너비의 얇은 띠 */
+      #status-stamina {
+        height: 4px;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid #444;
+        border-top: none;
+        margin-bottom: 4px;
+      }
+      #status-stamina-fill {
+        height: 100%;
+        width: 100%;
+        background: #c9d17a;
+        transition: width 90ms linear;
+      }
+      /* 탈진 — 회복선까지 찰 때까지 질주 불가.
+         채움이 0이라 막대가 안 보이므로 틀 자체를 붉게 물들인다 */
+      #status-stamina.spent {
+        border-color: #7a3a3a;
+        background: rgba(96, 34, 34, 0.55);
+      }
+      #status-stamina.spent #status-stamina-fill {
+        background: #a05050;
+      }
       /* 랜턴 — 아주 얇은 실선 게이지 + 오른쪽에 % / 예비 개수 */
       #status-lantern {
         display: flex;
@@ -244,6 +267,7 @@
         <div id="status-hp"><div id="status-hp-fill"></div></div>
         <div id="status-mana"><div id="status-mana-fill"></div></div>
       </div>
+      <div id="status-stamina"><div id="status-stamina-fill"></div></div>
       <div id="status-lantern">
         <div id="status-lantern-track"><div id="status-lantern-fill"></div></div>
         <span id="status-lantern-text">100% 예비 2</span>

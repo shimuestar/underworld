@@ -12,6 +12,7 @@ import * as PlayerMove from './PlayerMove';
 import * as Projectiles from './Projectiles';
 import * as Reaction from './Reaction';
 import * as Sigils from './Sigils';
+import * as Stamina from './Stamina';
 
 const DT = 1 / 60;
 
@@ -24,7 +25,7 @@ function makeWorld(): World {
     grid: ['########', '#S.....#', '#......#', '#......#', '########'],
     lighting: { ambient: 0.04, torches: [] },
   });
-  return new World(new Events(), {
+  const world = new World(new Events(), {
     input: Input.emptySnapshot(),
     player: {
       x: 10, y: 0, z: 10, prevX: 10, prevY: 0, prevZ: 10,
@@ -46,6 +47,8 @@ function makeWorld(): World {
     enemies: [],
     level,
   });
+  Stamina.init(world); // 회피는 스태미너를 쓴다 — 가득 찬 상태로 시작
+  return world;
 }
 
 function makeSpear(x: number, z: number): EnemyState {

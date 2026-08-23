@@ -52,7 +52,8 @@ export type SoundName =
   | 'shop_buy'
   | 'shop_deny'
   | 'dry_fire'
-  | 'exit_opened';
+  | 'exit_opened'
+  | 'stamina_empty';
 
 const MASTER_GAIN = 0.25;
 
@@ -240,6 +241,11 @@ export class GameAudio {
         this.tone(60, 0.7, 'sine', 1.6, 0, 28);
         this.noise(0.5, 1.3, 900);
         this.noise(0.9, 0.5, 300, 0.1);
+        break;
+      case 'stamina_empty':
+        // 숨이 찬다 — 짧게 두 번 헐떡이는 저역 노이즈
+        this.noise(0.16, 0.3, 700);
+        this.noise(0.2, 0.24, 520, 0.2);
         break;
       case 'exit_opened':
         // 봉인 해제 — 낮게 깔린 돌 갈림 뒤에 위로 열리는 화음

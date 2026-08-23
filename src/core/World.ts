@@ -258,6 +258,20 @@ export function pushPlayer(
   player.kbZ = (dirZ / len) * (distance / ticks);
 }
 
+/** 스태미너 소모 — 깎고 회복을 미룬다. 이번 소모로 바닥나면 true (호출한 시스템이
+ *  stamina_empty 를 발행한다). pushPlayer 와 같은 규약: balance 는 호출부가 읽어 넘긴다 */
+export function spendStamina(
+  stamina: { value: number; regenDelay: number; exhausted: boolean },
+  amount: number,
+  regenDelayTicks: number,
+): boolean {
+  stamina.value = Math.max(0, stamina.value - amount);
+  stamina.regenDelay = regenDelayTicks;
+  if (stamina.value > 0 || stamina.exhausted) return false;
+  stamina.exhausted = true;
+  return true;
+}
+
 /** (sourceX, sourceZ)에서 오는 공격을 방어 중인가 — 정면 arcDeg 안일 때만 */
 export function playerBlocks(
   world: World,
@@ -305,6 +319,9 @@ export class World {
   groundItems: GroundItemState[] = [];
 
   /** 보유 골드 — 적 처치 드랍으로 모인다 (사용처는 이후 구역) */
+  /** 스태미너 — 질주로 닳고 회피로 크게 깎인다. 0이 되면 지쳐서 질주 불가 */
+  stamina = { value: 0, regenDelay: 0, exhausted: false };
+
   gold = 0;
 
   /** 제단 상점 남은 재고 — 품목별. 비어 있으면 stock 만큼 있는 것으로 본다 */

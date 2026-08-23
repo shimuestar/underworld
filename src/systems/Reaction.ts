@@ -16,6 +16,7 @@
 
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef } from '../core/Entities';
+import { spendStamina } from '../core/World';
 import type { EnemyState, ProjectileState, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
@@ -56,6 +57,14 @@ export function tick(world: World, _dt: number): void {
   // Shift+누르기 = 명시적 회피 — 판정을 거치지 않고 즉시 발동.
   // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다
   if (freshPress && world.input.sprint) {
+    const stam = balance.player.stamina;
+    if (world.stamina.value < stam.dodgeCost) {
+      world.events.emit('stamina_blocked', { action: 'dodge', need: stam.dodgeCost });
+      return;
+    }
+    if (spendStamina(world.stamina, stam.dodgeCost, stam.regenDelayTicks)) {
+      world.events.emit('stamina_empty', {});
+    }
     startDodge(world);
     return;
   }
