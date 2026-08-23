@@ -108,6 +108,11 @@ export interface EnemyDef {
   chargeAttack?: EnemyAttackDef;
   /** 방패 밀쳐내기 — 연타를 멈추지 않는 상대를 떼어낸다 (창병) */
   shieldBash?: EnemyAttackDef;
+  /** 완벽 패링만 받는다 — 일반 대역(guardDepth)에서 눌러도 성립하지 않는다.
+   *  이르게 누른 입력은 버퍼로 살아남아 무기 끝이 완벽 대역에 들어오는 순간 성립한다 */
+  perfectParryOnly?: boolean;
+  /** 방패막기로 공격을 끊을 수 없다 — 칩 피해와 밀림은 그대로 받되 적은 튕기지 않는다 */
+  blockCannotStagger?: boolean;
   parriesToStagger?: number;
   executeDamage?: number;
   armorHealth?: number;

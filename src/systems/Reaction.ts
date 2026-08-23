@@ -83,14 +83,18 @@ export function tick(world: World, _dt: number): void {
     const attack = currentAttack(enemyDef(enemy.type), enemy);
 
     if (enemy.ai === 'active_perfect' || enemy.ai === 'active_normal') {
+      const def = enemyDef(enemy.type);
       // 애초에 나를 향하지 않는 공격은 막을 것도 없다 (옆으로 비켰으면 그냥 빗나간다)
-      if (!attackReaches(enemyDef(enemy.type), enemy, attack, p.x, p.z)) continue;
-      // 무기 끝이 가드 안까지 왔는가
+      if (!attackReaches(def, enemy, attack, p.x, p.z)) continue;
+      // 무기 끝이 가드 안까지 왔는가.
+      // perfectParryOnly(족장)는 일반 대역을 받지 않는다 — 정확히 닿는 순간만 성립한다
+      const band = def.perfectParryOnly ? space.perfectBand : space.guardDepth;
       const gap = dist - balance.player.radius - (enemy.weaponTipDist ?? 0);
-      if (gap <= space.guardDepth && (!parryTarget || gap < parryTarget.gap)) {
+      if (gap <= band && (!parryTarget || gap < parryTarget.gap)) {
         parryTarget = { enemy, gap };
-      } else if (gap > space.guardDepth) {
-        incoming = true; // 아직 오는 중 — 이르게 눌렀다면 버퍼로 살려준다
+      } else if (gap > band) {
+        // 아직 오는 중 — 이르게 눌렀다면 버퍼로 살려 두고, 대역에 들어오는 순간 성립시킨다
+        incoming = true;
       }
     } else if (enemy.ai === 'staggered') {
       if (!executeTarget || dist < executeTarget.dist) executeTarget = { enemy, dist };

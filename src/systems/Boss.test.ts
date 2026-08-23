@@ -156,13 +156,28 @@ describe('goblin_chieftain (1구역 보스)', () => {
     return boss;
   }
 
+  /** 족장은 완벽 대역에서만 성립한다 — 창이 열린 뒤 매 틱 눌러 닿는 순간을 잡는다 */
+  function parryBoss(boss: ReturnType<typeof spawnEnemyAt>): string {
+    tickEnemiesUntil(() => boss.ai === 'active_perfect');
+    const results: string[] = [];
+    const off = (p: unknown): void => {
+      results.push((p as { result: string }).result);
+    };
+    world.events.on('parry_attempt', off);
+    for (let i = 0; i < 40 && results.length === 0; i++) {
+      pressReaction();
+      if (results.length) break;
+      Enemies.tick(world, DT);
+    }
+    return results[0] ?? '없음';
+  }
+
   it('melee 페이즈: 3연속 패링해야 스태거, 그 전엔 recover', () => {
     const boss = makeBoss();
     const def = enemyDef('goblin_chieftain');
 
     for (let n = 1; n <= def.parriesToStagger!; n++) {
-      tickEnemiesUntil(() => boss.ai === 'active_perfect');
-      pressReaction();
+      expect(parryBoss(boss)).toBe('perfect'); // 보스는 완벽만 성립한다
       if (n < def.parriesToStagger!) {
         expect(boss.ai).toBe('recover');
         expect(boss.parryStreak).toBe(n);
@@ -170,6 +185,52 @@ describe('goblin_chieftain (1구역 보스)', () => {
     }
     expect(boss.ai).toBe('staggered');
     expect(boss.parryStreak).toBe(0);
+  });
+
+  it('일반 대역에서 누르면 성립하지 않는다 — 완벽 패링만 받는다', () => {
+    const def = enemyDef('goblin_chieftain');
+    expect(def.perfectParryOnly).toBe(true);
+    const boss = makeBoss();
+    tickEnemiesUntil(() => boss.ai === 'active_perfect');
+
+    const results: unknown[] = [];
+    world.events.on('parry_attempt', (p) => results.push(p));
+    // 무기 끝을 일반 대역 한가운데로 강제로 놓고 눌러 본다
+    const mid = (balance.parrySpace.perfectBand + balance.parrySpace.guardDepth) / 2;
+    boss.weaponTipDist =
+      Math.hypot(boss.x - world.player.x, boss.z - world.player.z) - balance.player.radius - mid;
+    pressReaction();
+    expect(results).toHaveLength(0);
+    expect(boss.ai).not.toBe('staggered');
+  });
+
+  it('장갑 페이즈 강타도 패링할 수 있다 (완벽만)', () => {
+    const def = enemyDef('goblin_chieftain');
+    expect(def.armoredAttack!.parryable).toBe(true);
+    expect(def.armoredAttack!.telegraph).toBe('blue'); // 색 규약 — 청=패링 가능
+    const boss = makeBoss();
+    boss.phase = 'armored';
+    boss.armorHealth = def.armorHealth!;
+    expect(parryBoss(boss)).toBe('perfect');
+  });
+
+  it('방패로 막아도 보스는 끊기지 않는다 — 플레이어만 굳는다', () => {
+    const def = enemyDef('goblin_chieftain');
+    expect(def.blockCannotStagger).toBe(true);
+    const boss = makeBoss();
+    world.player.blocking = true;
+    const clashes: unknown[] = [];
+    const blocks: unknown[] = [];
+    world.events.on('guard_clash', (p) => clashes.push(p));
+    world.events.on('block_hit', (p) => blocks.push(p));
+
+    tickEnemiesUntil(() => boss.ai === 'recover', 400);
+    expect(blocks).toHaveLength(1); // 막긴 했다 (방패 섬광·소리)
+    expect(clashes).toHaveLength(0); // 격돌 연출은 없다
+    expect(boss.recoiled).not.toBe(true); // 튕기지 않았다
+    expect(boss.timer).toBe(def.attack.recoverTicks); // 후딜이 늘지 않았다
+    expect(world.player.stunTicks).toBeGreaterThan(0); // 플레이어만 굳는다
+    expect(world.player.health).toBeLessThan(balance.player.healthMax); // 칩 피해도 받는다
   });
 
   it('스태거 중 처형 → executeDamage 타격 → 스태거 종료 후 armored 페이즈', () => {

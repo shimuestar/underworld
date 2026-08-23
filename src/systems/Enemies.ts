@@ -395,19 +395,23 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         );
 
         if (blocked) {
-          // 방패 격돌 — 양쪽이 잠깐 굳는다. 적이 더 오래 굳어 반격 창이 열린다
+          // 방패 격돌 — 양쪽이 잠깐 굳는다. 적이 더 오래 굳어 반격 창이 열린다.
+          // 단 blockCannotStagger(족장)는 튕기지 않는다 — 막아도 공격이 끊기지 않고
+          // 플레이어만 굳는다. 보스는 패링하거나 비켜야 한다
           const clash = balance.block;
           p.stunTicks = Math.max(p.stunTicks, clash.clashPlayerStunTicks);
-          enemy.recoiled = true;
-          world.freezeTicks = Math.max(world.freezeTicks, clash.clashHitstopTicks);
           world.events.emit('block_hit', { amount: damage, kind: 'melee' });
-          world.events.emit('guard_clash', {
-            kind: 'block',
-            enemyId: enemy.id,
-            enemyType: enemy.type,
-            x: enemy.x,
-            z: enemy.z,
-          });
+          if (!def.blockCannotStagger) {
+            enemy.recoiled = true;
+            world.freezeTicks = Math.max(world.freezeTicks, clash.clashHitstopTicks);
+            world.events.emit('guard_clash', {
+              kind: 'block',
+              enemyId: enemy.id,
+              enemyType: enemy.type,
+              x: enemy.x,
+              z: enemy.z,
+            });
+          }
         }
         world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
         if (p.health <= 0) {
