@@ -59,6 +59,8 @@ export interface EnemyAttackDef {
   maxRange?: number;
   /** 시전 중 플레이어가 이 거리 안으로 들어오면 취소하고 근접으로 전환 */
   abortRange?: number;
+  /** 맞으면 거미줄에 걸린다 — 수치는 balance.web */
+  appliesWeb?: boolean;
   /** 연사 — 1보다 크면 windup 뒤 shotIntervalTicks 간격으로 shots 발을 쏜다 */
   shots?: number;
   shotIntervalTicks?: number;

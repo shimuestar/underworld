@@ -15,10 +15,93 @@ const ENEMY_COLORS: Record<string, number> = {
   goblin_archer: 0x8a8a3a,
   warden: 0x5a4470,
   goblin_chieftain: 0x8f5a30,
+  spider_small: 0x14141a,
+  spider_large: 0xd8d8cf,
 };
+/** 거미는 기둥+머리가 아니라 몸통·배·다리로 만든다 */
+const SPIDER_TYPES = new Set(['spider_small', 'spider_large']);
 const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
+
+/** 거미 몸 — 낮게 깔린 몸통 + 뒤로 부푼 배 + 사방으로 뻗은 다리 8개.
+ *  키(def.height)가 낮아 기둥+머리로 만들면 그냥 통조림처럼 보인다 */
+function buildSpiderBody(
+  torso: THREE.Group,
+  def: { radius: number; height: number },
+  bodyMat: THREE.MeshLambertMaterial,
+  baseColor: number,
+  flashMaterials: THREE.MeshLambertMaterial[],
+): void {
+  const r = def.radius;
+  const bodyY = def.height * 0.62; // 다리 위에 얹힌 높이
+
+  // 머리가슴 — 앞쪽의 작고 단단한 덩어리
+  const cephalo = new THREE.Mesh(new THREE.SphereGeometry(r * 0.52, 10, 8), bodyMat);
+  cephalo.scale.set(1, 0.8, 1.05);
+  cephalo.position.set(0, bodyY, -r * 0.45);
+  torso.add(cephalo);
+
+  // 배 — 뒤로 크게 부푼다. 살짝 어둡게 해 덩어리가 갈려 보이게
+  const abdMat = new THREE.MeshLambertMaterial({
+    color: new THREE.Color(baseColor).multiplyScalar(0.82),
+  });
+  flashMaterials.push(abdMat);
+  const abdomen = new THREE.Mesh(new THREE.SphereGeometry(r * 0.78, 10, 8), abdMat);
+  abdomen.scale.set(1, 0.86, 1.15);
+  abdomen.position.set(0, bodyY + r * 0.06, r * 0.6);
+  torso.add(abdomen);
+
+  // 눈 — 앞을 향한 작은 점 넷. 어둠 속에서 이것만 보여도 거미인 줄 안다
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff4d4d });
+  for (const ex of [-0.55, -0.2, 0.2, 0.55]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.075, 5, 4), eyeMat);
+    eye.position.set(ex * r * 0.5, bodyY + r * 0.14, -r * 0.9);
+    torso.add(eye);
+  }
+
+  // 다리 8개 — 무릎에서 꺾여 위로 솟았다 바닥으로 내려온다.
+  // 각 다리는 "바깥(+X)·위(+Y)" 평면에서 각도로 직접 계산한 뒤 통째로 Y축 회전시킨다.
+  // lookAt 으로 맞추면 부모 월드행렬이 아직 갱신 전이라 엉뚱한 데를 향한다 (실측으로 확인)
+  const legMat = new THREE.MeshLambertMaterial({
+    color: new THREE.Color(baseColor).multiplyScalar(0.7),
+  });
+  flashMaterials.push(legMat);
+  const legW = r * 0.12;
+  const hipOut = r * 0.4;
+  const upLen = r * 0.85;
+  const upAng = 0.85; // 위로 솟는 각
+  const lowLen = r * 1.9;
+  const lowAng = -1.0; // 바닥으로 내려오는 각
+
+  /** (0,0)에서 각도 ang 로 len 만큼 뻗는 마디 — 중심에 놓고 Z축으로 돌린다 */
+  const segment = (len: number, ang: number, fromX: number, fromY: number): THREE.Mesh => {
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(len, legW, legW), legMat);
+    seg.position.set(fromX + (len / 2) * Math.cos(ang), fromY + (len / 2) * Math.sin(ang), 0);
+    seg.rotation.z = ang;
+    return seg;
+  };
+
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      const leg = new THREE.Group();
+      leg.position.y = bodyY;
+      // 앞(−Z)에서 뒤(+Z)로 벌어지게. side 로 좌우 대칭
+      leg.rotation.y = side * (Math.PI / 2) + side * (-0.62 + i * 0.42);
+      torso.add(leg);
+
+      const kneeX = hipOut + upLen * Math.cos(upAng);
+      const kneeY = upLen * Math.sin(upAng);
+      leg.add(segment(upLen, upAng, hipOut, 0));
+      leg.add(segment(lowLen, lowAng, kneeX, kneeY));
+      // 무릎 관절 — 마디 사이가 벌어져 보이지 않게 채운다
+      const joint = new THREE.Mesh(new THREE.SphereGeometry(legW * 0.8, 5, 4), legMat);
+      joint.position.set(kneeX, kneeY, 0);
+      leg.add(joint);
+    }
+  }
+}
 const BARRIER_COLOR = 0x9db8e8;
 const ARMOR_COLOR = 0x777d88;
+const WEB_COLOR = 0xe6e9e0; // 거미줄 — 희끄무레한 실뭉치
 const ENEMY_BOLT_COLOR = 0xa855f7; // 마법 투사체 색 규약 (balance.telegraph.colorProjectile)
 const IMPLODE_MS = 560; // 내파 연출 길이 (당김 지속 22틱 ≒ 367ms보다 길게 남는다)
 const IMPLODE_SHARDS = 16;
@@ -866,23 +949,27 @@ export class Stage {
 
     const bodyMat = new THREE.MeshLambertMaterial({ color: baseColor });
     flashMaterials.push(bodyMat);
-    // 몸통은 충돌 원과 같은 반경의 8각 기둥 — 박스로 두면 모서리가 반경 밖으로
-    // 0.21m 튀어나와(0.5→0.707) 비스듬히 부딪칠 때 뚫고 들어가 보인다
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(def.radius, def.radius, def.height * 0.78, 8),
-      bodyMat,
-    );
-    body.position.y = (def.height * 0.78) / 2;
-    torso.add(body);
+    if (SPIDER_TYPES.has(type)) {
+      buildSpiderBody(torso, def, bodyMat, baseColor, flashMaterials);
+    } else {
+      // 몸통은 충돌 원과 같은 반경의 8각 기둥 — 박스로 두면 모서리가 반경 밖으로
+      // 0.21m 튀어나와(0.5→0.707) 비스듬히 부딪칠 때 뚫고 들어가 보인다
+      const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(def.radius, def.radius, def.height * 0.78, 8),
+        bodyMat,
+      );
+      body.position.y = (def.height * 0.78) / 2;
+      torso.add(body);
 
-    const headMat = new THREE.MeshLambertMaterial({
-      color: new THREE.Color(baseColor).multiplyScalar(HEAD_DARKEN),
-    });
-    flashMaterials.push(headMat);
-    const headSize = def.radius * 0.9;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), headMat);
-    head.position.set(0, def.height - headSize / 2, -def.radius * 0.2);
-    torso.add(head);
+      const headMat = new THREE.MeshLambertMaterial({
+        color: new THREE.Color(baseColor).multiplyScalar(HEAD_DARKEN),
+      });
+      flashMaterials.push(headMat);
+      const headSize = def.radius * 0.9;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), headMat);
+      head.position.set(0, def.height - headSize / 2, -def.radius * 0.2);
+      torso.add(head);
+    }
 
     // 이름표 + HP 바 (빌보드 스프라이트, 어그로 후에만 표시)
     const plateCanvas = document.createElement('canvas');
@@ -1438,6 +1525,25 @@ export class Stage {
               new THREE.MeshLambertMaterial({ color: 0x6a5a4a, emissive: 0x191410 }),
             ),
           );
+        } else if (proj.kind === 'web') {
+          // 거미줄 뭉치 — 희끄무레하고 울퉁불퉁한 덩어리. 발광은 아주 약하게
+          const web = new THREE.Mesh(
+            new THREE.DodecahedronGeometry(proj.radius),
+            new THREE.MeshLambertMaterial({
+              color: WEB_COLOR,
+              emissive: WEB_COLOR,
+              emissiveIntensity: 0.22,
+              transparent: true,
+              opacity: 0.85,
+            }),
+          );
+          group.add(web);
+          const strand = new THREE.Mesh(
+            new THREE.BoxGeometry(proj.radius * 0.16, proj.radius * 0.16, proj.radius * 2.6),
+            new THREE.MeshBasicMaterial({ color: WEB_COLOR, transparent: true, opacity: 0.5 }),
+          );
+          group.add(strand); // 꼬리처럼 끌리는 실
+          group.add(new THREE.PointLight(WEB_COLOR, 0.5, 5, 0));
         } else if (proj.kind === 'arrow') {
           // 화살 — 나무 화살대 + 회색 촉. 발광하지 않아 어둠 속에서 위협적
           const shaft = new THREE.Mesh(

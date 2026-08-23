@@ -39,6 +39,10 @@ export interface PlayerState {
   kbTicks?: number;
   kbX?: number;
   kbZ?: number;
+  /** 거미줄 — 남은 지속 틱. 0보다 크면 느려진다 */
+  webTicks?: number;
+  /** 거미줄 끊기 진행도 — 이동 거리(PlayerMove)와 해머 타격(Weapons)이 채운다 */
+  webStruggle?: number;
 }
 
 export interface SigilState {
@@ -90,10 +94,12 @@ export interface ProjectileState {
   /** 반응 버튼으로 반사 가능한가 (마법탄 true, 화살 false) */
   deflectable?: boolean;
   /** 렌더 형태 */
-  kind?: 'fireball' | 'magic' | 'arrow' | 'rock' | 'grenade';
+  kind?: 'fireball' | 'magic' | 'arrow' | 'rock' | 'grenade' | 'web';
   /** 착탄 시 광역 효과. 시전자가 죽어도 남도록 투사체가 들고 다닌다.
    *  반사되면 그대로 적에게 터진다 */
   splash?: ProjectileSplashDef;
+  /** 맞은 플레이어가 거미줄에 걸린다 (큰 거미) */
+  appliesWeb?: boolean;
 }
 
 export interface SpellState {

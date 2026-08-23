@@ -48,6 +48,8 @@ export type SoundName =
   | 'boss_volley_draw'
   | 'ground_slam'
   | 'charge_ready'
+  | 'web_hit'
+  | 'web_break'
   | 'weapon_switch'
   | 'hammer_swing'
   | 'melee_hit'
@@ -355,6 +357,17 @@ export class GameAudio {
         this.tone(210, 1.0, 'square', 0.35, 0.1, 300);
         this.noise(1.4, 0.85, 620);
         this.noise(0.7, 0.4, 220, 0.5);
+        break;
+      case 'web_hit':
+        // 거미줄에 걸림 — 끈적하게 감기는 소리. 타격음처럼 들리면 안 된다
+        this.noise(0.35, 0.45, 2600);
+        this.tone(420, 0.3, 'triangle', 0.22, 0, 180);
+        this.noise(0.25, 0.2, 700, 0.12);
+        break;
+      case 'web_break':
+        // 줄이 끊긴다 — 짧게 툭 끊기는 고역 + 해방되는 상승음
+        this.noise(0.09, 0.4, 4200);
+        this.tone(300, 0.14, 'square', 0.2, 0, 720);
         break;
       case 'charge_ready':
         // 달려들기 직전 — 발로 땅을 긁고 낮게 으르렁. 짧고 굵게

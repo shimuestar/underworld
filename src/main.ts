@@ -238,6 +238,8 @@ for (const name of [
   'reload_started',
   'reload_finished',
   'weapon_empty',
+  'web_caught',
+  'web_broken',
   'stamina_empty',
   'stamina_recovered',
   'stamina_blocked',
@@ -382,6 +384,15 @@ events.on('weapon_empty', (payload) => {
     info.weapon === 'grenade' ? '수류탄 없음' : '탄약 없음 — 제단에서 사야 한다',
     1100,
   );
+});
+events.on('web_caught', () => {
+  audio.play('web_hit');
+  showReaction('거미줄에 걸렸다 — 움직이고 해머로 끊어라', 2200);
+});
+events.on('web_broken', (payload) => {
+  if ((payload as { reason: string }).reason === 'timeout') return; // 저절로 삭은 건 조용히
+  audio.play('web_break');
+  showReaction('거미줄을 끊었다', 900);
 });
 events.on('stamina_empty', () => {
   audio.play('stamina_empty');
@@ -853,6 +864,7 @@ let tpsWindowStart = performance.now();
 let tpsWindowTicks = 0;
 let measuredTps = 0;
 
+const webOverlay = document.getElementById('web-overlay')!;
 const staminaRow = document.getElementById('status-stamina')!;
 const staminaFill = document.getElementById('status-stamina-fill')!;
 const lanternRow = document.getElementById('status-lantern')!;
@@ -956,6 +968,13 @@ function render(alpha: number): void {
   const manaFill = document.getElementById('status-mana-fill')!;
   manaFill.style.width = `${manaFrac * 100}%`;
   manaFill.style.background = world.mana.chainIndex > 0 ? '#7fc4ff' : '#4a9eff';
+  // 거미줄 — 끊을수록 옅어진다 (남은 시간이 아니라 발버둥 진행도를 보여준다)
+  const webbed = (p.webTicks ?? 0) > 0;
+  const webLeft = webbed
+    ? 1 - Math.min(1, (p.webStruggle ?? 0) / balance.web.breakNeeded)
+    : 0;
+  webOverlay.style.opacity = String(webbed ? 0.35 + 0.55 * webLeft : 0);
+
   // 스태미너 — HP·마나 바 바로 아래. 탈진하면 붉게 죽는다
   const stamFrac = Math.max(0, Math.min(1, world.stamina.value / balance.player.stamina.max));
   staminaFill.style.width = `${stamFrac * 100}%`;

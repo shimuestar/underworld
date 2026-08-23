@@ -17,6 +17,14 @@ export function tick(world: World, dt: number): void {
   p.prevY = p.y;
   p.prevZ = p.z;
 
+  // 거미줄 — 시간이 흐르면 저절로 삭고, 발버둥(이동)과 해머로 더 빨리 끊는다
+  const web = balance.web;
+  const webbed = (p.webTicks ?? 0) > 0;
+  if (webbed) {
+    p.webTicks = (p.webTicks ?? 0) - 1;
+    if (p.webTicks <= 0) freeFromWeb(world, 'timeout');
+  }
+
   // 피격 밀림 — 입력·경직과 무관하게 먼저 적용된다. 벽에 막히면 거기서 멈춘다.
   // (감산 전에 기억해 둔다 — 마지막 한 틱도 감속 대상이다)
   const shoved = (p.kbTicks ?? 0) > 0;
@@ -58,11 +66,29 @@ export function tick(world: World, dt: number): void {
   }
   let speed = sprinting ? balance.player.sprintSpeed : balance.player.moveSpeed;
   if (st.exhausted) speed *= stam.exhaustedSpeedMul; // 숨이 차 제대로 못 걷는다
+  if (webbed) speed *= web.moveSpeedMul; // 거미줄에 발이 묶인다
   // 밀리는 동안은 발이 안 붙는다 — 밀림과 이동이 더해지는 구조라 배율로 눌러 준다
   if (shoved) speed *= balance.playerKnockback.moveSpeedMul;
   if (p.blocking) speed *= balance.block.speedMul; // 방어 중 감속 페널티
+  const beforeX = p.x;
+  const beforeZ = p.z;
   world.level.slideMove(p, balance.player.radius, wx * speed * dt, wz * speed * dt);
   resolveEnemyOverlap(world);
+
+  // 실제로 움직인 거리만큼 줄이 늘어난다 — 벽에 붙어 비비면 안 풀린다
+  if (webbed && (p.webTicks ?? 0) > 0) {
+    const moved = Math.hypot(p.x - beforeX, p.z - beforeZ);
+    p.webStruggle = (p.webStruggle ?? 0) + moved * web.breakPerMeter;
+    if (p.webStruggle >= web.breakNeeded) freeFromWeb(world, 'struggle');
+  }
+}
+
+/** 거미줄에서 풀려난다 — 시간 만료든 발버둥이든 한 곳에서 정리한다 */
+function freeFromWeb(world: World, reason: string): void {
+  const p = world.player;
+  p.webTicks = 0;
+  p.webStruggle = 0;
+  world.events.emit('web_broken', { reason });
 }
 
 /** 적 몸통은 통과할 수 없다 — 겹치면 겹친 만큼 밀려난다.

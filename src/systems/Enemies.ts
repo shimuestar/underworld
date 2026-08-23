@@ -722,10 +722,11 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
     casterId: enemy.id,
     deflectable: attack.deflectable ?? false,
     kind:
-      (attack.projectileKind as 'rock' | undefined) ??
+      (attack.projectileKind as 'rock' | 'web' | undefined) ??
       ((attack.deflectable ?? false) ? 'magic' : 'arrow'),
     // 광역 효과는 투사체가 들고 간다 — 시전자가 먼저 죽어도, 반사돼도 그대로 터진다
     splash: attack.splash,
+    appliesWeb: attack.appliesWeb,
   });
   world.events.emit('enemy_cast', { enemyId: enemy.id, enemyType: enemy.type });
 }

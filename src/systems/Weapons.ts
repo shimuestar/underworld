@@ -141,6 +141,17 @@ function startHammerSwing(world: World): void {
   // 닿기 전에는 다시 휘두를 수 없다 (한 스윙에 두 번 들어가는 것을 막는다)
   w.meleeCooldown = w.swingImpact;
 
+  // 거미줄 — 휘두르는 것만으로 줄이 끊긴다 (적을 맞힐 필요는 없다)
+  if ((p.webTicks ?? 0) > 0) {
+    const web = balance.web;
+    p.webStruggle = (p.webStruggle ?? 0) + web.breakPerSwing;
+    if (p.webStruggle >= web.breakNeeded) {
+      p.webTicks = 0;
+      p.webStruggle = 0;
+      world.events.emit('web_broken', { reason: 'hammer' });
+    }
+  }
+
   world.events.emit('hammer_swing', { heavy, step: w.comboStep });
   alertNearby(world, p.x, p.z, hammer.noiseRadius * (heavy ? 2 : 1));
 }

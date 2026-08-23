@@ -18,6 +18,8 @@ const IMPLEMENTED = new Set([
   'goblin_archer',
   'warden',
   'goblin_chieftain',
+  'spider_small',
+  'spider_large',
 ]);
 
 /** 임의 위치에 적 하나 생성 (연습 소환 등) */

@@ -27,6 +27,32 @@
       "counters": { "pistol": "poor", "rifle": "poor", "grenade": "good", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
       "drops": ["sig_fireball"], "dropsOnDeath": true
     },
+    "_spiderNote": "거미 둥지 — 큰 거미가 거미줄로 묶고 작은 거미들이 달려들어 물어뜯는다. 둘을 같이 배치해야 의도한 압박이 나온다",
+    "spider_small": {
+      "name": "검은 거미",
+      "zone": 1, "slice": true,
+      "weight": "light", "xp": 12, "health": 18, "speed": 5.6, "damage": 8,
+      "radius": 0.42, "height": 0.7,
+      "aggroRange": 16, "attackRange": 1.7,
+      "behavior": "swarm",
+      "attack": { "type": "contact", "arcDeg": 150, "windupTicks": 13, "recoverTicks": 18, "whiffRecoverTicks": 42, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
+      "_leapNote": "도약 — 26틱 × 15 = 6.5m. 예고 시점 좌표로만 날아가므로 옆으로 비키면 헛짚는다",
+      "chargeAttack": { "type": "contact", "arcDeg": 150, "chargeSpeed": 15, "chargeRunTicks": 26, "minRange": 3.2, "maxRange": 7, "windupTicks": 20, "recoverTicks": 30, "whiffRecoverTicks": 75, "impactRangeMul": 1.25, "playerKnockback": 0.9, "parryable": true, "telegraph": "blue", "cooldownTicks": 200 },
+      "counters": { "pistol": "good", "rifle": "good", "grenade": "best", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
+      "drops": []
+    },
+    "spider_large": {
+      "name": "흰 거미",
+      "zone": 1, "slice": true,
+      "weight": "medium", "xp": 45, "health": 75, "speed": 3.4, "damage": 6,
+      "radius": 0.85, "height": 1.25,
+      "aggroRange": 20, "attackRange": 15, "kiteMinRange": 7,
+      "behavior": "caster_kite",
+      "_webNote": "거미줄 — 피해는 거의 없고 묶는 게 목적이다. 반사 불가라 회피/엄폐로만 피한다",
+      "attack": { "type": "projectile", "windupTicks": 34, "recoverTicks": 62, "impactRangeMul": 1, "parryable": false, "deflectable": false, "telegraph": "red", "projectileSpeed": 17, "projectileRadius": 0.26, "projectileKind": "web", "appliesWeb": true },
+      "counters": { "pistol": "best", "rifle": "best", "grenade": "good", "flash": "good", "melee": "good", "magic": "good", "deflect": "none" },
+      "drops": []
+    },
     "goblin_archer": {
       "name": "고블린 궁수",
       "zone": 1, "slice": true,

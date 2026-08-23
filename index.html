@@ -139,6 +139,21 @@
       #status-mana-fill {
         background: #4a9eff;
       }
+      /* 거미줄에 걸림 — 화면 가장자리에 끈끈한 흰 막. 끊을수록 옅어진다 */
+      #web-overlay {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 120ms linear;
+        background:
+          radial-gradient(ellipse at center, rgba(255, 255, 255, 0) 38%, rgba(226, 232, 220, 0.5) 100%),
+          repeating-conic-gradient(
+            from 0deg at 50% 50%,
+            rgba(230, 233, 224, 0.16) 0deg 2deg,
+            rgba(0, 0, 0, 0) 2deg 22deg
+          );
+      }
       /* 스태미너 — HP·마나 바 바로 아래, 같은 너비의 얇은 띠 */
       #status-stamina {
         height: 4px;
@@ -262,6 +277,7 @@
       <div class="hint">클릭하면 계속 · ESC로 다시 멈춤</div>
     </div>
     <div id="altar-prompt"></div>
+    <div id="web-overlay"></div>
     <div id="status">
       <div id="status-bars">
         <div id="status-hp"><div id="status-hp-fill"></div></div>
