@@ -46,6 +46,7 @@ export type SoundName =
   | 'pickup_food'
   | 'boss_roar'
   | 'boss_volley_draw'
+  | 'ground_slam'
   | 'weapon_switch'
   | 'hammer_swing'
   | 'melee_hit'
@@ -353,6 +354,13 @@ export class GameAudio {
         this.tone(210, 1.0, 'square', 0.35, 0.1, 300);
         this.noise(1.4, 0.85, 620);
         this.noise(0.7, 0.4, 220, 0.5);
+        break;
+      case 'ground_slam':
+        // 지면 강타 — 서브베이스 충격 + 돌 갈리는 저역 + 흩어지는 파편
+        this.tone(42, 0.85, 'sine', 1.7, 0, 24);
+        this.tone(88, 0.5, 'sawtooth', 0.8, 0, 40);
+        this.noise(0.55, 1.1, 480);
+        this.noise(0.9, 0.35, 2200, 0.06);
         break;
       case 'boss_volley_draw':
         // 활 시위를 당긴다 — 삐걱이며 조여드는 상승음. 화살 세례 예고

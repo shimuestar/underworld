@@ -104,6 +104,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   }
 
   if ((enemy.volleyCooldown ?? 0) > 0) enemy.volleyCooldown = (enemy.volleyCooldown ?? 0) - 1;
+  if ((enemy.chargeCooldown ?? 0) > 0) enemy.chargeCooldown = (enemy.chargeCooldown ?? 0) - 1;
 
   // 연타를 멈추면 막아낸 기록이 사라진다 (붙어서 계속 때릴 때만 밀쳐내기가 나간다)
   if ((enemy.blockedStreakTicks ?? 0) > 0) {
@@ -180,6 +181,23 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         startWindup(world, enemy, currentAttack(def, enemy));
         break;
       }
+      // 돌격 — 중거리(minRange~maxRange)에 들어오면 달려들며 내리찍는다.
+      // maxRange 가 있는 돌격만 거리로 발동한다 (창병처럼 wantsCharge 로 쓰는 쪽과 구분)
+      const ch = def.chargeAttack;
+      if (
+        ch?.maxRange !== undefined &&
+        (enemy.chargeCooldown ?? 0) <= 0 &&
+        dist >= (ch.minRange ?? 0) &&
+        dist <= ch.maxRange &&
+        world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
+      ) {
+        enemy.attackMode = 'charge';
+        enemy.chargeCooldown = ch.cooldownTicks ?? 0;
+        startWindup(world, enemy, ch);
+        world.events.emit('enemy_charge', { enemyId: enemy.id, enemyType: enemy.type, dist });
+        break;
+      }
+
       // 화살 세례 — 큰 기술이라 쿨다운이 돌고, 붙어 있으면 쓰지 않는다
       if (
         def.volleyAttack &&
@@ -213,6 +231,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     }
 
     case 'windup': {
+      // 붙었으면 던지기를 접고 해머로 바꾼다 — 코앞에서 화살을 쏘고 있으면 안 된다
+      if (attack.abortRange !== undefined && dist <= attack.abortRange) {
+        enemy.ai = 'chase';
+        enemy.attackMode = 'melee';
+        world.events.emit('enemy_hold_fire', { enemyId: enemy.id, enemyType: enemy.type });
+        break;
+      }
       // 원거리 시전은 발사 순간의 플레이어 위치로 날아간다 — 시전 중 몸이 굳어 있으면
       // 충전 구체와 실제 발사 방향이 어긋난다. 근접 공격은 그대로 둔다
       // (시전 중에도 몸을 돌리면 옆으로 비켜 피하는 플레이가 죽는다)
@@ -278,6 +303,15 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
 
     // 연사 — 제자리에서 계속 조준하며 일정 간격으로 쏜다. 옆으로 계속 움직여 피한다
     case 'volley': {
+      // 붙어 오면 연사를 끊고 해머로 — 남은 발수는 버리고 쿨다운은 그대로 문다
+      if (attack.abortRange !== undefined && dist <= attack.abortRange) {
+        enemy.ai = 'chase';
+        enemy.attackMode = 'melee';
+        enemy.volleyLeft = 0;
+        enemy.volleyCooldown = attack.cooldownTicks ?? 0;
+        world.events.emit('enemy_hold_fire', { enemyId: enemy.id, enemyType: enemy.type });
+        break;
+      }
       if (dist > 0) enemy.yaw = Math.atan2(-distX, -distZ);
       if (enemy.timer > 0) {
         enemy.timer--;
@@ -339,6 +373,18 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           world.events.emit('player_died', { tick: world.tick });
         }
       }
+      // 지면 강타 — 맞았든 빗나갔든 땅은 울린다. 소리·화면 흔들림은 main 이 붙인다
+      if (attack.aoeRadius !== undefined) {
+        world.events.emit('ground_slam', {
+          enemyId: enemy.id,
+          enemyType: enemy.type,
+          x: enemy.x,
+          z: enemy.z,
+          radius: attack.aoeRadius,
+          dist: Math.hypot(p.x - enemy.x, p.z - enemy.z),
+        });
+      }
+
       // 헛쳤으면 긴 경직 — 마지막 동작 그대로 굳어 무방비가 된다 (반격 창)
       enemy.ai = 'recover';
       enemy.whiffed = !connected && attack.whiffRecoverTicks !== undefined;

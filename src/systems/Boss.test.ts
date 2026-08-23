@@ -237,6 +237,7 @@ describe('goblin_chieftain 원거리 공격', () => {
     const boss = spawnEnemyAt('goblin_chieftain', 18, 6, 1); // dist 12 ≥ minRange 7
     boss.ai = 'chase';
     boss.volleyCooldown = 9999; // 화살 세례가 먼저 나가지 않게
+    boss.chargeCooldown = 9999; // 돌격도
     world.enemies.push(boss);
 
     tickEnemiesUntil(() => boss.ai === 'windup');
@@ -251,7 +252,7 @@ describe('goblin_chieftain 원거리 공격', () => {
 
   it('화살 세례 — 예고 뒤 0.5초 간격으로 10발, 그동안 제자리', () => {
     const volley = enemyDef('goblin_chieftain').volleyAttack!;
-    const boss = spawnEnemyAt('goblin_chieftain', 18, 6, 1);
+    const boss = spawnEnemyAt('goblin_chieftain', 18, 6, 1); // dist 12 > chargeAttack.maxRange
     boss.ai = 'chase';
     world.enemies.push(boss);
     const starts: { shots: number }[] = [];
@@ -294,10 +295,70 @@ describe('goblin_chieftain 원거리 공격', () => {
     expect(boss.attackMode).toBe('melee'); // 끝나면 평소 모드로
   });
 
+  it('중거리에 들어오면 돌격 — 연사보다 먼저 고른다', () => {
+    const ch = enemyDef('goblin_chieftain').chargeAttack!;
+    const mid = ((ch.minRange ?? 0) + ch.maxRange!) / 2;
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + mid, 6, 1);
+    boss.ai = 'chase';
+    world.enemies.push(boss);
+    const charges: unknown[] = [];
+    world.events.on('enemy_charge', (p) => charges.push(p));
+
+    tickEnemiesUntil(() => boss.ai === 'windup');
+    expect(boss.attackMode).toBe('charge'); // 화살 세례가 아니라 돌격
+    expect(charges).toHaveLength(1);
+    expect(boss.chargeCooldown).toBe(ch.cooldownTicks);
+  });
+
+  it('돌격 사거리 밖(멀리)에서는 화살 세례로 돌아간다', () => {
+    const ch = enemyDef('goblin_chieftain').chargeAttack!;
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + ch.maxRange! + 3, 6, 1);
+    boss.ai = 'chase';
+    world.enemies.push(boss);
+    tickEnemiesUntil(() => boss.ai === 'windup');
+    expect(boss.attackMode).toBe('volley');
+  });
+
+  it('붙으면 던지기를 접고 해머로 — 연사 중이어도 끊긴다', () => {
+    const volley = enemyDef('goblin_chieftain').volleyAttack!;
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + 14, 6, 1);
+    boss.ai = 'chase';
+    boss.chargeCooldown = 9999; // 돌격 말고 연사를 쓰게
+    world.enemies.push(boss);
+    const held: unknown[] = [];
+    world.events.on('enemy_hold_fire', (p) => held.push(p));
+
+    tickEnemiesUntil(() => boss.ai === 'volley');
+    Enemies.tick(world, DT); // 첫 발
+    expect(world.projectiles.length).toBeGreaterThan(0);
+
+    // 플레이어가 코앞까지 붙는다
+    boss.x = world.player.x + volley.abortRange! - 0.5;
+    Enemies.tick(world, DT);
+    expect(boss.ai).toBe('chase');
+    expect(boss.attackMode).toBe('melee');
+    expect(held).toHaveLength(1);
+    expect(boss.volleyCooldown).toBe(volley.cooldownTicks); // 끊겨도 쿨다운은 문다
+  });
+
+  it('지면 강타는 맞든 빗나가든 ground_slam 을 발행한다 (소리·흔들림용)', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 8.4, 6, 1); // 근접 거리 → 해머
+    boss.ai = 'chase';
+    world.enemies.push(boss);
+    const slams: { radius: number; dist: number }[] = [];
+    world.events.on('ground_slam', (p) => slams.push(p as { radius: number; dist: number }));
+
+    tickEnemiesUntil(() => boss.ai === 'recover', 400);
+    expect(slams).toHaveLength(1);
+    expect(slams[0]!.radius).toBe(enemyDef('goblin_chieftain').attack.aoeRadius);
+    expect(slams[0]!.dist).toBeGreaterThan(0);
+  });
+
   it('화살 세례는 쿨다운 중이면 나가지 않는다', () => {
     const boss = spawnEnemyAt('goblin_chieftain', 18, 6, 1);
     boss.ai = 'chase';
     boss.volleyCooldown = 5;
+    boss.chargeCooldown = 9999;
     world.enemies.push(boss);
     tickEnemiesUntil(() => boss.ai === 'windup');
     expect(boss.attackMode).toBe('ranged'); // 바위 투척으로 대체

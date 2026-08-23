@@ -212,6 +212,8 @@ export interface EnemyState {
   /** 연사 남은 발수 / 재사용 대기 (족장 화살 세례) */
   volleyLeft?: number;
   volleyCooldown?: number;
+  /** 거리 조건으로 나가는 돌격의 재사용 대기 (족장) */
+  chargeCooldown?: number;
   /** 방패로 밀쳐낼 차례 (Weapons가 켜고 Enemies가 실행한다) */
   wantsBash?: boolean;
   /** 연속으로 방패에 막아낸 횟수 — 임계를 넘으면 밀쳐낸다 */

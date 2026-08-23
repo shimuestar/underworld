@@ -44,6 +44,10 @@ export interface EnemyAttackDef {
   projectileKind?: string;
   /** 원거리 공격 사용 최소 거리 (이보다 가까우면 근접) */
   minRange?: number;
+  /** 이 거리 안에서만 고른다 (돌격처럼 "중거리 전용" 기술) */
+  maxRange?: number;
+  /** 시전 중 플레이어가 이 거리 안으로 들어오면 취소하고 근접으로 전환 */
+  abortRange?: number;
   /** 연사 — 1보다 크면 windup 뒤 shotIntervalTicks 간격으로 shots 발을 쏜다 */
   shots?: number;
   shotIntervalTicks?: number;

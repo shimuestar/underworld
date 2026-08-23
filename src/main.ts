@@ -248,6 +248,7 @@ for (const name of [
   'enemy_windup',
   'enemy_whiffed',
   'enemy_charge',
+  'ground_slam',
   'enemy_volley_start',
   'enemy_volley_shot',
   'guard_clash',
@@ -407,6 +408,14 @@ events.on('enemy_alerted', (payload) => {
   audio.play('boss_roar');
   stage.triggerCameraKick(0.7, 420);
   showReaction(`${enemyDef(info.enemyType).name ?? '보스'}가 포효한다`, 2500);
+});
+// 지면 강타 — 맞든 안 맞든 땅이 울린다. 가까울수록 크게 흔들린다
+events.on('ground_slam', (payload) => {
+  const slam = payload as { radius: number; dist: number };
+  audio.play('ground_slam');
+  const outside = Math.max(0, slam.dist - slam.radius);
+  const near = Math.max(0, 1 - outside / 9); // 반경 안이면 1, 9m 더 멀면 0
+  stage.triggerCameraKick(0.45 + 1.35 * near, 430);
 });
 events.on('enemy_volley_start', (payload) => {
   const info = payload as { shots: number };
