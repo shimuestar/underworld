@@ -174,6 +174,24 @@ window.addEventListener('keydown', (e) => {
       );
     }
   }
+  // 테스트용 시야 내 몰살 — 진행 속도를 위한 편의 (슬라이스 검증 시 제거).
+  // 화면에 들어와 있고 벽에 가리지 않은 적만 죽인다
+  if (e.code === 'KeyK' && !world.dead && !world.uiOpen) {
+    const p = world.player;
+    let killed = 0;
+    for (const enemy of world.enemies) {
+      if (!enemy.alive) continue;
+      const def = enemyDef(enemy.type);
+      if (!stage.isInView(enemy.x, def.height * 0.5, enemy.z, def.radius)) continue;
+      if (!level.hasLineOfSight(p.x, p.z, enemy.x, enemy.z)) continue; // 벽 너머는 제외
+      enemy.alive = false;
+      killed++;
+      // enemy_died 만 발행한다 — 드랍·경험치·파편은 돌리되 무기 명중률 통계는 더럽히지 않게
+      events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    }
+    showReaction(killed > 0 ? `(테스트) 시야 내 ${killed}마리 처치` : '(테스트) 시야에 적 없음');
+    console.log('[debug] 시야 내 몰살', killed);
+  }
   // 테스트용 마나 풀충전 — 마법 튜닝 편의 (슬라이스 검증 시 제거)
   if (e.code === 'KeyO' && !world.dead) {
     world.mana.value = balance.mana.max;
@@ -965,7 +983,7 @@ function render(alpha: number): void {
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     'WASD 이동  Shift 질주  좌클릭 원거리(휠 교체)  우클릭 근접  Space 짧게=패링·꾹=방어  Shift+Space 회피\n' +
-    'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O 테스트';
+    'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K 테스트';
 
   stage.render();
 }

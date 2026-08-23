@@ -405,6 +405,25 @@ export class Stage {
     this.exitLight.intensity = left > 0 ? 0.9 + 5 * (left / EXIT_FLASH_MS) : 0.9;
   }
 
+  /** 화면에 실제로 들어와 있는가 — 카메라 절두체 판정.
+   *  yaw 기준 부채꼴 근사가 아니라 진짜 프러스텀이라 화면 가장자리까지 정확하다.
+   *  (디버그 킬 키가 "보고 있는 적"을 고르는 데 쓴다) */
+  isInView(x: number, y: number, z: number, radius: number): boolean {
+    this.camera.updateMatrixWorld();
+    this.viewProjection.multiplyMatrices(
+      this.camera.projectionMatrix,
+      this.camera.matrixWorldInverse,
+    );
+    this.frustum.setFromProjectionMatrix(this.viewProjection);
+    this.viewSphere.center.set(x, y, z);
+    this.viewSphere.radius = radius;
+    return this.frustum.intersectsSphere(this.viewSphere);
+  }
+
+  private readonly frustum = new THREE.Frustum();
+  private readonly viewProjection = new THREE.Matrix4();
+  private readonly viewSphere = new THREE.Sphere();
+
   /** 암시야 각인 — ambient 가산. boost 0 = 레벨 기본값 */
   setAmbientBoost(boost: number): void {
     if (this.ambientLight) this.ambientLight.intensity = this.levelAmbient + boost * 0.22;
