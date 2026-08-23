@@ -165,6 +165,9 @@ export interface WeaponState {
   meleeCooldown: number;
   /** 후딜 중에 눌린 근접 입력을 기억하는 남은 틱 — 풀리는 즉시 이어 친다 */
   meleeBufferTicks?: number;
+  /** 적중 가속 남은 틱 — 해머가 실제로 적을 때린 뒤에만 켜진다. 0보다 크면
+   *  다음 스윙의 예비동작과 후딜이 줄고 뷰모델도 같은 배율로 빨라진다 */
+  meleeRushTicks?: number;
   /** 수류탄 차징 누적 틱 (홀드 중) */
   grenadeCharge: number;
   /** 휘두른 해머가 닿기까지 남은 틱 (0 = 진행 중인 스윙 없음) */

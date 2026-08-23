@@ -401,8 +401,8 @@ export class Stage {
   }
 
   /** step: 연속타 단계 (1·2·3) — 단계마다 궤적이 다르다 */
-  triggerHammerSwing(step = 1): void {
-    this.hands.triggerHammerSwing(step);
+  triggerHammerSwing(step = 1, speedMul = 1): void {
+    this.hands.triggerHammerSwing(step, speedMul);
   }
 
   /** 불발 — 총이 딸깍 들썩이고 탄약 표시가 붉어진다 */

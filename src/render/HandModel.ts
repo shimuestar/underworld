@@ -106,6 +106,7 @@ export class HandModel {
   private swingUntil = 0;
   private swingStart = 0;
   private swingIndex = 0;
+  private swingSpeed = 1;
   private swingFrom: SwingPose | null = null;
   private baseRotX = 0;
   /** 왼팔(총) 자세 보간값 — 가드 블렌드와 별도로 유지된다 */
@@ -243,9 +244,12 @@ export class HandModel {
     for (const mesh of this.grenadeParts) mesh.visible = kind === 'grenade';
   }
 
-  /** step: 1·2·3 연속타 단계. 직전 타의 끝 자세에서 그대로 이어진다 */
-  triggerHammerSwing(step = 1): void {
+  /** step: 1·2·3 연속타 단계. 직전 타의 끝 자세에서 그대로 이어진다.
+   *  speedMul>1 은 적중 가속 — 로직의 impactTicks 가 줄어든 만큼 그림도 빨라져야
+   *  해머가 닿는 순간과 판정 시점이 어긋나지 않는다 */
+  triggerHammerSwing(step = 1, speedMul = 1): void {
     this.swingIndex = Math.max(0, Math.min(COMBO_SWINGS.length - 1, step - 1));
+    this.swingSpeed = Math.max(0.1, speedMul);
     const s = COMBO_SWINGS[this.swingIndex]!;
     // 지금 팔이 있는 위치를 출발점으로 삼는다 — 대기 자세로 되돌아갔다 오지 않는다
     this.swingFrom = {
@@ -255,7 +259,8 @@ export class HandModel {
       y: this.rightArm.position.y,
     };
     this.swingStart = performance.now();
-    this.swingUntil = this.swingStart + s.windupMs + s.strikeMs + s.holdMs + s.returnMs;
+    this.swingUntil =
+      this.swingStart + (s.windupMs + s.strikeMs + s.holdMs + s.returnMs) / this.swingSpeed;
   }
 
   triggerGrenadeThrow(): void {
@@ -386,7 +391,8 @@ export class HandModel {
         x: a.x + (b.x - a.x) * k,
         y: a.y + (b.y - a.y) * k,
       });
-      const e = now - this.swingStart;
+      // 경과 시간을 배속으로 늘려 읽는다 — 아래 구간 길이(ms)는 그대로 두고 전체가 빨라진다
+      const e = (now - this.swingStart) * this.swingSpeed;
       // 이미 그 자세에 있으면 감는 시간을 줄인다 — 아래에 있던 손이 곧바로 올라간다
       const near =
         Math.abs(from.rotX - step.windup.rotX) +

@@ -16,6 +16,7 @@ export function tick(world: World, _dt: number): void {
   if (w.cooldown > 0) w.cooldown--;
   if (w.meleeCooldown > 0) w.meleeCooldown--;
   if ((w.meleeBufferTicks ?? 0) > 0) w.meleeBufferTicks = (w.meleeBufferTicks ?? 0) - 1;
+  if ((w.meleeRushTicks ?? 0) > 0) w.meleeRushTicks = (w.meleeRushTicks ?? 0) - 1;
   // 연속타 유지 시간 — 끊기면 1타부터 다시
   if (w.comboTimer > 0) {
     w.comboTimer--;
@@ -137,7 +138,12 @@ function startHammerSwing(world: World): void {
   w.comboStep = (w.comboTimer > 0 ? w.comboStep : 0) + 1;
   const heavy = w.comboStep >= combo.finisherStep;
   w.swingHeavy = heavy;
-  w.swingImpact = heavy ? combo.heavyImpactTicks : hammer.impactTicks;
+  // 적중 가속 — 직전 타가 실제로 적을 때렸으면 예비동작이 짧아진다.
+  // 뷰모델도 같은 배율로 빨라져야 해머가 닿는 시점과 그림이 어긋나지 않는다
+  const rush = (w.meleeRushTicks ?? 0) > 0;
+  const speedMul = rush ? 1 / combo.hitImpactMul : 1;
+  const impact = heavy ? combo.heavyImpactTicks : hammer.impactTicks;
+  w.swingImpact = rush ? Math.max(1, Math.round(impact * combo.hitImpactMul)) : impact;
   // 닿기 전에는 다시 휘두를 수 없다 (한 스윙에 두 번 들어가는 것을 막는다)
   w.meleeCooldown = w.swingImpact;
 
@@ -152,7 +158,7 @@ function startHammerSwing(world: World): void {
     if (p.webSwingsLeft <= 0) world.events.emit('web_broken', { reason: 'hammer' });
   }
 
-  world.events.emit('hammer_swing', { heavy, step: w.comboStep });
+  world.events.emit('hammer_swing', { heavy, step: w.comboStep, speedMul, rush });
   alertNearby(world, p.x, p.z, hammer.noiseRadius * (heavy ? 2 : 1));
 }
 
@@ -173,6 +179,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
   const facingZ = -Math.cos(p.yaw);
   const arcCos = Math.cos(((arcDeg / 2) * Math.PI) / 180);
   let hitAny = false;
+  let damagedAny = false; // 방패에 튕긴 것은 제외 — 적중 가속은 살을 때렸을 때만
 
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
@@ -267,6 +274,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
       enemy.attackFreezeTicks = Math.max(enemy.attackFreezeTicks ?? 0, combo.chainFlinchTicks);
     }
     hitAny = true;
+    damagedAny = true;
     world.events.emit('melee_hit', { enemyId: enemy.id, damage, heavy });
     if (enemy.health <= 0) {
       enemy.alive = false;
@@ -291,7 +299,11 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     : heavy
       ? hammer.whiffExtraCooldownTicks
       : combo.chainWhiffExtraTicks;
-  w.meleeCooldown = Math.round(base + whiffExtra + blockedRecoil);
+  // 적중 가속 — 때린 만큼 후딜이 줄고, 그 상태가 rushWindowTicks 동안 이어진다.
+  // 놓치면 즉시 원속도로 (때리는 손맛만 빨라지고 헛손질은 벌을 그대로 받는다)
+  w.meleeRushTicks = damagedAny ? combo.rushWindowTicks : 0;
+  const rushMul = damagedAny ? combo.hitCooldownMul : 1;
+  w.meleeCooldown = Math.round(base * rushMul + whiffExtra + blockedRecoil);
 
   if (heavy) {
     w.comboStep = 0; // 마무리 — 다음은 다시 1타부터

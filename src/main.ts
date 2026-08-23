@@ -461,9 +461,9 @@ events.on('block_hit', (payload) => {
 // ---- 무기 — 원거리(좌클릭, 휠 교체) / 근접(우클릭) ----
 events.on('weapon_switched', () => audio.play('weapon_switch'));
 events.on('hammer_swing', (payload) => {
-  const sw = payload as { heavy?: boolean; step?: number };
+  const sw = payload as { heavy?: boolean; step?: number; speedMul?: number };
   audio.play(sw.heavy ? 'hammer_heavy' : 'hammer_swing');
-  stage.triggerHammerSwing(sw.step ?? 1);
+  stage.triggerHammerSwing(sw.step ?? 1, sw.speedMul ?? 1);
   if (sw.heavy) showReaction('강타!', 700);
 });
 events.on('melee_hit', (payload) => {
