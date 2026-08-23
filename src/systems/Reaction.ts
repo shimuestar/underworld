@@ -216,7 +216,12 @@ export function tick(world: World, _dt: number): void {
         });
         world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
       } else {
-        enemy.timer = 1; // 다음 틱에 스태거 종료 → 후딜로 (연속 처형 방지)
+        // 스태거는 처형 한 번으로 끝난다 — 여기서 바로 후딜로 넘긴다.
+        // timer 만 1로 줄이면 "다음 틱"이 오지 않는다: 처형 연출 동안
+        // (executeFocusTicks 32틱) Enemies 가 통째로 멈춰 staggered 가 그대로 남고,
+        // 연타하면 한 번의 스태거에 처형이 6번 들어가 840이 통째로 날아갔다(실측)
+        enemy.ai = 'recover';
+        enemy.timer = currentAttack(def, enemy).recoverTicks;
       }
       return;
     }

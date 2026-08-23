@@ -260,9 +260,29 @@ describe('goblin_chieftain (1구역 보스)', () => {
     expect(boss.health).toBe(def.health - def.executeDamage!);
     expect(boss.alive).toBe(true);
 
-    // 처형 연출 동안은 적 전체가 멈춘다 — 그 시간을 지나야 스태거가 끝난다
-    for (let i = 0; i < balance.reaction.executeFocusTicks + 1; i++) Enemies.tick(world, DT);
-    expect(boss.ai).not.toBe('staggered'); // 스태거 소모 — 연속 처형 불가
+    // 스태거는 그 자리에서 끝난다 — Enemies 를 한 틱도 돌리지 않아도
+    expect(boss.ai).toBe('recover');
+  });
+
+  it('한 번의 스태거에 처형은 한 번 — 연타해도 두 번째는 안 들어간다', () => {
+    const boss = makeBoss();
+    const def = enemyDef('goblin_chieftain');
+    boss.ai = 'staggered';
+    boss.timer = balance.reaction.staggerTicks;
+    world.enemies.push(boss);
+
+    const hits: unknown[] = [];
+    world.events.on('boss_execute', (p) => hits.push(p));
+
+    // 처형 연출 동안 Enemies 는 통째로 멈춘다(executeFocusTicks) — 그 사이에
+    // 연타하면 staggered 가 남아 있어 처형이 몇 번이고 들어가던 버그
+    for (let i = 0; i < 10; i++) {
+      pressReaction();
+      Enemies.tick(world, DT); // 연출 프리즈로 아무 일도 안 일어나는 틱
+    }
+    expect(hits).toHaveLength(1);
+    expect(boss.health).toBe(def.health - def.executeDamage!);
+    expect(boss.alive).toBe(true); // 만피에서 한 스태거로 죽지 않는다
   });
 
   it('장갑 페이즈는 없다 — 스태거 뒤에도 총알이 그대로 체력을 깎는다', () => {
