@@ -73,7 +73,10 @@ export interface EnemyAttackDef {
 export interface EnemyDef {
   /** 표시 이름 (이름표) */
   name?: string;
+  /** 총 체력. healthBars 가 있으면 이 값을 그만큼 나눠 표시한다 */
   health: number;
+  /** 체력 바 칸 수 (보스 2단). 없으면 1칸 */
+  healthBars?: number;
   /** 처치 시 획득 경험치 */
   xp: number;
   /** 체급 — 넉백 저항 등에 쓴다 (light / medium / heavy) */
@@ -127,6 +130,21 @@ export function currentAttack(def: EnemyDef, enemy: { attackMode?: string }): En
   if (enemy.attackMode === 'volley' && def.volleyAttack) return def.volleyAttack;
   if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
   return def.attack;
+}
+
+/** 체력 바 분할 — healthBars 만큼 나눠 표시한다 (보스는 2칸).
+ *  index 는 지금 깎이고 있는 칸(1부터 세고 마지막 칸이 1), frac 은 그 칸 안의 비율.
+ *  HUD 와 이름표가 같은 함수를 쓴다 — 갈리면 "바는 찼는데 ×1" 같은 어긋남이 난다 */
+export function healthBarState(
+  def: EnemyDef,
+  health: number,
+): { count: number; index: number; frac: number } {
+  const count = def.healthBars ?? 1;
+  const perBar = def.health / count;
+  const hp = Math.max(0, health);
+  const index = Math.min(count, Math.max(1, Math.ceil(hp / perBar)));
+  const frac = Math.min(1, Math.max(0, (hp - (index - 1) * perBar) / perBar));
+  return { count, index, frac };
 }
 
 /** 이 근접 공격의 유효 범위 안에 (x,z)가 있는가.

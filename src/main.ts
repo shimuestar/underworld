@@ -26,7 +26,7 @@ import * as Altar from './systems/Altar';
 import * as Exit from './systems/Exit';
 import * as Lever from './systems/Lever';
 import * as Lantern from './systems/Lantern';
-import { enemyDef } from './core/Entities';
+import { enemyDef, healthBarState } from './core/Entities';
 import { ShopUI } from './render/ShopUI';
 import { SigilUI } from './render/SigilUI';
 import { sigilDef } from './core/SigilData';
@@ -913,6 +913,9 @@ const lanternRow = document.getElementById('status-lantern')!;
 const lanternFill = document.getElementById('status-lantern-fill')!;
 const lanternText = document.getElementById('status-lantern-text')!;
 
+// 보스 체력 칸 색 — 마지막 칸(×1)은 HUD 기본색과 같은 계열, 그 앞 칸은 보라로 구분한다
+const BOSS_BAR_COLORS = { outer: '#b070e8', last: '#ff7a6b' };
+
 function render(alpha: number): void {
   const now = performance.now();
   runDelayedFx(now);
@@ -1080,20 +1083,23 @@ function render(alpha: number): void {
   const aliveCount = world.enemies.filter((e) => e.alive).length;
   if (performance.now() > reactionLabelUntil) reactionLabel = '';
 
-  // 보스 체력 바 (어그로 상태일 때만)
+  // 보스 체력 바 (어그로 상태일 때만) — 칸(×N)마다 색이 다르다
   const boss = world.enemies.find((e) => e.alive && enemyDef(e.type).boss && e.ai !== 'idle');
   let bossLine = '';
+  let bossBarColor = '';
   if (boss) {
     const def = enemyDef(boss.type);
-    const frac = Math.max(0, boss.health / def.health);
-    const bar = '█'.repeat(Math.round(frac * 24)).padEnd(24, '░');
+    const hb = healthBarState(def, boss.health);
+    bossBarColor = hb.index > 1 ? BOSS_BAR_COLORS.outer : BOSS_BAR_COLORS.last;
+    const bar = '█'.repeat(Math.round(hb.frac * 24)).padEnd(24, '░');
+    const stage2 = hb.count > 1 ? ` ×${hb.index}` : '';
     const streak = `패링 ${boss.parryStreak ?? 0}/${def.parriesToStagger}`;
-    bossLine = `족장 ${bar} ${Math.max(0, Math.round(boss.health))}/${def.health}  [${streak}]\n`;
+    bossLine = `족장${stage2} ${bar} ${Math.max(0, Math.round(boss.health))}/${def.health}  [${streak}]\n`;
   }
   const mana = world.mana;
   const chainMult = balance.chain.multipliers[Math.min(mana.chainIndex, balance.chain.multipliers.length - 1)]!;
   const manaBar = '█'.repeat(Math.round((mana.value / balance.mana.max) * 20)).padEnd(20, '░');
-  hud!.textContent =
+  const hudText =
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
     `HP ${Math.max(0, Math.round(p.health))}   9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}${p.blocking ? '  [방어]' : ''}\n` +
     `mana ${manaBar} ${mana.value.toFixed(0)}/${balance.mana.max}  chain ×${chainMult}${!mana.inCombat && mana.outOfCombatTicks >= balance.mana.combatExitTicks && mana.value > 0 ? '  [휘발중]' : ''}\n` +
@@ -1105,6 +1111,17 @@ function render(alpha: number): void {
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     'WASD 이동  Shift 질주  좌클릭 원거리(휠 교체)  우클릭 근접  Space 짧게=패링·꾹=방어  Shift+Space 회피\n' +
     'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트';
+
+  // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
+  // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)
+  if (bossLine) {
+    hud!.innerHTML = hudText.replace(
+      bossLine.slice(0, -1),
+      `<span style="color:${bossBarColor}">${bossLine.slice(0, -1)}</span>`,
+    );
+  } else {
+    hud!.textContent = hudText;
+  }
 
   stage.render();
 }

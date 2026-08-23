@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
-import { currentAttack, enemyDef } from '../core/Entities';
+import { currentAttack, enemyDef, healthBarState } from '../core/Entities';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, glyphTexture } from '../level/GridLoader';
 import type { EnemyState, GroundItemState, ProjectileState } from '../core/World';
 import { FINISHER_CONTACT_MS, HandModel } from './HandModel';
@@ -245,17 +245,31 @@ interface EnemyVisual {
 const PLATE_W = 256;
 const PLATE_H = 72;
 
-function drawPlate(canvas: HTMLCanvasElement, name: string, healthFrac: number): void {
+/** 남은 칸 수별 바 색. 마지막 칸(1)만 잔량에 따라 초록→노랑→빨강으로 변한다 */
+const PLATE_BAR_COLORS = ['#b070e8', '#4fc3ff']; // 2칸째 보라, 3칸째 하늘 (여유분)
+function barColor(index: number, frac: number): string {
+  if (index > 1) return PLATE_BAR_COLORS[Math.min(index - 2, PLATE_BAR_COLORS.length - 1)]!;
+  return frac > 0.5 ? '#3fae5a' : frac > 0.25 ? '#c9a227' : '#e04444';
+}
+
+function drawPlate(
+  canvas: HTMLCanvasElement,
+  name: string,
+  healthFrac: number,
+  barIndex = 1,
+  barCount = 1,
+): void {
   const ctx = canvas.getContext('2d')!;
   ctx.clearRect(0, 0, PLATE_W, PLATE_H);
 
+  const label = barCount > 1 ? `${name} ×${barIndex}` : name;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = 'bold 24px monospace';
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillText(name, 129, 19);
+  ctx.fillText(label, 129, 19);
   ctx.fillStyle = '#e8e8ee';
-  ctx.fillText(name, 128, 18);
+  ctx.fillText(label, 128, 18);
 
   // HP 바
   const barX = 28;
@@ -265,8 +279,15 @@ function drawPlate(canvas: HTMLCanvasElement, name: string, healthFrac: number):
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
   const frac = Math.max(0, Math.min(1, healthFrac));
-  ctx.fillStyle = frac > 0.5 ? '#3fae5a' : frac > 0.25 ? '#c9a227' : '#e04444';
+  ctx.fillStyle = barColor(barIndex, frac);
   ctx.fillRect(barX, barY, barW * frac, barH);
+  // 남은 칸 표시 — 뒤에 칸이 더 있으면 바 아래 얇은 선으로 몇 칸인지 알려 준다
+  if (barIndex > 1) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(barX - 2, barY + barH + 3, barW + 4, 5);
+    ctx.fillStyle = barColor(barIndex - 1, 1);
+    ctx.fillRect(barX, barY + barH + 4, barW, 3);
+  }
 }
 const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 그린다 (근접부 왜곡 방지)
 const TRACER_WIDTH = 0.022;
@@ -1233,7 +1254,8 @@ export class Stage {
         const key = `${Math.ceil(enemy.health)}`;
         if (key !== visual.plateKey) {
           visual.plateKey = key;
-          drawPlate(visual.plateCanvas, def2.name ?? enemy.type, enemy.health / def2.health);
+          const hb = healthBarState(def2, enemy.health);
+          drawPlate(visual.plateCanvas, def2.name ?? enemy.type, hb.frac, hb.index, hb.count);
           visual.plateTexture.needsUpdate = true;
         }
       }

@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
-import { attackReaches, enemyDef } from '../core/Entities';
+import { attackReaches, enemyDef, healthBarState } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World } from '../core/World';
@@ -296,6 +296,43 @@ describe('goblin_chieftain (1구역 보스)', () => {
     for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
     expect(blocked).toHaveLength(0);
     expect(boss.health).toBeLessThan(before);
+  });
+});
+
+describe('보스 체력 2칸', () => {
+  it('총량을 healthBars 로 나눠 표시한다 — 첫 칸을 다 깎아야 ×1 로 넘어간다', () => {
+    const def = enemyDef('goblin_chieftain');
+    expect(def.healthBars).toBe(2);
+    const perBar = def.health / def.healthBars!;
+
+    expect(healthBarState(def, def.health)).toMatchObject({ count: 2, index: 2, frac: 1 });
+    expect(healthBarState(def, perBar + 1).index).toBe(2); // 1 남아도 아직 두 번째 칸
+    expect(healthBarState(def, perBar).index).toBe(1); // 딱 절반 = 마지막 칸이 가득
+    expect(healthBarState(def, perBar).frac).toBe(1);
+    expect(healthBarState(def, perBar / 2)).toMatchObject({ index: 1, frac: 0.5 });
+    expect(healthBarState(def, 0)).toMatchObject({ index: 1, frac: 0 });
+    expect(healthBarState(def, -50)).toMatchObject({ index: 1, frac: 0 }); // 과피해도 안 깨진다
+  });
+
+  it('바가 없는 적은 한 칸으로 다룬다', () => {
+    const def = enemyDef('goblin_runner');
+    expect(def.healthBars).toBeUndefined();
+    expect(healthBarState(def, def.health)).toMatchObject({ count: 1, index: 1, frac: 1 });
+    expect(healthBarState(def, def.health / 4).frac).toBe(0.25);
+  });
+
+  it('처형 타격은 총량의 15% 이상이다 — 완벽 패링 3연속의 대가', () => {
+    const def = enemyDef('goblin_chieftain');
+    expect(def.executeDamage! / def.health).toBeGreaterThan(0.15);
+    const boss = spawnEnemyAt('goblin_chieftain', 8.4, 6, 1);
+    boss.ai = 'staggered';
+    boss.timer = 90;
+    world.enemies.push(boss);
+
+    pressReaction();
+    expect(boss.health).toBe(def.health - def.executeDamage!);
+    // 첫 칸(×2) 안에서 끝난다 — 한 방에 칸이 넘어갈 만큼 세지는 않다
+    expect(healthBarState(def, boss.health).index).toBe(2);
   });
 });
 

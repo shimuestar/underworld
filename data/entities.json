@@ -82,7 +82,8 @@
     "goblin_chieftain": {
       "name": "고블린 족장",
       "zone": 1, "slice": true, "boss": true,
-      "weight": "heavy", "xp": 250, "health": 420, "speed": 4.0, "damage": 30,
+      "weight": "heavy", "xp": 250, "health": 840, "healthBars": 2, "speed": 4.0, "damage": 30,
+      "_healthNote": "health 는 총량이고 healthBars 로 나눠 표시한다 — 420 짜리 두 칸. 첫 칸(×2)을 다 깎으면 색이 바뀌며 두 번째(×1)로 넘어간다",
       "radius": 0.8, "height": 2.4,
       "aggroRange": 18, "attackRange": 3.4,
       "_aoeNote": "족장 해머는 땅을 내리쳐 원형 범위로 판정한다 — 옆으로 비켜도 소용없고 반경 밖으로 물러나야 한다. 예고 중 바닥에 원이 그려진다",
@@ -96,7 +97,8 @@
       "perfectParryOnly": true,
       "parryAlwaysNormal": true,
       "blockCannotStagger": true,
-      "parriesToStagger": 3, "executeDamage": 60,
+      "_executeNote": "완벽 패링 3연속을 모아야 한 번 나가는 타격이라 크게 준다 — 총 840 기준 17.9%, 즉 처형만으로 잡으려면 완벽 패링 17번. 60(7%)일 땐 3연속 패링의 대가로 너무 초라했다",
+      "parriesToStagger": 3, "executeDamage": 150,
       "counters": { "pistol": "good", "rifle": "best", "grenade": "good", "flash": "good", "melee": "good", "magic": "poor", "deflect": "none" },
       "drops": ["sig_darkvision"], "dropsOnDeath": true
     },
