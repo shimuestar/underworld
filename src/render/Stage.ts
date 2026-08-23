@@ -1161,6 +1161,7 @@ export class Stage {
       const frozenWhiff = enemy.ai === 'recover' && enemy.whiffed === true;
       // 방패에 막혀 튕긴 경직 — 상체가 크게 젖혀진 채 굳는다
       const recoiled = enemy.ai === 'recover' && enemy.recoiled === true;
+      const charging = enemy.ai === 'charging';
       const striking =
         enemy.ai === 'active_perfect' ||
         enemy.ai === 'active_normal' ||
@@ -1192,6 +1193,11 @@ export class Stage {
         // 치켜들 때 몸을 젖히고(+), 내리칠 때 앞으로 숙인다(-)
         leanTarget = striking && isMelee ? -0.42 : inWindup ? 0.28 * windupProgress : 0;
         lungeTarget = striking && isMelee ? -0.5 : 0;
+        // 돌격 달리기 — 무기를 치켜든 채 앞으로 숙이고 달려온다
+        if (charging) {
+          leanTarget = -0.22 + Math.sin(now / 70) * 0.05;
+          lungeTarget = 0;
+        }
       }
       // 화살 세례 — 예고부터 발사 내내 상체를 젖힌 채 버틴다 (바위 투척과 구분되는 자세)
       const volleying =
@@ -1288,7 +1294,9 @@ export class Stage {
           }
         } else {
           armRotTarget = ARM_REST;
-          if (isMelee && inWindup) {
+          if (charging) {
+            armRotTarget = ARM_RAISED; // 치켜든 채로 달려온다
+          } else if (isMelee && inWindup) {
             armRotTarget = ARM_REST + (ARM_RAISED - ARM_REST) * windupProgress;
             if (trembling) armRotTarget += Math.sin(now / 12) * 0.08;
           } else if (isMelee && striking) {
@@ -1312,12 +1320,14 @@ export class Stage {
       // 지면 강타 범위 원 — 예고 내내 보이고 진행할수록 진해진다. 반경은 실제 판정과 같다
       if (visual.aoeRing && visual.aoeRingMaterial) {
         const aoe = attack.aoeRadius;
-        const show = aoe !== undefined && (inWindup || striking);
+        // 달려오는 동안에도 보여준다 — 위험 범위가 밀려오는 게 보여야 물러날 수 있다
+        const show = aoe !== undefined && (inWindup || charging || striking);
         visual.aoeRing.visible = show;
         if (show) {
           visual.aoeRing.scale.set(aoe!, aoe!, 1);
           // 예고 중엔 차오르고, 내리치는 순간 가장 진하다
           visual.aoeRingMaterial.opacity = inWindup ? 0.18 + 0.42 * windupProgress : 0.75;
+          if (charging) visual.aoeRingMaterial.opacity = 0.6;
         }
       }
 

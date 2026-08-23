@@ -24,6 +24,9 @@ export interface EnemyAttackDef {
   arcDeg?: number;
   /** 타격 구간 동안 플레이어를 향해 달려드는 속도 (돌격 공격) */
   chargeSpeed?: number;
+  /** 예고 뒤 따로 달리는 구간(틱). 있으면 이 동안 chargeSpeed 로 달린 뒤 타격한다.
+   *  없으면 타격 창(0.3초) 동안만 파고들어 3~4m 밖에 못 좁힌다 */
+  chargeRunTicks?: number;
   /** 이 공격만의 피해량 (없으면 def.damage) */
   damage?: number;
   /** 이 공격만의 플레이어 밀림 거리 (없으면 balance.playerKnockback[type]) */

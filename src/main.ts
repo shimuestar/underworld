@@ -587,9 +587,11 @@ events.on('guard_clash', (payload) => {
   );
   if (!parry) showReaction('막았다! 반격 기회', 800);
 });
-events.on('enemy_charge', () => {
+events.on('enemy_charge', (payload) => {
+  const info = payload as { enemyType: string };
   audio.play('telegraph_blue');
-  showReaction('창병이 달려든다!', 900);
+  // 창병만 쓰던 기술이 아니다 — 족장도 중·원거리에서 달려든다
+  showReaction(`${enemyDef(info.enemyType).name ?? '적'}이 달려든다!`, 900);
 });
 events.on('enemy_whiffed', () => {
   audio.play('enemy_whiff');

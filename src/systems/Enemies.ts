@@ -270,6 +270,10 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         fireProjectile(world, enemy, attack);
         enemy.ai = 'recover';
         enemy.timer = attack.recoverTicks;
+      } else if (attack.chargeRunTicks) {
+        // 돌격 — 타격 전에 따로 달리는 구간. 붙거나 시간이 다하면 내리친다
+        enemy.ai = 'charging';
+        enemy.timer = attack.chargeRunTicks;
       } else if (attack.parryable) {
         enemy.ai = 'active_perfect';
         enemy.timer = balance.reaction.windowPerfectTicks;
@@ -298,6 +302,25 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       advanceStrike(enemy, def, attack);
       chargeForward(world, enemy, def, attack, distX, distZ, dist, dt);
       if (enemy.timer <= 0) enemy.ai = 'impact';
+      break;
+    }
+
+    // 돌격 달리기 — 사거리에 들거나 시간이 다하면 타격으로 넘어간다.
+    // 이 구간은 패링 대상이 아니다 (판정은 붙은 뒤 타격 창에서 열린다)
+    case 'charging': {
+      enemy.timer--;
+      if (dist > 0) {
+        enemy.yaw = Math.atan2(-distX, -distZ);
+        moveAvoiding(world, enemy, def, distX / dist, distZ / dist, attack.chargeSpeed! * dt);
+      }
+      if (dist <= def.attackRange || enemy.timer <= 0) {
+        if (attack.parryable) {
+          enemy.ai = 'active_perfect';
+          enemy.timer = balance.reaction.windowPerfectTicks;
+        } else {
+          enemy.ai = 'impact';
+        }
+      }
       break;
     }
 

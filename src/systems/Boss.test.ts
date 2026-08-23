@@ -252,8 +252,9 @@ describe('goblin_chieftain 원거리 공격', () => {
 
   it('화살 세례 — 예고 뒤 0.5초 간격으로 10발, 그동안 제자리', () => {
     const volley = enemyDef('goblin_chieftain').volleyAttack!;
-    const boss = spawnEnemyAt('goblin_chieftain', 18, 6, 1); // dist 12 > chargeAttack.maxRange
+    const boss = spawnEnemyAt('goblin_chieftain', 18, 6, 1);
     boss.ai = 'chase';
+    boss.chargeCooldown = 9999; // 돌격이 먼저 나가지 않게 (이제 15m 까지 닿는다)
     world.enemies.push(boss);
     const starts: { shots: number }[] = [];
     const shots: { left: number }[] = [];
@@ -293,6 +294,28 @@ describe('goblin_chieftain 원거리 공격', () => {
     expect(boss.z).toBeCloseTo(heldZ, 5);
     expect(boss.volleyCooldown).toBe(volley.cooldownTicks);
     expect(boss.attackMode).toBe('melee'); // 끝나면 평소 모드로
+  });
+
+  it('돌격은 예고 뒤 따로 달려 거리를 좁힌다 — 타격 창만으로는 못 닿는다', () => {
+    const ch = enemyDef('goblin_chieftain').chargeAttack!;
+    const def = enemyDef('goblin_chieftain');
+    const start = 12; // 타격 창(0.3초 × chargeSpeed ≒ 3.9m)만으로는 절대 못 닿는 거리
+    expect(start - balance.reaction.windowPerfectTicks / 60 * ch.chargeSpeed!).toBeGreaterThan(
+      def.attackRange,
+    );
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + start, 6, 1);
+    boss.ai = 'chase';
+    world.enemies.push(boss);
+
+    tickEnemiesUntil(() => boss.ai === 'charging', 300);
+    expect(boss.attackMode).toBe('charge');
+    const atRunStart = boss.x - world.player.x;
+
+    tickEnemiesUntil(() => boss.ai !== 'charging', 300);
+    const atStrike = boss.x - world.player.x;
+    expect(atStrike).toBeLessThan(atRunStart - 5); // 달려서 크게 좁혔다
+    expect(atStrike).toBeLessThanOrEqual(def.attackRange + 0.2); // 사거리 안까지 붙었다
+    expect(boss.ai).toBe('active_perfect'); // 붙은 뒤에야 패링 창이 열린다
   });
 
   it('중거리에 들어오면 돌격 — 연사보다 먼저 고른다', () => {

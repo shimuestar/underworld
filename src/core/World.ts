@@ -184,7 +184,9 @@ export type EnemyAiState =
   | 'recover'
   | 'staggered'
   /** 연사 — 제자리에서 일정 간격으로 여러 발 (족장 화살 세례) */
-  | 'volley';
+  | 'volley'
+  /** 돌격 달리기 — 예고 뒤 타격 전까지 플레이어를 향해 달린다 */
+  | 'charging';
 
 export interface EnemyState {
   id: number;
