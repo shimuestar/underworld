@@ -459,8 +459,22 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
     if (!enemy.alive) continue;
     const dist = Math.hypot(enemy.x - proj.x, enemy.z - proj.z);
     if (dist > grenade.radius) continue;
-    const damage = damageAt(dist);
+    let damage = damageAt(dist);
     if (enemy.ai === 'idle') enemy.ai = 'chase';
+
+    // 정면 방패로 폭풍을 받아내면 방패가 부서진다 — 화염구와 같은 규칙.
+    // 방패가 충격을 일부 먹으므로 피해도 그만큼 줄어든다
+    if (shieldBlocksProjectile(enemyDef(enemy.type), enemy, proj.x, proj.z)) {
+      enemy.shieldBroken = true;
+      damage *= balance.shieldBreak.damageRatio;
+      world.events.emit('shield_broken', {
+        enemyId: enemy.id,
+        enemyType: enemy.type,
+        x: enemy.x,
+        z: enemy.z,
+      });
+    }
+
     // 폭발은 물리 피해 — 보스 장갑은 깎고, 방어막은 무시한다
     if (enemy.phase === 'armored' && (enemy.armorHealth ?? 0) > 0) {
       enemy.armorHealth = Math.max(0, (enemy.armorHealth ?? 0) - damage);

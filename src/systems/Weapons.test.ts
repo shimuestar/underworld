@@ -430,6 +430,60 @@ describe('방패 파괴 (화염구)', () => {
     expect(enemy.health).toBeLessThan(hpAfterFireball);
   });
 
+  /** 적 기준 offsetX 만큼 떨어진 곳에서 수류탄을 터뜨린다 (신관 만료) */
+  function grenadeAt(enemy: EnemyState, offsetX: number, id: number): void {
+    const gx = enemy.x + offsetX;
+    world.projectiles.push({
+      id, owner: 'player',
+      x: gx, y: 0.2, z: enemy.z, prevX: gx, prevY: 0.2, prevZ: enemy.z,
+      vx: 0, vy: 0, vz: 0, lifeTicks: 1, damage: 0,
+      burnTicks: 0, burnDamagePerTick: 0, radius: 0.2, kind: 'grenade',
+    });
+    Projectiles.tick(world, DT);
+  }
+
+  /** 폭심에서 dist 떨어진 지점의 수류탄 피해 */
+  function grenadeDamageAt(dist: number): number {
+    const g = balance.weapons.grenade;
+    return g.damage * (1 - (1 - g.damageFalloffMin) * Math.min(1, dist / g.radius));
+  }
+
+  it('수류탄 폭풍을 방패로 받아내면 방패가 부서진다 — 피해도 damageRatio 배', () => {
+    const enemy = shieldman(4); // 플레이어(−X 쪽)를 정면으로 본다
+    const broken: { enemyType: string }[] = [];
+    world.events.on('shield_broken', (payload) => broken.push(payload as { enemyType: string }));
+
+    grenadeAt(enemy, -1.5, 800); // 정면(플레이어 쪽) 1.5m 앞에서 폭발
+
+    expect(enemy.shieldBroken).toBe(true);
+    expect(broken[0]).toMatchObject({ enemyType: 'goblin_spear' });
+    expect(1000 - enemy.health).toBeCloseTo(
+      grenadeDamageAt(1.5) * balance.shieldBreak.damageRatio,
+      3,
+    );
+  });
+
+  it('등 뒤에서 터진 수류탄은 방패와 무관 — 온전한 피해', () => {
+    const enemy = shieldman(4);
+    grenadeAt(enemy, 1.5, 801); // 등 뒤 1.5m
+
+    expect(enemy.shieldBroken).toBeUndefined();
+    expect(1000 - enemy.health).toBeCloseTo(grenadeDamageAt(1.5), 3);
+  });
+
+  it('이미 부서진 방패는 다시 부서지지 않는다 — 두 번째 수류탄은 온전한 피해', () => {
+    const enemy = shieldman(4);
+    const broken: unknown[] = [];
+    world.events.on('shield_broken', () => broken.push(1));
+
+    grenadeAt(enemy, -1.5, 802);
+    const hpAfterFirst = enemy.health;
+    grenadeAt(enemy, -1.5, 803);
+
+    expect(broken).toHaveLength(1);
+    expect(hpAfterFirst - enemy.health).toBeCloseTo(grenadeDamageAt(1.5), 3);
+  });
+
   it('뒤로 밀려나는 동안은 방패가 내려가 총알이 박힌다 — 끝나면 다시 막는다', () => {
     const enemy = shieldman(4);
     const blocked: unknown[] = [];
