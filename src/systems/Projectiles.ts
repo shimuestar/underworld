@@ -77,6 +77,16 @@ function tryCast(world: World): void {
   world.events.emit('cast_spell', { sigil: sigilId, cost });
 }
 
+/** 부순 적 투사체를 배열에서 뺀다. 자기 자신을 먼저 지운 뒤 호출해야 한다 —
+ *  뒤에서 앞으로 도는 루프라 아래쪽 원소가 빠지면 남은 인덱스가 당겨진다.
+ *  다음 회차가 배열 밖을 보거나 하나를 건너뛰지 않게 맞춘 인덱스를 돌려준다 */
+function removeBroken(world: World, broken: ProjectileState | null, i: number): number {
+  if (!broken) return i;
+  const j = world.projectiles.indexOf(broken);
+  if (j >= 0) world.projectiles.splice(j, 1);
+  return Math.min(i, world.projectiles.length);
+}
+
 function moveProjectiles(world: World, dt: number): void {
   const level = world.level;
   for (let i = world.projectiles.length - 1; i >= 0; i--) {
@@ -227,17 +237,30 @@ function moveProjectiles(world: World, dt: number): void {
     }
 
     if (hitT <= stepLen) {
-      // 수류탄 — 벽·천장은 튕기고, 바닥에 닿거나 몸(·폭발통)에 맞으면 터진다
+      // 부순 적 투사체 — 화염구든 수류탄이든 같은 취급. 알리는 건 여기서 한 번만
+      if (hitProjectile) {
+        world.events.emit('projectile_broken', {
+          x: hitProjectile.x,
+          y: hitProjectile.y,
+          z: hitProjectile.z,
+          kind: hitProjectile.kind,
+          radius: hitProjectile.radius,
+        });
+      }
+
+      // 수류탄 — 벽·천장은 튕기고, 바닥에 닿거나 몸(·폭발통·부술 것)에 맞으면 터진다
       if (proj.kind === 'grenade') {
         proj.x += dirX * hitT;
         proj.y += dirY * hitT;
         proj.z += dirZ * hitT;
-        const bodyHit = hitEnemy !== null || hitPlayer || hitBarrelTarget !== null;
+        const bodyHit =
+          hitEnemy !== null || hitPlayer || hitBarrelTarget !== null || hitProjectile !== null;
         if (!bodyHit && (hitSurface === 'wall' || hitSurface === 'ceiling')) {
           if (bounceGrenade(world, proj, hitSurface, wall.axis, dirX, dirY, dirZ)) continue;
         }
         explodeGrenade(world, proj);
         world.projectiles.splice(i, 1);
+        i = removeBroken(world, hitProjectile, i);
         continue;
       }
       // 폭발통에 꽂혔다 — 마법·화염구는 즉발이다 (총·해머의 누적 규칙과 다르다)
@@ -254,15 +277,6 @@ function moveProjectiles(world: World, dt: number): void {
       }
 
       // 착탄
-      if (hitProjectile) {
-        world.events.emit('projectile_broken', {
-          x: hitProjectile.x,
-          y: hitProjectile.y,
-          z: hitProjectile.z,
-          kind: hitProjectile.kind,
-          radius: hitProjectile.radius,
-        });
-      }
       world.events.emit('spell_impact', {
         x: proj.x + dirX * hitT,
         y: proj.y + dirY * hitT,
@@ -350,14 +364,7 @@ function moveProjectiles(world: World, dt: number): void {
         applyProjectileHit(world, proj, hitEnemy, shieldedAtImpact);
       }
       world.projectiles.splice(i, 1);
-      if (hitProjectile) {
-        // 자기 자신을 먼저 지운 뒤 상대를 지운다 — 인덱스로 지우면 서로 밀린다
-        const j = world.projectiles.indexOf(hitProjectile);
-        if (j >= 0) world.projectiles.splice(j, 1);
-        // 아래쪽 원소가 빠지면 남은 인덱스가 당겨진다. 다음 회차가 배열 밖을
-        // 가리키지 않게 맞춰 준다 (건너뛰거나 두 번 도는 것도 함께 막힌다)
-        i = Math.min(i, world.projectiles.length);
-      }
+      i = removeBroken(world, hitProjectile, i);
       continue;
     }
 

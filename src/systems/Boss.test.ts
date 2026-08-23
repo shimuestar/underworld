@@ -6,6 +6,7 @@ import { attackReaches, enemyDef, healthBarState } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World } from '../core/World';
+import { sigilDef } from '../core/SigilData';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
@@ -390,6 +391,44 @@ describe('날아오는 바위 깨기', () => {
     throwRock();
     for (let i = 0; i < 60 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
     expect(world.player.health).toBeLessThan(100);
+  });
+
+  it('수류탄도 바위를 깬다 — 튕기지 않고 그 자리에서 터진다', () => {
+    const rock = throwRock();
+    const nade = {
+      id: 5, owner: 'player' as const,
+      x: 6, y: 1.2, z: 6, prevX: 6, prevY: 1.2, prevZ: 6,
+      vx: 22, vy: 0, vz: 0,
+      lifeTicks: 120, damage: balance.weapons.grenade.damage,
+      burnTicks: 0, burnDamagePerTick: 0, radius: 0.2, kind: 'grenade' as const,
+    };
+    world.projectiles.push(nade);
+    const broken: unknown[] = [];
+    const booms: unknown[] = [];
+    world.events.on('projectile_broken', (p) => broken.push(p));
+    world.events.on('explosion', (p) => booms.push(p));
+
+    for (let i = 0; i < 40 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(broken).toHaveLength(1);
+    expect(booms).toHaveLength(1); // 튕긴 게 아니라 터졌다
+    expect(world.projectiles).not.toContain(rock);
+    expect(world.projectiles).not.toContain(nade);
+    expect(world.player.health).toBe(100);
+  });
+
+  it('바위를 깬 화염구는 그 자리에서 터져 주변 적을 함께 친다', () => {
+    // 바위가 오는 길목에 적을 세워 둔다 — 바위를 미끼로 폭심을 잡는 플레이
+    const fx = sigilDef('sig_fireball').effects;
+    // 요격 지점(≈x 12) 옆 — 바위 진로 위에 두면 바위가 먼저 오사로 때린다
+    const near = spawnEnemyAt('goblin_runner', 12, 6 + 2.5, 7);
+    near.health = 1000;
+    world.enemies.push(near);
+    throwRock();
+    castFireball();
+
+    for (let i = 0; i < 40 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(near.health).toBeLessThan(1000); // 스플래시가 들어갔다
+    expect(1000 - near.health).toBeLessThanOrEqual(fx['explodeDamage']!);
   });
 
   it('부술 수 없는 투사체(화살)는 통과한다', () => {
