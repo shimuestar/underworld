@@ -256,11 +256,12 @@ describe('적 몸통 충돌', () => {
 describe('피격 밀림', () => {
   const kb = balance.playerKnockback;
 
-  /** 밀림이 끝날 때까지 PlayerMove만 돌려 이동 거리를 잰다 (입력 없음) */
+  /** 밀림이 끝날 때까지 PlayerMove만 돌려 이동 거리를 잰다 (입력 없음).
+   *  공격마다 미는 시간이 다르므로(playerKnockbackTicks) 남은 틱이 0이 될 때까지 돈다 */
   function settle(world: World): number {
     const x0 = world.player.x;
     const z0 = world.player.z;
-    for (let i = 0; i < kb.ticks + 2; i++) PlayerMove.tick(world, DT);
+    for (let i = 0; i < 60 && (world.player.kbTicks ?? 0) > 0; i++) PlayerMove.tick(world, DT);
     return Math.hypot(world.player.x - x0, world.player.z - z0);
   }
 
@@ -291,12 +292,21 @@ describe('피격 밀림', () => {
     return settle(world);
   }
 
-  it('창병 찌르기 — 적 반대 방향으로 thrust 거리만큼 밀린다', () => {
-    expect(spearHit(false)).toBeCloseTo(kb.thrust, 1);
+  it('창병 찌르기 — 기본 thrust 의 2배로 밀린다 (속도는 그대로)', () => {
+    const spear = enemyDef('goblin_spear').attack;
+    expect(spear.playerKnockback).toBeCloseTo(kb.thrust * 2, 5);
+    // 거리만 늘리고 시간을 그대로 두면 순간이동처럼 보인다 — 미는 시간도 2배
+    expect(spear.playerKnockbackTicks).toBe(kb.ticks * 2);
+    expect(spear.playerKnockback! / spear.playerKnockbackTicks!).toBeCloseTo(
+      kb.thrust / kb.ticks,
+      5,
+    );
+    expect(spearHit(false)).toBeCloseTo(spear.playerKnockback!, 1);
   });
 
   it('방어 중이면 1/3만 밀린다', () => {
-    expect(spearHit(true)).toBeCloseTo(kb.thrust * kb.blockedMul, 1);
+    const spear = enemyDef('goblin_spear').attack;
+    expect(spearHit(true)).toBeCloseTo(spear.playerKnockback! * kb.blockedMul, 1);
   });
 
   it('화살은 아주 조금, 마법은 많이 — 종류별로 다르다', () => {
