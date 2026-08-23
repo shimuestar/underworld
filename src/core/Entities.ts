@@ -39,6 +39,11 @@ export interface EnemyAttackDef {
   projectileKind?: string;
   /** 원거리 공격 사용 최소 거리 (이보다 가까우면 근접) */
   minRange?: number;
+  /** 연사 — 1보다 크면 windup 뒤 shotIntervalTicks 간격으로 shots 발을 쏜다 */
+  shots?: number;
+  shotIntervalTicks?: number;
+  /** 이 공격만의 재사용 대기 (연사처럼 큰 기술용) */
+  cooldownTicks?: number;
   /** 착탄 시 광역 효과 (없으면 단일 대상) */
   splash?: ProjectileSplashDef;
 }
@@ -75,6 +80,8 @@ export interface EnemyDef {
   armoredAttack?: EnemyAttackDef;
   /** 원거리 보조 공격 (족장 바위 투척 등) */
   rangedAttack?: EnemyAttackDef;
+  /** 연사 공격 — 예고 뒤 여러 발을 일정 간격으로 (족장 화살 세례) */
+  volleyAttack?: EnemyAttackDef;
   /** 돌격 공격 — 멀리 떨어졌을 때 달려들며 찌른다 (창병) */
   chargeAttack?: EnemyAttackDef;
   /** 방패 밀쳐내기 — 연타를 멈추지 않는 상대를 떼어낸다 (창병) */
@@ -91,6 +98,7 @@ export function currentAttack(
 ): EnemyAttackDef {
   if (enemy.attackMode === 'bash' && def.shieldBash) return def.shieldBash;
   if (enemy.attackMode === 'charge' && def.chargeAttack) return def.chargeAttack;
+  if (enemy.attackMode === 'volley' && def.volleyAttack) return def.volleyAttack;
   if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
   if (enemy.phase === 'armored' && def.armoredAttack) return def.armoredAttack;
   return def.attack;

@@ -248,6 +248,8 @@ for (const name of [
   'enemy_windup',
   'enemy_whiffed',
   'enemy_charge',
+  'enemy_volley_start',
+  'enemy_volley_shot',
   'guard_clash',
   'telegraph_flash',
   'player_damaged',
@@ -392,7 +394,24 @@ events.on('shot_blocked', () => audio.play('shot_blocked'));
 events.on('dodge_step', () => audio.play('dodge'));
 events.on('cast_spell', () => audio.play('cast_fire'));
 events.on('enemy_cast', (payload) => {
-  if ((payload as { enemyType: string }).enemyType === 'goblin_archer') audio.play('bow_twang');
+  const info = payload as { enemyType: string; enemyId: number };
+  if (info.enemyType === 'goblin_archer') audio.play('bow_twang');
+  // 족장 화살 세례 — 발사할 때마다 시위 소리 (바위 투척과 구분)
+  const boss = world.enemies.find((e) => e.id === info.enemyId);
+  if (boss?.ai === 'volley') audio.play('bow_twang');
+});
+// 보스가 처음 알아채는 순간 — 포효로 조우를 알린다
+events.on('enemy_alerted', (payload) => {
+  const info = payload as { enemyType: string };
+  if (!enemyDef(info.enemyType).boss) return;
+  audio.play('boss_roar');
+  stage.triggerCameraKick(0.7, 420);
+  showReaction(`${enemyDef(info.enemyType).name ?? '보스'}가 포효한다`, 2500);
+});
+events.on('enemy_volley_start', (payload) => {
+  const info = payload as { shots: number };
+  audio.play('boss_volley_draw');
+  showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
 });
 events.on('headshot', () => {
   audio.play('headshot');

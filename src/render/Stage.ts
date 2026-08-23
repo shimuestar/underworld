@@ -40,8 +40,8 @@ const POTION_COLOR = 0xe0384a; // HP 포션 — 붉은 약병
 const MANA_POTION_COLOR = 0x3a7ce0; // 마나 물약 — 푸른 약병
 const POTION_GLASS = 0xbfe6ff;
 const GOLD_COLOR = 0xffcc3a; // 골드 더미
-const FOOD_COLOR = 0xc98a4b; // 음식 — 구운 빵 덩어리
-const FOOD_CRUST = 0x8a5a2c;
+const FOOD_COLOR = 0x9c4a3c; // 음식 — 구운 고기
+const FOOD_BONE = 0xe8ddc0;
 
 // 트레이서 시각 상수 (튜닝값 아님 — 순수 연출)
 const TRACER_COLOR = 0xffe9b8;
@@ -1584,24 +1584,32 @@ export class Stage {
       group.add(body);
       group.add(new THREE.PointLight(color, 0.8, 4.5, 0));
     } else if (kind === 'food') {
-      // 음식 — 약병과 헷갈리지 않게 납작한 빵 덩어리. 발광은 약하게
-      const loaf = new THREE.Mesh(
+      // 음식 — 약병과 헷갈리지 않게 뼈다귀 고기. 살점 덩어리 + 튀어나온 뼈
+      const meat = new THREE.Mesh(
         new THREE.SphereGeometry(0.15, 8, 6),
         new THREE.MeshLambertMaterial({
           color: FOOD_COLOR,
           emissive: FOOD_COLOR,
-          emissiveIntensity: 0.28,
+          emissiveIntensity: 0.3,
         }),
       );
-      loaf.scale.set(1, 0.62, 0.78);
-      loaf.name = 'gem';
-      const crust = new THREE.Mesh(
-        new THREE.BoxGeometry(0.2, 0.03, 0.035),
-        new THREE.MeshLambertMaterial({ color: FOOD_CRUST }),
-      );
-      crust.position.y = 0.09;
-      loaf.add(crust);
-      group.add(loaf);
+      meat.scale.set(1.05, 0.85, 0.9);
+      meat.name = 'gem';
+      const boneMat = new THREE.MeshLambertMaterial({
+        color: FOOD_BONE,
+        emissive: FOOD_BONE,
+        emissiveIntensity: 0.18,
+      });
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.26, 6), boneMat);
+      shaft.rotation.z = Math.PI / 2 - 0.5; // 살점에서 비스듬히 튀어나온다
+      shaft.position.set(0.14, 0.08, 0);
+      meat.add(shaft);
+      for (const side of [-1, 1]) {
+        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 5), boneMat);
+        knob.position.set(0.14 + side * 0.11 * Math.sin(0.5), 0.08 + side * 0.11 * Math.cos(0.5), 0);
+        meat.add(knob);
+      }
+      group.add(meat);
       group.add(new THREE.PointLight(FOOD_COLOR, 0.45, 3.5, 0));
     } else if (kind === 'gold') {
       const pile = new THREE.Mesh(

@@ -182,7 +182,9 @@ export type EnemyAiState =
   | 'active_normal'
   | 'impact'
   | 'recover'
-  | 'staggered';
+  | 'staggered'
+  /** 연사 — 제자리에서 일정 간격으로 여러 발 (족장 화살 세례) */
+  | 'volley';
 
 export interface EnemyState {
   id: number;
@@ -206,7 +208,10 @@ export interface EnemyState {
   armorHealth?: number;
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
-  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash';
+  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley';
+  /** 연사 남은 발수 / 재사용 대기 (족장 화살 세례) */
+  volleyLeft?: number;
+  volleyCooldown?: number;
   /** 방패로 밀쳐낼 차례 (Weapons가 켜고 Enemies가 실행한다) */
   wantsBash?: boolean;
   /** 연속으로 방패에 막아낸 횟수 — 임계를 넘으면 밀쳐낸다 */

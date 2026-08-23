@@ -44,6 +44,8 @@ export type SoundName =
   | 'pickup_mana'
   | 'pickup_gold'
   | 'pickup_food'
+  | 'boss_roar'
+  | 'boss_volley_draw'
   | 'weapon_switch'
   | 'hammer_swing'
   | 'melee_hit'
@@ -343,6 +345,20 @@ export class GameAudio {
         this.tone(784, 0.24, 'sine', 0.4, 0.05);
         this.tone(1046, 0.34, 'sine', 0.32, 0.1);
         this.tone(1568, 0.3, 'triangle', 0.16, 0.14);
+        break;
+      case 'boss_roar':
+        // 족장 포효 — 낮게 깔리는 으르렁 + 위로 찢는 배음. 길고 크게
+        this.tone(70, 1.5, 'sawtooth', 1.5, 0, 46);
+        this.tone(104, 1.3, 'sawtooth', 0.9, 0.05, 132);
+        this.tone(210, 1.0, 'square', 0.35, 0.1, 300);
+        this.noise(1.4, 0.85, 620);
+        this.noise(0.7, 0.4, 220, 0.5);
+        break;
+      case 'boss_volley_draw':
+        // 활 시위를 당긴다 — 삐걱이며 조여드는 상승음. 화살 세례 예고
+        this.tone(150, 0.75, 'sawtooth', 0.3, 0, 520);
+        this.noise(0.7, 0.3, 1400);
+        this.tone(880, 0.14, 'triangle', 0.22, 0.72);
         break;
       case 'pickup_food':
         // 음식 — 회복음과 마나음을 섞은 낮고 둔탁한 상승. 포션보다 수수하게

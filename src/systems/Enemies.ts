@@ -103,6 +103,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     return;
   }
 
+  if ((enemy.volleyCooldown ?? 0) > 0) enemy.volleyCooldown = (enemy.volleyCooldown ?? 0) - 1;
+
   // 연타를 멈추면 막아낸 기록이 사라진다 (붙어서 계속 때릴 때만 밀쳐내기가 나간다)
   if ((enemy.blockedStreakTicks ?? 0) > 0) {
     enemy.blockedStreakTicks = (enemy.blockedStreakTicks ?? 0) - 1;
@@ -178,6 +180,22 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         startWindup(world, enemy, currentAttack(def, enemy));
         break;
       }
+      // 화살 세례 — 큰 기술이라 쿨다운이 돌고, 붙어 있으면 쓰지 않는다
+      if (
+        def.volleyAttack &&
+        (enemy.volleyCooldown ?? 0) <= 0 &&
+        dist >= (def.volleyAttack.minRange ?? 0) &&
+        world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
+      ) {
+        enemy.attackMode = 'volley';
+        startWindup(world, enemy, def.volleyAttack);
+        world.events.emit('enemy_volley_start', {
+          enemyId: enemy.id,
+          enemyType: enemy.type,
+          shots: def.volleyAttack.shots ?? 1,
+        });
+        break;
+      }
       // 원거리 보조 공격 (족장 바위 투척) — 근접 거리 밖 + 시야 확보 시
       if (
         def.rangedAttack &&
@@ -216,8 +234,14 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           world.events.emit('enemy_hold_fire', { enemyId: enemy.id, enemyType: enemy.type });
           break;
         }
-        // 시전 완료 — 마법 투사체 발사
+        // 시전 완료 — 연사면 첫 발부터 volley 상태로, 아니면 한 발 쏘고 후딜
         enemy.strafeBlockedTicks = 0;
+        if ((attack.shots ?? 1) > 1) {
+          enemy.ai = 'volley';
+          enemy.volleyLeft = attack.shots!;
+          enemy.timer = 0; // 예고가 끝나는 즉시 첫 발
+          break;
+        }
         fireProjectile(world, enemy, attack);
         enemy.ai = 'recover';
         enemy.timer = attack.recoverTicks;
@@ -249,6 +273,31 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       advanceStrike(enemy, def, attack);
       chargeForward(world, enemy, def, attack, distX, distZ, dist, dt);
       if (enemy.timer <= 0) enemy.ai = 'impact';
+      break;
+    }
+
+    // 연사 — 제자리에서 계속 조준하며 일정 간격으로 쏜다. 옆으로 계속 움직여 피한다
+    case 'volley': {
+      if (dist > 0) enemy.yaw = Math.atan2(-distX, -distZ);
+      if (enemy.timer > 0) {
+        enemy.timer--;
+        break;
+      }
+      fireProjectile(world, enemy, attack);
+      enemy.volleyLeft = (enemy.volleyLeft ?? 1) - 1;
+      world.events.emit('enemy_volley_shot', {
+        enemyId: enemy.id,
+        enemyType: enemy.type,
+        left: enemy.volleyLeft,
+      });
+      if (enemy.volleyLeft <= 0) {
+        enemy.ai = 'recover';
+        enemy.timer = attack.recoverTicks;
+        enemy.volleyCooldown = attack.cooldownTicks ?? 0;
+        enemy.attackMode = 'melee';
+      } else {
+        enemy.timer = attack.shotIntervalTicks ?? 30;
+      }
       break;
     }
 
@@ -568,7 +617,8 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
     vy: (dy / len) * speed,
     vz: (dz / len) * speed,
     lifeTicks: 240,
-    damage: def.damage,
+    // 공격별 피해 재정의 — 근접(impact)과 같은 규약. 화살 세례처럼 연사는 한 발이 약하다
+    damage: attack.damage ?? def.damage,
     burnTicks: 0,
     burnDamagePerTick: 0,
     radius,

@@ -147,6 +147,21 @@ gap ≤ parrySpace.guardDepth  → 일반    (가드 안까지 들어옴)
 > **먼저** 확정해 `applyProjectileHit` 에 넘긴다. 안 그러면 화염구가 자기 폭풍 때문에
 > "가드 풀림"으로 오판해 방패를 못 깬다.
 
+## 3.3 족장 화살 세례 (volleyAttack)
+
+`goblin_chieftain.volleyAttack`. 예고 0.9초 → **0.5초 간격으로 10발**, 발당 12 피해.
+재사용 10초, 최소 거리 5m. 쏘는 동안 제자리에 서서 **계속 조준**하므로 옆으로
+움직여 흘려야 한다. 가만히 서서 다 맞으면 120 — 즉사다.
+
+- `EnemyAttackDef.shots > 1` 이면 windup 종료 시 `volley` 상태로 들어가
+  `shotIntervalTicks` 마다 한 발씩 쏜다. `shotIntervalTicks` 는 발사 틱을 뺀 대기값이라
+  **29 = 실제 30틱(0.5초) 간격**.
+- 화살은 `deflectable: false` → 반사 불가, 회피/엄폐 전용 (적색 텔레그래프 규약).
+- 한 발이 약한 이유는 `attack.damage` 재정의 — `fireProjectile` 이 근접과 같은 규약으로
+  `attack.damage ?? def.damage` 를 쓴다. (예전에는 def.damage 만 봐서 발당 30이었다)
+- 예고는 UI가 아니라 **동작·발광·소리**로만 준다: 적색 텔레그래프 섬광 + 시위 당기는
+  소리(`boss_volley_draw`) + "화살 세례 — 10발이 온다!".
+
 ## 3.4 피격 밀림과 이동
 
 `balance.playerKnockback`. **밀림과 이동 입력은 서로를 막지 않고 더해진다** —
