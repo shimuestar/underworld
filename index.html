@@ -139,6 +139,22 @@
       #status-mana-fill {
         background: #4a9eff;
       }
+      /* 무적(테스트 키 G) — HP·마나 바가 함께 깜빡인다. 켜 둔 채로 잊고
+         플레이하는 사고를 막으려면 화면에서 계속 티가 나야 한다 */
+      @keyframes god-blink {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.2;
+        }
+      }
+      #status-hp.god,
+      #status-mana.god {
+        animation: god-blink 0.62s ease-in-out infinite;
+        border-color: #e8d24a;
+      }
       /* 거미줄에 걸림 — 화면 가장자리에 끈끈한 흰 막. 끊을수록 옅어진다 */
       #web-overlay {
         position: fixed;

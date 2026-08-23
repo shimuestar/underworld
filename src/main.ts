@@ -907,6 +907,8 @@ let tpsWindowTicks = 0;
 let measuredTps = 0;
 
 const webOverlay = document.getElementById('web-overlay')!;
+const hpRow = document.getElementById('status-hp')!;
+const manaRow = document.getElementById('status-mana')!;
 const staminaRow = document.getElementById('status-stamina')!;
 const staminaFill = document.getElementById('status-stamina-fill')!;
 const lanternRow = document.getElementById('status-lantern')!;
@@ -1013,6 +1015,9 @@ function render(alpha: number): void {
   const manaFill = document.getElementById('status-mana-fill')!;
   manaFill.style.width = `${manaFrac * 100}%`;
   manaFill.style.background = world.mana.chainIndex > 0 ? '#7fc4ff' : '#4a9eff';
+  // 무적 — HP·마나 바를 깜빡여 켜져 있다는 걸 계속 알린다 (CSS 애니메이션)
+  hpRow.classList.toggle('god', world.godMode === true);
+  manaRow.classList.toggle('god', world.godMode === true);
   // 거미줄 — 남은 타수만큼 진하다. 한 대 걷어낼 때마다 눈에 띄게 옅어진다
   const webLeft = (p.webSwingsLeft ?? 0) / balance.web.breakSwings;
   webOverlay.style.opacity = String(webLeft > 0 ? 0.3 + 0.6 * webLeft : 0);
