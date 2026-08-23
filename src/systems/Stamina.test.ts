@@ -58,6 +58,18 @@ function sprint(world: World, ticks: number, moving = true): void {
   }
 }
 
+/** 걷기 한 틱 (yaw 0 → −Z 방향) */
+function step(world: World): void {
+  world.input = { ...Input.emptySnapshot(), moveForward: 1 };
+  PlayerMove.tick(world, DT);
+  world.input = Input.emptySnapshot();
+}
+
+/** from 에서 지금까지 실제로 움직인 거리 (축을 헷갈리지 않게 항상 평면 거리로 잰다) */
+function moved(world: World, from: { x: number; z: number }): number {
+  return Math.hypot(world.player.x - from.x, world.player.z - from.z);
+}
+
 let world: World;
 beforeEach(() => {
   world = makeWorld();
@@ -93,11 +105,15 @@ describe('질주', () => {
     expect(world.stamina.exhausted).toBe(true);
     expect(empty).toHaveLength(1); // 한 번만
 
-    // 탈진 중엔 쉬프트를 눌러도 평속이고 더 닳지도 않는다
-    const x0 = world.player.x;
+    // 탈진 중엔 쉬프트를 눌러도 질주가 안 되고, 걸음마저 절반이다.
+    // (오래 달려 벽에 붙었으므로 방 가운데로 되돌려 놓고 잰다)
+    world.player.x = 10;
+    world.player.z = 10;
+    const from = { x: world.player.x, z: world.player.z };
     sprint(world, 1);
-    const sprintStep = balance.player.sprintSpeed * DT;
-    expect(Math.abs(world.player.x - x0)).toBeLessThan(sprintStep - 1e-6);
+    const walked = moved(world, from);
+    expect(walked).toBeCloseTo(balance.player.moveSpeed * CFG.exhaustedSpeedMul * DT, 5);
+    expect(walked).toBeLessThan(balance.player.moveSpeed * DT); // 평속보다도 느리다
 
     // 회복선(exhaustRecoverTo)에 닿는 순간 풀린다 — 그 전에는 계속 탈진
     world.input = Input.emptySnapshot();
@@ -110,6 +126,56 @@ describe('질주', () => {
     expect(world.stamina.exhausted).toBe(false);
     expect(world.stamina.value).toBeGreaterThanOrEqual(CFG.exhaustRecoverTo);
     expect(recovered).toHaveLength(1);
+  });
+
+  it('탈진 구간은 회복이 훨씬 느리고, 해제선을 넘으면 원래 속도로 돌아온다', () => {
+    expect(CFG.exhaustedRegenPerTick).toBeLessThan(CFG.regenPerTick);
+    const st = world.stamina;
+    st.value = 0;
+    st.exhausted = true;
+    st.regenDelay = 0;
+
+    Stamina.tick(world, DT);
+    expect(st.value).toBeCloseTo(CFG.exhaustedRegenPerTick, 5); // 느린 회복
+
+    // 해제선 직전까지 감아 두고 한 틱 — 여기까지는 여전히 느리다
+    st.value = CFG.exhaustRecoverTo - CFG.exhaustedRegenPerTick * 1.5;
+    const before = st.value;
+    Stamina.tick(world, DT);
+    expect(st.value).toBeCloseTo(before + CFG.exhaustedRegenPerTick, 5);
+    expect(st.exhausted).toBe(true);
+
+    // 해제선을 넘긴 뒤에는 원래 속도
+    Stamina.tick(world, DT);
+    expect(st.exhausted).toBe(false);
+    const after = st.value;
+    Stamina.tick(world, DT);
+    expect(st.value).toBeCloseTo(after + CFG.regenPerTick, 5);
+  });
+
+  it('탈진 중 이동 속도는 절반 — 방어 감속과는 곱해진다', () => {
+    world.stamina.exhausted = true;
+    world.stamina.value = 5;
+
+    // 대조군: 멀쩡할 때 한 틱
+    world.stamina.exhausted = false;
+    let from = { x: world.player.x, z: world.player.z };
+    step(world);
+    const normal = moved(world, from);
+    expect(normal).toBeCloseTo(balance.player.moveSpeed * DT, 5);
+
+    world.stamina.exhausted = true;
+    from = { x: world.player.x, z: world.player.z };
+    step(world);
+    expect(moved(world, from)).toBeCloseTo(normal * CFG.exhaustedSpeedMul, 5);
+
+    world.player.blocking = true;
+    from = { x: world.player.x, z: world.player.z };
+    step(world);
+    expect(moved(world, from)).toBeCloseTo(
+      normal * CFG.exhaustedSpeedMul * balance.block.speedMul,
+      5,
+    );
   });
 
   it('쉬면 회복한다 — 단 한동안 기다린 뒤에야 (regenDelayTicks)', () => {

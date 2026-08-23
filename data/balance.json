@@ -16,12 +16,14 @@
     "moveSpeed": 6.0,
     "sprintSpeed": 9.0,
     "eyeHeight": 1.6,
-    "_staminaNote": "질주는 움직이는 동안만 닳는다. 0이 되면 exhaustRecoverTo 까지 차야 다시 질주할 수 있다 — 안 그러면 쉬프트를 톡톡 눌러 무한 질주가 된다",
+    "_staminaNote": "질주는 움직이는 동안만 닳는다. 0이 되면 exhaustRecoverTo 까지 차야 다시 질주할 수 있다 — 안 그러면 쉬프트를 톡톡 눌러 무한 질주가 된다. 탈진 구간(0~exhaustRecoverTo)은 회복이 훨씬 느리고 걸음도 절반이라 실수의 대가가 확실하다",
     "stamina": {
       "max": 100,
       "sprintDrainPerTick": 0.35,
       "dodgeCost": 25,
       "regenPerTick": 0.7,
+      "exhaustedRegenPerTick": 0.18,
+      "exhaustedSpeedMul": 0.5,
       "regenDelayTicks": 45,
       "exhaustRecoverTo": 25
     },

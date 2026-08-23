@@ -55,6 +55,7 @@ export function tick(world: World, dt: number): void {
     }
   }
   let speed = sprinting ? balance.player.sprintSpeed : balance.player.moveSpeed;
+  if (st.exhausted) speed *= stam.exhaustedSpeedMul; // 숨이 차 제대로 못 걷는다
   if (p.blocking) speed *= balance.block.speedMul; // 방어 중 감속 페널티
   world.level.slideMove(p, balance.player.radius, wx * speed * dt, wz * speed * dt);
   resolveEnemyOverlap(world);

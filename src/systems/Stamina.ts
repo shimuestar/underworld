@@ -14,11 +14,13 @@ export function tick(world: World, _dt: number): void {
   const st = world.stamina;
   const cfg = balance.player.stamina;
 
-  // 쓴 직후에는 잠깐 멈췄다가 회복한다 — 안 그러면 질주 중에도 야금야금 찬다
+  // 쓴 직후에는 잠깐 멈췄다가 회복한다 — 안 그러면 질주 중에도 야금야금 찬다.
+  // 탈진 구간(0~exhaustRecoverTo)은 훨씬 느리게 — 숨을 고르는 시간이다
   if (st.regenDelay > 0) {
     st.regenDelay--;
   } else if (st.value < cfg.max) {
-    st.value = Math.min(cfg.max, st.value + cfg.regenPerTick);
+    const rate = st.exhausted ? cfg.exhaustedRegenPerTick : cfg.regenPerTick;
+    st.value = Math.min(cfg.max, st.value + rate);
   }
 
   // 탈진 해제 — 0에서 바로 풀면 쉬프트를 톡톡 눌러 무한 질주가 된다
