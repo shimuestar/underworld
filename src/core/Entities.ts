@@ -31,6 +31,14 @@ export interface EnemyAttackDef {
   damage?: number;
   /** 이 공격만의 플레이어 밀림 거리 (없으면 balance.playerKnockback[type]) */
   playerKnockback?: number;
+  /** 밀림에 쓰는 틱 (없으면 balance.playerKnockback.ticks). 크게 날릴수록 길게 잡아야
+   *  순간이동처럼 보이지 않는다 */
+  playerKnockbackTicks?: number;
+  /** 방어 시 밀림 배율 (없으면 balance.playerKnockback.blockedMul).
+   *  1.0 이면 방패로 받아도 그대로 날아간다 — 돌격처럼 몸으로 받으면 안 되는 기술용 */
+  blockedKnockbackMul?: number;
+  /** 방어 시 관통 피해 비율 (없으면 balance.block.chipDamageRatio) */
+  blockedDamageRatio?: number;
   /** 지면 강타 — 각과 무관한 원형 판정 반경(m). 있으면 arcDeg·impactRangeMul 대신 쓴다 */
   aoeRadius?: number;
   /** 투사체 발사 위치 — 무기 든 손에서 나가게 (def.radius/def.height 배율) */

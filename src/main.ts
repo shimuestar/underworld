@@ -589,9 +589,11 @@ events.on('guard_clash', (payload) => {
 });
 events.on('enemy_charge', (payload) => {
   const info = payload as { enemyType: string };
-  audio.play('telegraph_blue');
+  // 멀리서 달려오는 긴 돌격은 예비동작이 길어 전용 소리를 붙인다 (발로 땅을 긁는 소리)
+  const long = enemyDef(info.enemyType).chargeAttack?.chargeRunTicks !== undefined;
+  audio.play(long ? 'charge_ready' : 'telegraph_blue');
   // 창병만 쓰던 기술이 아니다 — 족장도 중·원거리에서 달려든다
-  showReaction(`${enemyDef(info.enemyType).name ?? '적'}이 달려든다!`, 900);
+  showReaction(`${enemyDef(info.enemyType).name ?? '적'}이 달려든다!`, 1200);
 });
 events.on('enemy_whiffed', () => {
   audio.play('enemy_whiff');

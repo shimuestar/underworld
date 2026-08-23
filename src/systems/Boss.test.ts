@@ -316,6 +316,38 @@ describe('goblin_chieftain 원거리 공격', () => {
     expect(atStrike).toBeLessThan(atRunStart - 5); // 달려서 크게 좁혔다
     expect(atStrike).toBeLessThanOrEqual(def.attackRange + 0.2); // 사거리 안까지 붙었다
     expect(boss.ai).toBe('active_perfect'); // 붙은 뒤에야 패링 창이 열린다
+    // 달리기가 멈추는 자리가 판정 반경 안이어야 한다 — 아니면 붙고도 헛친다
+    expect(ch.aoeRadius!).toBeGreaterThan(def.attackRange);
+  });
+
+  it('돌격은 방패로 막아도 크게 튕겨 나가고 피해도 들어온다', () => {
+    const ch = enemyDef('goblin_chieftain').chargeAttack!;
+    const def = enemyDef('goblin_chieftain');
+    expect(ch.blockedKnockbackMul).toBe(1); // 방어해도 밀림이 안 줄어든다
+
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + 2.5, 6, 1);
+    boss.yaw = Math.atan2(-(6 - boss.x), -(6 - boss.z)); // 플레이어를 본다
+    boss.attackMode = 'charge';
+    boss.ai = 'impact';
+    world.enemies.push(boss);
+    world.player.yaw = -Math.PI / 2; // 보스(+X)를 정면으로 본다
+    world.player.blocking = true;
+    const hp0 = world.player.health;
+
+    Enemies.tick(world, DT);
+
+    // 피해 — 완전 차단이 아니라 blockedDamageRatio 만큼 들어온다
+    const taken = hp0 - world.player.health;
+    expect(taken).toBeCloseTo(def.damage * ch.blockedDamageRatio!, 4);
+    expect(taken).toBeGreaterThan(def.damage * balance.block.chipDamageRatio); // 평소보다 아프다
+
+    // 밀림 — 방패를 들었는데도 전량
+    const flung = Math.hypot(world.player.kbX!, world.player.kbZ!) * world.player.kbTicks!;
+    expect(flung).toBeCloseTo(ch.playerKnockback!, 3);
+    expect(world.player.kbTicks).toBe(ch.playerKnockbackTicks);
+    // 일반 스매시를 막았을 때보다 훨씬 멀리 난다
+    const normalBlocked = balance.playerKnockback.smash * balance.playerKnockback.blockedMul;
+    expect(flung).toBeGreaterThan(normalBlocked * 5);
   });
 
   it('중거리에 들어오면 돌격 — 연사보다 먼저 고른다', () => {

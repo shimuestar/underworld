@@ -47,6 +47,7 @@ export type SoundName =
   | 'boss_roar'
   | 'boss_volley_draw'
   | 'ground_slam'
+  | 'charge_ready'
   | 'weapon_switch'
   | 'hammer_swing'
   | 'melee_hit'
@@ -354,6 +355,13 @@ export class GameAudio {
         this.tone(210, 1.0, 'square', 0.35, 0.1, 300);
         this.noise(1.4, 0.85, 620);
         this.noise(0.7, 0.4, 220, 0.5);
+        break;
+      case 'charge_ready':
+        // 달려들기 직전 — 발로 땅을 긁고 낮게 으르렁. 짧고 굵게
+        this.noise(0.22, 0.5, 900);
+        this.noise(0.16, 0.35, 420, 0.16);
+        this.tone(88, 0.42, 'sawtooth', 0.7, 0, 62);
+        this.tone(150, 0.3, 'square', 0.22, 0.08, 110);
         break;
       case 'ground_slam':
         // 지면 강타 — 서브베이스 충격 + 돌 갈리는 저역 + 흩어지는 파편

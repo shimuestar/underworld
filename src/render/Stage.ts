@@ -101,6 +101,12 @@ const ARM_VOLLEY_SWING = 1.05; // 몸을 가로지르게 옆으로 (rotation.y)
 const VOLLEY_PULL = 0.5; // 팔을 뒤로 당김 (armZ)
 const VOLLEY_LEAN = 0.34; // 상체 젖힘
 const VOLLEY_SNAP = 0.25; // 발사 직후 앞으로 튕기는 구간 비율
+/** 돌격 예비동작 — 스프린터처럼 웅크려 앞으로 기울이고 무게를 뒤로 싣는다.
+ *  내리치기 예비동작(뒤로 젖히며 무기를 치켜듦)과 정반대라 한눈에 구분된다 */
+const CHARGE_COIL_CROUCH = 0.15; // def.height 배
+const CHARGE_COIL_LEAN = -0.32; // − = 앞으로 숙임
+const CHARGE_COIL_ROCK = 0.3; // + = 뒤로 무게 싣기
+const ARM_CHARGE_COIL = -1.0; // 무기를 뒤아래로 끌어 내린다
 /** thrust: 창끝은 항상 수평(플레이어를 겨눔). 움츠렸다 진격하며 내지른다.
  *  몸통 rotation.x는 + 가 뒤로 젖힘 / - 가 앞으로 숙임 (피벗이 발밑) */
 const THRUST_LEVEL = 0.02;
@@ -1162,6 +1168,8 @@ export class Stage {
       // 방패에 막혀 튕긴 경직 — 상체가 크게 젖혀진 채 굳는다
       const recoiled = enemy.ai === 'recover' && enemy.recoiled === true;
       const charging = enemy.ai === 'charging';
+      // 돌격 예비동작 — 달리는 구간이 따로 있는 돌격만 (창병의 짧은 돌격은 그대로)
+      const chargeCoil = inWindup && attack.chargeRunTicks !== undefined;
       const striking =
         enemy.ai === 'active_perfect' ||
         enemy.ai === 'active_normal' ||
@@ -1193,6 +1201,12 @@ export class Stage {
         // 치켜들 때 몸을 젖히고(+), 내리칠 때 앞으로 숙인다(-)
         leanTarget = striking && isMelee ? -0.42 : inWindup ? 0.28 * windupProgress : 0;
         lungeTarget = striking && isMelee ? -0.5 : 0;
+        // 돌격 예비동작 — 웅크려 앞으로 기울이고 무게를 뒤로 싣는다 (달려들기 직전)
+        if (chargeCoil) {
+          leanTarget = CHARGE_COIL_LEAN * windupProgress;
+          lungeTarget = CHARGE_COIL_ROCK * windupProgress;
+          crouchTarget = -def2.height * CHARGE_COIL_CROUCH * windupProgress;
+        }
         // 돌격 달리기 — 무기를 치켜든 채 앞으로 숙이고 달려온다
         if (charging) {
           leanTarget = -0.22 + Math.sin(now / 70) * 0.05;
@@ -1294,7 +1308,12 @@ export class Stage {
           }
         } else {
           armRotTarget = ARM_REST;
-          if (charging) {
+          if (chargeCoil) {
+            // 무기를 뒤아래로 끌어 내렸다가 달리며 치켜든다
+            armRotTarget = ARM_REST + (ARM_CHARGE_COIL - ARM_REST) * windupProgress;
+            armZTarget = 0.3 * windupProgress;
+            if (trembling) armRotTarget += Math.sin(now / 11) * 0.09;
+          } else if (charging) {
             armRotTarget = ARM_RAISED; // 치켜든 채로 달려온다
           } else if (isMelee && inWindup) {
             armRotTarget = ARM_REST + (ARM_RAISED - ARM_REST) * windupProgress;

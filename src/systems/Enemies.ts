@@ -364,15 +364,24 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         // 방어(정면) — 칩 데미지만 관통. 피해가 있으므로 연쇄는 여전히 리셋된다
         const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
         const base = attack.damage ?? def.damage; // 공격별 피해 재정의 (방패 밀쳐내기 등)
-        const damage = blocked ? base * balance.block.chipDamageRatio : base;
+        // 방어 관통 비율도 공격별로 열어 둔다 — 돌격처럼 몸으로 받으면 안 되는 기술은 더 아프다
+        const chip = attack.blockedDamageRatio ?? balance.block.chipDamageRatio;
+        const damage = blocked ? base * chip : base;
         p.health -= damage;
         if (enemy.parryStreak !== undefined) enemy.parryStreak = 0; // 연속 패링 끊김
 
         // 뒤로 밀림 — 무기가 무거울수록 크게. 방어 중이면 버티므로 1/3
         const kb = balance.playerKnockback as unknown as Record<string, number>;
         const pushBase = attack.playerKnockback ?? kb[attack.type] ?? kb['contact']!;
-        const push = pushBase * (blocked ? kb['blockedMul']! : 1);
-        pushPlayer(p, p.x - enemy.x, p.z - enemy.z, push, balance.playerKnockback.ticks);
+        const blockedMul = attack.blockedKnockbackMul ?? kb['blockedMul']!;
+        const push = pushBase * (blocked ? blockedMul : 1);
+        pushPlayer(
+          p,
+          p.x - enemy.x,
+          p.z - enemy.z,
+          push,
+          attack.playerKnockbackTicks ?? balance.playerKnockback.ticks,
+        );
 
         if (blocked) {
           // 방패 격돌 — 양쪽이 잠깐 굳는다. 적이 더 오래 굳어 반격 창이 열린다
