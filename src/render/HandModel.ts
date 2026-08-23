@@ -12,6 +12,9 @@ const GRIP = 0x2b2320;
 const BRACER = 0x555c66;
 
 const RECOIL_MS = 130;
+/** 불발 — 발사 반동의 1/5 크기로 딸깍 튀고, 탄약 표시가 잠깐 붉어진다 */
+const DRY_FIRE_MS = 220;
+const DRY_FIRE_TINT = 0xff6a6a;
 const PARRY_SWING_MS = 340;
 const BLOCK_FLASH_MS = 260; // 방어 성공 섬광 (2회 깜빡임)
 // 처형 마무리 — 어깨 뒤로 크게 젖혔다 대각선으로 분쇄한다.
@@ -93,6 +96,7 @@ export class HandModel {
   private ammoLabel!: HandLabel;
 
   private recoilUntil = 0;
+  private dryFireUntil = 0;
   private parryUntil = 0;
   private parryGlow = 0x000000;
   private blockBlend = 0;
@@ -223,6 +227,11 @@ export class HandModel {
 
   triggerRecoil(): void {
     this.recoilUntil = performance.now() + RECOIL_MS;
+  }
+
+  /** 불발 — 총이 살짝 들썩이기만 하고 나가지 않는다 */
+  triggerDryFire(): void {
+    this.dryFireUntil = performance.now() + DRY_FIRE_MS;
   }
 
   /** 왼손에 든 원거리 무기 교체 (해머는 항상 오른손에 있다) */
@@ -422,6 +431,17 @@ export class HandModel {
       gunZ += 0.055 * k;
       gunRot += 0.3 * k;
     }
+    // 불발 — 앞 30%만 딸깍 튀고 나머지는 힘없이 내려온다. 반동의 1/5 크기라
+    // "쐈는데 안 나갔다"로 읽힌다
+    if (now < this.dryFireUntil) {
+      const t = 1 - (this.dryFireUntil - now) / DRY_FIRE_MS;
+      const jolt = t < 0.3 ? t / 0.3 : 1 - (t - 0.3) / 0.7;
+      gunZ += 0.011 * jolt;
+      gunRot += 0.06 * jolt;
+      gunY -= 0.008 * jolt;
+    }
+    const ammoMat = this.ammoLabel.mesh.material as THREE.MeshBasicMaterial;
+    ammoMat.color.setHex(now < this.dryFireUntil ? DRY_FIRE_TINT : 0xffffff);
     // 수류탄 — 차징 중엔 뒤로 당기고, 투척 시 앞으로 밀기
     gunZ += 0.14 * (state.chargeFrac ?? 0);
     gunRot -= 0.35 * (state.chargeFrac ?? 0);

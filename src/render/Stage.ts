@@ -312,6 +312,11 @@ export class Stage {
     this.hands.triggerHammerSwing(step);
   }
 
+  /** 불발 — 총이 딸깍 들썩이고 탄약 표시가 붉어진다 */
+  triggerDryFire(): void {
+    this.hands.triggerDryFire();
+  }
+
   /** 방어 성공 — 방패 섬광 + 화살이면 방패에 꽂힘 */
   triggerBlockHit(kind?: string): void {
     this.hands.triggerBlockHit(kind);

@@ -50,7 +50,8 @@ export type SoundName =
   | 'explosion'
   | 'implode'
   | 'shop_buy'
-  | 'shop_deny';
+  | 'shop_deny'
+  | 'dry_fire';
 
 const MASTER_GAIN = 0.25;
 
@@ -238,6 +239,13 @@ export class GameAudio {
         this.tone(60, 0.7, 'sine', 1.6, 0, 28);
         this.noise(0.5, 1.3, 900);
         this.noise(0.9, 0.5, 300, 0.1);
+        break;
+      case 'dry_fire':
+        // 불발 — 공이가 빈 약실을 때리는 금속 딸깍. 저음을 넣으면 발사음처럼 들리므로
+        // 고역 노이즈와 짧은 금속 티만 쓴다
+        this.noise(0.03, 0.55, 5600);
+        this.tone(2200, 0.045, 'square', 0.09, 0, 850);
+        this.noise(0.05, 0.2, 1600, 0.05);
         break;
       case 'shop_buy':
         // 구매 — 동전이 떨어지는 짧은 2음 상승

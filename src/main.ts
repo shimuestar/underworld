@@ -341,6 +341,20 @@ events.on('melee_kill', (payload) => {
   const kill = payload as { execution: boolean; x?: number; z?: number };
   if (kill.execution) presentExecute(1, kill.x, kill.z);
 });
+// 불발 — 소리·모션은 누를 때마다, 글자 안내만 연타에도 한 번씩
+let emptyHintUntil = 0;
+events.on('weapon_empty', (payload) => {
+  const info = payload as { weapon?: string };
+  audio.play('dry_fire');
+  stage.triggerDryFire();
+  const now = performance.now();
+  if (now < emptyHintUntil) return;
+  emptyHintUntil = now + 1200;
+  showReaction(
+    info.weapon === 'grenade' ? '수류탄 없음' : '탄약 없음 — 제단에서 사야 한다',
+    1100,
+  );
+});
 events.on('shot_blocked', () => audio.play('shot_blocked'));
 events.on('dodge_step', () => audio.play('dodge'));
 events.on('cast_spell', () => audio.play('cast_fire'));

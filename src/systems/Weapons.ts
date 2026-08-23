@@ -87,7 +87,7 @@ export function tick(world: World, _dt: number): void {
   if (w.ranged === 'grenade') {
     // 홀드 차징 — 누르는 동안 힘을 모으고, 놓으면 던진다
     if (w.grenades <= 0) {
-      if (world.input.rangedPressed) world.events.emit('weapon_empty');
+      if (world.input.rangedPressed) world.events.emit('weapon_empty', { weapon: 'grenade' });
       w.grenadeCharge = 0;
       return;
     }
@@ -114,9 +114,9 @@ export function tick(world: World, _dt: number): void {
   if (!world.input.rangedPressed) return;
 
   if (w.mag === 0) {
-    // 빈 탄창 — 예비탄이 있으면 자동 장전, 없으면 불발
+    // 빈 탄창 — 예비탄이 있으면 자동 장전, 예비까지 없으면 공이만 딸깍 (불발)
     if (w.reserve > 0) startReload(world);
-    else world.events.emit('weapon_empty');
+    else world.events.emit('weapon_empty', { weapon: 'pistol' });
     return;
   }
 

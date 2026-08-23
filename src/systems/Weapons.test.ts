@@ -192,6 +192,39 @@ describe('해머 (슬롯 1)', () => {
     expect(swings.map((s) => s.step)).toEqual([1, 2]);
   });
 
+  it('예비탄까지 없으면 불발 — weapon_empty 만 나가고 탄은 줄지 않는다', () => {
+    world.weapon.mag = 0;
+    world.weapon.reserve = 0;
+    const empty: { weapon: string }[] = [];
+    const shots: unknown[] = [];
+    world.events.on('weapon_empty', (payload) => empty.push(payload as { weapon: string }));
+    world.events.on('shot_fired', (payload) => shots.push(payload));
+
+    world.weapon.cooldown = 0;
+    world.input = { ...Input.emptySnapshot(), rangedPressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+
+    expect(empty).toEqual([{ weapon: 'pistol' }]);
+    expect(shots).toHaveLength(0); // 총알은 나가지 않는다
+    expect(world.weapon.reloading).toBe(0); // 장전도 시작되지 않는다
+  });
+
+  it('예비탄이 남아 있으면 불발이 아니라 자동 장전', () => {
+    world.weapon.mag = 0;
+    world.weapon.reserve = 12;
+    const empty: unknown[] = [];
+    world.events.on('weapon_empty', () => empty.push(1));
+
+    world.weapon.cooldown = 0;
+    world.input = { ...Input.emptySnapshot(), rangedPressed: true };
+    Weapons.tick(world, DT);
+    world.input = Input.emptySnapshot();
+
+    expect(empty).toHaveLength(0);
+    expect(world.weapon.reloading).toBeGreaterThan(0);
+  });
+
   it('처치 시 melee_kill(비처형) → 마나 지급 경로', () => {
     const hammer = balance.weapons.hammer;
     const enemy = spawnEnemyAt('goblin_runner', 6 + hammer.range - 0.2, 6, 1);
