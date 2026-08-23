@@ -1,4 +1,4 @@
-// 소모품 드랍 — 적 처치 시 HP 포션·골드를 바닥에 떨구고, 근처에 가면 자동 획득한다.
+// 소모품 드랍 — 적 처치 시 포션·음식·골드를 바닥에 떨구고, 근처에 가면 자동 획득한다.
 // 각인(Sigils)과 같은 world.groundItems 배열을 쓰되 kind로 구분한다.
 // 수치는 전부 balance.pickups.
 
@@ -37,6 +37,18 @@ export function rollDrops(world: World, enemyType: string, x: number, z: number)
     world.events.emit('mana_potion_dropped', { x, z });
   }
 
+  // 음식 — HP·마나를 동시에, 대신 각 포션의 절반씩
+  if (Math.random() < cfg.food.dropChance) {
+    const angle = Math.random() * Math.PI * 2;
+    world.groundItems.push({
+      id: nextPickupId++,
+      kind: 'food',
+      x: x + Math.cos(angle) * 0.45,
+      z: z + Math.sin(angle) * 0.45,
+    });
+    world.events.emit('food_dropped', { x, z });
+  }
+
   if (Math.random() < cfg.gold.dropChance || def.boss) {
     const span = cfg.gold.max - cfg.gold.min;
     let amount = cfg.gold.min + Math.round(Math.random() * span);
@@ -63,6 +75,10 @@ function restHeight(kind: string): number {
 function wants(world: World, kind: string): boolean {
   if (kind === 'potion') return world.player.health < balance.player.healthMax;
   if (kind === 'mana') return world.mana.value < balance.mana.max;
+  // 음식은 둘 중 하나만 모자라도 먹을 값어치가 있다
+  if (kind === 'food') {
+    return world.player.health < balance.player.healthMax || world.mana.value < balance.mana.max;
+  }
   return true;
 }
 
@@ -88,7 +104,9 @@ export function tick(world: World, dt: number): void {
           ? cfg.gold.magnetRadius
           : item.kind === 'mana'
             ? cfg.manaPotion.magnetRadius
-            : cfg.potion.magnetRadius;
+            : item.kind === 'food'
+              ? cfg.food.magnetRadius
+              : cfg.potion.magnetRadius;
       if (Math.hypot(p.x - item.x, p.z - item.z) > radius) continue;
       item.magnet = true;
       item.y = restHeight(item.kind) + mag.popUp; // 살짝 튀어오르며 출발
@@ -123,6 +141,17 @@ export function tick(world: World, dt: number): void {
       );
       world.events.emit('mana_potion_picked', {
         restored: world.mana.value - before,
+        mana: world.mana.value,
+      });
+    } else if (item.kind === 'food') {
+      const hpBefore = p.health;
+      const manaBefore = world.mana.value;
+      p.health = Math.min(balance.player.healthMax, p.health + cfg.food.healAmount);
+      world.mana.value = Math.min(balance.mana.max, world.mana.value + cfg.food.restoreAmount);
+      world.events.emit('food_picked', {
+        healed: p.health - hpBefore,
+        restored: world.mana.value - manaBefore,
+        health: p.health,
         mana: world.mana.value,
       });
     } else {

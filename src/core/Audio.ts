@@ -43,6 +43,7 @@ export type SoundName =
   | 'pickup_potion'
   | 'pickup_mana'
   | 'pickup_gold'
+  | 'pickup_food'
   | 'weapon_switch'
   | 'hammer_swing'
   | 'melee_hit'
@@ -342,6 +343,12 @@ export class GameAudio {
         this.tone(784, 0.24, 'sine', 0.4, 0.05);
         this.tone(1046, 0.34, 'sine', 0.32, 0.1);
         this.tone(1568, 0.3, 'triangle', 0.16, 0.14);
+        break;
+      case 'pickup_food':
+        // 음식 — 회복음과 마나음을 섞은 낮고 둔탁한 상승. 포션보다 수수하게
+        this.tone(330, 0.16, 'sine', 0.38);
+        this.tone(494, 0.2, 'triangle', 0.3, 0.06);
+        this.noise(0.09, 0.14, 900, 0.02);
         break;
       case 'pickup_gold':
         // 동전 — 짧고 밝은 금속 딸랑

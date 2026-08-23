@@ -104,7 +104,7 @@ export interface SpellState {
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
-  kind: 'sigil' | 'potion' | 'mana' | 'gold';
+  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold';
   x: number;
   z: number;
   /** kind==='sigil' 일 때만 */

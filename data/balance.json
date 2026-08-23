@@ -225,6 +225,13 @@
       "restoreAmount": 35,
       "magnetRadius": 3.2
     },
+    "_foodNote": "음식 — HP·마나를 동시에 채우되 각 포션의 절반씩. 하나로 두 자원을 조금씩 메우는 대신 급할 때는 포션만 못하다",
+    "food": {
+      "dropChance": 0.15,
+      "healAmount": 12.5,
+      "restoreAmount": 17.5,
+      "magnetRadius": 3.2
+    },
     "gold": {
       "dropChance": 0.65,
       "min": 3,

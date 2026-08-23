@@ -79,6 +79,12 @@ describe('처치 드랍', () => {
     expect(world.groundItems.map((i) => i.kind)).toContain('mana');
   });
 
+  it('음식도 함께 떨어진다', () => {
+    fixRandom(0.01); // food(0.15) 통과
+    Pickups.rollDrops(world, 'goblin_runner', 12, 10);
+    expect(world.groundItems.map((i) => i.kind)).toContain('food');
+  });
+
   it('보스는 확률과 무관하게 포션 확정 + 골드 ×배율', () => {
     fixRandom(0.99);
     Pickups.rollDrops(world, 'goblin_chieftain', 12, 10);
@@ -115,6 +121,40 @@ describe('자석 흡수', () => {
     expect(ticks).toBeLessThan(20); // 아주 빠르게 (0.33초 이내)
     expect(world.player.health).toBe(balance.player.healthMax);
     expect(events[0]).toMatchObject({ healed: 10 }); // 상한 초과분은 버려진다
+  });
+
+  it('음식 — HP·마나를 동시에, 각 포션의 절반씩 채운다', () => {
+    expect(cfg.food.healAmount).toBeCloseTo(cfg.potion.healAmount / 2, 5);
+    expect(cfg.food.restoreAmount).toBeCloseTo(cfg.manaPotion.restoreAmount / 2, 5);
+
+    world.player.health = 40;
+    world.mana.value = 10;
+    world.groundItems.push({ id: 1, kind: 'food', x: 12, z: 10 });
+    const events: { healed: number; restored: number }[] = [];
+    world.events.on('food_picked', (payload) =>
+      events.push(payload as { healed: number; restored: number }),
+    );
+
+    expect(absorb()).toBeGreaterThan(1);
+    expect(world.player.health).toBeCloseTo(40 + cfg.food.healAmount, 5);
+    expect(world.mana.value).toBeCloseTo(10 + cfg.food.restoreAmount, 5);
+    expect(events[0]).toMatchObject({
+      healed: cfg.food.healAmount,
+      restored: cfg.food.restoreAmount,
+    });
+  });
+
+  it('음식 — 둘 다 가득이면 남고, 하나만 모자라도 먹는다', () => {
+    world.player.health = balance.player.healthMax;
+    world.mana.value = balance.mana.max;
+    world.groundItems.push({ id: 1, kind: 'food', x: 12, z: 10 });
+    for (let i = 0; i < 30; i++) Pickups.tick(world, DT);
+    expect(world.groundItems).toHaveLength(1); // 그대로 바닥에
+    expect(world.groundItems[0]!.magnet).toBeUndefined();
+
+    world.mana.value = balance.mana.max - 1; // 마나만 모자라도
+    expect(absorb()).toBeGreaterThan(0);
+    expect(world.mana.value).toBe(balance.mana.max);
   });
 
   it('포션 — 체력이 가득이면 걸리지 않고 바닥에 남는다', () => {
