@@ -20,7 +20,7 @@
     "stamina": {
       "max": 100,
       "sprintDrainPerTick": 0.35,
-      "dodgeCost": 25,
+      "dodgeCost": 15,
       "regenPerTick": 0.7,
       "exhaustedRegenPerTick": 0.18,
       "exhaustedSpeedMul": 0.5,
