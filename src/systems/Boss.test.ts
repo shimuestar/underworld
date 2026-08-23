@@ -357,6 +357,55 @@ describe('goblin_chieftain 원거리 공격', () => {
     expect(boss.attackMode).toBe('melee'); // 끝나면 평소 모드로
   });
 
+  it('화살은 손에서 나가도 몸 중심을 향한다 — 조준선은 발사 지점에서 다시 잰다', () => {
+    const def = enemyDef('goblin_chieftain');
+    const volley = def.volleyAttack!;
+    expect(volley.muzzleSideMul!).toBeGreaterThan(0); // 해머 든 손 옆에서 나간다
+    const boss = spawnEnemyAt('goblin_chieftain', 18, 6, 1);
+    boss.ai = 'chase';
+    boss.chargeCooldown = 9999;
+    world.enemies.push(boss);
+
+    tickEnemiesUntil(() => world.projectiles.length === 1, 1200);
+    const arrow = world.projectiles[0]!;
+    const p = world.player;
+
+    // 발사 지점은 몸 중심에서 옆으로 벗어나 있다 (손 위치)
+    expect(Math.hypot(arrow.x - boss.x, arrow.z - boss.z)).toBeGreaterThan(def.radius);
+    expect(Math.abs(arrow.z - boss.z)).toBeGreaterThan(def.radius * volley.muzzleSideMul! * 0.9);
+
+    // 그런데도 진행선은 플레이어를 관통해야 한다. 몸 중심 기준으로 조준하면
+    // 손만큼(0.68m) 평행 이동한 선이 되어 반경(0.4+0.15)을 넘어 영영 빗나간다
+    const len = Math.hypot(arrow.vx, arrow.vy, arrow.vz);
+    const u = [arrow.vx / len, arrow.vy / len, arrow.vz / len];
+    const rel = [
+      p.x - arrow.x,
+      p.y + balance.player.eyeHeight * 0.8 - arrow.y,
+      p.z - arrow.z,
+    ];
+    const t = rel[0]! * u[0]! + rel[1]! * u[1]! + rel[2]! * u[2]!;
+    const perp = Math.hypot(rel[0]! - u[0]! * t, rel[1]! - u[1]! * t, rel[2]! - u[2]! * t);
+    expect(perp).toBeLessThan(1e-9);
+  });
+
+  it('그래서 정면을 보고 있으면 방패로 받아낼 수 있다', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 18, 6, 1);
+    boss.ai = 'chase';
+    boss.chargeCooldown = 9999;
+    world.enemies.push(boss);
+    tickEnemiesUntil(() => world.projectiles.length === 1, 1200);
+
+    world.player.blocking = true; // +X 를 본다 = 보스 정면
+    const blocked: unknown[] = [];
+    world.events.on('block_hit', (payload) => blocked.push(payload));
+    const before = world.player.health;
+
+    for (let i = 0; i < 120 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(world.projectiles).toHaveLength(0); // 옆으로 지나쳐 날아가지 않았다
+    expect(blocked).toHaveLength(1);
+    expect(world.player.health).toBe(before); // 화살 칩 피해는 0
+  });
+
   it('돌격은 예고 뒤 따로 달려 거리를 좁힌다 — 타격 창만으로는 못 닿는다', () => {
     const ch = enemyDef('goblin_chieftain').chargeAttack!;
     const def = enemyDef('goblin_chieftain');

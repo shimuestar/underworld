@@ -689,21 +689,27 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
   // 데이터로 받는다. 없으면 예전처럼 몸 중심에서 나간다
   const originY = def.height * (attack.muzzleHeightMul ?? 0.7);
   const targetY = p.y + balance.player.eyeHeight * 0.8;
-  const dx = p.x - enemy.x;
-  const dy = targetY - originY;
-  const dz = p.z - enemy.z;
-  const len = Math.hypot(dx, dy, dz);
-  if (len === 0) return;
+  const toX = p.x - enemy.x;
+  const toZ = p.z - enemy.z;
+  const flat = Math.hypot(toX, toZ);
+  if (flat === 0) return;
   const speed = attack.projectileSpeed ?? 12;
 
-  // 시전자 몸 밖에서 출발 — 밀착한 아군이 발사 즉시 삼키는 것을 막는다
+  // 발사 지점 — 몸 밖으로 muzzle 만큼, 무기를 쥔 손 쪽으로 side 만큼.
+  // 몸 밖에서 쏘는 건 밀착한 아군이 발사 즉시 삼키는 것을 막기 위한 것
   const radius = attack.projectileRadius ?? 0.3;
   const muzzle = def.radius + radius;
-  // 정면(dx,dz) 기준 오른쪽 = (-dz, dx) — 무기를 쥔 손 쪽으로 밀어낸다
-  const flat = Math.hypot(dx, dz) || 1;
   const side = def.radius * (attack.muzzleSideMul ?? 0);
-  const originX = enemy.x + (dx / len) * muzzle + (-dz / flat) * side;
-  const originZ = enemy.z + (dz / len) * muzzle + (dx / flat) * side;
+  const originX = enemy.x + (toX / flat) * muzzle + (-toZ / flat) * side;
+  const originZ = enemy.z + (toZ / flat) * muzzle + (toX / flat) * side;
+
+  // 조준은 반드시 "발사 지점에서" 다시 잰다. 몸 중심 기준 방향을 그대로 쓰면
+  // 손만큼 옆으로 평행 이동한 채 날아가 계속 빗나간다 (실측 0.68m 어긋남)
+  const dx = p.x - originX;
+  const dy = targetY - originY;
+  const dz = p.z - originZ;
+  const len = Math.hypot(dx, dy, dz);
+  if (len === 0) return;
 
   world.projectiles.push({
     id: nextProjectileId++,
