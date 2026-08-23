@@ -3,7 +3,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
-import { sigilDef } from '../core/SigilData';
+import sigilsJson from '../../data/sigils.json';
+import { sigilColor, sigilDef } from '../core/SigilData';
 import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
@@ -60,6 +61,31 @@ function runnerAt(x: number, z: number): EnemyState {
 let world: World;
 beforeEach(() => {
   world = makeWorld();
+});
+
+describe('각인 색', () => {
+  it('24종이 전부 다른 색이다 — 바닥에서 색만 보고 구분한다', () => {
+    const ids = (sigilsJson.sigils as { id: string }[]).map((s) => s.id);
+    expect(ids).toHaveLength(24);
+    const colors = ids.map((id) => sigilDef(id).color);
+    expect(new Set(colors).size).toBe(ids.length);
+    for (const c of colors) expect(c).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  it('sigilColor 는 같은 값을 숫자로 준다 (Three.js·CSS 공용)', () => {
+    expect(sigilColor('sig_fireball')).toBe(
+      Number.parseInt(sigilDef('sig_fireball').color.slice(1), 16),
+    );
+    expect(sigilColor('sig_fireball')).not.toBe(sigilColor('sig_dash'));
+  });
+
+  it('너무 어두운 색은 쓰지 않는다 — 랜턴 밖에서도 보여야 한다', () => {
+    for (const s of sigilsJson.sigils as { id: string; color: string }[]) {
+      const n = Number.parseInt(s.color.slice(1), 16);
+      const lum = ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114;
+      expect(lum, s.id).toBeGreaterThan(70);
+    }
+  });
 });
 
 describe('각인 드랍과 부착', () => {

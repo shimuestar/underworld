@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
 import { currentAttack, enemyDef, healthBarState } from '../core/Entities';
+import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, glyphTexture } from '../level/GridLoader';
 import type { EnemyState, GroundItemState, ProjectileState } from '../core/World';
 import { FINISHER_CONTACT_MS, HandModel } from './HandModel';
@@ -1876,7 +1877,7 @@ export class Stage {
   }
 
   /** 바닥 아이템 비주얼 — 각인(팔면체 보석) / 포션(붉은 약병) / 골드(낮은 더미) */
-  private makeGroundItem(kind: GroundItemState['kind']): THREE.Group {
+  private makeGroundItem(kind: GroundItemState['kind'], sigilId?: string): THREE.Group {
     const group = new THREE.Group();
     if (kind === 'potion' || kind === 'mana') {
       const color = kind === 'mana' ? MANA_POTION_COLOR : POTION_COLOR;
@@ -1947,17 +1948,19 @@ export class Stage {
       group.add(pile);
       group.add(new THREE.PointLight(GOLD_COLOR, 0.5, 3.5, 0));
     } else {
+      // 각인 — 종류마다 색이 다르다. 어둠 속에서 점광원 색만 보고도 무엇인지 안다
+      const color = sigilId ? sigilColor(sigilId) : GROUND_ITEM_COLOR;
       const gem = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.22),
         new THREE.MeshLambertMaterial({
-          color: GROUND_ITEM_COLOR,
-          emissive: GROUND_ITEM_COLOR,
+          color,
+          emissive: color,
           emissiveIntensity: 0.55,
         }),
       );
       gem.name = 'gem';
       group.add(gem);
-      group.add(new THREE.PointLight(GROUND_ITEM_COLOR, 0.9, 5, 0));
+      group.add(new THREE.PointLight(color, 0.9, 5, 0));
     }
     return group;
   }
@@ -1999,7 +2002,7 @@ export class Stage {
       seen.add(item.id);
       let group = this.groundItemVisuals.get(item.id);
       if (!group) {
-        group = this.makeGroundItem(item.kind);
+        group = this.makeGroundItem(item.kind, item.sigilId);
         this.groundItemVisuals.set(item.id, group);
         this.scene.add(group);
       }

@@ -13,6 +13,15 @@ const SLOT_LABELS: Record<SigilSlot, string> = {
   spine: '척추',
 };
 
+/** 각인 색 견본 — 바닥에 떨어진 팔면체와 같은 색이라 주운 것과 목록이 이어진다 */
+function swatch(color: string): HTMLElement {
+  const dot = document.createElement('span');
+  dot.style.cssText =
+    `display:inline-block;width:9px;height:9px;margin-right:7px;` +
+    `background:${color};box-shadow:0 0 6px ${color};vertical-align:baseline;`;
+  return dot;
+}
+
 export class SigilUI {
   private readonly root: HTMLDivElement;
   open = false;
@@ -72,6 +81,7 @@ export class SigilUI {
       const value = document.createElement('span');
       if (equipped) {
         const def = sigilDef(equipped);
+        row.appendChild(swatch(def.color)); // 바닥에서 본 색 그대로
         if (this.altarMode) {
           value.textContent = `[${def.name}] — 클릭해서 해제`;
           value.style.cssText = 'color:#e8c76a;cursor:pointer;';
@@ -107,10 +117,15 @@ export class SigilUI {
       const def = sigilDef(id);
       const row = document.createElement('div');
       const occupied = world.sigils.equipped[def.slot] !== null;
-      row.textContent = `${def.name} (${SLOT_LABELS[def.slot]}) — ${occupied ? '슬롯 사용 중' : '클릭해서 부착'}`;
       row.style.cssText = occupied
         ? 'color:#555c66;padding:2px 0;'
         : 'color:#7fbfff;cursor:pointer;padding:2px 0;';
+      row.appendChild(swatch(def.color));
+      row.appendChild(
+        document.createTextNode(
+          `${def.name} (${SLOT_LABELS[def.slot]}) — ${occupied ? '슬롯 사용 중' : '클릭해서 부착'}`,
+        ),
+      );
       if (!occupied) {
         row.onclick = () => {
           Sigils.attach(this.world, id);

@@ -157,11 +157,17 @@ interface Sigil {
   slot: 'eye' | 'rightArm' | 'leftArm' | 'heart' | 'spine';
   tier: 'passive' | 'small' | 'medium' | 'large';
   corruptionCost: number;
+  color: string;   // #rrggbb — 24종 전부 다른 색
   effects: Record<string, number>;
 }
 ```
 
 부위별 슬롯은 각 1개. 최대 동시 부착 5개.
+
+**색으로 구분한다.** 24종에 각기 다른 `color` 를 두고, 바닥에 떨어진 팔면체의
+본체·발광·점광원과 각인 UI 의 견본이 같은 값을 쓴다(`sigilColor`) — 어둠 속에서
+불빛 색만 보고 주우러 갈지 정할 수 있다. 랜턴 밖에서도 보이도록 너무 어두운 색은
+쓰지 않는다 (휘도 하한을 테스트가 잠근다).
 
 ### 상태 3종
 
