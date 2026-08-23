@@ -706,7 +706,6 @@ events.on('boss_phase', (payload) => {
   audio.play('boss_phase');
   showReaction(phase === 'armored' ? '장갑 페이즈 — 실탄으로 파괴하라' : '장갑 파괴 — 패링 구간', 3000);
 });
-events.on('exit_locked', () => showReaction('출구가 봉인되어 있다 — 족장이 살아 있다', 3000));
 events.on('exit_opened', () => {
   audio.play('exit_opened');
   showReaction('족장이 쓰러졌다 — 출구의 봉인이 풀렸다', 3500);
@@ -942,7 +941,12 @@ function render(alpha: number): void {
   });
   const showAltarPrompt =
     world.altarInView && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
-  altarPrompt!.classList.toggle('visible', showAltarPrompt || (nearLever && !world.dead));
+  // 봉인된 출구 발판 위 — 서 있는 동안 계속 띄운다 (3초 뒤 사라지면 못 보고 지나친다)
+  const onSealedExit = world.onExitPad && !world.exitOpen && !world.dead && !world.uiOpen;
+  altarPrompt!.classList.toggle(
+    'visible',
+    showAltarPrompt || (nearLever && !world.dead) || onSealedExit,
+  );
   if (showAltarPrompt) {
     altarPrompt!.textContent =
       `제단 — E 보급 상점\n` +
@@ -950,6 +954,11 @@ function render(alpha: number): void {
       `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
   } else if (nearLever) {
     altarPrompt!.textContent = 'E — 레버를 당긴다';
+  } else if (onSealedExit) {
+    const boss = world.enemies.find((e) => e.alive && enemyDef(e.type).boss);
+    altarPrompt!.textContent =
+      `출구가 봉인되어 있다\n` +
+      `${boss ? (enemyDef(boss.type).name ?? '족장') : '족장'}을 쓰러뜨려야 발판이 열린다`;
   }
 
   const w = world.weapon;

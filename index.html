@@ -82,7 +82,9 @@
       }
       #altar-prompt {
         position: fixed;
-        bottom: 12%;
+        /* 하단 상태 블록(바+랜턴+골드+무기 슬롯 ≒ 110px) 위로 올린다 —
+           12% 로 두면 창이 낮을 때 HP 바와 겹친다 */
+        bottom: 132px;
         left: 50%;
         transform: translateX(-50%);
         display: none;

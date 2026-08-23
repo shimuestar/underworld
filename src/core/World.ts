@@ -341,6 +341,8 @@ export class World {
   exitLockedNotified = false;
   /** 출구 개방 여부 — 보스가 죽으면 열린다. 렌더·미니맵이 이 값을 본다 */
   exitOpen = false;
+  /** 출구 발판 위에 서 있는가 — 봉인 안내를 계속 띄우기 위한 플래그 */
+  onExitPad = false;
 
   /** 당겨진 레버 ("row-col") — 레버는 1회용 */
   pulledLevers = new Set<string>();

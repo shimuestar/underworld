@@ -19,7 +19,8 @@ export function tick(world: World, _dt: number): void {
   }
 
   const dist = Math.hypot(world.player.x - exit.x, world.player.z - exit.z);
-  if (dist > EXIT_RADIUS) {
+  world.onExitPad = dist <= EXIT_RADIUS; // 발판 위 안내를 렌더가 이 값으로 띄운다
+  if (!world.onExitPad) {
     world.exitLockedNotified = false;
     return;
   }
