@@ -36,6 +36,7 @@ function buildSpiderBody(
   torso: THREE.Group,
   def: { radius: number; height: number },
   bodyMat: THREE.MeshLambertMaterial,
+  eyes: EyeKit,
   baseColor: number,
   flashMaterials: THREE.MeshLambertMaterial[],
 ): void {
@@ -58,12 +59,10 @@ function buildSpiderBody(
   abdomen.position.set(0, bodyY + r * 0.06, r * 0.6);
   torso.add(abdomen);
 
-  // 눈 — 앞을 향한 작은 점 넷. 어둠 속에서 이것만 보여도 거미인 줄 안다
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff4d4d });
+  // 눈 — 앞을 향한 안광 넷. 어둠 속에서 이것만 보여도 거미인 줄 안다
+  const eyeR = r * balance.lighting.enemyEyes.radiusMul;
   for (const ex of [-0.55, -0.2, 0.2, 0.55]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.075, 5, 4), eyeMat);
-    eye.position.set(ex * r * 0.5, bodyY + r * 0.14, -r * 0.9);
-    torso.add(eye);
+    addGlowEye(torso, ex * r * 0.5, bodyY + r * 0.14, -r * 0.9, eyeR, eyes.eyeMat, eyes.haloMat, eyes.halos);
   }
 
   // 다리 8개 — 무릎에서 꺾여 위로 솟았다 바닥으로 내려온다.
@@ -215,6 +214,12 @@ const THRUST_LEAN = -0.18; // 타격: 앞으로 숙임
 
 interface EnemyVisual {
   group: THREE.Group;
+  /** 안광 후광 재질 — 어그로가 잡히면 밝아진다 */
+  eyeHalo: THREE.SpriteMaterial;
+  /** 후광 스프라이트들 — 거리에 따라 매 프레임 크기를 키운다 (원거리 글린트) */
+  eyeHalos: THREE.Sprite[];
+  /** 가까이서의 후광 기본 크기 (m) */
+  eyeHaloBase: number;
   /** 몸통+머리 서브그룹 — 공격 모션(기울임/내지름)의 피벗 (발 기준) */
   torso: THREE.Group;
   /** 텔레그래프 발광을 적용할 머티리얼들 (몸통/머리/창끝) */
@@ -270,6 +275,72 @@ const ALERT_POP_MS = 160;
 
 /** 느낌표 텍스처 — 모든 적이 같은 그림을 쓰므로 한 번만 만든다 */
 let alertTexture: THREE.CanvasTexture | null = null;
+let eyeHaloTexture: THREE.CanvasTexture | null = null;
+
+/** 안광 후광 — 가운데가 밝고 가장자리로 사라지는 원. 가산 혼합으로 얹어
+ *  "빛이 번진다"를 만든다. 한 장을 모든 적이 공유한다 */
+function getEyeHaloTexture(): THREE.CanvasTexture {
+  if (eyeHaloTexture) return eyeHaloTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.6, 'rgba(255,255,255,0.12)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  eyeHaloTexture = new THREE.CanvasTexture(canvas);
+  return eyeHaloTexture;
+}
+
+/** 안광 하나 — unlit 구(가까이서 보이는 알맹이) + 후광 스프라이트(멀리서 보이는 점).
+ *  재질은 적 하나가 눈 여러 개에 공유한다 — 어그로 밝기를 한 번에 바꾸려고 */
+function addGlowEye(
+  parent: THREE.Object3D,
+  x: number,
+  y: number,
+  z: number,
+  radius: number,
+  eyeMat: THREE.MeshBasicMaterial,
+  haloMat: THREE.SpriteMaterial,
+  halos: THREE.Sprite[],
+): void {
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(radius, 6, 5), eyeMat);
+  eye.position.set(x, y, z);
+  parent.add(eye);
+  const halo = new THREE.Sprite(haloMat);
+  const size = radius * balance.lighting.enemyEyes.haloScaleMul;
+  halo.scale.set(size, size, 1);
+  halo.position.set(x, y, z);
+  parent.add(halo);
+  halos.push(halo);
+}
+
+/** 적 하나의 안광 재질 한 벌 */
+interface EyeKit {
+  eyeMat: THREE.MeshBasicMaterial;
+  haloMat: THREE.SpriteMaterial;
+  halos: THREE.Sprite[];
+}
+function makeEyeMaterials(): EyeKit {
+  const cfg = balance.lighting.enemyEyes;
+  const color = new THREE.Color(cfg.color);
+  return {
+    halos: [],
+    eyeMat: new THREE.MeshBasicMaterial({ color }),
+    haloMat: new THREE.SpriteMaterial({
+      map: getEyeHaloTexture(),
+      color,
+      transparent: true,
+      opacity: cfg.haloOpacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false, // 뒤의 것을 가리지 않는다. depthTest 는 켜 둔다 — 벽 너머로 안 비친다
+    }),
+  };
+}
 function getAlertTexture(): THREE.CanvasTexture {
   if (alertTexture) return alertTexture;
   const canvas = document.createElement('canvas');
@@ -1153,8 +1224,10 @@ export class Stage {
 
     const bodyMat = new THREE.MeshLambertMaterial({ color: baseColor });
     flashMaterials.push(bodyMat);
+    // 안광 — 조명이 아니라 자체 발광 눈. 어둠 속에서 멀리서도 "저기 뭔가 있다"가 읽힌다
+    const eyes = makeEyeMaterials();
     if (SPIDER_TYPES.has(type)) {
-      buildSpiderBody(torso, def, bodyMat, baseColor, flashMaterials);
+      buildSpiderBody(torso, def, bodyMat, eyes, baseColor, flashMaterials);
     } else {
       // 몸통은 충돌 원과 같은 반경의 8각 기둥 — 박스로 두면 모서리가 반경 밖으로
       // 0.21m 튀어나와(0.5→0.707) 비스듬히 부딪칠 때 뚫고 들어가 보인다
@@ -1173,6 +1246,15 @@ export class Stage {
       const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), headMat);
       head.position.set(0, def.height - headSize / 2, -def.radius * 0.2);
       torso.add(head);
+
+      // 눈 둘 — 머리 앞면(-Z)에 살짝 박혀 나온다. 눈높이는 얼굴 중앙보다 약간 위
+      const ec = balance.lighting.enemyEyes;
+      const eyeR = def.radius * ec.radiusMul;
+      const eyeY = head.position.y + headSize * 0.08;
+      const eyeZ = head.position.z - headSize / 2 - eyeR * 0.4;
+      for (const side of [-1, 1]) {
+        addGlowEye(torso, side * headSize * ec.spacingMul, eyeY, eyeZ, eyeR, eyes.eyeMat, eyes.haloMat, eyes.halos);
+      }
     }
 
     // 이름표 + HP 바 (빌보드 스프라이트, 어그로 후에만 표시)
@@ -1207,6 +1289,9 @@ export class Stage {
 
     const visual: EnemyVisual = {
       group,
+      eyeHalo: eyes.haloMat,
+      eyeHalos: eyes.halos,
+      eyeHaloBase: eyes.halos[0]?.scale.x ?? 0,
       torso,
       flashMaterials,
       shieldBaseZ: 0,
@@ -1475,6 +1560,12 @@ export class Stage {
 
       // 이름표 — 어그로 후에만. 체력·패링 카운터가 바뀔 때만 다시 그린다
       visual.plate.visible = enemy.ai !== 'idle';
+      const eyeCfg = balance.lighting.enemyEyes;
+      visual.eyeHalo.opacity = enemy.ai !== 'idle' ? eyeCfg.alertedHaloOpacity : eyeCfg.haloOpacity;
+      // 원거리 글린트 — 멀수록 후광을 키워 화면에서 몇 픽셀은 늘 남긴다
+      const eyeDist = Math.hypot(enemy.x - this.camera.position.x, enemy.z - this.camera.position.z);
+      const haloSize = Math.max(visual.eyeHaloBase, eyeDist * eyeCfg.haloPerMeter);
+      for (const halo of visual.eyeHalos) halo.scale.set(haloSize, haloSize, 1);
       if (visual.plate.visible) {
         const staggered = enemy.ai === 'staggered';
         const parry = def2.parriesToStagger

@@ -413,6 +413,17 @@
       "color": "#b8c4d8",
       "intensity": 0.55,
       "radius": 7.0
+    },
+    "_enemyEyesNote": "적의 안광 — 조명이 아니라 자체 발광(unlit) 눈 + 가산 혼합 후광 스프라이트. 실제 광원을 적마다 달면 40마리분 포인트라이트가 모든 셰이더에 들어가 렌더가 무너진다. 눈 자체는 멀면 픽셀 이하라 원거리 식별은 후광이 맡는다. 어그로가 잡히면 후광이 더 밝아진다",
+    "enemyEyes": {
+      "color": "#ff2418",
+      "radiusMul": 0.075,
+      "spacingMul": 0.26,
+      "haloScaleMul": 3.2,
+      "haloOpacity": 0.34,
+      "alertedHaloOpacity": 0.7,
+      "_haloPerMeterNote": "후광의 월드 크기 하한 = 거리(m) × 이 값. 멀어질수록 후광을 키워 화면에서 늘 몇 픽셀은 남긴다 — 이게 없으면 15m 밖에서 눈이 픽셀 하나로 사라져 원거리 식별이 안 된다 (실측)",
+      "haloPerMeter": 0.016
     }
   },
 
