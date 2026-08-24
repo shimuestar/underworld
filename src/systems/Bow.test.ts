@@ -172,31 +172,18 @@ describe('회수', () => {
     for (let i = 0; i < max && world.groundItems.length > 0; i++) Pickups.tick(world, DT);
   }
 
-  it('벽에 꽂힌 내 화살이 바닥 아이템으로 남는다', () => {
-    const arrow = shoot(world, BOW.maxDrawTicks)!;
-    void arrow;
-    for (let i = 0; i < 300 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
-    const arrows = world.groundItems.filter((g) => g.kind === 'arrow');
-    expect(arrows).toHaveLength(1);
-    expect(arrows[0]!.id).toBeGreaterThanOrEqual(600000);
-    expect(arrows[0]!.id).toBeLessThan(700000); // 가방 버리기 대역과 안 겹친다
-  });
-
-  it('벽에 꽂힌 내 화살은 꽂힌 자세를 들고 있다 — 그림과 주울 물건이 하나다', () => {
-    const stuckEvents: unknown[] = [];
-    world.events.on('arrow_stuck', (p) => stuckEvents.push(p));
+  it('벽에 꽂힌 화살은 못 뽑는다 — 박힌 채 남기만 한다', () => {
+    const stuck: { dx: number; dy: number; dz: number }[] = [];
+    world.events.on('arrow_stuck', (p) => stuck.push(p as { dx: number; dy: number; dz: number }));
     shoot(world, BOW.maxDrawTicks);
     for (let i = 0; i < 300 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
 
-    const arrow = world.groundItems.find((g) => g.kind === 'arrow')!;
-    expect(arrow).toBeDefined();
-    // 착탄 높이를 들고 있다 (바닥에 눕히지 않는다)
-    expect(arrow.y).toBeGreaterThan(0.5);
-    // 날아온 방향 — 정면(+X)으로 쐈으니 X 성분이 크다
-    expect(arrow.stuckX).toBeGreaterThan(0.9);
-    expect(Math.hypot(arrow.stuckX!, arrow.stuckY!, arrow.stuckZ!)).toBeCloseTo(1, 3);
-    // 데칼은 따로 띄우지 않는다 — 두 대로 보이면 안 된다
-    expect(stuckEvents).toHaveLength(0);
+    // 회수는 적을 맞힌 화살에서만 나온다
+    expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(0);
+    // 대신 꽂힌 자세(날아온 방향)를 실어 보낸다 — 정면(+X)으로 쐈다
+    expect(stuck).toHaveLength(1);
+    expect(stuck[0]!.dx).toBeGreaterThan(0.9);
+    expect(Math.hypot(stuck[0]!.dx, stuck[0]!.dy, stuck[0]!.dz)).toBeCloseTo(1, 3);
   });
 
   it('적 궁수의 화살은 바닥에 남지 않는다 — 회수 대상이 아니다', () => {

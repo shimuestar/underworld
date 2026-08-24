@@ -765,7 +765,10 @@ export class Stage {
     }
   }
 
-  /** 벽에 꽂힌 화살 */
+  /** 벽에 꽂힌 화살 — 촉이 벽 안, 꼬리가 밖.
+   *  ⚠ 일반 Object3D 의 lookAt 은 카메라와 반대로 **+Z** 가 대상을 향한다
+   *  (three.js 가 내부에서 eye/target 을 뒤바꾼다). 그래서 촉을 +Z 에 둔다 —
+   *  -Z 에 두면 촉이 벽 밖을 보며 거꾸로 꽂힌다 (실측으로 확인) */
   spawnStuckArrow(x: number, y: number, z: number, dx: number, dy: number, dz: number): void {
     const arrow = new THREE.Group();
     const material = new THREE.MeshLambertMaterial({
@@ -774,6 +777,14 @@ export class Stage {
       opacity: 1,
     });
     arrow.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.6), material));
+    const headMat = new THREE.MeshLambertMaterial({
+      color: 0xb9c0c9,
+      transparent: true,
+      opacity: 1,
+    });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.13), headMat);
+    head.position.z = 0.33; // +Z = 날아온 방향 = 벽 안쪽
+    arrow.add(head);
     // 촉이 박힌 지점에서 꼬리가 튀어나오도록 뒤로 물림
     arrow.position.set(x - dx * 0.26, y - dy * 0.26, z - dz * 0.26);
     arrow.lookAt(x + dx, y + dy, z + dz);
@@ -2271,20 +2282,10 @@ export class Stage {
                   : 0.55 + Math.sin(now / 400 + item.id) * 0.1);
       group.position.set(item.x, bob, item.z);
       const gem = group.getObjectByName('gem');
-      // 벽에 꽂힌 화살 — 날아온 방향으로 박힌 자세 그대로 둔다. 돌지도 눕지도 않는다.
-      // 자석에 걸리는 순간부터는 평범한 바닥 아이템처럼 날아온다
-      const stuck = item.stuckX !== undefined && !item.magnet;
-      if (stuck) {
-        group.rotation.set(0, 0, 0);
-        group.lookAt(item.x + item.stuckX!, bob + (item.stuckY ?? 0), item.z + item.stuckZ!);
-        if (gem) gem.rotation.set(0, 0, 0);
-      } else {
-        if (item.stuckX !== undefined) group.rotation.set(0, 0, 0); // 뽑혀 날아가는 중
-        // 빨려드는 동안은 빠르게 회전하고 살짝 작아진다 (몸으로 들어가는 느낌)
-        // 화살도 골드처럼 아주 느리게만 돈다 — 빙글빙글 돌면 주울 물건이 아니라
-        // 장식으로 보인다
-        if (gem) gem.rotation.y = now / (item.magnet ? 90 : grounded ? 1400 : 700);
-      }
+      // 빨려드는 동안은 빠르게 회전하고 살짝 작아진다 (몸으로 들어가는 느낌)
+      // 화살도 골드처럼 아주 느리게만 돈다 — 빙글빙글 돌면 주울 물건이 아니라
+      // 장식으로 보인다
+      if (gem) gem.rotation.y = now / (item.magnet ? 90 : grounded ? 1400 : 700);
       const shrink = item.magnet ? 0.78 : 1;
       group.scale.setScalar(group.scale.x + (shrink - group.scale.x) * 0.25);
     }

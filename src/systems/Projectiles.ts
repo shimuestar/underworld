@@ -305,21 +305,17 @@ function moveProjectiles(world: World, dt: number): void {
       // 허공이 아니라 무언가에 닿았다 — 착탄 연출이 붙어야 한다
       world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', impact);
 
-      // 화살은 벽·바닥에 꽂힌 채 남는다
+      // 벽·바닥에 꽂힌 화살은 누가 쐈든 못 뽑는다 — 박힌 채로 남기만 한다.
+      // 회수는 적을 맞힌 화살에서만 나온다 (한 마리당 한 대)
       if (proj.kind === 'arrow' && !hitEnemy && !hitPlayer) {
-        const back = balance.pickups.arrow.stickPullback;
-        const sx = proj.x + dirX * hitT;
-        const sy = proj.y + dirY * hitT;
-        const sz = proj.z + dirZ * hitT;
-        if (proj.recoverable) {
-          // 내 화살은 꽂힌 그림과 주울 물건이 같은 하나다 — 데칼을 따로 띄우면
-          // 벽에 꽂힌 화살과 그 앞에 떨어진 화살이 겹쳐 두 대로 보인다.
-          // 촉이 박힌 지점에서 꼬리 쪽으로 물려 꽂힌 자세 그대로 남긴다
-          stickArrow(world, sx - dirX * back, sy - dirY * back, sz - dirZ * back, dirX, dirY, dirZ);
-        } else {
-          // 적 궁수의 화살은 못 줍는다 — 예전대로 렌더 잔존물로만
-          world.events.emit('arrow_stuck', { x: sx, y: sy, z: sz, dx: dirX, dy: dirY, dz: dirZ });
-        }
+        world.events.emit('arrow_stuck', {
+          x: proj.x + dirX * hitT,
+          y: proj.y + dirY * hitT,
+          z: proj.z + dirZ * hitT,
+          dx: dirX,
+          dy: dirY,
+          dz: dirZ,
+        });
       }
 
       // 방패 판정은 폭발보다 먼저 확정한다 — 폭풍/흡인이 kbTicks 를 세우면
@@ -403,22 +399,6 @@ function moveProjectiles(world: World, dt: number): void {
  *  부러짐 판정은 여기서 하지 않는다 — 줍는 순간에 굴려야 "왜 안 늘었지"를
  *  안내로 설명할 수 있다. 여기서 굴리면 화살이 애초에 안 생겨 보이지도 않는다 */
 let nextArrowItemId = 600000; // 처치 드랍(500000~)과 가방 버리기(700000~) 사이
-/** 벽·바닥에 꽂힌 채 남기는 화살. 방향을 실어 보내면 렌더가 그 자세로 박아 놓는다 */
-function stickArrow(
-  world: World,
-  x: number, y: number, z: number,
-  dx: number, dy: number, dz: number,
-): void {
-  world.groundItems.push({
-    id: nextArrowItemId++,
-    kind: 'arrow',
-    amount: 1,
-    x, z, y,
-    stuckX: dx, stuckY: dy, stuckZ: dz,
-    noMagnetTicks: balance.pickups.arrow.noMagnetTicks,
-  });
-}
-
 function dropArrow(world: World, x: number, z: number, scatter = false): void {
   const cfg = balance.pickups.arrow;
   // 적에게서 떨어진 화살은 처치 드랍(골드·물약)과 같은 점에 놓이므로 흩는다
