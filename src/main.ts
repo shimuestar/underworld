@@ -602,7 +602,11 @@ events.on('melee_kill', (payload) => {
   }
 });
 events.on('enemy_died', (payload) => {
-  const dead = payload as { enemyType: string; x: number; z: number };
+  const dead = payload as {
+    enemyType: string; x: number; z: number; blastX?: number; blastZ?: number;
+  };
+  // 폭발로 죽었으면 파편이 폭심 반대쪽으로 날아간다 (살아남은 적은 몸이 밀린다)
+  const launch = dead.blastX !== undefined ? balance.explosionKnockback.burstLaunch : 0;
   if (executedThisFrame) {
     // 처형 — 사망 연출도 해머가 닿는 순간까지 미룬다
     afterMs(executeContactMs, () => {
@@ -611,7 +615,9 @@ events.on('enemy_died', (payload) => {
     });
   } else {
     audio.play('enemy_death');
-    stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType, 1);
+    stage.spawnDeathBurst(
+      dead.x, dead.z, dead.enemyType, 1, dead.blastX ?? 0, dead.blastZ ?? 0, launch,
+    );
   }
   executedThisFrame = false;
 });

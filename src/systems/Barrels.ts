@@ -87,8 +87,15 @@ function explode(world: World, barrel: BarrelState): void {
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('weapon_kill', { weapon: 'barrel', enemyType: enemy.type });
-      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
-      continue; // 시체는 밀지 않는다
+      // 폭심 반대 방향을 함께 실어 보낸다 — 밀려날 몸이 안 남으니 파편이 대신 날아간다
+      world.events.emit('enemy_died', {
+        enemyType: enemy.type,
+        x: enemy.x,
+        z: enemy.z,
+        blastX: enemy.x - barrel.x,
+        blastZ: enemy.z - barrel.z,
+      });
+      continue; // 시체를 밀 수는 없다 (사망 즉시 모형이 사라진다)
     }
     // 폭풍에 밀린다 — 피해와 같은 감쇠를 따라 폭심에 가까울수록 멀리 날아간다
     pushFromBlast(enemy, barrel.x, barrel.z, cfg.enemyKnockback * damageAt(dist) / cfg.damage);

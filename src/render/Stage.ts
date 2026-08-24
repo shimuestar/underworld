@@ -2006,10 +2006,23 @@ export class Stage {
   }
 
   /** 적 사망 파편 폭발 — 몸통 색 조각들이 튀어 흩어진다. power>1 이면 더 많이·세게 */
-  spawnDeathBurst(x: number, z: number, enemyType: string, power = 1): void {
+  /** 사망 파편. launch 를 주면 (dirX,dirZ) 쪽으로 쏠려 날아간다 —
+   *  폭발에 죽은 적은 밀려날 몸이 남지 않으므로(래그돌 없음) 파편이 대신 날아간다 */
+  spawnDeathBurst(
+    x: number,
+    z: number,
+    enemyType: string,
+    power = 1,
+    dirX = 0,
+    dirZ = 0,
+    launch = 0,
+  ): void {
     const def = enemyDef(enemyType);
     const color = ENEMY_COLORS[enemyType] ?? ENEMY_COLOR_FALLBACK;
     const now = performance.now();
+    const len = Math.hypot(dirX, dirZ);
+    const lx = len > 0 ? dirX / len : 0;
+    const lz = len > 0 ? dirZ / len : 0;
     for (let i = 0; i < Math.round(DEATH_PARTICLE_COUNT * power); i++) {
       const size = (0.08 + Math.random() * 0.12) * (power > 1 ? 1.25 : 1);
       const mesh = new THREE.Mesh(
@@ -2018,14 +2031,17 @@ export class Stage {
       );
       const angle = Math.random() * Math.PI * 2;
       const speed = (1.5 + Math.random() * 3.5) * power;
+      // 흩어지는 성분은 남기고 날아가는 성분을 얹는다 — 전부 한 방향이면
+      // 파편이 아니라 화살처럼 보인다
+      const kick = launch * (0.55 + Math.random() * 0.9);
       const particle: Particle = {
         mesh,
         ox: x,
         oy: def.height * (0.3 + Math.random() * 0.6),
         oz: z,
-        vx: Math.cos(angle) * speed,
-        vy: (2 + Math.random() * 4) * power,
-        vz: Math.sin(angle) * speed,
+        vx: Math.cos(angle) * speed + lx * kick,
+        vy: (2 + Math.random() * 4) * power + launch * 0.25,
+        vz: Math.sin(angle) * speed + lz * kick,
         bornMs: now,
       };
       mesh.position.set(particle.ox, particle.oy, particle.oz);

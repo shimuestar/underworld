@@ -643,8 +643,15 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('weapon_kill', { weapon: 'grenade', enemyType: enemy.type });
-      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
-      continue; // 시체는 밀지 않는다
+      // 폭심 반대 방향을 함께 실어 보낸다 — 밀려날 몸이 안 남으니 파편이 대신 날아간다
+      world.events.emit('enemy_died', {
+        enemyType: enemy.type,
+        x: enemy.x,
+        z: enemy.z,
+        blastX: enemy.x - proj.x,
+        blastZ: enemy.z - proj.z,
+      });
+      continue; // 시체를 밀 수는 없다 (사망 즉시 모형이 사라진다)
     }
     // 폭풍에 밀린다 — 폭발통과 같은 규칙 (피해 감쇠 × 체급 배율)
     pushFromBlast(enemy, proj.x, proj.z, (grenade.enemyKnockback * damage) / grenade.damage);

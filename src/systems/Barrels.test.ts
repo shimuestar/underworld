@@ -270,16 +270,48 @@ describe('폭발', () => {
     expect(Math.abs(heavy.kbX!)).toBeCloseTo(Math.abs(light.kbX!) * byWeight.heavy!, 5);
   });
 
-  it('폭발로 죽은 적은 밀지 않는다 — 시체가 미끄러지지 않게', () => {
+  it('폭발로 죽은 적은 밀지 않는다 — 대신 파편 방향을 실어 보낸다', () => {
+    // 사망 즉시 모형이 사라져(래그돌 없음) 밀어 봐야 보이는 게 없다.
+    // 그래서 죽은 쪽은 파편이 폭심 반대로 날아가게 방향만 넘긴다
     const doomed = spawnEnemyAt('goblin_runner', 20 + 1, 6, 1);
     doomed.health = 5; // 확실히 죽는다
     world.enemies.push(doomed);
+    const deaths: { blastX?: number; blastZ?: number }[] = [];
+    world.events.on('enemy_died', (p) => deaths.push(p as { blastX?: number; blastZ?: number }));
+
     const barrel = putBarrel(world, 20, 6);
     barrel.fuseTicks = 0;
     Barrels.tick(world, DT);
 
     expect(doomed.alive).toBe(false);
     expect(doomed.kbTicks ?? 0).toBe(0);
+    expect(deaths[0]!.blastX).toBeGreaterThan(0); // 폭심(-X)에서 바깥으로
+    expect(deaths[0]!.blastZ).toBeCloseTo(0, 5);
+  });
+
+  it('반경 안에 살아남은 적은 죽지 않아도 전부 밀린다', () => {
+    // "죽을 때만 밀리는 것 아니냐"에 대한 못. 살아 있으면 거리와 무관하게 밀린다
+    const dists = [0.5, 2, 4, CFG.radius - 0.3];
+    const mobs = dists.map((d, i) => {
+      const e = spawnEnemyAt('goblin_runner', 20 + d, 6, i + 1);
+      e.health = 100000; // 아무도 안 죽는다
+      world.enemies.push(e);
+      return e;
+    });
+    const outside = spawnEnemyAt('goblin_runner', 20 + CFG.radius + 1, 6, 99);
+    outside.health = 100000;
+    world.enemies.push(outside);
+
+    const barrel = putBarrel(world, 20, 6);
+    barrel.fuseTicks = 0;
+    Barrels.tick(world, DT);
+
+    for (const e of mobs) {
+      expect(e.alive).toBe(true);
+      expect(e.kbTicks).toBe(balance.explosionKnockback.ticks);
+      expect(e.kbX!).toBeGreaterThan(0);
+    }
+    expect(outside.kbTicks ?? 0).toBe(0); // 반경 밖은 그대로
   });
 
   it('플레이어도 맞는다 — 뒤로 밀리기까지', () => {
