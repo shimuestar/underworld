@@ -9,7 +9,15 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef, shieldBlocksProjectile } from '../core/Entities';
-import { alertEnemy, igniteBarrel, pushPlayer, type BarrelState, type World } from '../core/World';
+import {
+  alertEnemy,
+  igniteBarrel,
+  pushEnemy,
+  pushPlayer,
+  type BarrelState,
+  type EnemyState,
+  type World,
+} from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   for (const barrel of world.barrels) {
@@ -22,6 +30,15 @@ export function tick(world: World, _dt: number): void {
     }
     explode(world, barrel);
   }
+}
+
+/** 폭심에서 바깥으로 밀어낸다. 체급이 무거울수록 덜 밀린다 —
+ *  해머 마무리 타와 같은 규약 (balance.explosionKnockback) */
+function pushFromBlast(enemy: EnemyState, cx: number, cz: number, distance: number): void {
+  const kb = balance.explosionKnockback;
+  const byWeight = kb.byWeight as unknown as Record<string, number>;
+  const weightMul = byWeight[enemyDef(enemy.type).weight] ?? 1;
+  pushEnemy(enemy, enemy.x - cx, enemy.z - cz, distance * weightMul, kb.ticks);
 }
 
 /** 터진다 — 적·플레이어·다른 통을 가리지 않는다. 연쇄는 즉발로 걸어 두고
@@ -71,7 +88,10 @@ function explode(world: World, barrel: BarrelState): void {
       enemy.alive = false;
       world.events.emit('weapon_kill', { weapon: 'barrel', enemyType: enemy.type });
       world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      continue; // 시체는 밀지 않는다
     }
+    // 폭풍에 밀린다 — 피해와 같은 감쇠를 따라 폭심에 가까울수록 멀리 날아간다
+    pushFromBlast(enemy, barrel.x, barrel.z, cfg.enemyKnockback * damageAt(dist) / cfg.damage);
   }
 
   // 플레이어도 예외가 아니다 — 이게 이 기믹의 값이다 (엄폐물 뒤에서 쏘라는 뜻)

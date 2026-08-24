@@ -94,6 +94,12 @@
     "scatterRadius": 1.2,
     "collisionRadius": 0.55
   },
+  "explosionKnockback": {
+    "_comment": "폭발이 적을 밀어내는 규칙 (폭발통·수류탄 공용). 미는 거리는 각 폭발이 따로 갖고, 여기서는 미는 시간과 체급 배율만 정한다. 피해와 같은 감쇠를 따라 폭심에 가까울수록 멀리 날아가고, 체급이 무거울수록 덜 밀린다 — 해머 마무리 타(weapons.hammer.combo.knockbackByWeight)와 같은 규약이다",
+    "ticks": 14,
+    "byWeight": { "light": 1.0, "medium": 0.55, "heavy": 0.3 }
+  },
+
   "barrel": {
     "_comment": "폭발통 — 총알·해머는 한 방에 터뜨리지 못한다. 맞은 수만큼 도화선이 짧아진다(fuseByHits: 1대=2초, 2대=0.5초, 3대=즉발). 화염구·수류탄·다른 통의 폭발은 즉발. 피해는 적·플레이어를 가리지 않는다 — 엄폐물 뒤에서 쏘는 무기다",
     "radius": 6.5,
@@ -101,6 +107,8 @@
     "damageFalloffMin": 0.25,
     "_damageNote": "수류탄(120)의 70%. 피해 수치는 그대로 두고 반경만 4.5 → 6.5 로 넓혔다(2026-08) — 중심 84, 가장자리 21 은 전과 같고 그 사이가 늘어난 것이라, 같은 거리에서 맞는 값은 오히려 올라간다(3m 42 → 55). 이제 수류탄(5.0)보다 넓다: 통은 제자리에 붙박이라 유인해서 터뜨려야 하고 플레이어도 같이 맞으므로, 던지고 싶을 때 던지는 수류탄과는 역할이 갈린다",
     "fuseByHits": [120, 30, 0],
+    "_enemyKnockbackNote": "폭풍에 적도 밀린다 — 플레이어만 밀리던 것을 맞췄다(2026-08). 폭심 기준 최대 거리이고, 실제 거리는 피해 감쇠·체급 배율을 곱한 값",
+    "enemyKnockback": 3.6,
     "playerKnockback": 3.2,
     "playerKnockbackTicks": 12,
     "collisionRadius": 0.46,
@@ -252,6 +260,8 @@
   "bounceRestitution": 0.5,
   "bounceFriction": 0.82,
       "damageFalloffMin": 0.25,
+      "_enemyKnockbackNote": "폭풍에 적이 밀리는 최대 거리 (폭심 기준). 통(3.6)보다 조금 약하다 — 통은 유인해서 터뜨리는 대가가 있다",
+      "enemyKnockback": 3.2,
       "cooldownTicks": 45,
       "noiseRadius": 20.0
     },

@@ -109,6 +109,25 @@ export interface SpellState {
 
 /** 바닥에 떨어진 각인. 접근하면 획득 */
 /** 보물상자 — E로 한 번 열면 골드 무더기와 각인 하나가 쏟아진다 */
+/** 적을 (dirX,dirZ) 쪽으로 distance 만큼 ticks 동안 밀어낸다.
+ *  밀리는 동안 적은 아무것도 못 한다 (Enemies 가 kbTicks 를 보고 멈춘다).
+ *  방향을 부르는 쪽이 주는 이유: 때린 사람에게서 밀려나는 경우(처형·해머)와
+ *  폭심에서 밀려나는 경우(폭발통·수류탄)가 있어 기준점이 하나가 아니다.
+ *  balance 는 호출부가 읽어 넘긴다 (pushPlayer 와 같은 규약) */
+export function pushEnemy(
+  enemy: EnemyState,
+  dirX: number,
+  dirZ: number,
+  distance: number,
+  ticks: number,
+): void {
+  const len = Math.hypot(dirX, dirZ);
+  if (len === 0 || ticks <= 0 || distance <= 0) return;
+  enemy.kbTicks = ticks;
+  enemy.kbX = (dirX / len) * (distance / ticks);
+  enemy.kbZ = (dirZ / len) * (distance / ticks);
+}
+
 /** 적이 플레이어를 알아챘다 — 추격으로 넘기고 멈칫 시간을 건다.
  *  깨우는 곳이 여섯 군데(시야·랜턴·보스 포효·총소리·화염구·폭발통)라 한 군데서만
  *  멈칫을 걸면 나머지는 느낌표가 뜨자마자 달려든다. balance 는 호출부가 읽어 넘긴다

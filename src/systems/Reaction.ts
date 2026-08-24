@@ -16,7 +16,7 @@
 
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef } from '../core/Entities';
-import { spendStamina } from '../core/World';
+import { pushEnemy, spendStamina } from '../core/World';
 import type { EnemyState, ProjectileState, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
@@ -273,13 +273,7 @@ function pushEnemyBack(
   ticks: number,
 ): void {
   const p = world.player;
-  const dx = enemy.x - p.x;
-  const dz = enemy.z - p.z;
-  const len = Math.hypot(dx, dz);
-  if (len === 0 || ticks <= 0) return;
-  enemy.kbTicks = ticks;
-  enemy.kbX = (dx / len) * (distance / ticks);
-  enemy.kbZ = (dz / len) * (distance / ticks);
+  pushEnemy(enemy, enemy.x - p.x, enemy.z - p.z, distance, ticks);
 }
 
 /** 회피 스텝 — 이동 입력 방향, 없으면 뒤로 */

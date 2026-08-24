@@ -235,6 +235,53 @@ describe('폭발', () => {
     expect(1000 - rim.health).toBeCloseTo(CFG.damage * CFG.damageFalloffMin, 5);
   });
 
+  it('적도 폭풍에 밀린다 — 폭심 반대쪽으로', () => {
+    const kb = balance.explosionKnockback;
+    const near = spawnEnemyAt('goblin_runner', 20 + 1, 6, 1);
+    const far = spawnEnemyAt('goblin_runner', 20 + CFG.radius - 0.5, 6, 2);
+    for (const e of [near, far]) {
+      e.health = 1000; // 죽으면 안 밀린다 (시체는 밀지 않는다)
+      world.enemies.push(e);
+    }
+    const barrel = putBarrel(world, 20, 6);
+    barrel.fuseTicks = 0;
+    Barrels.tick(world, DT);
+
+    expect(near.kbTicks).toBe(kb.ticks);
+    expect(near.kbX).toBeGreaterThan(0); // 폭심(-X 쪽)에서 멀어진다
+    expect(near.kbZ).toBeCloseTo(0, 5);
+    // 폭심에 가까울수록 멀리 — 피해와 같은 감쇠를 탄다
+    expect(near.kbX!).toBeGreaterThan(far.kbX!);
+  });
+
+  it('체급이 무거울수록 덜 밀린다 — 해머 마무리와 같은 규약', () => {
+    const byWeight = balance.explosionKnockback.byWeight as unknown as Record<string, number>;
+    const light = spawnEnemyAt('goblin_runner', 20 + 1, 6, 1);
+    const heavy = spawnEnemyAt('goblin_chieftain', 20 - 1, 6, 2);
+    for (const e of [light, heavy]) {
+      e.health = 5000;
+      world.enemies.push(e);
+    }
+    const barrel = putBarrel(world, 20, 6);
+    barrel.fuseTicks = 0;
+    Barrels.tick(world, DT);
+
+    expect(byWeight.heavy!).toBeLessThan(byWeight.light!);
+    expect(Math.abs(heavy.kbX!)).toBeCloseTo(Math.abs(light.kbX!) * byWeight.heavy!, 5);
+  });
+
+  it('폭발로 죽은 적은 밀지 않는다 — 시체가 미끄러지지 않게', () => {
+    const doomed = spawnEnemyAt('goblin_runner', 20 + 1, 6, 1);
+    doomed.health = 5; // 확실히 죽는다
+    world.enemies.push(doomed);
+    const barrel = putBarrel(world, 20, 6);
+    barrel.fuseTicks = 0;
+    Barrels.tick(world, DT);
+
+    expect(doomed.alive).toBe(false);
+    expect(doomed.kbTicks ?? 0).toBe(0);
+  });
+
   it('플레이어도 맞는다 — 뒤로 밀리기까지', () => {
     const p = world.player;
     const barrel = putBarrel(world, p.x + 2, p.z);

@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef } from '../core/SigilData';
-import { alertEnemy,
+import { type EnemyState, pushEnemy, alertEnemy,
   igniteBarrel,
   playerBlocks,
   pushPlayer,
@@ -602,6 +602,15 @@ function bounceGrenade(
   return true;
 }
 
+/** 폭심에서 바깥으로 밀어낸다. 체급이 무거울수록 덜 밀린다 —
+ *  폭발통(Barrels)과 같은 규약을 쓴다 (balance.explosionKnockback) */
+function pushFromBlast(enemy: EnemyState, cx: number, cz: number, distance: number): void {
+  const kb = balance.explosionKnockback;
+  const byWeight = kb.byWeight as unknown as Record<string, number>;
+  const weightMul = byWeight[enemyDef(enemy.type).weight] ?? 1;
+  pushEnemy(enemy, enemy.x - cx, enemy.z - cz, distance * weightMul, kb.ticks);
+}
+
 function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]): void {
   const grenade = balance.weapons.grenade;
   world.events.emit('explosion', { x: proj.x, y: proj.y, z: proj.z, radius: grenade.radius });
@@ -635,7 +644,10 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
       enemy.alive = false;
       world.events.emit('weapon_kill', { weapon: 'grenade', enemyType: enemy.type });
       world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      continue; // 시체는 밀지 않는다
     }
+    // 폭풍에 밀린다 — 폭발통과 같은 규칙 (피해 감쇠 × 체급 배율)
+    pushFromBlast(enemy, proj.x, proj.z, (grenade.enemyKnockback * damage) / grenade.damage);
   }
 
   // 자가 피해 — 가까이서 던지면 나도 다친다
