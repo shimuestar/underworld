@@ -1,5 +1,9 @@
 // 입력 수집기. DOM 이벤트를 누적했다가 틱 시작 시 sample()로 스냅샷을 넘긴다.
 // 게임 로직은 이 스냅샷(world.input)만 읽는다 — DOM 이벤트를 직접 읽지 않는다.
+// 그 덕에 패드 지원은 여기서 스냅샷을 한 번 더 채우는 일로 끝난다 (core/Gamepad).
+
+import { balance } from './Balance';
+import { GamepadInput } from './Gamepad';
 
 export interface InputSnapshot {
   /** -1(A) ~ +1(D) */
@@ -9,6 +13,9 @@ export interface InputSnapshot {
   sprint: boolean;
   /** 이번 틱에 질주 키(Space)를 새로 눌렀는가 (엣지 — 연타 회피 판정용) */
   sprintPressed: boolean;
+  /** 회피를 직접 요청했는가 (엣지). 키보드는 질주 키 연타로 만들고,
+   *  패드는 버튼 하나로 만든다 — 연타는 스틱·버튼에 어울리는 입력이 아니다 */
+  dodgePressed: boolean;
   /** 이번 틱 동안 누적된 마우스 이동량 (포인터 락 중에만) */
   lookDX: number;
   lookDY: number;
@@ -48,6 +55,9 @@ const DIGIT_CODES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
 const SHIFT_CODES = ['ShiftLeft', 'ShiftRight'];
 
 export class Input {
+  /** 패드 입력 — 키보드·마우스와 같은 스냅샷에 얹는다.
+   *  둘을 동시에 써도 되게 OR 로 합친다 (한쪽만 쓰라고 강요할 이유가 없다) */
+  readonly gamepad = new GamepadInput();
   private keys = new Set<string>();
   private dx = 0;
   private dy = 0;
@@ -202,27 +212,50 @@ export class Input {
 
   /** 누적 입력을 스냅샷으로 반환하고 엣지/델타를 리셋한다. 틱당 1회 호출. */
   sample(): InputSnapshot {
+    // 패드는 이벤트가 아니라 폴링이다 — 틱당 한 번인 여기가 제자리
+    const pad = this.gamepad;
+    pad.poll();
+    const axes = pad.axes();
+    const lookMul = balance.input.gamepad.lookSpeed / balance.loop.tickRate;
+    // 스틱은 위치, 마우스는 델타 — 축 값을 틱당 회전량으로 바꿔 같은 필드에 넣는다.
+    // 마우스 감도로 나눠 두면 PlayerMove 가 곱할 때 원래 뜻으로 돌아온다
+    const padLookX = (axes.lookX * lookMul) / balance.input.mouseSensitivity;
+    const padLookY = (axes.lookY * lookMul) / balance.input.mouseSensitivity;
+    /** 퀵슬롯 — 패드는 D-패드 4방향까지만 (5번은 자리가 없다) */
+    let padSlot = 0;
+    if (pad.pressed('slot1')) padSlot = 1;
+    else if (pad.pressed('slot2')) padSlot = 2;
+    else if (pad.pressed('slot3')) padSlot = 3;
+    else if (pad.pressed('slot4')) padSlot = 4;
+
+    // 키보드·마우스와 패드를 OR 로 합친다 — 한쪽만 쓰라고 강요할 이유가 없다.
+    // 이동은 키(±1)와 스틱(아날로그) 중 더 크게 민 쪽을 쓴다
+    const keyX = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
+    const keyZ = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
     const snapshot: InputSnapshot = {
-      moveX: (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0),
-      moveForward: (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0),
-      sprint: this.keys.has('Space'),
+      moveX: Math.abs(axes.moveX) > Math.abs(keyX) ? axes.moveX : keyX,
+      // 스틱 Y 는 위로 밀 때 음수다 — 전진(+)과 부호가 반대라 뒤집는다
+      moveForward: Math.abs(axes.moveY) > Math.abs(keyZ) ? -axes.moveY : keyZ,
+      sprint: this.keys.has('Space') || pad.held('sprint'),
       sprintPressed: this.sprintPresses > 0,
-      lookDX: this.dx,
-      lookDY: this.dy,
-      lanternToggle: this.lanternToggles > 0,
-      batterySwap: this.batterySwaps > 0,
-      meleePressed: this.meleeClicks > 0,
-      meleeHeld: this.meleeDown,
-      rangedPressed: this.rangedClicks > 0,
-      rangedHeld: this.rangedDown,
-      reload: this.reloads > 0,
-      reactionPressed: this.reactionClicks > 0,
-      reactionHeld: this.reactionDown,
-      reactionReleased: this.reactionReleases > 0,
-      castPressed: this.casts > 0,
-      interactPressed: this.interacts > 0,
-      cycleRanged: this.cycleRanged,
-      useSlot: this.useSlot,
+      // 회피는 패드에선 버튼 하나 — 연타는 스틱·버튼에 어울리는 입력이 아니다
+      dodgePressed: pad.pressed('dodge'),
+      lookDX: this.dx + padLookX,
+      lookDY: this.dy + padLookY,
+      lanternToggle: this.lanternToggles > 0 || pad.pressed('lantern'),
+      batterySwap: this.batterySwaps > 0 || pad.pressed('battery'),
+      meleePressed: this.meleeClicks > 0 || pad.pressed('melee'),
+      meleeHeld: this.meleeDown || pad.held('melee'),
+      rangedPressed: this.rangedClicks > 0 || pad.pressed('ranged'),
+      rangedHeld: this.rangedDown || pad.held('ranged'),
+      reload: this.reloads > 0 || pad.pressed('reload'),
+      reactionPressed: this.reactionClicks > 0 || pad.pressed('reaction'),
+      reactionHeld: this.reactionDown || pad.held('reaction'),
+      reactionReleased: this.reactionReleases > 0 || pad.released('reaction'),
+      castPressed: this.casts > 0 || pad.pressed('cast'),
+      interactPressed: this.interacts > 0 || pad.pressed('interact'),
+      cycleRanged: this.cycleRanged !== 0 ? this.cycleRanged : pad.pressed('cycleWeapon') ? 1 : 0,
+      useSlot: this.useSlot !== 0 ? this.useSlot : padSlot,
     };
     this.dx = 0;
     this.dy = 0;
@@ -247,6 +280,7 @@ export class Input {
       moveForward: 0,
       sprint: false,
       sprintPressed: false,
+      dodgePressed: false,
       lookDX: 0,
       lookDY: 0,
       lanternToggle: false,

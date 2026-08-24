@@ -12,6 +12,7 @@ import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt } from './level/Spawner';
 import { Minimap } from './render/Minimap';
 import { PauseMenu } from './render/PauseMenu';
+import { GamepadUI } from './render/GamepadUI';
 import { Stage } from './render/Stage';
 import { grenadeThrowSpeed } from './systems/Weapons';
 import * as PlayerMove from './systems/PlayerMove';
@@ -1101,6 +1102,23 @@ const systems = [
 function simulate(dt: number): void {
   world.input = input.sample();
 
+  // Menu 버튼 = Tab. 가방·각인 창은 스냅샷을 안 거치는 raw 입력이라 여기서 본다.
+  // 렌더 루프에서 읽으면 안 된다 — 폴링은 틱에서 도는데 렌더는 다른 속도로 돌아
+  // 같은 엣지를 두 프레임이 먹고 창이 열렸다 곧바로 닫힌다 (실측으로 확인)
+  // View = 일시정지. 패드만 쓰는 사람이 메뉴·키 설정에 오는 유일한 길이다
+  if (input.gamepad.pressed('pause') && !world.uiOpen && !world.dead && !world.cleared) {
+    setPaused(true);
+    return;
+  }
+  if (input.gamepad.pressed('inventory')) {
+    if (shopUI.open) {
+      shopUI.hide();
+      setUiOpen(sigilUI.toggle(true));
+    } else {
+      setUiOpen(sigilUI.toggle());
+    }
+  }
+
   // 히트스톱 — simulate를 건너뛰되 반응 입력(릴리즈)은 버퍼에 보관 (docs/architecture.md §1)
   if (world.freezeTicks > 0) {
     world.freezeTicks--;
@@ -1255,6 +1273,10 @@ function syncQuickslots(): void {
 
 function render(alpha: number): void {
   const now = performance.now();
+  // 패드는 sample() 에서만 폴링되는데 그건 일시정지 중엔 안 돈다 —
+  // 그대로 두면 패드만 쓰는 사람은 멈춘 게임을 풀 방법이 없다 (포인터 락도 못 잡는다).
+  // 멈춰 있는 동안에는 여기서 대신 폴링해 메뉴를 조작하게 한다
+  if (loop.isPaused) pollPadWhilePaused();
   runDelayedFx(now);
   if (now - tpsWindowStart >= 1000) {
     measuredTps = tpsWindowTicks / ((now - tpsWindowStart) / 1000);
@@ -1502,6 +1524,27 @@ function render(alpha: number): void {
   stage.render();
 }
 
+/** 일시정지 중 패드 조작 — D-패드 위아래로 커서, 상호작용 버튼으로 결정.
+ *  프레임당 한 번만 폴링한다 (simulate 가 안 도는 동안이므로 엣지가 어긋나지 않는다) */
+let padMenuRepeat = 0;
+function pollPadWhilePaused(): void {
+  const pad = input.gamepad;
+  if (!pad.connected) return;
+  pad.poll();
+  if (gamepadUI.open) {
+    gamepadUI.poll();
+    return;
+  }
+  if (!pauseMenu.open) return;
+  if (padMenuRepeat > 0) padMenuRepeat--;
+  // 메뉴 안에서는 매핑을 안 거친 고정 버튼을 쓴다 — 매핑을 잘못 걸어 놓고
+  // 메뉴에서 못 빠져나오면 손쓸 방법이 없다 (설정 화면과 같은 규약)
+  if (pad.rawPressed(12)) pauseMenu.padMove(-1); // D-패드 ↑
+  else if (pad.rawPressed(13)) pauseMenu.padMove(1); // D-패드 ↓
+  else if (pad.rawPressed(0)) pauseMenu.padActivate(); // A
+  else if (pad.rawPressed(8)) setPaused(false); // View — 다시 눌러 재개
+}
+
 const loop = new Loop(balance.loop.tickRate, balance.loop.maxFrameClampSec, {
   simulate,
   render,
@@ -1514,12 +1557,18 @@ const pauseOverlay = document.getElementById('pause')!;
 // 메뉴에서 고른 결과는 전부 "멈춤을 푼다 + 포인터 락을 되찾는다"로 끝난다.
 // 락이 걸릴 때까지 기다리지 않고 먼저 재개하는 이유: ESC 직후엔 브라우저가
 // 락을 약 1.25초 거부한다. 락에 재개를 묶어 두면 그동안 화면이 굳어 보인다
+const gamepadUI = new GamepadUI(input.gamepad);
 const pauseMenu = new PauseMenu(pauseOverlay, world, {
   resume: () => {
     setPaused(false);
     input.requestLock();
   },
   restart: () => location.reload(),
+  openGamepad: () => {
+    // 일시정지는 유지한 채 설정 화면만 덮는다 — 닫으면 다시 메뉴로 돌아온다
+    pauseMenu.hide();
+    gamepadUI.show();
+  },
   loadSave: () => {
     world.dead = false;
     respawnAtAltar();
@@ -1538,14 +1587,27 @@ function setPaused(paused: boolean): void {
   else pauseMenu.hide();
   if (paused) input.releaseHeld(); // 멈춘 사이 눌려 있던 키가 남지 않게
 }
+// 설정 화면을 닫으면 일시정지 메뉴로 돌아온다 (게임은 멈춘 채)
+gamepadUI.onClose = () => pauseMenu.show();
+
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement) setPaused(false);
-  else if (!world.uiOpen) setPaused(true);
+  // 패드로 놀고 있으면 포인터 락이 없는 게 정상이다 — 여기서 멈추면 영영 멈춘다.
+  // 꽂혀만 있고 키보드로 노는 사람에게는 그대로 걸려야 하므로 active 로 가른다
+  else if (!world.uiOpen && !input.gamepad.active) setPaused(true);
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) setPaused(true);
 });
 window.addEventListener('blur', () => setPaused(true));
+// 패드를 집어 들면 멈춰 있던 게임이 풀린다 — 패드에는 포인터 락을 잡을 방법이 없다.
+// 창이 뒤에 있을 때(document.hidden)는 그대로 멈춰 둔다
+window.addEventListener('gamepadconnected', () => {
+  showReaction('게임패드 연결됨 — Menu 버튼으로 가방, 일시정지에서 키 설정', 3000);
+});
+window.addEventListener('gamepaddisconnected', () => {
+  if (!document.pointerLockElement && !world.uiOpen) setPaused(true);
+});
 
 // 개발 빌드 전용 디버그 핸들 (헤드리스 테스트/콘솔 조작용)
 if (import.meta.env.DEV) {

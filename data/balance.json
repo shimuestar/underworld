@@ -8,7 +8,16 @@
 
   "input": {
     "mouseSensitivity": 0.0023,
-    "pitchMaxDeg": 89
+    "pitchMaxDeg": 89,
+    "_gamepadNote": "패드 튜닝. 마우스는 델타를 주고 스틱은 위치를 주므로, 시선은 축 값 × lookSpeed 를 틱으로 나눠 델타로 바꾼다. lookCurve 는 중앙부를 눌러 정밀 조준을 살리는 지수 (1이면 선형)",
+    "gamepad": {
+      "moveDeadzone": 0.22,
+      "lookDeadzone": 0.16,
+      "lookSpeed": 3.4,
+      "lookCurve": 2.0,
+      "triggerThreshold": 0.35,
+      "activeTimeoutMs": 4000
+    }
   },
 
   "player": {

@@ -24,6 +24,8 @@ export interface PauseMenuActions {
   restart(): void;
   /** 저장된 곳(제단 체크포인트)에서 시작 */
   loadSave(): void;
+  /** 패드 키 설정 열기 */
+  openGamepad(): void;
 }
 
 interface MenuItem {
@@ -72,6 +74,12 @@ export class PauseMenu {
             : '아직 들른 제단이 없다',
         enabled: (world) => world.respawn !== null,
         run: actions.loadSave,
+      },
+      {
+        label: '4. 패드 키 설정',
+        hint: () => '게임패드 버튼을 기능에 건다',
+        enabled: () => true,
+        run: actions.openGamepad,
       },
     ];
 
@@ -141,6 +149,19 @@ export class PauseMenu {
         this.activate(0);
       }
     });
+  }
+
+  /** 패드로 커서를 옮긴다 — 일시정지 중에는 키보드 핸들러가 안 돌 수도 있다
+   *  (패드만 쓰는 사람은 포인터 락도 키 입력도 없이 여기 들어온다) */
+  padMove(step: number): void {
+    if (!this.open) return;
+    this.move(step);
+  }
+
+  /** 패드로 지금 줄을 고른다 */
+  padActivate(): void {
+    if (!this.open) return;
+    this.activate(this.selected);
   }
 
   show(): void {

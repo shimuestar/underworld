@@ -49,6 +49,11 @@ export function tick(world: World, _dt: number): void {
   // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다.
   // 첫 타는 창만 열고, 창이 열려 있는 동안 한 번 더 누르면 나간다
   if (p.sprintTapTicks && p.sprintTapTicks > 0) p.sprintTapTicks--;
+  // 패드처럼 회피 버튼이 따로 있는 입력은 연타를 거치지 않는다
+  if (world.input.dodgePressed) {
+    p.sprintTapTicks = 0;
+    if (tryDodge(world)) return;
+  }
   if (world.input.sprintPressed) {
     if ((p.sprintTapTicks ?? 0) > 0) {
       p.sprintTapTicks = 0; // 세 번째 타로 또 나가지 않게 창을 닫는다

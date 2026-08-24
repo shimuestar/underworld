@@ -47,8 +47,11 @@ export function tick(world: World, dt: number): void {
     resolveEnemyOverlap(world); // 가만히 서 있어도 적이 파고들면 밀려난다
     return;
   }
-  wx /= len;
-  wz /= len;
+  // 방향만 정규화하고 크기는 남긴다 — 정규화만 하면 스틱을 살짝 밀어도 전력이 된다.
+  // 키보드는 len 이 1 또는 √2 라 언제나 1로 잘려 예전과 똑같이 움직인다
+  const mag = Math.min(1, len);
+  wx = (wx / len) * mag;
+  wz = (wz / len) * mag;
 
   // 질주 — 스태미너가 있어야 하고, 움직이는 동안만 닳는다 (제자리 쉬프트는 무소모).
   // 탈진 중에는 아무리 눌러도 평속
