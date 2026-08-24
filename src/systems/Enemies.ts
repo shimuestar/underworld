@@ -10,7 +10,7 @@
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { playerBlocks, pushPlayer, type EnemyState, type World } from '../core/World';
+import { alertEnemy, playerBlocks, pushPlayer, type EnemyState, type World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -139,6 +139,14 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   const dist = Math.hypot(distX, distZ);
   const attack = currentAttack(def, enemy);
 
+  // 알아챈 직후 멈칫 — 몸은 플레이어 쪽으로 돌리되 발도 무기도 나가지 않는다.
+  // 느낌표가 뜨자마자 달려들면 표시를 읽을 틈이 없다
+  if ((enemy.noticeTicks ?? 0) > 0) {
+    enemy.noticeTicks = (enemy.noticeTicks ?? 0) - 1;
+    enemy.yaw = Math.atan2(-distX, -distZ);
+    return;
+  }
+
   switch (enemy.ai) {
     case 'idle': {
       // 가만히 서 있어도 천천히 좌우를 살핀다 — 사각이 고정되면 한 자리에서
@@ -156,7 +164,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         (lit || (dist <= def.aggroRange && seesPlayer(enemy, dist, distX, distZ))) &&
         world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
       ) {
-        enemy.ai = 'chase';
+        alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
         world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, lantern: lit });
         // 보스가 깨면 포효로 방 전체가 함께 깬다 — 벽 너머라도 소리는 들린다
         if (def.boss) wakeAround(world, enemy, balance.enemyAi.bossAlertRadius);
@@ -532,7 +540,7 @@ function wakeAround(world: World, source: EnemyState, radius: number): void {
   for (const other of world.enemies) {
     if (other === source || !other.alive || other.ai !== 'idle') continue;
     if (Math.hypot(other.x - source.x, other.z - source.z) > radius) continue;
-    other.ai = 'chase';
+    alertEnemy(other, balance.enemyAi.noticeDelayTicks);
     world.events.emit('enemy_alerted', { enemyId: other.id, enemyType: other.type });
   }
 }

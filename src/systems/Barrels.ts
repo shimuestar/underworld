@@ -9,7 +9,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef, shieldBlocksProjectile } from '../core/Entities';
-import { igniteBarrel, pushPlayer, type BarrelState, type World } from '../core/World';
+import { alertEnemy, igniteBarrel, pushPlayer, type BarrelState, type World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   for (const barrel of world.barrels) {
@@ -108,7 +108,7 @@ function explode(world: World, barrel: BarrelState): void {
   for (const enemy of world.enemies) {
     if (!enemy.alive || enemy.ai !== 'idle') continue;
     if (Math.hypot(enemy.x - barrel.x, enemy.z - barrel.z) > cfg.noiseRadius) continue;
-    enemy.ai = 'chase';
+    alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
     world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, noise: true });
   }
 }

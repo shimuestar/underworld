@@ -686,6 +686,68 @@ describe('보스 포효 — 주변을 함께 깨운다', () => {
     expect(alerted.every((a) => typeof a.enemyId === 'number')).toBe(true);
   });
 
+  it('알아챈 직후 noticeDelayTicks 동안은 발이 안 나간다 — 느낌표를 읽을 틈', () => {
+    const delay = balance.enemyAi.noticeDelayTicks;
+    const runner = spawnEnemyAt('goblin_runner', 6 + 8, 6, 1);
+    runner.ai = 'idle';
+    runner.homeYaw = Math.atan2(-(world.player.x - runner.x), -(world.player.z - runner.z));
+    world.enemies.push(runner);
+
+    Enemies.tick(world, DT); // 알아채는 틱
+    expect(runner.ai).toBe('chase');
+    expect(runner.noticeTicks).toBe(delay);
+    const startX = runner.x;
+
+    // 멈칫하는 동안은 제자리 — 대신 몸은 플레이어를 향해 돌아간다
+    for (let i = 0; i < delay; i++) Enemies.tick(world, DT);
+    expect(runner.x).toBe(startX);
+    expect(runner.noticeTicks).toBe(0);
+    expect(runner.yaw).toBeCloseTo(
+      Math.atan2(-(world.player.x - runner.x), -(world.player.z - runner.z)),
+      5,
+    );
+
+    // 멈칫이 끝나면 달려든다
+    Enemies.tick(world, DT);
+    expect(runner.x).toBeLessThan(startX); // 플레이어(-X 쪽)로 다가온다
+  });
+
+  it('멈칫 중에는 공격도 시작하지 않는다', () => {
+    const delay = balance.enemyAi.noticeDelayTicks;
+    // 사거리 안에 붙여 둔다 — 멈칫이 없으면 알아채자마자 예비동작에 들어간다
+    const spear = spawnEnemyAt('goblin_spear', 6 + 2.5, 6, 1);
+    spear.ai = 'idle';
+    spear.homeYaw = Math.atan2(-(world.player.x - spear.x), -(world.player.z - spear.z));
+    world.enemies.push(spear);
+
+    Enemies.tick(world, DT);
+    expect(spear.ai).toBe('chase');
+    for (let i = 0; i < delay; i++) {
+      expect(spear.ai).toBe('chase'); // windup 으로 안 넘어간다
+      Enemies.tick(world, DT);
+    }
+    Enemies.tick(world, DT);
+    expect(spear.ai).toBe('windup'); // 이제서야 겨눈다
+  });
+
+  it('보스 포효로 깬 적도 같은 멈칫을 받는다 — 깨우는 경로가 여섯이라 한 군데만 걸면 샌다', () => {
+    const boss = spawnEnemyAt('goblin_chieftain', 6 + 6, 6, 1);
+    const near = spawnEnemyAt('goblin_runner', 6 + 10, 6, 2);
+    for (const e of [boss, near]) {
+      e.ai = 'idle';
+      world.enemies.push(e);
+    }
+    boss.homeYaw = Math.atan2(-(world.player.x - boss.x), -(world.player.z - boss.z));
+    const startX = near.x;
+    Enemies.tick(world, DT);
+    expect(near.ai).toBe('chase');
+    // 깨운 보스보다 배열에서 뒤라 같은 틱에 이미 한 틱을 쓴다 — 16ms 차이라 그냥 둔다
+    expect(near.noticeTicks).toBeGreaterThanOrEqual(balance.enemyAi.noticeDelayTicks - 1);
+
+    for (let i = 0; i < balance.enemyAi.noticeDelayTicks - 1; i++) Enemies.tick(world, DT);
+    expect(near.x).toBe(startX); // 포효를 듣고도 한 박자 멈칫한다
+  });
+
   it('보스가 아니면 주변을 깨우지 않는다', () => {
     const runner = spawnEnemyAt('goblin_runner', 6 + 5, 6, 1);
     const other = spawnEnemyAt('goblin_runner', 6 + 8, 6, 2);

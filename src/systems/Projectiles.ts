@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef } from '../core/SigilData';
-import {
+import { alertEnemy,
   igniteBarrel,
   playerBlocks,
   pushPlayer,
@@ -682,7 +682,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
   for (const enemy of world.enemies) {
     if (!enemy.alive || enemy.ai !== 'idle') continue;
     if (Math.hypot(enemy.x - proj.x, enemy.z - proj.z) > grenade.noiseRadius) continue;
-    enemy.ai = 'chase';
+    alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
     world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, noise: true });
   }
 }

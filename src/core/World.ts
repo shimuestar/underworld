@@ -109,6 +109,15 @@ export interface SpellState {
 
 /** 바닥에 떨어진 각인. 접근하면 획득 */
 /** 보물상자 — E로 한 번 열면 골드 무더기와 각인 하나가 쏟아진다 */
+/** 적이 플레이어를 알아챘다 — 추격으로 넘기고 멈칫 시간을 건다.
+ *  깨우는 곳이 여섯 군데(시야·랜턴·보스 포효·총소리·화염구·폭발통)라 한 군데서만
+ *  멈칫을 걸면 나머지는 느낌표가 뜨자마자 달려든다. balance 는 호출부가 읽어 넘긴다
+ *  (pushPlayer 와 같은 규약 — World 는 데이터에 의존하지 않는다) */
+export function alertEnemy(enemy: EnemyState, noticeTicks: number): void {
+  enemy.ai = 'chase';
+  enemy.noticeTicks = noticeTicks;
+}
+
 /** 문 잠금을 통째로 푼다 — 레버가 부른다. 미닫이와 개방은 Door 가 이어서 돌리므로
  *  레버는 이 한 줄만 건드리면 된다. balance 는 호출부가 읽어 넘긴다
  *  (pushPlayer·spendStamina 와 같은 규약 — World 는 데이터에 의존하지 않는다) */
@@ -317,6 +326,9 @@ export interface EnemyState {
   flinchTicks?: number;
   /** 강한 타격 경직 — 공격 중이라도 그 상태 그대로 굳는다 (해머용) */
   attackFreezeTicks?: number;
+  /** 알아챈 직후 멈칫 — 이 틱 동안 몸만 돌리고 이동·공격을 하지 않는다.
+   *  머리 위 느낌표를 읽을 틈을 주는 시간이다 (alertEnemy 가 건다) */
+  noticeTicks?: number;
   /** 방패에 막히거나 패링당해 튕긴 직후인가 — recover 동안 뒤로 젖혀진 채 굳는다 */
   recoiled?: boolean;
   /** 헛친 직후인가 — recover 동안 마지막 동작으로 굳고 무방비가 된다 */

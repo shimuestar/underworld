@@ -6,7 +6,7 @@
 import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import {
+import { alertEnemy,
   hitBarrel,
   RANGED_WEAPONS,
   spendStamina,
@@ -444,7 +444,7 @@ function alertNearby(world: World, x: number, z: number, radius: number): void {
   for (const enemy of world.enemies) {
     if (!enemy.alive || enemy.ai !== 'idle') continue;
     if (Math.hypot(enemy.x - x, enemy.z - z) > radius) continue;
-    enemy.ai = 'chase';
+    alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
     world.events.emit('enemy_alerted', {
       enemyId: enemy.id,
       enemyType: enemy.type,
@@ -535,7 +535,7 @@ function fire(world: World): void {
   alertNearby(world, p.x, p.z, pistol.noiseRadius);
   alertNearby(world, p.x + dx * hitT, p.z + dz * hitT, pistol.noiseRadius);
   if (hit && hit.enemy.ai === 'idle') {
-    hit.enemy.ai = 'chase';
+    alertEnemy(hit.enemy, balance.enemyAi.noticeDelayTicks);
     world.events.emit('enemy_alerted', {
       enemyId: hit.enemy.id,
       enemyType: hit.enemy.type,
