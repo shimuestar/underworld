@@ -227,6 +227,10 @@ interface EnemyVisual {
   shieldDown?: boolean;
   /** 방패 균열 (마무리 타를 받아내면 드러난다) */
   shieldCracks?: THREE.Group;
+  /** 방패에 꽂힌 화살 슬롯 — 평소엔 숨김, 막을 때마다 순환해 드러난다.
+   *  방패의 자식이라 방패가 부서지면 화살도 같이 사라진다 (판에 박혀 있었으니까) */
+  shieldArrows?: THREE.Mesh[];
+  shieldArrowSlot?: number;
   /** 다음 화상 불티를 낼 시각 */
   nextEmberMs: number;
   /** 해머 적중 명멸이 끝나는 시각 */
@@ -552,6 +556,17 @@ export class Stage {
   /** 인지 표시 — 알아챈 순간 머리 위에서 튀어올랐다 옅어진다 */
   markAlert(enemyId: number): void {
     this.alertAt.set(enemyId, performance.now());
+  }
+
+  /** 방패에 화살을 꽂는다 — 슬롯을 순환해 쓴다 (다 차면 오래된 것부터 갈아 끼운다).
+   *  방패가 이미 부서졌으면 꽂을 판이 없으므로 아무 일도 하지 않는다 */
+  stickArrowInShield(enemyId: number): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    const slots = visual?.shieldArrows;
+    if (!visual || !slots || slots.length === 0 || !visual.shield) return;
+    const i = (visual.shieldArrowSlot ?? 0) % slots.length;
+    slots[i]!.visible = true;
+    visual.shieldArrowSlot = i + 1;
   }
 
   flashShield(enemyId: number): void {
@@ -1284,6 +1299,32 @@ export class Stage {
       cracks.visible = false;
       visual.shieldCracks = cracks;
       visual.shield.add(cracks);
+
+      // 꽂히는 화살 슬롯 — 전투 중에 메시를 만들지 않게 미리 깔아 두고 숨긴다
+      // (플레이어 방패의 3슬롯과 같은 방식). 판 바깥면(-z)에서 앞으로 삐져나온다
+      visual.shieldArrows = [];
+      visual.shieldArrowSlot = 0;
+      // 판을 정면으로 보면 앞으로 곧게 꽂힌 화살은 점으로 뭉개진다 —
+      // 위·옆으로 확실히 눕혀야 샤프트 길이가 보인다 (실측으로 확인)
+      const spots: [number, number, number, number][] = [
+        // [좌우, 높이, 위아래 기울기, 좌우 기울기]
+        [-w * 0.24, h * 0.14, -0.55, 0.3],
+        [w * 0.2, -h * 0.06, 0.4, -0.35],
+        [w * 0.04, h * 0.28, -0.75, -0.15],
+        [-w * 0.14, -h * 0.24, 0.5, 0.4],
+      ];
+      for (const [ax, ay, pitch, yawTilt] of spots) {
+        const shaft = new THREE.Mesh(
+          new THREE.BoxGeometry(0.035, 0.035, 0.62),
+          new THREE.MeshLambertMaterial({ color: 0x6b5233 }),
+        );
+        // 촉이 판에 박히고 꼬리가 앞으로 솟는다 — 판 두께(0.09) 밖으로 내민다
+        shaft.position.set(ax, ay, -0.3);
+        shaft.rotation.set(pitch, yawTilt, 0);
+        shaft.visible = false;
+        visual.shieldArrows.push(shaft);
+        visual.shield.add(shaft);
+      }
     }
 
     // 근접 무기 — 어깨 피벗 팔에 쥐고 치켜들었다 내리찍는다
@@ -1935,10 +1976,19 @@ export class Stage {
     // 방패 본체 제거 — 이후 업데이트에서도 건너뛴다
     this.scene.remove(shield);
     visual.torso.remove(shield);
-    shield.geometry.dispose();
+    // 판에 매달린 것들(균열·꽂힌 화살)도 함께 정리한다 — 판만 dispose 하면
+    // 자식 지오메트리가 남는다. 판이 조각나면 박혀 있던 화살도 같이 사라지는 게 맞다
+    shield.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        (obj.material as THREE.Material).dispose();
+      }
+    });
     visual.shieldMaterial?.dispose();
     visual.shield = undefined;
     visual.shieldMaterial = undefined;
+    visual.shieldCracks = undefined;
+    visual.shieldArrows = undefined;
 
     const now = performance.now();
     // 판을 3×4 격자로 쪼갠 조각들 — 원래 자리에서 앞쪽으로 터져 나간다

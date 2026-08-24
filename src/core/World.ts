@@ -364,6 +364,10 @@ export interface EnemyState {
   whiffed?: boolean;
   /** 정면 방패가 부서졌는가 — 이후 투사체를 막지 못한다 */
   shieldBroken?: boolean;
+  /** 이 적에게서 이미 회수 화살을 하나 떨궜는가.
+   *  한 마리에 여러 대를 박아도 주울 수 있는 건 한 대뿐이다 — 없으면
+   *  체력 높은 적에게 화살을 퍼부어 회수하는 무한 순환이 생긴다 */
+  arrowDropped?: boolean;
   /** 방패가 해머 마무리 타를 받아낸 횟수 (금 → 파괴) */
   shieldHits?: number;
   /** 방패로 버티는 중 — 웅크린 채 아무 행동도 하지 않는다 */

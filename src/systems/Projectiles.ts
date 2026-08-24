@@ -435,8 +435,16 @@ function applyProjectileHit(
       });
     } else {
       // 그 외 투사체(반사된 마법 등)는 방패에 막힌다.
-      // 막힌 화살도 튕겨 발밑에 떨어진다 — 맞히든 막히든 화살은 회수 대상이다
-      if (proj.recoverable) dropArrow(world, enemy.x, enemy.z);
+      // 화살은 방패에 그대로 꽂힌다 — 판에 박힌 것이라 뽑아 쓸 수 없다.
+      // "방패를 쏘면 화살을 잃는다"가 곧 정면을 피할 이유가 된다
+      if (proj.kind === 'arrow') {
+        world.events.emit('arrow_shielded', {
+          enemyId: enemy.id,
+          enemyType: enemy.type,
+          x: enemy.x,
+          z: enemy.z,
+        });
+      }
       world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'shield' });
       return;
     }
@@ -444,7 +452,6 @@ function applyProjectileHit(
 
   // 마법 방어막(warden) — 반사된 투사체가 아니면 무효 (7.2 피드백)
   if (def.magicBarrier?.blocksMagic && barrierUp(def, enemy) && !proj.deflected) {
-    if (proj.recoverable) dropArrow(world, enemy.x, enemy.z);
     world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'magic' });
     return;
   }
@@ -455,8 +462,13 @@ function applyProjectileHit(
   enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
   if (proj.burnDamagePerTick > 0) enemy.burnDamagePerTick = proj.burnDamagePerTick;
   // 맞은 화살은 그 자리에 떨어진다 (적이 죽어도 시체 자리에 남는다).
-  // 처치 드랍도 같은 점에 쏟아지므로 조금 흩어 놓는다
-  if (proj.recoverable) dropArrow(world, enemy.x, enemy.z, true);
+  // 단 한 마리가 내주는 건 한 대까지다 — 몇 대를 박아 죽였든 회수는 하나.
+  // 안 그러면 체력 높은 적이 화살 무한 순환 장치가 된다
+  if (proj.recoverable && !enemy.arrowDropped) {
+    enemy.arrowDropped = true;
+    // 처치 드랍도 같은 점에 쏟아지므로 조금 흩어 놓는다
+    dropArrow(world, enemy.x, enemy.z, true);
+  }
   // 맞았으면 깬다 — 활은 소리가 작을 뿐(noiseRadius 4) 맞은 놈까지 자면 곤란하다
   if (proj.owner === 'player' && enemy.health > 0 && enemy.ai === 'idle') {
     alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);

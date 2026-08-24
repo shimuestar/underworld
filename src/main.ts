@@ -308,6 +308,7 @@ for (const name of [
   'item_used',
   'arrow_loosed',
   'arrow_impact',
+  'arrow_shielded',
   'arrow_recovered',
   'arrow_broken',
   'quiver_full',
@@ -730,6 +731,14 @@ events.on('inventory_full', () => {
 events.on('gold_picked', () => audio.play('pickup_gold'));
 // ---- 활 ----
 events.on('bow_draw_started', () => audio.play('reload_start'));
+// 방패에 막힌 화살 — 판에 꽂힌 채 남는다. 소리·번쩍임은 총알이 막힐 때와 같게
+// (같은 일이 벌어진 것이므로 다른 신호를 쓸 이유가 없다)
+events.on('arrow_shielded', (payload) => {
+  const info = payload as { enemyId: number };
+  audio.play('shot_blocked');
+  stage.flashShield(info.enemyId);
+  stage.stickArrowInShield(info.enemyId);
+});
 events.on('arrow_impact', (payload) => {
   const hit = payload as { x: number; y: number; z: number; hitEnemy: boolean };
   audio.play(hit.hitEnemy ? 'hit_flesh' : 'hit_wall');

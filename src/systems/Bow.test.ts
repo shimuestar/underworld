@@ -261,6 +261,70 @@ describe('적을 맞혔을 때', () => {
     expect(dropped[0]!.noMagnetTicks).toBe(balance.pickups.arrow.noMagnetTicks);
   });
 
+  it('한 마리가 내주는 화살은 한 대까지 — 몇 대를 박아 죽였든', () => {
+    // 안 막으면 체력 높은 적이 화살 무한 순환 장치가 된다
+    const enemy = runnerAt(14);
+    enemy.health = 1000; // 여러 대를 견딘다
+    for (let n = 0; n < 4; n++) {
+      world.weapon.cooldown = 0;
+      shoot(world, BOW.maxDrawTicks);
+      for (let i = 0; i < 300 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    }
+    expect(enemy.health).toBeLessThan(1000 - BOW.damageMax * 3); // 네 대 다 맞았다
+    expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(1);
+    expect(enemy.arrowDropped).toBe(true);
+  });
+
+  it('죽이는 마지막 한 방까지 쏴도 한 대뿐이다', () => {
+    const enemy = runnerAt(14);
+    enemy.health = BOW.damageMax * 2.5; // 세 대째에 죽는다
+    for (let n = 0; n < 3; n++) {
+      world.weapon.cooldown = 0;
+      shoot(world, BOW.maxDrawTicks);
+      for (let i = 0; i < 300 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    }
+    expect(enemy.alive).toBe(false);
+    expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(1);
+  });
+
+  it('방패에 막힌 화살은 판에 꽂힌 채 남는다 — 바닥으로 안 떨어진다', () => {
+    const spear = spawnEnemyAt('goblin_spear', 6 + 8, 6, 1);
+    spear.health = 1000;
+    spear.ai = 'chase'; // 방패를 든 상태 (찌르는 중이면 내려간다)
+    spear.yaw = Math.atan2(-(6 - spear.x), -(6 - spear.z));
+    world.enemies.push(spear);
+    const shielded: { enemyId: number }[] = [];
+    const blocked: { kind: string }[] = [];
+    world.events.on('arrow_shielded', (p) => shielded.push(p as { enemyId: number }));
+    world.events.on('barrier_blocked', (p) => blocked.push(p as { kind: string }));
+
+    shoot(world, BOW.maxDrawTicks);
+    for (let i = 0; i < 300 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+
+    expect(spear.health).toBe(1000); // 막혔다
+    expect(shielded[0]).toMatchObject({ enemyId: spear.id });
+    expect(blocked[0]).toMatchObject({ kind: 'shield' });
+    expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(0);
+    expect(spear.arrowDropped).toBeFalsy(); // 몸에 안 맞았으니 회수분도 안 썼다
+  });
+
+  it('창을 내지르는 중에는 방패가 내려가 화살이 들어간다', () => {
+    const spear = spawnEnemyAt('goblin_spear', 6 + 8, 6, 1);
+    spear.health = 1000;
+    spear.ai = 'active_normal'; // 방패를 내린 구간
+    spear.yaw = Math.atan2(-(6 - spear.x), -(6 - spear.z));
+    world.enemies.push(spear);
+    const shielded: unknown[] = [];
+    world.events.on('arrow_shielded', (p) => shielded.push(p));
+
+    shoot(world, BOW.maxDrawTicks);
+    for (let i = 0; i < 300 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+
+    expect(spear.health).toBeLessThan(1000);
+    expect(shielded).toHaveLength(0);
+    expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(1);
+  });
+
   it('활 처치는 무기 처치다 — 마법 처치로 새지 않고 마나도 안 준다', () => {
     const enemy = runnerAt(14);
     enemy.health = 1;
