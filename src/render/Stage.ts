@@ -480,6 +480,18 @@ export class Stage {
     this.lanternSpill = new THREE.PointLight(0xffffff, lp.spillIntensity, lp.spillRadius, 0);
     this.camera.add(this.lanternSpill);
 
+    // 플레이어 미광 — 랜턴과 무관하게 항상 켜져 있는 편의 조명.
+    // 렌더에만 존재한다: 적 인지는 world.lantern.on 만 보므로 이 빛엔 안 들킨다.
+    // 살짝 차가운 색 — 따뜻한 랜턴 빛과 구분돼 "랜턴이 꺼져 있다"가 색으로 읽힌다
+    const glow = balance.lighting.playerGlow;
+    const playerGlow = new THREE.PointLight(
+      new THREE.Color(glow.color),
+      glow.intensity,
+      glow.radius,
+      0,
+    );
+    this.camera.add(playerGlow);
+
     // 총구 화염 — 강도/반경은 랜턴의 배율 (combat.md §6: 실질적 정찰 수단, 미묘하게 만들지 말 것)
     const mf = balance.weapons.pistol.muzzleFlash;
     this.muzzleLight = new THREE.PointLight(

@@ -406,7 +406,13 @@
     "torchHeight": 2.6,
     "_flashNote": "폭발·처형·문 개방 섬광의 기준 밝기/사거리. 예전엔 lantern.intensity·radius 를 그대로 빌려 썼는데, 랜턴을 밝히면 게임의 모든 섬광이 같이 두 배가 된다 — 떼어내 고정했다 (예전 값 2.2 / 30×0.9)",
     "flashIntensity": 2.2,
-    "flashDistance": 27.0
+    "flashDistance": 27.0,
+    "_playerGlowNote": "플레이어 몸에 붙은 상시 미광 — 순수 편의용 렌더 조명이라 적 인지(lantern.on)와 무관하다. 랜턴 잔광(1.4/12)보다 어둡게 유지할 것 — 이게 더 밝으면 랜턴을 켤 이유가 사라진다",
+    "playerGlow": {
+      "color": "#b8c4d8",
+      "intensity": 0.55,
+      "radius": 7.0
+    }
   },
 
   "door": {
