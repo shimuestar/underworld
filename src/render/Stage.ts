@@ -630,6 +630,12 @@ export class Stage {
     mesh.position.set(base.x + offsetX, base.y, base.z + offsetZ);
   }
 
+  /** 레버 당김 — 손잡이를 반대쪽으로 넘긴다 */
+  pullLever(row: number, col: number): void {
+    const handle = this.scene.getObjectByName(`lever-${row}-${col}`);
+    if (handle) handle.rotation.z = -0.5;
+  }
+
   /** 문 개방 — 다 밀린 판을 씬에서 걷어낸다 (이미 벽 속이라 화면은 그대로) */
   openDoor(row: number, col: number): void {
     this.doorBase.delete(`door-${row}-${col}`);

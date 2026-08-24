@@ -30,6 +30,7 @@ import * as Barrels from './systems/Barrels';
 import * as Chest from './systems/Chest';
 import * as Exit from './systems/Exit';
 import * as Door from './systems/Door';
+import * as Lever from './systems/Lever';
 import * as Lantern from './systems/Lantern';
 import { enemyDef, healthBarState } from './core/Entities';
 import { ShopUI } from './render/ShopUI';
@@ -343,6 +344,8 @@ for (const name of [
   'door_channel_broken',
   'door_unlocked',
   'door_opened',
+  'door_needs_lever',
+  'lever_pulled',
 ]) {
   events.on(name, (payload) => console.log(`[events] ${name}`, payload));
 }
@@ -948,6 +951,19 @@ events.on('door_unlocked', (payload) => {
   stage.triggerFlash(at.x, 1.2, at.z, 0x9a7a4a, 220, 2);
   showReaction('잠금이 풀렸다 — 문이 옆으로 밀린다', 2200);
 });
+events.on('lever_pulled', (payload) => {
+  const info = payload as { lever: { row: number; col: number } };
+  audio.play('lever_pull');
+  stage.pullLever(info.lever.row, info.lever.col);
+  showReaction('레버를 당겼다 — 어딘가에서 관문이 갈리며 열린다', 3200);
+});
+let needsLeverUntil = 0;
+events.on('door_needs_lever', () => {
+  if (performance.now() < needsLeverUntil) return; // E 를 두들기면 매 틱 뜬다
+  needsLeverUntil = performance.now() + 2000;
+  audio.play('shop_deny');
+  showReaction('손으로는 안 열린다 — 어딘가의 레버를 찾아야 한다', 2000);
+});
 events.on('door_opened', (payload) => {
   const at = payload as { row: number; col: number };
   stage.openDoor(at.row, at.col);
@@ -996,6 +1012,7 @@ const systems = [
   Mana.tick,
   Altar.tick,
   Door.tick,
+  Lever.tick,
   Chest.tick,
   Exit.tick,
   Lantern.tick,
@@ -1307,6 +1324,7 @@ function render(alpha: number): void {
 
   // 제단/문 프롬프트 — 상호작용 가능한 것 안내
   const nearDoor = world.doorInView !== null && !world.dead && !world.uiOpen;
+  const nearLever = world.leverInView !== null && !world.dead && !world.uiOpen;
   const showAltarPrompt =
     world.altarInView && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
   // 출구 발판 위 — 서 있는 동안 계속 띄운다 (3초 뒤 사라지면 못 보고 지나친다).
@@ -1315,7 +1333,7 @@ function render(alpha: number): void {
   const nearChest = world.chestInView !== null && !world.dead && !world.uiOpen;
   altarPrompt!.classList.toggle(
     'visible',
-    showAltarPrompt || nearDoor || onExit || nearChest,
+    showAltarPrompt || nearDoor || nearLever || onExit || nearChest,
   );
   if (showAltarPrompt) {
     altarPrompt!.textContent =
@@ -1324,11 +1342,14 @@ function render(alpha: number): void {
       `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
   } else if (nearChest) {
     altarPrompt!.textContent = 'E — 보물상자를 연다';
+  } else if (nearLever) {
+    altarPrompt!.textContent = 'E — 레버를 당긴다 (보스 아레나 북쪽 관문이 열린다)';
   } else if (nearDoor) {
     // 진행 게이지를 프롬프트 안에 그려 준다 — 손 동작만으로는 얼마나 남았는지 모른다
     const frac = Door.channelFrac(world);
-    altarPrompt!.textContent =
-      frac > 0
+    altarPrompt!.textContent = world.doorInView!.byLever
+      ? '관문 — 손으로는 안 열린다. 어딘가의 레버를 찾아야 한다'
+      : frac > 0
         ? `잠금을 푸는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%\n문에서 떨어지면 처음부터`
         : 'E — 문을 연다 (누른 채 기다릴 필요 없이 문 앞에 서 있으면 된다)';
   } else if (onExit) {

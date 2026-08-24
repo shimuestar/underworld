@@ -7,6 +7,7 @@ import { Input } from '../core/Input';
 import { World } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Door from './Door';
+import * as Lever from './Lever';
 import * as Sigils from './Sigils';
 
 const DT = 1 / 60;
@@ -30,8 +31,26 @@ function makeLevel(): Level {
   });
 }
 
-function makeWorld(): World {
-  const level = makeLevel();
+/** 같은 배치인데 문이 관문(G)이고, 레버가 서쪽 방 [1,2] 에 있다 */
+function makeGateLevel(): Level {
+  return new Level({
+    id: 'gateway',
+    name: 'gateway',
+    cellSize: 4,
+    ceiling: 4,
+    grid: [
+      '###########',
+      '#SL..#....#',
+      '#....G....#',
+      '#....#....#',
+      '###########',
+    ],
+    lighting: { ambient: 0.04, torches: [] },
+    triggers: [{ type: 'lever', cell: [1, 2], opens: [2, 5] }],
+  });
+}
+
+function makeWorld(level: Level = makeLevel()): World {
   return new World(new Events(), {
     input: Input.emptySnapshot(),
     player: {
@@ -56,16 +75,20 @@ function makeWorld(): World {
   });
 }
 
-/** E 한 번 누른 틱 */
+/** E 한 번 누른 틱 (문·레버 둘 다 돌린다 — main 의 순서와 같다) */
 function press(world: World): void {
   world.input = { ...Input.emptySnapshot(), interactPressed: true };
   Door.tick(world, DT);
+  Lever.tick(world, DT);
   world.input = Input.emptySnapshot();
 }
 
 /** 손 안 대고 n 틱 */
 function idle(world: World, n: number): void {
-  for (let i = 0; i < n; i++) Door.tick(world, DT);
+  for (let i = 0; i < n; i++) {
+    Door.tick(world, DT);
+    Lever.tick(world, DT);
+  }
 }
 
 let world: World;
@@ -213,13 +236,93 @@ describe('미닫이', () => {
   });
 });
 
-describe('레벨 데이터', () => {
-  it('레버는 폐지됐다 — z01_f1 에 lever 트리거도, L 칸도 없다', async () => {
-    const level = (await import('../../data/levels/z01_f1.json')).default;
-    expect(level.grid.some((row: string) => row.includes('L'))).toBe(false);
-    expect((level.triggers ?? []).some((t: { type: string }) => t.type === 'lever')).toBe(false);
+describe('관문(G)과 레버', () => {
+  /** 레버 [1,2] → x 10, z 6 / 관문 [2,5] → x 22, z 10 */
+  function gateWorld(): World {
+    const w = makeWorld(makeGateLevel());
+    w.player.x = 20; w.player.z = 10; w.player.prevX = 20; w.player.prevZ = 10;
+    w.player.yaw = -Math.PI / 2; // +X = 관문 쪽
+    return w;
+  }
+  /** 레버 앞(서쪽 2m)에 서서 레버를 본다 */
+  function standAtLever(w: World): void {
+    w.player.x = 8.5; w.player.z = 6; w.player.prevX = 8.5; w.player.prevZ = 6;
+    w.player.yaw = -Math.PI / 2;
+  }
+
+  it('관문은 byLever 로 표시되고 레버도 읽힌다', () => {
+    const w = gateWorld();
+    expect(w.doors).toHaveLength(1);
+    expect(w.doors[0]!.byLever).toBe(true);
+    expect(w.level.levers).toHaveLength(1);
   });
 
+  it('관문 앞에서 E 를 눌러도 안 열린다 — 이유를 알려 준다', () => {
+    const w = gateWorld();
+    const needs: unknown[] = [];
+    w.events.on('door_needs_lever', (p) => needs.push(p));
+
+    Door.tick(w, DT);
+    expect(w.doorInView).toBe(w.doors[0]); // 안내 대상은 된다
+    press(w);
+    idle(w, CFG.openTicks + CFG.slideTicks);
+    expect(w.doors[0]!.progress).toBe(0);
+    expect(w.doors[0]!.opened).toBe(false);
+    expect(w.level.solidAt(5, 2)).toBe(true);
+    expect(needs.length).toBeGreaterThan(0);
+    expect(Door.channelFrac(w)).toBe(0); // 게이지도 안 찬다
+  });
+
+  it('레버를 당기면 관문이 열린다 — 미닫이는 문과 같은 경로로 돈다', () => {
+    const w = gateWorld();
+    standAtLever(w);
+    const pulled: unknown[] = [];
+    const opened: unknown[] = [];
+    w.events.on('lever_pulled', (p) => pulled.push(p));
+    w.events.on('door_opened', (p) => opened.push(p));
+
+    Lever.tick(w, DT);
+    expect(w.leverInView).toEqual({ row: 1, col: 2 }); // 안내가 뜰 조건
+
+    press(w);
+    expect(pulled).toHaveLength(1);
+    expect(w.doors[0]!.progress).toBe(CFG.openTicks); // 잠금이 통째로 풀렸다
+
+    idle(w, CFG.slideTicks - 1);
+    expect(w.level.solidAt(5, 2)).toBe(true); // 다 밀리기 전엔 아직 벽
+    idle(w, 1);
+    expect(w.doors[0]!.opened).toBe(true);
+    expect(w.level.solidAt(5, 2)).toBe(false);
+    expect(opened).toHaveLength(1);
+  });
+
+  it('레버는 1회용 — 두 번째 E 는 아무 일도 없다', () => {
+    const w = gateWorld();
+    standAtLever(w);
+    press(w);
+    const pulled: unknown[] = [];
+    w.events.on('lever_pulled', (p) => pulled.push(p));
+    press(w);
+    expect(pulled).toHaveLength(0);
+    Lever.tick(w, DT);
+    expect(w.leverInView).toBeNull(); // 안내도 사라진다
+  });
+
+  it('멀거나 등지고 있으면 안 당겨진다 — 제단·상자와 같은 규약', () => {
+    const w = gateWorld();
+    standAtLever(w);
+    w.player.x = 10 - CFG.leverRadius - 1;
+    press(w);
+    expect(w.doors[0]!.progress).toBe(0);
+
+    standAtLever(w);
+    w.player.yaw = Math.PI / 2; // 등진다
+    press(w);
+    expect(w.doors[0]!.progress).toBe(0);
+  });
+});
+
+describe('레벨 데이터', () => {
   it('z01_f1 의 문 두 짝 모두 밀려 들어갈 벽을 찾는다', async () => {
     const levelJson = (await import('../../data/levels/z01_f1.json')).default;
     const level = new Level(levelJson as never);
@@ -229,5 +332,21 @@ describe('레벨 데이터', () => {
       expect(Math.abs(door.dirX) + Math.abs(door.dirZ)).toBe(1);
       expect(level.charAt(door.col + door.dirX, door.row + door.dirZ)).toBe('#');
     }
+  });
+
+  it('보스 아레나 북쪽만 관문(G)이고, 그걸 여는 레버가 실제로 있다', async () => {
+    const levelJson = (await import('../../data/levels/z01_f1.json')).default;
+    const level = new Level(levelJson as never);
+    const gates = level.doors.filter((d) => d.byLever);
+    expect(gates).toHaveLength(1);
+    expect([gates[0]!.row, gates[0]!.col]).toEqual([14, 13]);
+    // 나머지 한 짝(보물방)은 손으로 연다
+    expect(level.doors.filter((d) => !d.byLever)).toHaveLength(1);
+
+    // 레버가 이 관문을 가리키고, 레버 칸이 벽 안이 아니어야 한다
+    expect(level.levers).toHaveLength(1);
+    const lever = level.levers[0]!;
+    expect(lever.opens).toEqual([14, 13]);
+    expect(level.solidAt(lever.cell[1]!, lever.cell[0]!)).toBe(false);
   });
 });

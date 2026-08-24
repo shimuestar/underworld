@@ -37,10 +37,12 @@ export interface DoorCell {
   z: number;
   dirX: number;
   dirZ: number;
+  /** 레버로만 열리는 관문(G)인가. false 면 문 앞에서 E 로 직접 연다(D) */
+  byLever: boolean;
 }
 
 /** 이동을 막는 셀. 잠긴 문(D)과 균열 벽(C)은 열리기 전까지 벽 취급. */
-const SOLID_CHARS = new Set(['#', 'D', 'C']);
+const SOLID_CHARS = new Set(['#', 'D', 'G', 'C']);
 /** 제단 기둥 발자국(가로세로 m). 충돌과 시각 메시가 반드시 같은 값을 쓴다 —
  *  하나만 고치면 "보이는 것과 부딪히는 것"이 어긋난다 */
 const ALTAR_FOOTPRINT = 1.1;
@@ -61,8 +63,11 @@ export class Level {
   readonly props: { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
   readonly exitPos: { x: number; z: number } | null;
   readonly glyphs: GlyphDef[];
-  /** 잠긴 문(D) — 문 앞에서 E 로 직접 연다. 미닫이가 밀려 들어갈 축도 여기서 정한다 */
+  /** 잠긴 문(D·G) — 미닫이가 밀려 들어갈 축도 여기서 정한다 */
   readonly doors: DoorCell[];
+
+  /** 레버 — 당기면 연결된 관문(G)이 열린다. 연결은 레벨 데이터의 triggers */
+  readonly levers: TriggerDef[];
   readonly rows: number;
   readonly cols: number;
 
@@ -105,13 +110,18 @@ export class Level {
       : null;
 
     this.glyphs = def.glyphs ?? [];
-    // 문은 격자에서 직접 찾는다 — 레버-문 연결(triggers)은 폐지됐다.
+    this.levers = (def.triggers ?? []).filter(
+      (trigger) => trigger.type === 'lever' && trigger.opens,
+    );
+
+    // 문은 격자에서 직접 찾는다. D 는 손으로, G 는 레버로 열린다.
     // 미닫이 방향: 벽이 이어지는 축으로 민다. 문 좌우가 벽이면 벽은 가로로 이어지므로
     // 가로(X)로 밀어 넣고, 위아래가 벽이면 세로(Z)로 민다
     this.doors = [];
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
-        if (this.charAt(col, row) !== 'D') continue;
+        const ch = this.charAt(col, row);
+        if (ch !== 'D' && ch !== 'G') continue;
         const alongX = this.charAt(col - 1, row) === '#' || this.charAt(col + 1, row) === '#';
         const dirX = alongX ? (this.charAt(col + 1, row) === '#' ? 1 : -1) : 0;
         const dirZ = alongX ? 0 : this.charAt(col, row + 1) === '#' ? 1 : -1;
@@ -122,6 +132,7 @@ export class Level {
           z: (row + 0.5) * this.cellSize,
           dirX,
           dirZ,
+          byLever: ch === 'G',
         });
       }
     }
@@ -285,6 +296,8 @@ export class Level {
 const COLOR_WALL = 0x55555f;
 const COLOR_DOOR = 0x6b4a2f;
 const COLOR_CRACK = 0x4a5a68;
+/** 레버로만 열리는 관문 — 손으로 여는 문(갈색)과 확실히 다른 청록 금속색 */
+export const COLOR_GATE = 0x2f6f74;
 const COLOR_FLOOR = 0x3a3a44;
 const COLOR_CEILING = 0x2e2e36;
 const COLOR_ALTAR = 0xd8c9a0;
@@ -314,14 +327,23 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
     for (let col = 0; col < level.cols; col++) {
       const ch = level.charAt(col, row);
       if (!SOLID_CHARS.has(ch)) continue;
-      if (ch === 'D' || ch === 'C') {
-        // 문·균열 벽은 열리거나 파괴될 수 있으므로 개별 메시
+      if (ch === 'D' || ch === 'G' || ch === 'C') {
+        // 문·관문·균열 벽은 열리거나 파괴될 수 있으므로 개별 메시.
+        // 관문(G)은 색을 달리한다 — 손으로 열리는 문과 눈으로 구분돼야 헛되이
+        // 붙어서 E 를 두들기지 않는다
+        const color = ch === 'D' ? COLOR_DOOR : ch === 'G' ? COLOR_GATE : COLOR_CRACK;
         const mesh = new THREE.Mesh(
           new THREE.BoxGeometry(cs, level.ceiling, cs),
-          new THREE.MeshLambertMaterial({ color: ch === 'D' ? COLOR_DOOR : COLOR_CRACK }),
+          new THREE.MeshLambertMaterial({
+            color,
+            // 관문은 은은하게 자체 발광 — 어두운 복도 끝에서도 "저기 뭔가 있다"가 보인다
+            emissive: ch === 'G' ? COLOR_GATE : 0x000000,
+            emissiveIntensity: ch === 'G' ? 0.22 : 0,
+          }),
         );
         mesh.position.set((col + 0.5) * cs, level.ceiling / 2, (row + 0.5) * cs);
-        mesh.name = `${ch === 'D' ? 'door' : 'crack'}-${row}-${col}`;
+        // 이름은 문·관문 모두 door- 로 둔다 — 미닫이·제거를 같은 경로로 쓴다
+        mesh.name = `${ch === 'C' ? 'crack' : 'door'}-${row}-${col}`;
         group.add(mesh);
         continue;
       }
@@ -382,12 +404,35 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
     }
   }
 
-  // 출구 — 미니맵 색과 동일한 시각물 (지도와 실물 일치)
+  // 레버·출구 — 미니맵 색과 동일한 시각물 (지도와 실물 일치)
   for (let row = 0; row < level.rows; row++) {
     for (let col = 0; col < level.cols; col++) {
       const ch = level.charAt(col, row);
       const x = (col + 0.5) * cs;
       const z = (row + 0.5) * cs;
+
+      if (ch === 'L') {
+        // 레버 — 받침 + 기울어진 손잡이. 관문과 같은 색이라 "이게 저 문을 연다"가 읽힌다
+        const base = new THREE.Mesh(
+          new THREE.BoxGeometry(0.5, 0.5, 0.5),
+          new THREE.MeshLambertMaterial({ color: 0x4a4a52 }),
+        );
+        base.position.set(x, 0.25, z);
+        group.add(base);
+        const handle = new THREE.Mesh(
+          new THREE.BoxGeometry(0.09, 0.9, 0.09),
+          new THREE.MeshLambertMaterial({
+            color: COLOR_GATE,
+            emissive: COLOR_GATE,
+            emissiveIntensity: 0.45,
+          }),
+        );
+        handle.position.set(x, 0.85, z);
+        handle.rotation.z = 0.5;
+        handle.name = `lever-${row}-${col}`;
+        group.add(handle);
+        group.add(new THREE.PointLight(COLOR_GATE, 0.7, 5, 0));
+      }
 
       if (ch === 'X') {
         // 출구 — 바닥 발광 판 + 초록 광원

@@ -109,6 +109,15 @@ export interface SpellState {
 
 /** 바닥에 떨어진 각인. 접근하면 획득 */
 /** 보물상자 — E로 한 번 열면 골드 무더기와 각인 하나가 쏟아진다 */
+/** 문 잠금을 통째로 푼다 — 레버가 부른다. 미닫이와 개방은 Door 가 이어서 돌리므로
+ *  레버는 이 한 줄만 건드리면 된다. balance 는 호출부가 읽어 넘긴다
+ *  (pushPlayer·spendStamina 와 같은 규약 — World 는 데이터에 의존하지 않는다) */
+export function unlockDoor(door: DoorState, openTicks: number): boolean {
+  if (door.opened || door.progress >= openTicks) return false;
+  door.progress = openTicks;
+  return true;
+}
+
 /** 잠긴 문 하나. 격자 정보(위치·미닫이 방향)는 Level.doors 에서 그대로 옮겨 온다 */
 export interface DoorState {
   row: number;
@@ -118,6 +127,8 @@ export interface DoorState {
   /** 미닫이가 밀려 들어갈 방향 (셀 단위, 둘 중 하나만 0이 아니다) */
   dirX: number;
   dirZ: number;
+  /** 레버로만 열리는 관문(G)인가 — 문 앞에서 E 를 눌러도 안 열린다 */
+  byLever: boolean;
   /** 잠금을 푸는 중 진행 틱. 0 이면 아무도 손대지 않은 상태 */
   progress: number;
   /** 미닫이 진행 0~1. 1 이 되는 틱에 통행이 열린다 */
@@ -493,8 +504,15 @@ export class World {
   /** 잠긴 문 — Door 가 E 채널을 돌리고 미닫이를 민다 (레버는 2026-08 폐지) */
   doors: DoorState[] = [];
 
-  /** 지금 바라보고 있는 열 수 있는 문 (없으면 null) — HUD 안내가 읽는다 */
+  /** 지금 바라보고 있는 아직 안 열린 문 (없으면 null) — HUD 안내가 읽는다.
+   *  관문(byLever)도 여기 잡힌다 — "이건 레버로만 열린다"를 알려 줘야 하므로 */
   doorInView: DoorState | null = null;
+
+  /** 당겨진 레버 ("row-col") — 레버는 1회용 */
+  pulledLevers = new Set<string>();
+
+  /** 지금 바라보고 있는 아직 안 당긴 레버 (없으면 null) — HUD 안내가 읽는다 */
+  leverInView: { row: number; col: number } | null = null;
 
   enemies: EnemyState[];
   level: Level;
@@ -536,6 +554,7 @@ export class World {
       z: d.z,
       dirX: d.dirX,
       dirZ: d.dirZ,
+      byLever: d.byLever,
       progress: 0,
       slide: 0,
       prevSlide: 0,

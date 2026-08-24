@@ -1,4 +1,6 @@
-// 잠긴 문 — 문 앞에서 E 를 눌러 플레이어가 직접 연다. (레버 폐지 2026-08)
+// 잠긴 문 — 문 앞에서 E 를 눌러 플레이어가 직접 연다(D).
+// 관문(G)만은 예외로 레버로만 열린다 — Lever 가 unlockByLever 로 잠금을 풀어 주면
+// 그 뒤 미닫이·개방은 여기서 똑같이 처리한다 (문 파이프라인은 하나다).
 //
 // 세 단계로 나뉜다.
 //   1. 채널  progress 0 → openTicks. E 로 시작하고, 반경 안에서 문을 보고 있는 동안만 오른다.
@@ -59,6 +61,13 @@ export function tick(world: World, _dt: number): void {
     }
 
     // 이미 손을 대고 있으면 계속, 아니면 E 를 눌러야 시작한다
+    // 관문은 손으로 안 열린다 — 레버가 progress 를 채워 줄 때까지 그대로다
+    if (door.byLever) {
+      if (world.input.interactPressed) {
+        world.events.emit('door_needs_lever', { row: door.row, col: door.col });
+      }
+      continue;
+    }
     if (door.progress === 0 && !world.input.interactPressed) continue;
     door.progress++;
     if (door.progress === 1) {
@@ -74,6 +83,6 @@ export function tick(world: World, _dt: number): void {
  *  미닫이가 밀리는 동안은 손을 떼므로 0 이다 */
 export function channelFrac(world: World): number {
   const door = world.doorInView;
-  if (!door || door.progress <= 0) return 0;
+  if (!door || door.byLever || door.progress <= 0) return 0;
   return Math.min(1, door.progress / balance.door.openTicks);
 }
