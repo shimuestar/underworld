@@ -14,8 +14,8 @@ import { igniteBarrel, pushPlayer, type BarrelState, type World } from '../core/
 export function tick(world: World, _dt: number): void {
   for (const barrel of world.barrels) {
     if (!barrel.alive || barrel.fuseTicks < 0) continue;
-    // 먼저 줄이고 0이 된 그 틱에 터뜨린다 — 180이면 정확히 180틱(3초).
-    // 나중에 줄이면 한 틱이 더 붙어 3.02초가 된다
+    // 먼저 줄이고 0이 된 그 틱에 터뜨린다 — 120이면 정확히 120틱(2초).
+    // 나중에 줄이면 한 틱이 더 붙어 2.02초가 된다
     if (barrel.fuseTicks > 0) {
       barrel.fuseTicks--;
       if (barrel.fuseTicks > 0) continue;

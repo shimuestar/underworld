@@ -98,10 +98,10 @@ beforeEach(() => {
 });
 
 describe('점화 — 맞은 수만큼 도화선이 짧아진다', () => {
-  it('총 1발 = 3초, 2발 = 1초, 3발 = 즉발', () => {
+  it('총 1발 = 2초, 2발 = 0.5초, 3발 = 즉발', () => {
     const [long, mid, instant] = CFG.fuseByHits;
-    expect(long).toBe(180); // 3초
-    expect(mid).toBe(60); // 1초
+    expect(long).toBe(120); // 2초
+    expect(mid).toBe(30); // 0.5초
     expect(instant).toBe(0);
 
     const barrel = putBarrel(world, 6 + 6, 6);
@@ -122,30 +122,31 @@ describe('점화 — 맞은 수만큼 도화선이 짧아진다', () => {
     expect(barrel.alive).toBe(false);
   });
 
-  it('1발만 쏘면 3초를 꽉 채워야 터진다', () => {
+  it('1발만 쏘면 2초를 꽉 채워야 터진다', () => {
     const barrel = putBarrel(world, 6 + 6, 6);
     aimAt(world, barrel.x, barrel.z);
     shoot(world);
-    burn(world, CFG.fuseByHits[0]! - 1); // 3초에서 한 틱 모자라다
+    burn(world, CFG.fuseByHits[0]! - 1); // 2초에서 한 틱 모자라다
     expect(barrel.alive).toBe(true);
     Barrels.tick(world, DT);
-    expect(barrel.alive).toBe(false); // 정확히 180틱 = 3.00초
+    expect(barrel.alive).toBe(false); // 정확히 120틱 = 2.00초
   });
 
   it('도화선이 도는 중에 더 맞히면 앞당겨진다 — 늘어나지는 않는다', () => {
     const barrel = putBarrel(world, 6 + 6, 6);
     aimAt(world, barrel.x, barrel.z);
-    shoot(world); // 3초
+    shoot(world); // 1발째 도화선
     burn(world, 30);
     expect(barrel.fuseTicks).toBe(CFG.fuseByHits[0]! - 30);
-    shoot(world); // 2발째 → 1초로 앞당김
+    shoot(world); // 2발째 → 더 짧은 도화선으로 앞당김
     expect(barrel.fuseTicks).toBe(CFG.fuseByHits[1]!);
 
-    // 남은 도화선이 이미 더 짧으면 그대로 둔다
-    burn(world, 55);
+    // 남은 도화선이 이미 더 짧으면 그대로 둔다.
+    // 태우는 틱 수는 수치를 다시 튜닝해도 따라오게 CFG 에서 뽑는다
+    burn(world, CFG.fuseByHits[1]! - 5);
     const left = barrel.fuseTicks;
     expect(left).toBeLessThan(CFG.fuseByHits[1]!);
-    barrel.hits = 1; // 다시 1발째 취급으로 되돌려 3초를 물려 본다
+    barrel.hits = 1; // 다시 1발째 취급으로 되돌려 더 긴 도화선을 물려 본다
     shoot(world);
     expect(barrel.fuseTicks).toBeLessThanOrEqual(left);
   });

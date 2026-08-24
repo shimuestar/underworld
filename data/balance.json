@@ -95,12 +95,12 @@
     "collisionRadius": 0.55
   },
   "barrel": {
-    "_comment": "폭발통 — 총알·해머는 한 방에 터뜨리지 못한다. 맞은 수만큼 도화선이 짧아진다(fuseByHits: 1대=3초, 2대=1초, 3대=즉발). 화염구·수류탄·다른 통의 폭발은 즉발. 피해는 적·플레이어를 가리지 않는다 — 엄폐물 뒤에서 쏘는 무기다",
+    "_comment": "폭발통 — 총알·해머는 한 방에 터뜨리지 못한다. 맞은 수만큼 도화선이 짧아진다(fuseByHits: 1대=2초, 2대=0.5초, 3대=즉발). 화염구·수류탄·다른 통의 폭발은 즉발. 피해는 적·플레이어를 가리지 않는다 — 엄폐물 뒤에서 쏘는 무기다",
     "radius": 4.5,
     "damage": 84,
     "damageFalloffMin": 0.25,
     "_damageNote": "수류탄(120)의 70%. 반경은 수류탄(5.0)보다 조금 좁게 둬서 수류탄의 자리를 뺏지 않는다",
-    "fuseByHits": [180, 60, 0],
+    "fuseByHits": [120, 30, 0],
     "playerKnockback": 3.2,
     "playerKnockbackTicks": 12,
     "collisionRadius": 0.46,
