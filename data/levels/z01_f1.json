@@ -50,13 +50,6 @@
     {
       "type": "goblin_runner",
       "cell": [
-        1,
-        13
-      ]
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
         3,
         10
       ]
@@ -66,13 +59,6 @@
       "cell": [
         3,
         15
-      ]
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
-        5,
-        13
       ]
     },
     {
@@ -97,13 +83,6 @@
         15
       ],
       "note": "아레나 A 후방 궁수"
-    },
-    {
-      "type": "goblin_spear",
-      "cell": [
-        7,
-        11
-      ]
     },
     {
       "type": "goblin_spear",
@@ -167,14 +146,6 @@
       "note": "주술사 호위"
     },
     {
-      "type": "goblin_runner",
-      "cell": [
-        12,
-        5
-      ],
-      "note": "주술사 호위"
-    },
-    {
       "type": "warden",
       "cell": [
         2,
@@ -183,35 +154,12 @@
       "note": "보물방 수문장"
     },
     {
-      "type": "goblin_spear",
-      "cell": [
-        3,
-        19
-      ],
-      "note": "보물방 경비"
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
-        13,
-        10
-      ]
-    },
-    {
       "type": "goblin_chieftain",
       "cell": [
         17,
         18
       ],
       "note": "보스 아레나"
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
-        16,
-        20
-      ],
-      "note": "보스 부하"
     },
     {
       "type": "goblin_runner",
@@ -248,32 +196,9 @@
       "type": "goblin_archer",
       "cell": [
         6,
-        15
-      ]
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        6,
         12
       ],
       "note": "아레나 A 남측 (스폰 방에서 이동)"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        1,
-        20
-      ],
-      "note": "보물방"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        4,
-        22
-      ],
-      "note": "보물방"
     },
     {
       "type": "goblin_archer",
@@ -318,14 +243,6 @@
     {
       "type": "goblin_archer",
       "cell": [
-        13,
-        18
-      ],
-      "note": "남부 복도 중앙"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
         5,
         25
       ],
@@ -334,42 +251,10 @@
     {
       "type": "goblin_archer",
       "cell": [
-        9,
-        25
-      ],
-      "note": "동쪽 세로 복도 중단"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        15,
-        12
-      ],
-      "note": "보스 아레나 서측"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
         18,
         21
       ],
       "note": "보스 아레나 동측"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        19,
-        11
-      ],
-      "note": "보스 아레나 남서"
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
-        13,
-        19
-      ],
-      "group": "amb01"
     },
     {
       "type": "goblin_runner",
@@ -450,6 +335,70 @@
         18
       ],
       "note": "본길 복도 — 거미를 먼저 한 번 만나 본다"
+    },
+    {
+      "type": "spider_large",
+      "cell": [
+        10,
+        13
+      ],
+      "note": "중앙 방 둥지 — 아레나 A 에서 남부 복도로 내려가는 길목"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        8,
+        13
+      ],
+      "note": "중앙 방 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        9,
+        12
+      ],
+      "note": "중앙 방 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        10,
+        15
+      ],
+      "note": "중앙 방 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        11,
+        14
+      ],
+      "note": "중앙 방 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        2,
+        20
+      ],
+      "note": "거미 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        4,
+        19
+      ],
+      "note": "거미 둥지"
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        13,
+        12
+      ],
+      "note": "본길 복도 서단 — 제단 안전실 입구에서 떨어뜨려 둔다"
     },
     { "type": "barrel", "cell": [2, 9], "note": "초입 복도 — 러너 무리 옆" },
     { "type": "barrel", "cell": [2, 19], "note": "오른쪽 방 — 주술사·거미 둥지 길목" },
