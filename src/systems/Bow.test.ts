@@ -75,24 +75,28 @@ function shoot(world: World, drawTicks: number): ProjectileState | null {
 }
 
 describe('당겨 쏘기', () => {
-  it('당긴 만큼 빠르고 아프다 — 최소·최대가 balance 값과 맞는다', () => {
+  it('당긴 만큼 빠르다, 피해는 balance 구간을 따른다 — 최소·최대가 값과 맞는다', () => {
     const weak = shoot(world, BOW.minDrawTicks)!;
     expect(weak).not.toBeNull();
     // 최소 당김이 곧 damageMin 이다 — 당김 비율을 minDrawTicks 부터 세기 때문
     expect(weak.damage).toBeCloseTo(BOW.damageMin, 5);
+    const weakSpeed = Math.hypot(weak.vx, weak.vy, weak.vz);
 
     world = makeWorld();
     const full = shoot(world, BOW.maxDrawTicks)!;
     expect(full.damage).toBeCloseTo(BOW.damageMax, 5);
     expect(Math.hypot(full.vx, full.vy, full.vz)).toBeCloseTo(BOW.speedMax, 4);
-    expect(full.damage).toBeGreaterThan(weak.damage);
+    // 지금은 피해가 고정(min==max, 권총의 2배)이라 당김의 보상은 속도다.
+    // 피해 경사를 되살리면(min<max) 피해도 함께 늘어야 한다
+    expect(full.damage).toBeGreaterThanOrEqual(weak.damage);
+    expect(Math.hypot(full.vx, full.vy, full.vz)).toBeGreaterThan(weakSpeed);
   });
 
-  it('당김 구간이 damageMin~damageMax 를 온전히 덮는다 — 중간값도 사이에 든다', () => {
+  it('당김 구간이 damageMin~damageMax 를 벗어나지 않는다 — 중간값도 구간 안', () => {
     const mid = Math.round((BOW.minDrawTicks + BOW.maxDrawTicks) / 2);
     const arrow = shoot(world, mid)!;
-    expect(arrow.damage).toBeGreaterThan(BOW.damageMin);
-    expect(arrow.damage).toBeLessThan(BOW.damageMax);
+    expect(arrow.damage).toBeGreaterThanOrEqual(BOW.damageMin);
+    expect(arrow.damage).toBeLessThanOrEqual(BOW.damageMax);
   });
 
   it('maxDrawTicks 를 넘겨 당겨도 더 세지지 않는다', () => {
@@ -549,7 +553,8 @@ describe('화살통 드랍', () => {
 describe('데이터', () => {
   it('활이 원거리 교체 순환에 들어 있다', () => {
     expect(balance.weapons.bow.ammoMax).toBeGreaterThan(0);
-    expect(BOW.damageMin).toBeLessThan(BOW.damageMax);
+    expect(BOW.damageMin).toBeLessThanOrEqual(BOW.damageMax); // 고정 피해(min==max) 허용
+    expect(BOW.damageMin).toBe(balance.weapons.pistol.damage * 2); // 화살 = 총알의 2배 (2026-08 결정)
     expect(BOW.speedMin).toBeLessThan(BOW.speedMax);
     expect(BOW.minDrawTicks).toBeLessThan(BOW.maxDrawTicks);
     expect(BOW.recoverChance).toBeGreaterThan(0);
