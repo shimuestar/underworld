@@ -31,6 +31,8 @@ export class ShopUI {
   private selected = 0;
   /** 닫힐 때 main이 uiOpen 을 되돌린다 */
   onClose: (() => void) | null = null;
+  /** 패드로 조작 중 — 하단 힌트를 패드 표기로 바꾼다 (main 이 틱마다 갱신) */
+  padMode = false;
 
   constructor(private readonly world: World) {
     this.root = document.createElement('div');
@@ -91,6 +93,19 @@ export class ShopUI {
   hide(): void {
     this.open = false;
     this.root.style.display = 'none';
+  }
+
+  // ---- 패드 조작 — 일시정지 메뉴와 같은 고정 버튼 규약 (매핑을 안 거친다) ----
+  padMove(step: number): void {
+    if (this.open) this.move(step);
+  }
+  padBuy(): void {
+    if (this.open) this.buy(ROWS[this.selected]!.item);
+  }
+  padClose(): void {
+    if (!this.open) return;
+    this.hide();
+    this.onClose?.();
   }
 
   private buy(item: Altar.ShopItem): void {
@@ -195,9 +210,10 @@ export class ShopUI {
     });
 
     const hint = document.createElement('div');
-    hint.textContent =
-      'WASD·↑↓ 이동   Enter·좌클릭 구매   1~5 바로 구매   Tab 각인 교체   E / Esc 닫기\n' +
-      '재고를 다 쓰면 5분 뒤에 가득 재입고된다';
+    hint.textContent = this.padMode
+      ? 'D-패드 ↑↓ 이동   A 구매   Menu 각인 교체   B 닫기\n재고를 다 쓰면 5분 뒤에 가득 재입고된다'
+      : 'WASD·↑↓ 이동   Enter·좌클릭 구매   1~5 바로 구매   Tab 각인 교체   E / Esc 닫기\n' +
+        '재고를 다 쓰면 5분 뒤에 가득 재입고된다';
     hint.style.cssText =
       'margin-top:16px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;white-space:pre-line;';
     panel.appendChild(hint);

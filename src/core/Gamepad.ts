@@ -42,6 +42,7 @@ export const BUTTON_NAMES: Record<number, string> = {
 };
 
 export function buttonName(index: number): string {
+  if (index < 0) return '(없음)';
   return BUTTON_NAMES[index] ?? `버튼 ${index}`;
 }
 
@@ -131,9 +132,14 @@ export class GamepadInput {
       if (b.pressed || b.value >= threshold) this.now.add(i);
     });
 
-    if (this.now.size > 0 || this.axesRaw.some((a) => Math.abs(a) > 0.5)) {
-      this.lastInputMs = performance.now();
-    }
+    this.sawInput = this.now.size > 0 || this.axesRaw.some((a) => Math.abs(a) > 0.5);
+    if (this.sawInput) this.lastInputMs = performance.now();
+  }
+
+  /** 이번 poll 에서 실제 입력이 있었나 — "마지막으로 쓴 장치" 판정용 */
+  private sawInput = false;
+  get touched(): boolean {
+    return this.sawInput;
   }
 
   get connected(): boolean {

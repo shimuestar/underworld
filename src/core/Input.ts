@@ -58,6 +58,13 @@ export class Input {
   /** 패드 입력 — 키보드·마우스와 같은 스냅샷에 얹는다.
    *  둘을 동시에 써도 되게 OR 로 합친다 (한쪽만 쓰라고 강요할 이유가 없다) */
   readonly gamepad = new GamepadInput();
+
+  /** 마지막으로 실제 입력이 온 장치. 안내 문구를 키보드/패드 표기 중 무엇으로
+   *  띄울지 이걸로 정한다 — 꽂아만 두고 키보드로 노는 사람에겐 키보드를 보여준다 */
+  private device: 'kb' | 'pad' = 'kb';
+  get usingPad(): boolean {
+    return this.device === 'pad' && this.gamepad.connected;
+  }
   private keys = new Set<string>();
   private dx = 0;
   private dy = 0;
@@ -98,6 +105,7 @@ export class Input {
 
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
+      this.device = 'kb';
       this.keys.add(e.code);
       // 질주 — 스페이스. 브라우저 기본 스크롤을 막는다
       if (e.code === 'Space') {
@@ -138,6 +146,7 @@ export class Input {
     // 포인터 락을 얻는 그 클릭은 발사로 치지 않는다 (mousedown 시점엔 아직 미잠금)
     window.addEventListener('mousedown', (e) => {
       if (!this.pointerLocked) return;
+      this.device = 'kb';
       // 좌클릭 = 원거리 / 우클릭 = 근접
       if (e.button === 0) {
         this.rangedClicks++;
@@ -215,6 +224,7 @@ export class Input {
     // 패드는 이벤트가 아니라 폴링이다 — 틱당 한 번인 여기가 제자리
     const pad = this.gamepad;
     pad.poll();
+    if (pad.touched) this.device = 'pad';
     const axes = pad.axes();
     const lookMul = balance.input.gamepad.lookSpeed / balance.loop.tickRate;
     // 스틱은 위치, 마우스는 델타 — 축 값을 틱당 회전량으로 바꿔 같은 필드에 넣는다.

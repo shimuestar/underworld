@@ -13,6 +13,7 @@ import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt } from './level/S
 import { Minimap } from './render/Minimap';
 import { PauseMenu } from './render/PauseMenu';
 import { GamepadUI } from './render/GamepadUI';
+import { buttonName, type PadAction } from './core/Gamepad';
 import { Stage } from './render/Stage';
 import { grenadeThrowSpeed } from './systems/Weapons';
 import * as PlayerMove from './systems/PlayerMove';
@@ -54,6 +55,15 @@ const events = new Events();
 const metrics = new Metrics(events); // 다른 구독보다 먼저 — 이벤트만 구독한다
 const level = new Level(levelJson);
 const input = new Input(app);
+
+/** 현재 매핑 기준 패드 버튼 이름 — 안내 문구용 */
+function padBtn(action: PadAction): string {
+  return buttonName(input.gamepad.binding(action));
+}
+/** 안내 문구의 키 표기 — 마지막으로 쓴 장치를 따라간다 */
+function keyLabel(kb: string, action: PadAction): string {
+  return input.usingPad ? padBtn(action) : kb;
+}
 
 const world = new World(events, {
   input: Input.emptySnapshot(),
@@ -710,7 +720,11 @@ events.on('item_denied', (payload) => {
   const info = payload as { kind?: ItemKind; reason: string };
   if (info.reason === 'cooldown') return; // 연타는 조용히 무시 — 매번 뜨면 시끄럽다
   const name = info.kind ? itemDef(info.kind).name : '';
-  showReaction(`${name ? name + ' — ' : ''}${DENY_TEXT[info.reason] ?? info.reason}`, 1100);
+  const deny =
+    info.reason === 'empty'
+      ? `빈 퀵슬롯 — ${keyLabel('Tab', 'inventory')} 에서 등록한다`
+      : (DENY_TEXT[info.reason] ?? info.reason);
+  showReaction(`${name ? name + ' — ' : ''}${deny}`, 1100);
 });
 events.on('item_channel_started', (payload) => {
   const kind = (payload as { kind: ItemKind }).kind;
@@ -729,7 +743,7 @@ let bagFullUntil = 0;
 events.on('inventory_full', () => {
   if (performance.now() < bagFullUntil) return; // 밟고 서 있으면 매 틱 뜬다
   bagFullUntil = performance.now() + 2500;
-  showReaction('가방이 가득 찼다 — Tab 에서 쓰거나 버려야 한다', 2000);
+  showReaction(`가방이 가득 찼다 — ${keyLabel('Tab', 'inventory')} 에서 쓰거나 버려야 한다`, 2000);
 });
 events.on('gold_picked', () => audio.play('pickup_gold'));
 // ---- 활 ----
@@ -873,7 +887,8 @@ events.on('sigil_acquired', (payload) => {
 
 events.on('player_died', () => {
   if (world.godMode) return; // 무적 중에는 사망 화면도 뜨지 않는다 (자원은 틱 끝에 되돌아간다)
-  deathHint!.textContent = world.respawn ? 'Enter — 제단에서 부활' : 'Enter 키로 재시작';
+  const dk = keyLabel('Enter', 'interact');
+  deathHint!.textContent = world.respawn ? `${dk} — 제단에서 부활` : `${dk} 키로 재시작`;
   deathOverlay.classList.add('visible');
 });
 
@@ -943,11 +958,12 @@ events.on('dodge_step', () => stage.triggerParry('normal'));
 events.on('shot_blocked', (payload) => {
   stage.flashShield((payload as { enemyId: number }).enemyId);
 });
+function restartAfterDeath(): void {
+  if (world.respawn) respawnAtAltar();
+  else location.reload();
+}
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Enter' && world.dead) {
-    if (world.respawn) respawnAtAltar();
-    else location.reload();
-  }
+  if (e.code === 'Enter' && world.dead) restartAfterDeath();
 });
 
 // ---- 제단 ----
@@ -1018,7 +1034,9 @@ events.on('barrier_broken', (payload) => {
   showReaction('방어막이 부서졌다!', 1600);
 });
 events.on('shot_blocked', () => showReaction('방패 — 정면은 막힌다 (화염구로 부술 수 있다)'));
-events.on('boss_staggered', () => showReaction('보스 스태거 — 지금 처형! (Space·우클릭)'));
+events.on('boss_staggered', () =>
+  showReaction(`보스 스태거 — 지금 처형! (${input.usingPad ? padBtn('melee') : 'Space·우클릭'})`),
+);
 events.on('exit_opened', () => {
   audio.play('exit_opened');
   showReaction('족장이 쓰러졌다 — 출구의 봉인이 풀렸다', 3500);
@@ -1118,6 +1136,16 @@ function simulate(dt: number): void {
       setUiOpen(sigilUI.toggle());
     }
   }
+  // 상점 — 일시정지 메뉴와 같은 고정 버튼 규약. uiOpen 중엔 게임 시스템이 다
+  // 멈춰 있어서 A·B 가 상호작용·회피로 새지 않는다
+  if (shopUI.open && input.gamepad.connected) {
+    shopUI.padMode = input.usingPad;
+    if (input.gamepad.rawPressed(13)) shopUI.padMove(1); // D-패드 ↓
+    else if (input.gamepad.rawPressed(12)) shopUI.padMove(-1); // D-패드 ↑
+    else if (input.gamepad.rawPressed(0)) shopUI.padBuy(); // A
+    else if (input.gamepad.rawPressed(1)) shopUI.padClose(); // B
+  }
+  if (world.dead && input.gamepad.pressed('interact')) restartAfterDeath();
 
   // 히트스톱 — simulate를 건너뛰되 반응 입력(릴리즈)은 버퍼에 보관 (docs/architecture.md §1)
   if (world.freezeTicks > 0) {
@@ -1420,18 +1448,19 @@ function render(alpha: number): void {
   const drawPips = bowDraw > 0
     ? `  ${'▮'.repeat(Math.round((bowDraw / balance.weapons.bow.maxDrawTicks) * 6)).padEnd(6, '▯')}`
     : '';
+  const RK = keyLabel('LMB', 'ranged');
   document.getElementById('slot-ranged')!.textContent =
     wpn.ranged === 'pistol'
-      ? `LMB 권총 ${wpn.mag}/${wpn.reserve}${wpn.reloading > 0 ? ' …' : ''}`
+      ? `${RK} 권총 ${wpn.mag}/${wpn.reserve}${wpn.reloading > 0 ? ' …' : ''}`
       : wpn.ranged === 'bow'
-        ? `LMB 활 ×${wpn.arrows ?? 0}${drawPips}`
-        : `LMB 수류탄 ×${wpn.grenades}`;
+        ? `${RK} 활 ×${wpn.arrows ?? 0}${drawPips}`
+        : `${RK} 수류탄 ×${wpn.grenades}`;
   // 연속타 단계 — 다음 타가 강타면 눈에 띄게 표시
   const step = wpn.comboTimer > 0 ? wpn.comboStep : 0;
   const finisher = balance.weapons.hammer.combo.finisherStep;
   const pips = '●'.repeat(step) + '○'.repeat(Math.max(0, finisher - 1 - step));
   const meleeSlot = document.getElementById('slot-melee')!;
-  meleeSlot.textContent = `RMB ${wpn.melee === 'hammer' ? '해머' : wpn.melee} ${pips}`;
+  meleeSlot.textContent = `${keyLabel('RMB', 'melee')} ${wpn.melee === 'hammer' ? '해머' : wpn.melee} ${pips}`;
   meleeSlot.className = `weapon-slot active${step >= finisher - 1 ? ' charged' : ''}`;
 
   // 디버그 오버레이 (F1) — 0.5초마다 갱신
@@ -1453,15 +1482,21 @@ function render(alpha: number): void {
     'visible',
     showAltarPrompt || nearDoor || nearLever || onExit || nearChest,
   );
+  const IK = keyLabel('E', 'interact'); // 상호작용 키 표기 — 아래 프롬프트 공통
+  // 사망 화면 힌트 — 죽은 뒤에 패드를 집거나 내려놔도 표기가 따라온다
+  if (world.dead) {
+    const dk = keyLabel('Enter', 'interact');
+    deathHint!.textContent = world.respawn ? `${dk} — 제단에서 부활` : `${dk} 키로 재시작`;
+  }
   if (showAltarPrompt) {
     altarPrompt!.textContent =
-      `제단 — E 보급 상점\n` +
+      `제단 — ${IK} 보급 상점\n` +
       `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
       `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
   } else if (nearChest) {
-    altarPrompt!.textContent = 'E — 보물상자를 연다';
+    altarPrompt!.textContent = `${IK} — 보물상자를 연다`;
   } else if (nearLever) {
-    altarPrompt!.textContent = 'E — 레버를 당긴다 (보스 아레나 북쪽 관문이 열린다)';
+    altarPrompt!.textContent = `${IK} — 레버를 당긴다 (보스 아레나 북쪽 관문이 열린다)`;
   } else if (nearDoor) {
     // 진행 게이지를 프롬프트 안에 그려 준다 — 손 동작만으로는 얼마나 남았는지 모른다
     const frac = Door.channelFrac(world);
@@ -1469,9 +1504,9 @@ function render(alpha: number): void {
       ? '관문 — 손으로는 안 열린다. 어딘가의 레버를 찾아야 한다'
       : frac > 0
         ? `잠금을 푸는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%\n문에서 떨어지면 처음부터`
-        : 'E — 문을 연다 (누른 채 기다릴 필요 없이 문 앞에 서 있으면 된다)';
+        : `${IK} — 문을 연다 (누른 채 기다릴 필요 없이 문 앞에 서 있으면 된다)`;
   } else if (onExit) {
-    altarPrompt!.textContent = world.exitOpen ? 'E — 구역을 벗어난다' : '출구가 봉인되어 있다';
+    altarPrompt!.textContent = world.exitOpen ? `${IK} — 구역을 벗어난다` : '출구가 봉인되어 있다';
   }
 
   const w = world.weapon;
@@ -1507,8 +1542,11 @@ function render(alpha: number): void {
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
-    'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형  Shift 짧게=패링·꾹=방어\n' +
-    'Q 마법  1~5 소모품  Tab 가방·각인  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트';
+    (input.usingPad
+      ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 원거리(${padBtn('cycleWeapon')} 교체)  ${padBtn('melee')} 근접·처형  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
+        `${padBtn('cast')} 마법  D-패드 소모품  ${padBtn('inventory')} 가방·각인  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴  ${padBtn('battery')} 배터리  ${padBtn('pause')} 일시정지·키 설정`
+      : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형  Shift 짧게=패링·꾹=방어\n' +
+        'Q 마법  1~5 소모품  Tab 가방·각인  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트');
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
   // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)
@@ -1603,7 +1641,10 @@ window.addEventListener('blur', () => setPaused(true));
 // 패드를 집어 들면 멈춰 있던 게임이 풀린다 — 패드에는 포인터 락을 잡을 방법이 없다.
 // 창이 뒤에 있을 때(document.hidden)는 그대로 멈춰 둔다
 window.addEventListener('gamepadconnected', () => {
-  showReaction('게임패드 연결됨 — Menu 버튼으로 가방, 일시정지에서 키 설정', 3000);
+  showReaction(
+    `게임패드 연결됨 — ${padBtn('inventory')} 가방, ${padBtn('pause')} 일시정지·키 설정`,
+    3000,
+  );
 });
 window.addEventListener('gamepaddisconnected', () => {
   if (!document.pointerLockElement && !world.uiOpen) setPaused(true);
