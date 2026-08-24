@@ -26,7 +26,8 @@
     "hammerHeavyCost": 12,
       "regenPerTick": 0.7,
       "exhaustedRegenPerTick": 0.18,
-      "exhaustedSpeedMul": 0.5,
+      "_exhaustedSpeedNote": "거미줄(web.moveSpeedMul)과 같은 값으로 맞췄다(2026-08) — 발이 묶이는 두 상태의 체감을 하나로 본다. 두 배율은 각각 남겨 둔다: 같은 값일 뿐 같은 손잡이가 아니라, 한쪽만 조일 수 있어야 한다. 둘이 겹치면 곱해진다 (0.336 × 0.336 = 0.113, 6.0 → 0.68m/s)",
+      "exhaustedSpeedMul": 0.336,
       "regenDelayTicks": 45,
       "exhaustRecoverTo": 25
     },

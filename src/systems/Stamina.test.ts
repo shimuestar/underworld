@@ -179,6 +179,36 @@ describe('질주', () => {
     );
   });
 
+  it('탈진 걸음은 거미줄에 걸린 걸음과 같은 속도다', () => {
+    // 2026-08: 발이 묶이는 두 상태의 체감을 하나로 맞췄다.
+    // 배율은 각각 남겨 둔다 — 같은 값일 뿐 같은 손잡이가 아니다
+    expect(CFG.exhaustedSpeedMul).toBeCloseTo(balance.web.moveSpeedMul, 5);
+
+    const webbed = makeWorld();
+    webbed.player.webSwingsLeft = balance.web.breakSwings;
+    let from = { x: webbed.player.x, z: webbed.player.z };
+    step(webbed);
+    const webStep = moved(webbed, from);
+
+    const tired = makeWorld();
+    tired.stamina.exhausted = true;
+    from = { x: tired.player.x, z: tired.player.z };
+    step(tired);
+    expect(moved(tired, from)).toBeCloseTo(webStep, 5);
+  });
+
+  it('탈진과 거미줄이 겹치면 곱해진다 — 둘 다면 훨씬 느리다', () => {
+    const both = makeWorld();
+    both.stamina.exhausted = true;
+    both.player.webSwingsLeft = balance.web.breakSwings;
+    const from = { x: both.player.x, z: both.player.z };
+    step(both);
+    expect(moved(both, from)).toBeCloseTo(
+      balance.player.moveSpeed * CFG.exhaustedSpeedMul * balance.web.moveSpeedMul * DT,
+      5,
+    );
+  });
+
   it('쉬면 회복한다 — 단 한동안 기다린 뒤에야 (regenDelayTicks)', () => {
     sprint(world, 60); // 상한에 부딪히지 않게 넉넉히 쓴다
     const spent = world.stamina.value;
