@@ -278,10 +278,11 @@
     "channelMoveSpeedMul": 0.55,
     "_dropNote": "가방에서 버린 아이템은 이 틱 동안 자석에 안 걸린다 — 안 그러면 버리자마자 도로 주워진다",
     "dropNoMagnetTicks": 90,
+    "_iconNote": "icon 은 HUD·가방 아이콘 모양. 바닥에 떨어진 3D 모형과 같은 실루엣을 쓴다 — 지도·실물 일치 규약과 같은 이유로, 주웠던 그것이 칸 안에 그대로 있어야 한다. color 도 바닥 모형이 이 값을 그대로 읽는다",
     "kinds": {
-      "potion": { "name": "체력 물약", "color": "#e0455a", "heal": 25, "restore": 0 },
-      "mana": { "name": "마나 물약", "color": "#4aa8e0", "heal": 0, "restore": 35 },
-      "food": { "name": "말린 고기", "color": "#c8903a", "heal": 12.5, "restore": 17.5 }
+      "potion": { "name": "체력 물약", "color": "#e0384a", "icon": "flask", "heal": 25, "restore": 0 },
+      "mana": { "name": "마나 물약", "color": "#3a7ce0", "icon": "flask", "heal": 0, "restore": 35 },
+      "food": { "name": "말린 고기", "color": "#9c4a3c", "icon": "meat", "heal": 12.5, "restore": 17.5 }
     }
   },
 

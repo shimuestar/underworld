@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
+import { itemColor } from '../core/Inventory';
 import { currentAttack, enemyDef, healthBarState } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, glyphTexture } from '../level/GridLoader';
@@ -127,11 +128,12 @@ const BURN_EMBER_LIFE_MS = 520;
 const BURN_EMBER_COLORS = [0xff8a2a, 0xffc04a, 0xff5a1a];
 const FIREBALL_COLOR = 0xff7733;
 const GROUND_ITEM_COLOR = 0xe8c76a; // 바닥 각인 — 어둠 속 금색 발광
-const POTION_COLOR = 0xe0384a; // HP 포션 — 붉은 약병
-const MANA_POTION_COLOR = 0x3a7ce0; // 마나 물약 — 푸른 약병
+// 바닥 모형 색 — HUD 아이콘과 어긋나지 않게 balance.items.kinds 를 그대로 읽는다
+const POTION_COLOR = itemColor('potion'); // HP 포션 — 붉은 약병
+const MANA_POTION_COLOR = itemColor('mana'); // 마나 물약 — 푸른 약병
 const POTION_GLASS = 0xbfe6ff;
 const GOLD_COLOR = 0xffcc3a; // 골드 더미
-const FOOD_COLOR = 0x9c4a3c; // 음식 — 구운 고기
+const FOOD_COLOR = itemColor('food'); // 음식 — 구운 고기
 const FOOD_BONE = 0xe8ddc0;
 
 // 트레이서 시각 상수 (튜닝값 아님 — 순수 연출)

@@ -12,6 +12,8 @@ import { ITEM_KINDS, type InventorySlot, type ItemKind, type World } from './Wor
 export interface ItemDef {
   name: string;
   color: string;
+  /** HUD·가방 아이콘 모양 (render/ItemIcons). 바닥 3D 모형과 같은 실루엣을 쓴다 */
+  icon: string;
   heal: number;
   restore: number;
 }

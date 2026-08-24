@@ -16,6 +16,7 @@ import {
 } from '../core/Inventory';
 import { balance } from '../core/Balance';
 import { sigilDef, SIGIL_SLOTS, type SigilSlot } from '../core/SigilData';
+import { itemIcon } from './ItemIcons';
 import type { ItemKind, World } from '../core/World';
 import * as Sigils from '../systems/Sigils';
 
@@ -37,6 +38,8 @@ function swatch(color: string): HTMLElement {
 }
 
 const CELL = 'width:64px;height:64px;box-sizing:border-box;position:relative;';
+/** 칸(64px) 안에서 숫자·번호와 부딪히지 않는 크기 */
+const ICON_PX = 28;
 
 export class InventoryUI {
   private readonly root: HTMLDivElement;
@@ -144,10 +147,9 @@ export class InventoryUI {
       if (kind) {
         const def = itemDef(kind);
         const count = countOf(world, kind);
-        const icon = document.createElement('div');
-        icon.style.cssText =
+        const icon = itemIcon(kind, ICON_PX);
+        icon.style.cssText +=
           `position:absolute;left:50%;top:24px;transform:translate(-50%,-50%);` +
-          `width:18px;height:18px;background:${def.color};box-shadow:0 0 8px ${def.color};` +
           `opacity:${count > 0 ? 1 : 0.25};`;
         cell.appendChild(icon);
         const name = document.createElement('div');
@@ -191,10 +193,9 @@ export class InventoryUI {
 
       if (slot) {
         const def = itemDef(slot.kind);
-        const icon = document.createElement('div');
-        icon.style.cssText =
-          `position:absolute;left:50%;top:24px;transform:translate(-50%,-50%);` +
-          `width:18px;height:18px;background:${def.color};box-shadow:0 0 8px ${def.color};`;
+        const icon = itemIcon(slot.kind, ICON_PX);
+        icon.style.cssText +=
+          'position:absolute;left:50%;top:24px;transform:translate(-50%,-50%);';
         cell.appendChild(icon);
 
         const count = document.createElement('div');

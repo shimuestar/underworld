@@ -34,6 +34,7 @@ import * as Lantern from './systems/Lantern';
 import { enemyDef, healthBarState } from './core/Entities';
 import { ShopUI } from './render/ShopUI';
 import { InventoryUI, quickslotView } from './render/InventoryUI';
+import { itemIconSvg } from './render/ItemIcons';
 import { sigilDef } from './core/SigilData';
 import levelJson from '../data/levels/z01_f1.json';
 
@@ -1089,6 +1090,7 @@ const BOSS_BAR_COLORS = { outer: '#b070e8', last: '#ff7a6b' };
 
 // ---- 퀵슬롯 바 ----
 // 칸은 한 번만 만들고 이후에는 값만 바꾼다 (매 프레임 DOM 을 다시 그리면 낭비다)
+const QUICK_ICON_PX = 20;
 const quickBar = document.getElementById('status-quick')!;
 const quickCells = Array.from({ length: balance.items.quickslots }, (_, i) => {
   const cell = document.createElement('div');
@@ -1098,11 +1100,22 @@ const quickCells = Array.from({ length: balance.items.quickslots }, (_, i) => {
   key.textContent = String(i + 1);
   const dot = document.createElement('span');
   dot.className = 'dot';
+  // 내용(아이콘 SVG)은 종류가 바뀔 때만 갈아 끼운다 — 매 프레임 innerHTML 을 쓰면 낭비다
+  let shownKind: ItemKind | null = null;
   const num = document.createElement('span');
   num.className = 'n';
   cell.append(key, dot, num);
   quickBar.appendChild(cell);
-  return { cell, dot, num };
+  return {
+    cell,
+    dot,
+    num,
+    setKind(kind: ItemKind | null): void {
+      if (shownKind === kind) return;
+      shownKind = kind;
+      dot.innerHTML = kind ? itemIconSvg(kind, QUICK_ICON_PX) : '';
+    },
+  };
 });
 
 function syncQuickslots(): void {
@@ -1114,16 +1127,14 @@ function syncQuickslots(): void {
     const ui = quickCells[i]!;
     if (!slot.kind) {
       ui.cell.className = 'quick-slot spent';
-      ui.dot.style.background = 'transparent';
-      ui.dot.style.boxShadow = 'none';
+      ui.setKind(null);
       ui.num.textContent = '';
       return;
     }
     // 다 썼거나 지금 마셔 봐야 소용없는 칸은 흐리게 — 급할 때 눈이 안 간다
     const dim = slot.count <= 0 || !slot.useful;
     ui.cell.className = `quick-slot ${dim ? 'spent' : 'ready'}`;
-    ui.dot.style.background = slot.color;
-    ui.dot.style.boxShadow = dim ? 'none' : `0 0 6px ${slot.color}`;
+    ui.setKind(slot.kind);
     ui.num.textContent = String(slot.count);
     // 마시는 중인 칸 — 아래에서 위로 차오른다. 다 차야 효과가 난다는 걸 그대로 보여 준다
     ui.cell.style.setProperty('--fill', channel?.index === i ? `${chFrac * 100}%` : '0%');
