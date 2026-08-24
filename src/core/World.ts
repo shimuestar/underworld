@@ -29,6 +29,8 @@ export interface PlayerState {
   iframeTicks: number;
   /** 히트스톱 중 눌린 반응 입력의 버퍼 잔여 틱 */
   reactionBufferTicks: number;
+  /** 질주 키를 마지막으로 누른 뒤 남은 연타 인정 틱 (0 = 창 닫힘) */
+  sprintTapTicks?: number;
   /** 조금 이르게 누른 패링의 유효 잔여 틱 — 무기가 도달하면 그때 성립한다 */
   parryBufferTicks?: number;
   /** 방어 중 (Space 홀드) — 정면 피해 경감, 이동·사격 제한 */

@@ -45,6 +45,19 @@ export function tick(world: World, _dt: number): void {
     return; // 대시 중 추가 반응 불가
   }
 
+  // Shift 연타 = 회피. 반응 키와 무관하게 여기서 먼저 본다 —
+  // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다.
+  // 첫 타는 창만 열고, 창이 열려 있는 동안 한 번 더 누르면 나간다
+  if (p.sprintTapTicks && p.sprintTapTicks > 0) p.sprintTapTicks--;
+  if (world.input.sprintPressed) {
+    if ((p.sprintTapTicks ?? 0) > 0) {
+      p.sprintTapTicks = 0; // 세 번째 타로 또 나가지 않게 창을 닫는다
+      if (tryDodge(world)) return;
+    } else {
+      p.sprintTapTicks = reaction.dodgeDoubleTapTicks;
+    }
+  }
+
   // 판정은 버튼을 "누르는 순간" 한 번. 계속 누르고 있어도 다시 판정되지 않는다
   // (누른 채로 두면 그냥 방어 상태가 유지된다)
   const freshPress = world.input.reactionPressed || p.reactionBufferTicks > 0;
@@ -61,21 +74,6 @@ export function tick(world: World, _dt: number): void {
   const executePress = world.input.meleePressed && !swinging;
   if (!freshPress && !buffered && !executePress) return;
   if (freshPress) p.reactionBufferTicks = 0;
-
-  // Shift+누르기 = 명시적 회피 — 판정을 거치지 않고 즉시 발동.
-  // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다
-  if (freshPress && world.input.sprint) {
-    const stam = balance.player.stamina;
-    if (world.stamina.value < stam.dodgeCost) {
-      world.events.emit('stamina_blocked', { action: 'dodge', need: stam.dodgeCost });
-      return;
-    }
-    if (spendStamina(world.stamina, stam.dodgeCost, stam.regenDelayTicks)) {
-      world.events.emit('stamina_empty', {});
-    }
-    startDodge(world);
-    return;
-  }
 
   // 반경 내 적을 우선순위로 분류 (같은 우선순위면 가장 가까운 적)
   const space = balance.parrySpace;
@@ -274,6 +272,20 @@ function pushEnemyBack(
 ): void {
   const p = world.player;
   pushEnemy(enemy, enemy.x - p.x, enemy.z - p.z, distance, ticks);
+}
+
+/** 스태미너를 내고 회피에 들어간다. 모자라면 알리고 false */
+function tryDodge(world: World): boolean {
+  const stam = balance.player.stamina;
+  if (world.stamina.value < stam.dodgeCost) {
+    world.events.emit('stamina_blocked', { action: 'dodge', need: stam.dodgeCost });
+    return false;
+  }
+  if (spendStamina(world.stamina, stam.dodgeCost, stam.regenDelayTicks)) {
+    world.events.emit('stamina_empty', {});
+  }
+  startDodge(world);
+  return true;
 }
 
 /** 회피 스텝 — 이동 입력 방향, 없으면 뒤로 */

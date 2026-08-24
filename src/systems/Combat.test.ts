@@ -794,19 +794,57 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
     expect(world.player.dodgeTicks).toBe(0);
   });
 
-  it('Shift+탭 = 즉시 회피 (판정 생략)', () => {
-    const world = makeWorld();
-    world.input = { ...Input.emptySnapshot(), reactionPressed: true, sprint: true };
+  /** Shift 를 한 번 눌렀다 뗀 한 틱 */
+  function shiftTap(world: World): void {
+    world.input = { ...Input.emptySnapshot(), sprint: true, sprintPressed: true };
     Reaction.tick(world, DT);
+    world.input = Input.emptySnapshot();
+  }
+
+  it('한 번만 누르면 회피가 아니다 — 그냥 질주다', () => {
+    const world = makeWorld();
+    shiftTap(world);
+    for (let i = 0; i < balance.reaction.dodgeDoubleTapTicks + 4; i++) {
+      Reaction.tick(world, DT);
+    }
+    expect(world.player.dodgeTicks).toBe(0);
+  });
+
+  it('연타 창이 지난 뒤 누르면 다시 첫 타로 친다', () => {
+    const world = makeWorld();
+    shiftTap(world);
+    for (let i = 0; i < balance.reaction.dodgeDoubleTapTicks; i++) Reaction.tick(world, DT);
+    shiftTap(world); // 창이 닫힌 뒤라 이게 새 첫 타
+    expect(world.player.dodgeTicks).toBe(0);
+    shiftTap(world); // 이제야 두 번째
+    expect(world.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
+  });
+
+  it('Shift 를 누른 채로 두어도 회피가 안 나간다 — 엣지로만 센다', () => {
+    const world = makeWorld();
+    shiftTap(world); // 누른 순간 (엣지)
+    // 이후로는 계속 눌려 있기만 하다 (sprintPressed 없음)
+    for (let i = 0; i < balance.reaction.dodgeDoubleTapTicks + 10; i++) {
+      world.input = { ...Input.emptySnapshot(), sprint: true };
+      Reaction.tick(world, DT);
+    }
+    expect(world.player.dodgeTicks).toBe(0);
+  });
+
+  it('Shift 연타 = 즉시 회피 (판정 생략)', () => {
+    const world = makeWorld();
+    shiftTap(world);
+    expect(world.player.dodgeTicks).toBe(0); // 첫 타는 창만 연다
+    shiftTap(world);
     expect(world.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
     expect(world.player.iframeTicks).toBe(balance.reaction.dodgeIFrameTicks);
 
-    // windup 중이어도 Shift+탭은 실패 경직 없이 회피한다 (빨강 공격 탈출용)
+    // windup 중이어도 연타는 실패 경직 없이 회피한다 (빨강 공격 탈출용)
     const world2 = makeWorld();
     world2.enemies.push(makeSpear(12, 10));
     tickUntil(world2, 'windup');
-    world2.input = { ...Input.emptySnapshot(), reactionPressed: true, sprint: true };
-    Reaction.tick(world2, DT);
+    shiftTap(world2);
+    shiftTap(world2);
     expect(world2.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
     expect(world2.player.stunTicks).toBe(0);
   });

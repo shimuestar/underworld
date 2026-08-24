@@ -51,6 +51,8 @@
     "_executeKnockbackNote": "처형 타격은 크게 날린다 — 250 을 꽂는 한 방이라 몸이 안 움직이면 무게가 안 실린다. 밀려나는 동안 적은 아무것도 못 하므로 다시 붙을 시간은 준다",
     "executeKnockback": 6.5,
     "executeKnockbackTicks": 26,
+    "_dodgeTapNote": "회피는 Shift 연타. 첫 타 뒤 이 틱 안에 한 번 더 누르면 나간다 — 짧으면 안 나가고, 길면 질주하려고 두 번 눌렀을 때 의도치 않게 튄다",
+    "dodgeDoubleTapTicks": 18,
     "dodgeIFrameTicks": 8,
     "dodgeDistance": 3.5,
     "dodgeDashTicks": 6,

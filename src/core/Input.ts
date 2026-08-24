@@ -7,6 +7,8 @@ export interface InputSnapshot {
   /** -1(S) ~ +1(W, 전방) */
   moveForward: number;
   sprint: boolean;
+  /** 이번 틱에 질주 키(Shift)를 새로 눌렀는가 (엣지 — 연타 회피 판정용) */
+  sprintPressed: boolean;
   /** 이번 틱 동안 누적된 마우스 이동량 (포인터 락 중에만) */
   lookDX: number;
   lookDY: number;
@@ -47,6 +49,7 @@ export class Input {
   private keys = new Set<string>();
   private dx = 0;
   private dy = 0;
+  private sprintPresses = 0;
   private lanternToggles = 0;
   private batterySwaps = 0;
   private meleeClicks = 0;
@@ -84,6 +87,7 @@ export class Input {
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
       this.keys.add(e.code);
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.sprintPresses++;
       if (e.code === 'KeyF') this.lanternToggles++;
       if (e.code === 'KeyB') this.batterySwaps++;
       if (e.code === 'KeyR') this.reloads++;
@@ -191,6 +195,7 @@ export class Input {
       moveX: (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0),
       moveForward: (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0),
       sprint: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+      sprintPressed: this.sprintPresses > 0,
       lookDX: this.dx,
       lookDY: this.dy,
       lanternToggle: this.lanternToggles > 0,
@@ -210,6 +215,7 @@ export class Input {
     };
     this.dx = 0;
     this.dy = 0;
+    this.sprintPresses = 0;
     this.lanternToggles = 0;
     this.batterySwaps = 0;
     this.meleeClicks = 0;
@@ -229,6 +235,7 @@ export class Input {
       moveX: 0,
       moveForward: 0,
       sprint: false,
+      sprintPressed: false,
       lookDX: 0,
       lookDY: 0,
       lanternToggle: false,

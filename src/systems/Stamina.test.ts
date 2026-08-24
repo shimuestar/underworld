@@ -243,10 +243,13 @@ describe('해머', () => {
 });
 
 describe('회피', () => {
+  /** Shift 연타 — 첫 타는 창만 열고 두 번째 타에 나간다 */
   function dodge(world: World): void {
-    world.input = { ...Input.emptySnapshot(), reactionPressed: true, sprint: true };
-    Reaction.tick(world, DT);
-    world.input = Input.emptySnapshot();
+    for (let i = 0; i < 2; i++) {
+      world.input = { ...Input.emptySnapshot(), sprint: true, sprintPressed: true };
+      Reaction.tick(world, DT);
+      world.input = Input.emptySnapshot();
+    }
   }
 
   it('질주보다 훨씬 크게 깎인다 — dodgeCost 만큼', () => {
