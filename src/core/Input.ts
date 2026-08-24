@@ -36,7 +36,12 @@ export interface InputSnapshot {
   interactPressed: boolean;
   /** 원거리 무기 교체 (휠) — -1/0/+1 */
   cycleRanged: number;
+  /** 이번 틱에 누른 퀵슬롯 번호 (1~5, 없으면 0) */
+  useSlot: number;
 }
+
+/** 퀵슬롯 키 — 순서대로 1~5 번 칸 */
+const DIGIT_CODES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
 
 export class Input {
   private keys = new Set<string>();
@@ -55,6 +60,7 @@ export class Input {
   private casts = 0;
   private interacts = 0;
   private cycleRanged = 0;
+  private useSlot = 0;
 
   constructor(private readonly lockTarget: HTMLElement) {
     // 화면 어디를 클릭하든 락을 시도한다 (일시정지 오버레이 위를 눌러도 재개되도록).
@@ -83,6 +89,9 @@ export class Input {
       if (e.code === 'KeyR') this.reloads++;
       if (e.code === 'KeyQ') this.casts++;
       if (e.code === 'KeyE') this.interacts++;
+      // 퀵슬롯 1~5 — 마지막에 누른 것 하나만 남긴다 (한 틱에 두 개를 쓸 일은 없다)
+      const digit = DIGIT_CODES.indexOf(e.code);
+      if (digit >= 0) this.useSlot = digit + 1;
       // 반응(패링/방어) — 스페이스. 누른 순간과 뗀 순간을 모두 엣지로 잡는다
       if (e.code === 'Space') {
         e.preventDefault();
@@ -197,6 +206,7 @@ export class Input {
       castPressed: this.casts > 0,
       interactPressed: this.interacts > 0,
       cycleRanged: this.cycleRanged,
+      useSlot: this.useSlot,
     };
     this.dx = 0;
     this.dy = 0;
@@ -210,6 +220,7 @@ export class Input {
     this.casts = 0;
     this.interacts = 0;
     this.cycleRanged = 0;
+    this.useSlot = 0;
     return snapshot;
   }
 
@@ -233,6 +244,7 @@ export class Input {
       castPressed: false,
       interactPressed: false,
       cycleRanged: 0,
+      useSlot: 0,
     };
   }
 }

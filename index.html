@@ -266,6 +266,59 @@
         gap: 6px;
         justify-content: center;
       }
+      /* 퀵슬롯 바 — 무기 슬롯 위. 등록만 되고 개수가 0이면 흐리게 남겨 둔다
+         (자리가 사라지면 "몇 번이 물약이었지"를 매번 다시 외워야 한다) */
+      #status-quick {
+        display: flex;
+        gap: 5px;
+        justify-content: center;
+        margin-bottom: 5px;
+      }
+      .quick-slot {
+        position: relative;
+        width: 46px;
+        height: 34px;
+        box-sizing: border-box;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid #3a3a44;
+        font: 10px/1 monospace;
+        color: #8a8f9a;
+      }
+      .quick-slot .k {
+        position: absolute;
+        top: 2px;
+        left: 4px;
+      }
+      .quick-slot .n {
+        position: absolute;
+        bottom: 3px;
+        right: 4px;
+        font-size: 12px;
+        color: #cfd2da;
+      }
+      .quick-slot .dot {
+        position: absolute;
+        top: 50%;
+        left: 13px;
+        transform: translateY(-50%);
+        width: 11px;
+        height: 11px;
+      }
+      /* 다 썼거나 지금 써도 소용없는 칸 — 눈에 덜 걸리게 */
+      .quick-slot.spent {
+        opacity: 0.35;
+      }
+      .quick-slot.ready {
+        border-color: #6a5f3a;
+      }
+      /* 사용 쿨다운 — 아래에서 차오르는 얇은 띠 */
+      .quick-slot .cd {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        height: 2px;
+        background: #e8c76a;
+      }
       .weapon-slot {
         background: rgba(0, 0, 0, 0.55);
         border: 1px solid #3a3a44;
@@ -332,6 +385,7 @@
         <span id="status-lantern-text">100% 예비 2</span>
       </div>
       <div id="status-gold">◆ 0</div>
+      <div id="status-quick"></div>
       <div id="status-weapons">
         <span class="weapon-slot active" id="slot-ranged">LMB 권총</span>
         <span class="weapon-slot active" id="slot-melee">RMB 해머</span>

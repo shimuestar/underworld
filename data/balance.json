@@ -263,24 +263,39 @@
     }
   },
 
+  "items": {
+    "_comment": "소모품 가방과 퀵슬롯. 포션·음식은 주우면 즉시 먹지 않고 가방으로 들어가고, 퀵슬롯에 등록한 것을 1~5 키로 쓴다. 골드·각인은 가방을 쓰지 않는다",
+    "_gridNote": "가방은 cols×rows 칸. 같은 종류는 한 칸에 stackMax 까지 쌓인다 — 칸이 10개뿐이라 안 쌓으면 세 종류만으로도 금방 막힌다",
+    "cols": 5,
+    "rows": 2,
+    "stackMax": 5,
+    "quickslots": 5,
+    "_bindNote": "퀵슬롯은 '가방 몇 번 칸'이 아니라 '어떤 종류'를 기억한다. 다 써도 등록이 남아 다시 주우면 그대로 쓸 수 있다 — 칸을 기억하면 물약 하나 쓸 때마다 Tab 을 열어 다시 꽂아야 한다",
+    "_autoBindNote": "등록 안 된 종류를 처음 주우면 빈 퀵슬롯에 자동으로 꽂힌다. Tab 을 한 번도 안 열어도 물약을 쓸 수 있어야 한다",
+    "useCooldownTicks": 30,
+    "_dropNote": "가방에서 버린 아이템은 이 틱 동안 자석에 안 걸린다 — 안 그러면 버리자마자 도로 주워진다",
+    "dropNoMagnetTicks": 90,
+    "kinds": {
+      "potion": { "name": "체력 물약", "color": "#e0455a", "heal": 25, "restore": 0 },
+      "mana": { "name": "마나 물약", "color": "#4aa8e0", "heal": 0, "restore": 35 },
+      "food": { "name": "말린 고기", "color": "#c8903a", "heal": 12.5, "restore": 17.5 }
+    }
+  },
+
   "pickups": {
-    "_comment": "적 처치 드랍. 근처에 가면 자동 획득 (각인과 같은 바닥 아이템 경로)",
+    "_comment": "적 처치 드랍. 근처에 가면 자동 획득 (각인과 같은 바닥 아이템 경로). 2026-08: 소모품은 즉시 먹지 않고 가방으로 들어간다 — 회복량은 items.kinds 로 옮겼다",
     "potion": {
       "dropChance": 0.18,
       "bossAlways": true,
-      "healAmount": 25,
       "magnetRadius": 3.2
     },
     "manaPotion": {
       "dropChance": 0.16,
-      "restoreAmount": 35,
       "magnetRadius": 3.2
     },
     "_foodNote": "음식 — HP·마나를 동시에 채우되 각 포션의 절반씩. 하나로 두 자원을 조금씩 메우는 대신 급할 때는 포션만 못하다",
     "food": {
       "dropChance": 0.15,
-      "healAmount": 12.5,
-      "restoreAmount": 17.5,
       "magnetRadius": 3.2
     },
     "gold": {

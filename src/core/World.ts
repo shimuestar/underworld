@@ -149,6 +149,17 @@ export interface BarrelState {
   blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
 
+/** 가방에 들어가는 소모품 종류. 골드·각인은 가방을 쓰지 않는다 */
+export type ItemKind = 'potion' | 'mana' | 'food';
+
+export const ITEM_KINDS: ItemKind[] = ['potion', 'mana', 'food'];
+
+/** 가방 한 칸 — 같은 종류가 count 개 쌓여 있다. 빈 칸은 null */
+export interface InventorySlot {
+  kind: ItemKind;
+  count: number;
+}
+
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
@@ -164,6 +175,8 @@ export interface GroundItemState {
   /** 비행 중 높이와 현재 속도 (자석 상태에서만 의미 있음) */
   y?: number;
   speed?: number;
+  /** 이 틱 수만큼은 자석에 안 걸린다 — 가방에서 버린 직후 도로 주워지는 것을 막는다 */
+  noMagnetTicks?: number;
 }
 
 export interface ManaState {
@@ -410,6 +423,16 @@ export class World {
 
   /** 폭발통 — Barrels 가 도화선을 돌리고 터뜨린다 */
   barrels: BarrelState[] = [];
+
+  /** 소모품 가방 — 빈 칸은 null. 칸 수는 Items.init 이 balance 를 읽어 잡는다
+   *  (World 는 데이터에 의존하지 않는다 — pushPlayer 와 같은 규약) */
+  inventory: (InventorySlot | null)[] = [];
+
+  /** 퀵슬롯 — 1~5 키에 등록된 종류. 칸이 아니라 종류를 기억한다 (balance.items._bindNote) */
+  quickslots: (ItemKind | null)[] = [];
+
+  /** 소모품 공용 사용 쿨다운 — 한 프레임에 물약을 들이붓지 못하게 */
+  itemCooldown = 0;
 
   /** 보물상자 — Chest 가 연다 */
   chests: ChestState[] = [];

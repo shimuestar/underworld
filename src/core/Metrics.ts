@@ -90,7 +90,8 @@ export class Metrics {
     events.on('boss_execute', () => this.killsExecution++); // 처형 타격도 시도로 집계
     events.on('spell_kill', () => this.killsSpell++);
     events.on('friendly_fire_kill', () => this.killsFriendlyFire++);
-    events.on('potion_picked', (payload) => {
+    // 소모품은 이제 줍는 순간이 아니라 마시는 순간을 센다 (가방을 거치므로)
+    events.on('item_used', (payload) => {
       this.potionsPicked++;
       this.healedTotal += (payload as { healed: number }).healed;
     });

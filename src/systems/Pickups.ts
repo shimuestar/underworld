@@ -1,10 +1,14 @@
 // 소모품 드랍 — 적 처치 시 포션·음식·골드를 바닥에 떨구고, 근처에 가면 자동 획득한다.
 // 각인(Sigils)과 같은 world.groundItems 배열을 쓰되 kind로 구분한다.
-// 수치는 전부 balance.pickups.
+// 드랍 확률·자석은 balance.pickups, 회복량은 balance.items.kinds.
+//
+// 2026-08: 포션·음식은 몸에 닿아도 즉시 먹지 않는다 — 가방(Items)으로 들어가고,
+// 실제로 마시는 것은 퀵슬롯 1~5 다. 골드만 예전처럼 바로 주머니로 들어간다.
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import type { World } from '../core/World';
+import { addItem, hasRoom } from '../core/Inventory';
+import type { ItemKind, World } from '../core/World';
 
 let nextPickupId = 500000; // 각인 아이템 id 대역과 구분
 
@@ -71,15 +75,12 @@ function restHeight(kind: string): number {
   return kind === 'gold' ? 0.12 : 0.55;
 }
 
-/** 이 아이템을 지금 주울 이유가 있는가 (가득 차 있으면 남겨둔다) */
+/** 이 아이템을 지금 주울 이유가 있는가.
+ *  이제 기준은 "체력이 모자란가"가 아니라 "가방에 자리가 있는가"다 —
+ *  당장 필요 없어도 챙겨 뒀다 쓰는 게 가방의 값이고, 대신 가득 차면 바닥에 남는다 */
 function wants(world: World, kind: string): boolean {
-  if (kind === 'potion') return world.player.health < balance.player.healthMax;
-  if (kind === 'mana') return world.mana.value < balance.mana.max;
-  // 음식은 둘 중 하나만 모자라도 먹을 값어치가 있다
-  if (kind === 'food') {
-    return world.player.health < balance.player.healthMax || world.mana.value < balance.mana.max;
-  }
-  return true;
+  if (kind === 'gold') return true;
+  return hasRoom(world, kind as ItemKind);
 }
 
 /** 자석 흡수 — 반경에 들면 공중으로 떠올라 가속하며 몸으로 빨려든다.
@@ -90,14 +91,18 @@ export function tick(world: World, dt: number): void {
   const cfg = balance.pickups;
   const mag = cfg.magnet;
   const targetY = balance.player.eyeHeight * mag.targetHeightMul; // 가슴 높이
+  // 반경 안에 들어왔는데 가방이 가득이라 못 문 것이 있었는가 (틱당 한 번만 알린다)
+  let blocked = false;
 
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
     const item = world.groundItems[i]!;
     if (item.kind === 'sigil') continue; // 각인은 Sigils 담당
 
-    // 이미 가득이면 걸리지 않는다 — 필요할 때 오라고 남겨둔다
-    if (!item.magnet && !wants(world, item.kind)) continue;
-
+    // 버린 직후에는 자석이 물지 않는다 (버리자마자 도로 주워지는 것을 막는다)
+    if (item.noMagnetTicks && item.noMagnetTicks > 0) {
+      item.noMagnetTicks--;
+      continue;
+    }
     if (!item.magnet) {
       const radius =
         item.kind === 'gold'
@@ -108,6 +113,12 @@ export function tick(world: World, dt: number): void {
               ? cfg.food.magnetRadius
               : cfg.potion.magnetRadius;
       if (Math.hypot(p.x - item.x, p.z - item.z) > radius) continue;
+      // 가방이 가득이면 걸리지 않는다 — 자리가 날 때 오라고 남겨둔다.
+      // 다만 코앞까지 왔는데 아무 반응이 없으면 "왜 안 주워지지"가 되므로 한 번 알린다
+      if (!wants(world, item.kind)) {
+        blocked = true;
+        continue;
+      }
       item.magnet = true;
       item.y = restHeight(item.kind) + mag.popUp; // 살짝 튀어오르며 출발
       item.speed = mag.startSpeed;
@@ -127,36 +138,26 @@ export function tick(world: World, dt: number): void {
       continue;
     }
 
-    // 몸에 닿음 — 효과 적용
-    world.groundItems.splice(i, 1);
-    if (item.kind === 'potion') {
-      const before = p.health;
-      p.health = Math.min(balance.player.healthMax, p.health + cfg.potion.healAmount);
-      world.events.emit('potion_picked', { healed: p.health - before, health: p.health });
-    } else if (item.kind === 'mana') {
-      const before = world.mana.value;
-      world.mana.value = Math.min(
-        balance.mana.max,
-        world.mana.value + cfg.manaPotion.restoreAmount,
-      );
-      world.events.emit('mana_potion_picked', {
-        restored: world.mana.value - before,
-        mana: world.mana.value,
-      });
-    } else if (item.kind === 'food') {
-      const hpBefore = p.health;
-      const manaBefore = world.mana.value;
-      p.health = Math.min(balance.player.healthMax, p.health + cfg.food.healAmount);
-      world.mana.value = Math.min(balance.mana.max, world.mana.value + cfg.food.restoreAmount);
-      world.events.emit('food_picked', {
-        healed: p.health - hpBefore,
-        restored: world.mana.value - manaBefore,
-        health: p.health,
-        mana: world.mana.value,
-      });
-    } else {
+    // 몸에 닿음
+    if (item.kind === 'gold') {
+      world.groundItems.splice(i, 1);
       world.gold += item.amount ?? 0;
       world.events.emit('gold_picked', { amount: item.amount ?? 0, total: world.gold });
+      continue;
     }
+    // 소모품 — 가방으로. 자석에 걸린 뒤에 가방이 차 버렸으면 발밑에 도로 놓는다
+    if (!addItem(world, item.kind as ItemKind)) {
+      item.magnet = false;
+      item.x = p.x;
+      item.z = p.z;
+      item.y = restHeight(item.kind);
+      item.noMagnetTicks = balance.items.dropNoMagnetTicks;
+      world.events.emit('inventory_full', { kind: item.kind });
+      continue;
+    }
+    world.groundItems.splice(i, 1);
+    world.events.emit('item_picked', { kind: item.kind });
   }
+
+  if (blocked) world.events.emit('inventory_full', {});
 }

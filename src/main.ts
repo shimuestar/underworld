@@ -5,7 +5,8 @@ import { Metrics } from './core/Metrics';
 import { DebugOverlay } from './render/DebugOverlay';
 import { Input } from './core/Input';
 import { Loop } from './core/Loop';
-import { World } from './core/World';
+import { World, type ItemKind } from './core/World';
+import { countOf, initInventory, itemDef } from './core/Inventory';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt } from './level/Spawner';
@@ -18,6 +19,7 @@ import * as Enemies from './systems/Enemies';
 import * as Weapons from './systems/Weapons';
 import * as Projectiles from './systems/Projectiles';
 import * as Mana from './systems/Mana';
+import * as Items from './systems/Items';
 import * as Pickups from './systems/Pickups';
 import * as Progression from './systems/Progression';
 import * as Sigils from './systems/Sigils';
@@ -31,7 +33,7 @@ import * as Door from './systems/Door';
 import * as Lantern from './systems/Lantern';
 import { enemyDef, healthBarState } from './core/Entities';
 import { ShopUI } from './render/ShopUI';
-import { SigilUI } from './render/SigilUI';
+import { InventoryUI, quickslotView } from './render/InventoryUI';
 import { sigilDef } from './core/SigilData';
 import levelJson from '../data/levels/z01_f1.json';
 
@@ -136,7 +138,7 @@ window.addEventListener('keydown', (e) => {
 // 세션 경계에서 콘솔에 스냅샷 자동 출력
 events.on('player_died', () => console.log('[metrics] 사망 시점 스냅샷', metrics.snapshot(world)));
 events.on('zone_cleared', () => console.log('[metrics] 클리어 스냅샷', metrics.snapshot(world)));
-const sigilUI = new SigilUI(world);
+const sigilUI = new InventoryUI(world);
 const shopUI = new ShopUI(world);
 /** UI 오버레이 열기/닫기 — 닫을 때 포인터 락을 바로 되찾는다.
  *  안 그러면 메뉴를 나온 뒤 커서가 남아 화면을 한 번 클릭해야 조작이 돌아온다 */
@@ -295,11 +297,15 @@ for (const name of [
   'friendly_fire_kill',
   'sigil_dropped',
   'potion_dropped',
-  'potion_picked',
   'mana_potion_dropped',
-  'mana_potion_picked',
   'food_dropped',
-  'food_picked',
+  'item_picked',
+  'item_gained',
+  'item_used',
+  'item_denied',
+  'item_dropped',
+  'inventory_full',
+  'quickslot_bound',
   'gold_dropped',
   'gold_picked',
   'xp_gained',
@@ -632,20 +638,51 @@ events.on('melee_kill', (payload) => {
   if ((payload as { execution: boolean }).execution) showReaction('처형!');
 });
 events.on('dodge_step', () => showReaction('회피'));
-events.on('potion_picked', (payload) => {
-  const info = payload as { healed: number; health: number };
-  audio.play('pickup_potion');
-  showReaction(`+${Math.round(info.healed)} HP`, 900);
+// 소모품은 이제 줍는 순간이 아니라 쓰는 순간에 효과가 난다
+const ITEM_SOUND: Record<string, 'pickup_potion' | 'pickup_mana' | 'pickup_food'> = {
+  potion: 'pickup_potion',
+  mana: 'pickup_mana',
+  food: 'pickup_food',
+};
+events.on('item_picked', (payload) => {
+  const kind = (payload as { kind: ItemKind }).kind;
+  audio.play(ITEM_SOUND[kind] ?? 'pickup_potion');
+  const def = itemDef(kind);
+  const slot = world.quickslots.indexOf(kind);
+  showReaction(
+    `${def.name} 획득 (가방 ${countOf(world, kind)}개)${slot >= 0 ? `  [${slot + 1}번]` : ''}`,
+    1100,
+  );
 });
-events.on('mana_potion_picked', (payload) => {
-  const info = payload as { restored: number };
-  audio.play('pickup_mana');
-  showReaction(`+${Math.round(info.restored)} 마나`, 900);
+events.on('item_used', (payload) => {
+  const info = payload as { kind: ItemKind; healed: number; restored: number; left: number };
+  audio.play(ITEM_SOUND[info.kind] ?? 'pickup_potion');
+  const parts: string[] = [];
+  if (info.healed > 0) parts.push(`+${Math.round(info.healed)} HP`);
+  if (info.restored > 0) parts.push(`+${Math.round(info.restored)} 마나`);
+  showReaction(`${parts.join('  ')}   (남은 ${info.left}개)`, 1000);
 });
-events.on('food_picked', (payload) => {
-  const info = payload as { healed: number; restored: number };
-  audio.play('pickup_food');
-  showReaction(`+${Math.round(info.healed)} HP  +${Math.round(info.restored)} 마나`, 900);
+const DENY_TEXT: Record<string, string> = {
+  empty: '빈 퀵슬롯 — Tab 에서 등록한다',
+  none: '다 썼다',
+  full: '이미 가득 차 있다',
+  cooldown: '아직 못 쓴다',
+};
+events.on('item_denied', (payload) => {
+  const info = payload as { kind?: ItemKind; reason: string };
+  if (info.reason === 'cooldown') return; // 연타는 조용히 무시 — 매번 뜨면 시끄럽다
+  const name = info.kind ? itemDef(info.kind).name : '';
+  showReaction(`${name ? name + ' — ' : ''}${DENY_TEXT[info.reason] ?? info.reason}`, 1100);
+});
+events.on('item_dropped', (payload) => {
+  const info = payload as { kind: ItemKind; count: number };
+  showReaction(`${itemDef(info.kind).name} ${info.count}개를 버렸다`, 1200);
+});
+let bagFullUntil = 0;
+events.on('inventory_full', () => {
+  if (performance.now() < bagFullUntil) return; // 밟고 서 있으면 매 틱 뜬다
+  bagFullUntil = performance.now() + 2500;
+  showReaction('가방이 가득 찼다 — Tab 에서 쓰거나 버려야 한다', 2000);
 });
 events.on('gold_picked', () => audio.play('pickup_gold'));
 const PARRY_SPARK_COLOR = 0xbfe0ff; // 패링은 청백색 (텔레그래프 청색 계열)
@@ -926,6 +963,7 @@ events.on('corruption_threshold', (payload) => {
 Mana.init(world);
 Sigils.init(world);
 Pickups.init(world);
+initInventory(world);
 Progression.init(world);
 Corruption.init(world);
 Stamina.init(world);
@@ -935,6 +973,7 @@ const systems = [
   Reaction.tick,
   Sigils.tick,
   Pickups.tick,
+  Items.tick,
   Weapons.tick,
   Projectiles.tick,
   Barrels.tick, // 같은 틱에 쏜 화염구·던진 수류탄이 통을 터뜨릴 수 있게 뒤에 둔다
@@ -1032,6 +1071,58 @@ const lanternText = document.getElementById('status-lantern-text')!;
 
 // 보스 체력 칸 색 — 마지막 칸(×1)은 HUD 기본색과 같은 계열, 그 앞 칸은 보라로 구분한다
 const BOSS_BAR_COLORS = { outer: '#b070e8', last: '#ff7a6b' };
+
+// ---- 퀵슬롯 바 ----
+// 칸은 한 번만 만들고 이후에는 값만 바꾼다 (매 프레임 DOM 을 다시 그리면 낭비다)
+const quickBar = document.getElementById('status-quick')!;
+const quickCells = Array.from({ length: balance.items.quickslots }, (_, i) => {
+  const cell = document.createElement('div');
+  cell.className = 'quick-slot';
+  const key = document.createElement('span');
+  key.className = 'k';
+  key.textContent = String(i + 1);
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  const num = document.createElement('span');
+  num.className = 'n';
+  cell.append(key, dot, num);
+  quickBar.appendChild(cell);
+  return { cell, dot, num };
+});
+
+function syncQuickslots(): void {
+  const view = quickslotView(world);
+  const cdFrac = world.itemCooldown / balance.items.useCooldownTicks;
+  view.forEach((slot, i) => {
+    const ui = quickCells[i]!;
+    if (!slot.kind) {
+      ui.cell.className = 'quick-slot spent';
+      ui.dot.style.background = 'transparent';
+      ui.dot.style.boxShadow = 'none';
+      ui.num.textContent = '';
+      return;
+    }
+    // 다 썼거나 지금 마셔 봐야 소용없는 칸은 흐리게 — 급할 때 눈이 안 간다
+    const dim = slot.count <= 0 || !slot.useful;
+    ui.cell.className = `quick-slot ${dim ? 'spent' : 'ready'}`;
+    ui.dot.style.background = slot.color;
+    ui.dot.style.boxShadow = dim ? 'none' : `0 0 6px ${slot.color}`;
+    ui.num.textContent = String(slot.count);
+  });
+  // 쿨다운 띠 — 칸마다 그리지 않고 첫 칸에만 (공용 쿨다운이라 하나면 충분하다)
+  const bar = quickCells[0]!.cell;
+  let cd = bar.querySelector('.cd') as HTMLElement | null;
+  if (cdFrac > 0) {
+    if (!cd) {
+      cd = document.createElement('span');
+      cd.className = 'cd';
+      bar.appendChild(cd);
+    }
+    cd.style.width = `${cdFrac * 100}%`;
+  } else if (cd) {
+    cd.remove();
+  }
+}
 
 function render(alpha: number): void {
   const now = performance.now();
@@ -1161,6 +1252,7 @@ function render(alpha: number): void {
   lanternRow.className =
     (battPct <= 20 ? 'low' : '') + (world.lantern.on ? '' : ' off');
   document.getElementById('status-gold')!.textContent = `◆ ${world.gold}   XP ${world.xp}`;
+  syncQuickslots();
   // 원거리(좌클릭) / 근접(우클릭) 두 슬롯. 원거리는 휠로 교체
   document.getElementById('slot-ranged')!.textContent =
     wpn.ranged === 'pistol'
@@ -1244,7 +1336,7 @@ function render(alpha: number): void {
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     'WASD 이동  Shift 질주  좌클릭 원거리(휠 교체)  우클릭 근접·처형  Space 짧게=패링·꾹=방어  Shift+Space 회피\n' +
-    'Q 마법  Tab 각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트';
+    'Q 마법  1~5 소모품  Tab 가방·각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트';
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
   // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)
