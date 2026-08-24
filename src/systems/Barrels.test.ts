@@ -214,6 +214,27 @@ describe('폭발', () => {
     expect(outside.health).toBe(1000); // 반경 밖은 무사
   });
 
+  it('반경만 넓혔지 피해는 그대로다 — 중심 84, 가장자리 21', () => {
+    // 2026-08: radius 4.5 → 6.5. "범위는 넓게, 데미지는 전과 동일" 요청의 계약.
+    // damage 와 damageFalloffMin 을 건드리지 않으면 양 끝값이 고정된다
+    expect(CFG.damage).toBe(84);
+    expect(CFG.damage * CFG.damageFalloffMin).toBeCloseTo(21, 5);
+    expect(CFG.radius).toBeGreaterThan(balance.weapons.grenade.radius); // 수류탄보다 넓다
+
+    const center = spawnEnemyAt('goblin_runner', 20, 6, 1);
+    const rim = spawnEnemyAt('goblin_runner', 20 + CFG.radius, 6, 2);
+    for (const e of [center, rim]) {
+      e.health = 1000;
+      world.enemies.push(e);
+    }
+    const barrel = putBarrel(world, 20, 6);
+    barrel.fuseTicks = 0;
+    Barrels.tick(world, DT);
+
+    expect(1000 - center.health).toBeCloseTo(CFG.damage, 5);
+    expect(1000 - rim.health).toBeCloseTo(CFG.damage * CFG.damageFalloffMin, 5);
+  });
+
   it('플레이어도 맞는다 — 뒤로 밀리기까지', () => {
     const p = world.player;
     const barrel = putBarrel(world, p.x + 2, p.z);
