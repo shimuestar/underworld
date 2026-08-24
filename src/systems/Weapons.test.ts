@@ -538,6 +538,68 @@ describe('방패 파괴 (화염구)', () => {
     void target;
   }
 
+  it('창을 내지르는 동안은 방패가 내려간다 — 총알이 그대로 들어간다', () => {
+    const enemy = shieldman(4);
+    const blocked: unknown[] = [];
+    world.events.on('shot_blocked', (payload) => blocked.push(payload));
+
+    // 붙어 오는 중(chase)에는 정면을 막는다
+    fireAt(4, 1.0);
+    expect(blocked).toHaveLength(1);
+    expect(enemy.health).toBe(1000);
+
+    // 예고(windup) 중에도 아직 든 채다 — 여기서까지 내려가면 방패가 사실상 없다
+    enemy.ai = 'windup';
+    fireAt(4, 1.0);
+    expect(blocked).toHaveLength(2);
+    expect(enemy.health).toBe(1000);
+
+    // 찌르는 중 — 몸을 실었으므로 방패가 내려간다
+    enemy.ai = 'active_normal';
+    fireAt(4, 1.0);
+    expect(blocked).toHaveLength(2); // 안 막혔다
+    expect(enemy.health).toBeLessThan(1000);
+    expect(enemy.shieldBroken).toBeFalsy(); // 내려간 것이지 부서진 게 아니다
+  });
+
+  it('해머도 마찬가지 — 붙어 올 땐 방패에 막히고, 찌르는 중엔 HP 가 깎인다', () => {
+    // "해머는 방패병에게 HP 피해를 주지 않는다"는 방패를 들고 있을 때의 규칙이다.
+    // 내려간 방패 뒤로는 그대로 들어간다 (총알과 같은 판정을 쓴다)
+    const enemy = shieldman(balance.weapons.hammer.range - 0.3);
+    const hit = (): number => {
+      const before = enemy.health;
+      world.weapon.meleeCooldown = 0;
+      world.weapon.comboStep = 0;
+      world.weapon.comboTimer = 0;
+      world.input = { ...Input.emptySnapshot(), meleePressed: true };
+      Weapons.tick(world, DT);
+      world.input = Input.emptySnapshot();
+      advanceToHammerImpact(world);
+      return before - enemy.health;
+    };
+
+    enemy.ai = 'chase';
+    expect(hit()).toBe(0); // 방패가 받아낸다
+
+    enemy.ai = 'active_normal';
+    expect(hit()).toBeGreaterThan(0); // 내려간 사이엔 들어간다
+  });
+
+  it('찌른 뒤 회수(recover) 동안에도 내려가 있다 — 여기가 반격 창이다', () => {
+    const enemy = shieldman(4);
+    for (const state of ['active_perfect', 'impact', 'recover'] as const) {
+      enemy.health = 1000;
+      enemy.ai = state;
+      fireAt(4, 1.0);
+      expect(enemy.health).toBeLessThan(1000);
+    }
+    // 다시 붙어 오면 도로 든다 — 한 번 내려갔다고 계속 열려 있지 않다
+    enemy.health = 1000;
+    enemy.ai = 'chase';
+    fireAt(4, 1.0);
+    expect(enemy.health).toBe(1000);
+  });
+
   it('화염구가 정면 방패를 부순다 — 피해는 damageRatio 배', () => {
     const enemy = shieldman(4);
     const events: unknown[] = [];

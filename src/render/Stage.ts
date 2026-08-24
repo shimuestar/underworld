@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
-import { currentAttack, enemyDef, healthBarState } from '../core/Entities';
+import { currentAttack, enemyDef, healthBarState, shieldLowered } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, glyphTexture } from '../level/GridLoader';
 import type {
@@ -1658,7 +1658,8 @@ export class Stage {
         visual.shieldMaterial.emissive.set(now < visual.shieldFlashUntil ? 0xffffff : 0x000000);
         const def = enemyDef(enemy.type);
         const shoved = (enemy.kbTicks ?? 0) > 0;
-        const down = shoved || enemy.ai === 'staggered';
+        // 판정과 그림을 한 곳에서 읽는다 — 어긋나면 "내려간 방패에 막혔다"가 된다
+        const down = shoved || shieldLowered(enemy);
         // torso 의 자식이라 웅크림(position.y)·전진(z)·기울기(rotation.x)는
         // 부모가 이미 반영한다 — 여기서 다시 더하면 두 번 움직인다
         const targetY = down ? def.height * SHIELD_DOWN_Y : def.height * 0.5;

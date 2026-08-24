@@ -182,6 +182,16 @@ export function attackReaches(
 
 /** (fromX, fromZ)에서 오는 공격이 정면 방패에 막히는가.
  *  스태거 중이거나 이미 깨졌으면 막지 못한다 — Weapons·Projectiles 공용 규칙 */
+/** 공격에 몸을 실은 상태 — 이 동안은 방패를 내린다.
+ *  windup(예고)은 뺐다: 예고 중에도 방패가 내려가면 붙어 있는 내내 무방비라
+ *  방패가 사실상 없는 것과 같아진다. "창을 내지르는 순간부터 회수까지"가 빈틈이다 */
+const SHIELD_DOWN_STATES = new Set(['active_perfect', 'active_normal', 'impact', 'recover']);
+
+/** 지금 방패를 내리고 있는가 (막기 판정과 연출이 같이 읽는다) */
+export function shieldLowered(enemy: { ai: string; shieldBroken?: boolean }): boolean {
+  return !!enemy.shieldBroken || enemy.ai === 'staggered' || SHIELD_DOWN_STATES.has(enemy.ai);
+}
+
 export function shieldBlocks(
   def: EnemyDef,
   enemy: {
@@ -196,7 +206,9 @@ export function shieldBlocks(
   fromZ: number,
 ): boolean {
   if (!def.frontalShieldBlocksProjectiles) return false;
-  if (enemy.shieldBroken || enemy.ai === 'staggered') return false;
+  // 부서졌거나·스태거·공격에 몸을 실은 동안은 못 막는다.
+  // 창을 내지르는 순간 방패가 내려가는 게 방패병의 빈틈이다
+  if (shieldLowered(enemy)) return false;
   const facingX = -Math.sin(enemy.yaw);
   const facingZ = -Math.cos(enemy.yaw);
   const toX = fromX - enemy.x;
