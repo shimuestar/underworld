@@ -2271,10 +2271,20 @@ export class Stage {
                   : 0.55 + Math.sin(now / 400 + item.id) * 0.1);
       group.position.set(item.x, bob, item.z);
       const gem = group.getObjectByName('gem');
-      // 빨려드는 동안은 빠르게 회전하고 살짝 작아진다 (몸으로 들어가는 느낌)
-      // 화살도 골드처럼 아주 느리게만 돈다 — 빙글빙글 돌면 주울 물건이 아니라
-      // 장식으로 보인다
-      if (gem) gem.rotation.y = now / (item.magnet ? 90 : grounded ? 1400 : 700);
+      // 벽에 꽂힌 화살 — 날아온 방향으로 박힌 자세 그대로 둔다. 돌지도 눕지도 않는다.
+      // 자석에 걸리는 순간부터는 평범한 바닥 아이템처럼 날아온다
+      const stuck = item.stuckX !== undefined && !item.magnet;
+      if (stuck) {
+        group.rotation.set(0, 0, 0);
+        group.lookAt(item.x + item.stuckX!, bob + (item.stuckY ?? 0), item.z + item.stuckZ!);
+        if (gem) gem.rotation.set(0, 0, 0);
+      } else {
+        if (item.stuckX !== undefined) group.rotation.set(0, 0, 0); // 뽑혀 날아가는 중
+        // 빨려드는 동안은 빠르게 회전하고 살짝 작아진다 (몸으로 들어가는 느낌)
+        // 화살도 골드처럼 아주 느리게만 돈다 — 빙글빙글 돌면 주울 물건이 아니라
+        // 장식으로 보인다
+        if (gem) gem.rotation.y = now / (item.magnet ? 90 : grounded ? 1400 : 700);
+      }
       const shrink = item.magnet ? 0.78 : 1;
       group.scale.setScalar(group.scale.x + (shrink - group.scale.x) * 0.25);
     }

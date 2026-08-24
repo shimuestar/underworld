@@ -182,15 +182,36 @@ describe('회수', () => {
     expect(arrows[0]!.id).toBeLessThan(700000); // 가방 버리기 대역과 안 겹친다
   });
 
+  it('벽에 꽂힌 내 화살은 꽂힌 자세를 들고 있다 — 그림과 주울 물건이 하나다', () => {
+    const stuckEvents: unknown[] = [];
+    world.events.on('arrow_stuck', (p) => stuckEvents.push(p));
+    shoot(world, BOW.maxDrawTicks);
+    for (let i = 0; i < 300 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+
+    const arrow = world.groundItems.find((g) => g.kind === 'arrow')!;
+    expect(arrow).toBeDefined();
+    // 착탄 높이를 들고 있다 (바닥에 눕히지 않는다)
+    expect(arrow.y).toBeGreaterThan(0.5);
+    // 날아온 방향 — 정면(+X)으로 쐈으니 X 성분이 크다
+    expect(arrow.stuckX).toBeGreaterThan(0.9);
+    expect(Math.hypot(arrow.stuckX!, arrow.stuckY!, arrow.stuckZ!)).toBeCloseTo(1, 3);
+    // 데칼은 따로 띄우지 않는다 — 두 대로 보이면 안 된다
+    expect(stuckEvents).toHaveLength(0);
+  });
+
   it('적 궁수의 화살은 바닥에 남지 않는다 — 회수 대상이 아니다', () => {
     world.projectiles.push({
       id: 100001, owner: 'enemy', kind: 'arrow',
-      x: 30, y: 1.2, z: 6, prevX: 30, prevY: 1.2, prevZ: 6,
+      // 동쪽 벽(x≈156) 가까이서 쏴야 lifeTicks 안에 실제로 꽂힌다
+      x: 140, y: 1.2, z: 6, prevX: 140, prevY: 1.2, prevZ: 6,
       vx: 30, vy: 0, vz: 0, lifeTicks: 240, damage: 15,
       burnTicks: 0, burnDamagePerTick: 0, radius: 0.15,
     });
+    const stuckEvents: unknown[] = [];
+    world.events.on('arrow_stuck', (p) => stuckEvents.push(p));
     for (let i = 0; i < 300 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
     expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(0);
+    expect(stuckEvents).toHaveLength(1); // 대신 렌더 잔존물로는 남는다
   });
 
   it('주우면 화살이 는다 — 가방을 거치지 않는다', () => {
@@ -397,17 +418,24 @@ describe('시위를 끊는 상황들', () => {
 });
 
 describe('통·소음·인지', () => {
-  it('화살은 통을 한 방에 안 터뜨린다 — 총알과 같은 규약', () => {
-    // 즉발이면 조용한 활이 시끄러운 권총(3발)보다 나아져 역할이 무너진다
+  it('화살은 통을 한 방에 터뜨린다 — 총알(3발)과 다른 규약', () => {
+    expect(BOW.ignitesBarrel).toBe(true); // false 면 총알과 같은 누적으로 돌아간다
     const barrel = { id: 1, x: 6 + 6, z: 6, alive: true, hits: 0, fuseTicks: -1 };
     world.barrels.push(barrel);
     // 통은 1.3m 라 눈높이(1.6)에서 수평으로 쏘면 위로 지나간다 — 총알과 같은 성질
     world.player.pitch = -0.1;
     shoot(world, BOW.maxDrawTicks);
     for (let i = 0; i < 60 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
-    expect(barrel.hits).toBe(1);
-    expect(barrel.fuseTicks).toBe(balance.barrel.fuseByHits[0]); // 즉발이 아니다
-    expect(barrel.alive).toBe(true);
+    expect(barrel.fuseTicks).toBe(0); // 즉발
+  });
+
+  it('통에 박힌 화살은 회수 대상이 아니다 — 곧 폭발에 휩쓸린다', () => {
+    const barrel = { id: 1, x: 6 + 6, z: 6, alive: true, hits: 0, fuseTicks: -1 };
+    world.barrels.push(barrel);
+    world.player.pitch = -0.1;
+    shoot(world, BOW.maxDrawTicks);
+    for (let i = 0; i < 60 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(0);
   });
 
   it('맞은 적은 깬다 — 조용한 건 소리지 명중이 아니다', () => {

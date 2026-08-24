@@ -267,7 +267,9 @@
       "_noiseNote": "권총(12.0)보다 훨씬 조용한 것이 활의 값이다 — 한 마리씩 조용히 걷어내는 무기",
       "noiseRadius": 4.0,
       "_recoverNote": "회수할 때 이 확률로 살아남는다. 1.0 이면 화살이 무한 순환해 제단에서 살 이유가 사라진다",
-      "recoverChance": 0.75
+      "recoverChance": 0.75,
+      "_barrelNote": "화살은 통을 한 방에 터뜨린다. 총알·해머는 3대를 때려야 하는데 활만 즉발이라 통 기믹에서는 활이 앞선다 — 의도한 것이다. false 로 두면 총알과 같은 누적 규칙으로 돌아간다",
+      "ignitesBarrel": true
     },
     "grenade": {
       "ammoMax": 4,

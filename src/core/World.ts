@@ -221,6 +221,11 @@ export interface GroundItemState {
   speed?: number;
   /** 이 틱 수만큼은 자석에 안 걸린다 — 가방에서 버린 직후 도로 주워지는 것을 막는다 */
   noMagnetTicks?: number;
+  /** 벽에 꽂힌 화살의 방향 (kind==='arrow' 일 때만). 있으면 바닥에 눕지 않고
+   *  이 방향으로 박힌 채 그려진다 — 꽂힌 그림과 주울 물건이 같은 하나가 된다 */
+  stuckX?: number;
+  stuckY?: number;
+  stuckZ?: number;
 }
 
 export interface ManaState {

@@ -270,18 +270,22 @@ function moveProjectiles(world: World, dt: number): void {
         const by = proj.y + dirY * hitT;
         const bz = proj.z + dirZ * hitT;
         if (proj.kind === 'arrow') {
-          // 화살은 운동 에너지다 — 총알·해머와 같은 규약으로 도화선만 짧아진다.
-          // 즉발로 두면 조용한 활이 시끄러운 권총(3발)보다 나아져 역할이 무너진다
-          hitBarrel(hitBarrelTarget, balance.barrel.fuseByHits);
-          world.events.emit('barrel_hit', {
-            id: hitBarrelTarget.id,
-            hits: hitBarrelTarget.hits,
-            fuseTicks: hitBarrelTarget.fuseTicks,
-            x: hitBarrelTarget.x,
-            z: hitBarrelTarget.z,
-          });
+          // 화살은 통을 한 방에 터뜨린다 (weapons.bow.ignitesBarrel).
+          // false 로 두면 총알·해머와 같은 누적 규칙으로 돌아간다
+          if (balance.weapons.bow.ignitesBarrel) {
+            igniteBarrel(hitBarrelTarget);
+          } else {
+            hitBarrel(hitBarrelTarget, balance.barrel.fuseByHits);
+            world.events.emit('barrel_hit', {
+              id: hitBarrelTarget.id,
+              hits: hitBarrelTarget.hits,
+              fuseTicks: hitBarrelTarget.fuseTicks,
+              x: hitBarrelTarget.x,
+              z: hitBarrelTarget.z,
+            });
+          }
           world.events.emit('arrow_impact', { x: bx, y: by, z: bz, hitEnemy: true });
-          if (proj.recoverable) dropArrow(world, bx, bz, true);
+          // 통에 박힌 화살은 곧 폭발에 휩쓸린다 — 회수 대상이 아니다
         } else {
           igniteBarrel(hitBarrelTarget);
           world.events.emit('spell_impact', { x: bx, y: by, z: bz, hitEnemy: true });
@@ -301,17 +305,19 @@ function moveProjectiles(world: World, dt: number): void {
       // 허공이 아니라 무언가에 닿았다 — 착탄 연출이 붙어야 한다
       world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', impact);
 
-      // 화살은 벽·바닥에 꽂힌 채 남는다 (렌더 전용 잔존물 — 적 화살도 포함)
+      // 화살은 벽·바닥에 꽂힌 채 남는다
       if (proj.kind === 'arrow' && !hitEnemy && !hitPlayer) {
+        const back = balance.pickups.arrow.stickPullback;
         const sx = proj.x + dirX * hitT;
         const sy = proj.y + dirY * hitT;
         const sz = proj.z + dirZ * hitT;
         if (proj.recoverable) {
-          // 주울 수 있는 화살은 바닥 아이템이 진짜 물건이다 — 데칼까지 그리면
+          // 내 화살은 꽂힌 그림과 주울 물건이 같은 하나다 — 데칼을 따로 띄우면
           // 벽에 꽂힌 화살과 그 앞에 떨어진 화살이 겹쳐 두 대로 보인다.
-          // 벽면에 딱 붙여 두면 자석이 벽 안쪽을 향하므로 날아온 방향으로 물려 놓는다
-          dropArrow(world, sx - dirX * balance.pickups.arrow.stickPullback, sz - dirZ * balance.pickups.arrow.stickPullback);
+          // 촉이 박힌 지점에서 꼬리 쪽으로 물려 꽂힌 자세 그대로 남긴다
+          stickArrow(world, sx - dirX * back, sy - dirY * back, sz - dirZ * back, dirX, dirY, dirZ);
         } else {
+          // 적 궁수의 화살은 못 줍는다 — 예전대로 렌더 잔존물로만
           world.events.emit('arrow_stuck', { x: sx, y: sy, z: sz, dx: dirX, dy: dirY, dz: dirZ });
         }
       }
@@ -397,6 +403,22 @@ function moveProjectiles(world: World, dt: number): void {
  *  부러짐 판정은 여기서 하지 않는다 — 줍는 순간에 굴려야 "왜 안 늘었지"를
  *  안내로 설명할 수 있다. 여기서 굴리면 화살이 애초에 안 생겨 보이지도 않는다 */
 let nextArrowItemId = 600000; // 처치 드랍(500000~)과 가방 버리기(700000~) 사이
+/** 벽·바닥에 꽂힌 채 남기는 화살. 방향을 실어 보내면 렌더가 그 자세로 박아 놓는다 */
+function stickArrow(
+  world: World,
+  x: number, y: number, z: number,
+  dx: number, dy: number, dz: number,
+): void {
+  world.groundItems.push({
+    id: nextArrowItemId++,
+    kind: 'arrow',
+    amount: 1,
+    x, z, y,
+    stuckX: dx, stuckY: dy, stuckZ: dz,
+    noMagnetTicks: balance.pickups.arrow.noMagnetTicks,
+  });
+}
+
 function dropArrow(world: World, x: number, z: number, scatter = false): void {
   const cfg = balance.pickups.arrow;
   // 적에게서 떨어진 화살은 처치 드랍(골드·물약)과 같은 점에 놓이므로 흩는다
