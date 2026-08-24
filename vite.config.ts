@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // GitHub Pages 는 https://<user>.github.io/underworld/ 하위 경로로 서비스된다 —
+  // 상대 경로면 어디에 얹혀도 깨지지 않는다 (개발 서버 주소는 그대로다)
+  base: './',
   server: {
     // 모든 인터페이스에 바인딩 — localhost가 IPv4(127.0.0.1)로 풀려도 접속된다
     host: true,
