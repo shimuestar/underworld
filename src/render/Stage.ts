@@ -528,6 +528,8 @@ export class Stage {
     stunned: boolean;
     blocking?: boolean;
     chargeFrac?: number;
+    /** 문 잠금을 푸는 중 진행률 0~1 — 0 이면 손을 대지 않은 상태 */
+    doorFrac?: number;
   }): void {
     this.hands.update(state);
   }
@@ -611,10 +613,26 @@ export class Stage {
     this.hands.setCorruptionStage(stage);
   }
 
-  /** 문 개방 — 해당 문 메시 제거 */
+  /** 미닫이 — 문 판을 원래 자리에서 offset 만큼 옆으로 밀어 놓는다.
+   *  셀 하나만큼 밀면 이웃 벽 셀에 정확히 가려져 사라진 것처럼 보인다.
+   *  얼마나 밀지(진행률 × 셀 크기)는 부르는 쪽이 계산한다 — 여기는 그리기만 한다 */
+  setDoorSlide(row: number, col: number, offsetX: number, offsetZ: number): void {
+    const name = `door-${row}-${col}`;
+    const mesh = this.scene.getObjectByName(name);
+    if (!(mesh instanceof THREE.Mesh)) return;
+    let base = this.doorBase.get(name);
+    if (!base) this.doorBase.set(name, (base = mesh.position.clone()));
+    mesh.position.set(base.x + offsetX, base.y, base.z + offsetZ);
+  }
+
+  /** 문 개방 — 다 밀린 판을 씬에서 걷어낸다 (이미 벽 속이라 화면은 그대로) */
   openDoor(row: number, col: number): void {
+    this.doorBase.delete(`door-${row}-${col}`);
     this.removeNamedCell(`door-${row}-${col}`);
   }
+
+  /** 문 판의 원래 자리 — 슬라이드는 여기서부터의 오프셋으로 계산한다 */
+  private readonly doorBase = new Map<string, THREE.Vector3>();
 
   /** 균열 벽 파괴 */
   breakCrack(row: number, col: number): void {
@@ -889,12 +907,6 @@ export class Stage {
       (ex.shell.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - age);
       ex.light.intensity = 6 * (1 - age);
     }
-  }
-
-  /** 레버 당김 — 손잡이 반대쪽으로 기울임 */
-  pullLever(row: number, col: number): void {
-    const handle = this.scene.getObjectByName(`lever-${row}-${col}`);
-    if (handle) handle.rotation.z = -0.5;
   }
 
   /** 카메라 충격 — 앞으로 훅 밀리며 짧게 흔들린다 (연출 전용, 조준에는 영향 없음) */

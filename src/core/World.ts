@@ -109,6 +109,24 @@ export interface SpellState {
 
 /** 바닥에 떨어진 각인. 접근하면 획득 */
 /** 보물상자 — E로 한 번 열면 골드 무더기와 각인 하나가 쏟아진다 */
+/** 잠긴 문 하나. 격자 정보(위치·미닫이 방향)는 Level.doors 에서 그대로 옮겨 온다 */
+export interface DoorState {
+  row: number;
+  col: number;
+  x: number;
+  z: number;
+  /** 미닫이가 밀려 들어갈 방향 (셀 단위, 둘 중 하나만 0이 아니다) */
+  dirX: number;
+  dirZ: number;
+  /** 잠금을 푸는 중 진행 틱. 0 이면 아무도 손대지 않은 상태 */
+  progress: number;
+  /** 미닫이 진행 0~1. 1 이 되는 틱에 통행이 열린다 */
+  slide: number;
+  /** 렌더 보간용 직전 값 */
+  prevSlide: number;
+  opened: boolean;
+}
+
 export interface ChestState {
   id: number;
   x: number;
@@ -445,8 +463,11 @@ export class World {
   /** 출구 발판 위에 서 있는가 — 봉인 안내를 계속 띄우기 위한 플래그 */
   onExitPad = false;
 
-  /** 당겨진 레버 ("row-col") — 레버는 1회용 */
-  pulledLevers = new Set<string>();
+  /** 잠긴 문 — Door 가 E 채널을 돌리고 미닫이를 민다 (레버는 2026-08 폐지) */
+  doors: DoorState[] = [];
+
+  /** 지금 바라보고 있는 열 수 있는 문 (없으면 null) — HUD 안내가 읽는다 */
+  doorInView: DoorState | null = null;
 
   enemies: EnemyState[];
   level: Level;
@@ -481,5 +502,17 @@ export class World {
     if (init.barrels) this.barrels = init.barrels;
     if (init.chests) this.chests = init.chests;
     this.level = init.level;
+    this.doors = init.level.doors.map((d) => ({
+      row: d.row,
+      col: d.col,
+      x: d.x,
+      z: d.z,
+      dirX: d.dirX,
+      dirZ: d.dirZ,
+      progress: 0,
+      slide: 0,
+      prevSlide: 0,
+      opened: false,
+    }));
   }
 }

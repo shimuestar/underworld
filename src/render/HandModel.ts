@@ -304,6 +304,8 @@ export class HandModel {
     stunned: boolean;
     blocking?: boolean;
     chargeFrac?: number;
+    /** 문 잠금을 푸는 중 진행률 0~1 — 0 이면 손을 대지 않은 상태 */
+    doorFrac?: number;
     /** 왼손에 띄울 탄약 수 */
     ammoText?: string;
   }): void {
@@ -406,6 +408,49 @@ export class HandModel {
       else if (e < t2) pose = mix(step.windup, step.strike, easeInCubic((e - t1) / step.strikeMs));
       else if (e < t3) pose = step.strike; // 그대로 버틴다 — 연결 대기
       else pose = mix(step.strike, rest, easeOutCubic((e - t3) / step.returnMs));
+    }
+
+    // 문 조작 — 해머를 내리고 맨손을 문에 얹어 더듬는다.
+    // 스윙·처형이 돌고 있으면 그쪽이 이긴다 (때리는 중에 문을 만질 일은 없다)
+    const doorFrac = state.doorFrac ?? 0;
+    // 잠금을 만지는 동안은 해머를 내려놓은 것으로 친다 — 자루가 화면을 가로질러
+    // 정작 만지는 손을 가린다. 누른 순간 소리와 함께 사라지므로 의도한 동작으로 읽힌다
+    const bareHand = doorFrac > 0 && !pose && !finisher;
+    for (const mesh of this.hammerParts) mesh.visible = !bareHand;
+    if (bareHand) {
+      // 앞으로 뻗어 벽면에 붙인 자세. 손끝이 화면 중앙 살짝 아래에 오게 둔다
+      const reach = easeOutCubic(Math.min(1, doorFrac / DOOR_REACH_T));
+      // 더듬는 결 — 위아래로 훑으면서 가끔 짧게 눌러 넣는다. 두 주기를 겹쳐
+      // 일정한 왕복이 아니라 "찾고 있는" 손짓으로 읽히게 한다
+      const t = now / 1000;
+      const probe = Math.sin(t * DOOR_PROBE_HZ * Math.PI * 2);
+      const drift = Math.sin(t * DOOR_DRIFT_HZ * Math.PI * 2);
+      const push = Math.max(0, Math.sin(t * DOOR_PUSH_HZ * Math.PI * 2));
+      pose = {
+        rotX: DOOR_TOUCH.rotX + probe * 0.14,
+        rotY: DOOR_TOUCH.rotY + drift * 0.16,
+        x: DOOR_TOUCH.x + drift * 0.07,
+        y: DOOR_TOUCH.y + probe * 0.055,
+        z: DOOR_TOUCH.z - push * 0.035,
+        rotZ: DOOR_TOUCH.rotZ + drift * 0.2,
+      };
+      // 시작 순간 팔이 순간이동하지 않게 대기 자세에서 뻗어 나간다
+      const rest: SwingPose = {
+        rotX: HAMMER_REST_ROT,
+        rotY: REST_RIGHT.rotY,
+        x: REST_RIGHT.pos.x,
+        y: REST_RIGHT.pos.y,
+        z: REST_RIGHT.pos.z,
+        rotZ: REST_RIGHT.rotZ,
+      };
+      pose = {
+        rotX: rest.rotX + (pose.rotX - rest.rotX) * reach,
+        rotY: rest.rotY + (pose.rotY - rest.rotY) * reach,
+        x: rest.x + (pose.x - rest.x) * reach,
+        y: rest.y + (pose.y - rest.y) * reach,
+        z: rest.z! + (pose.z! - rest.z!) * reach,
+        rotZ: rest.rotZ! + (pose.rotZ! - rest.rotZ!) * reach,
+      };
     }
 
     if (finisher) pose = finisher; // 처형이 스윙을 덮어쓴다
@@ -580,6 +625,16 @@ const REST_RIGHT = {
 };
 /** 내리치는 동안 손목이 옮겨가는 위치 — 화면 중앙 살짝 오른쪽, 앞으로 */
 const SMASH_RIGHT = new THREE.Vector3(0.1, -0.26, -0.56);
+// 문 잠금을 더듬는 자세 — 손을 조준점 오른쪽 아래로 들어 올려 벽면에 붙인다.
+// z 는 대기(-0.6)에서 거의 안 당긴다: 손목을 카메라 쪽으로 끌면 팔뚝이 근평면에
+// 걸려 화면 절반을 덮는 판때기가 된다 (-0.42 에서 실측 확인)
+const DOOR_TOUCH = { rotX: 0.08, rotY: 0.16, x: 0.13, y: -0.12, z: -0.56, rotZ: -0.12 };
+/** 뻗는 데 쓰는 진행률 구간 — 채널 앞 15% 동안 손이 문에 닿는다 */
+const DOOR_REACH_T = 0.15;
+/** 더듬는 손짓 주파수(Hz) — 셋을 겹쳐 규칙적인 왕복으로 보이지 않게 한다 */
+const DOOR_PROBE_HZ = 1.7;
+const DOOR_DRIFT_HZ = 0.63;
+const DOOR_PUSH_HZ = 1.1;
 // 대기: 화면 왼쪽 아래 밖. 가드: 팔뚝이 화면을 가로로 가로막는다 (rotY로 눕힘, 주먹이 오른쪽)
 // 왼팔 대기: 총을 든 손. 각도는 총열이 화면 중앙(조준점)으로 수렴하도록 맞췄다 —
 // 실측으로 좌 2.9°·상 3.4° 어긋나 있던 것을 보정한 값

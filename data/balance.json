@@ -331,8 +331,13 @@
     "torchHeight": 2.6
   },
 
-  "interaction": {
-    "leverRadius": 1.8
+  "door": {
+    "_note": "잠긴 문(D) — 레버 폐지(2026-08). 문 앞에서 E 를 눌러 직접 연다. openTicks 동안 손으로 잠금을 푸는 시간, 그 뒤 slideTicks 동안 옆으로 밀리고 다 밀린 틱에 통행이 열린다",
+    "_radiusNote": "문 중심 기준. 문은 셀을 통째로 채우므로 몸이 닿아도 중심에서 2+플레이어 반경(≈2.4m) 이 한계다 — 제단·상자(2.4)와 달리 그보다 넉넉해야 문 앞에 설 자리가 생긴다",
+    "radius": 3.6,
+    "facingArcDeg": 100,
+    "openTicks": 150,
+    "slideTicks": 45
   },
 
   "altar": {

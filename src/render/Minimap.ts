@@ -14,7 +14,6 @@ const COLORS: Record<string, string> = {
   C: '#4a5a68',
   A: '#d8c9a0',
   X: '#3fae5a',
-  L: '#c9a227',
 };
 const FLOOR = 'rgba(30,30,36,0.85)';
 const PLAYER = '#9fe870';
@@ -59,7 +58,6 @@ export class Minimap {
     this.legend.innerHTML =
       '<span style="color:#d8c9a0">■</span>제단 ' +
       '<span style="color:#3fae5a">■</span>출구 ' +
-      '<span style="color:#c9a227">■</span>레버 ' +
       '<span style="color:#6b4a2f">■</span>잠긴 문 ' +
       '<span style="color:#4a5a68">■</span>균열벽<br>' +
       '<span style="color:#9fe870">▲</span>나 ' +

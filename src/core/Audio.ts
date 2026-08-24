@@ -29,7 +29,8 @@ export type SoundName =
   | 'reload_end'
   | 'altar_enter'
   | 'corruption_up'
-  | 'lever_pull'
+  | 'door_touch'
+  | 'door_slide'
   | 'bow_twang'
   | 'headshot'
   | 'player_hurt'
@@ -469,8 +470,13 @@ export class GameAudio {
         this.tone(220, 0.06, 'square', 0.7, 0, 140);
         this.noise(0.18, 0.5, 1600, 0.02);
         break;
-      case 'lever_pull':
-        // 육중한 기계 딸깍 + 멀리서 돌 문이 갈리는 소리
+      case 'door_touch':
+        // 문에 손을 얹는 순간 — 마른 돌을 긁는 짧은 소리
+        this.noise(0.12, 0.22, 900, 0.0);
+        this.tone(140, 0.05, 'square', 0.25);
+        break;
+      case 'door_slide':
+        // 잠금이 풀리고 돌 문이 갈리며 옆으로 밀린다
         this.tone(180, 0.08, 'square', 0.6);
         this.tone(120, 0.1, 'square', 0.5, 0.1);
         this.noise(0.7, 0.4, 250, 0.25);

@@ -96,7 +96,6 @@ Weapons → Projectiles → Damage → Mana → Corruption → Altar → Metrics
     ".": "floor",
     "S": "spawn",
     "A": "altar",
-    "L": "lever",
     "D": "door_locked",
     "C": "crack_wall",
     "P": "pit_trap",
@@ -108,8 +107,7 @@ Weapons → Projectiles → Damage → Mana → Corruption → Altar → Metrics
     { "type": "warden",        "cell": [9, 5] }
   ],
   "triggers": [
-    { "type": "ambush", "cell": [4, 2], "spawns": "amb01" },
-    { "type": "link", "from": [3, 5], "to": [7, 1], "note": "레버가 문을 연다" }
+    { "type": "ambush", "cell": [4, 2], "spawns": "amb01" }
   ],
   "lighting": { "ambient": 0.04, "torches": [[2, 1], [8, 5]] }
 }

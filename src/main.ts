@@ -27,7 +27,7 @@ import * as Altar from './systems/Altar';
 import * as Barrels from './systems/Barrels';
 import * as Chest from './systems/Chest';
 import * as Exit from './systems/Exit';
-import * as Lever from './systems/Lever';
+import * as Door from './systems/Door';
 import * as Lantern from './systems/Lantern';
 import { enemyDef, healthBarState } from './core/Entities';
 import { ShopUI } from './render/ShopUI';
@@ -330,7 +330,10 @@ for (const name of [
   'exit_locked',
   'exit_opened',
   'zone_cleared',
-  'lever_pulled',
+  'door_channel_started',
+  'door_channel_broken',
+  'door_unlocked',
+  'door_opened',
 ]) {
   events.on(name, (payload) => console.log(`[events] ${name}`, payload));
 }
@@ -884,13 +887,18 @@ events.on('exit_opened', () => {
   audio.play('exit_opened');
   showReaction('족장이 쓰러졌다 — 출구의 봉인이 풀렸다', 3500);
 });
-events.on('lever_pulled', (payload) => {
-  const info = payload as { lever: { row: number; col: number }; door: { row: number; col: number } };
-  audio.play('lever_pull');
-  stage.pullLever(info.lever.row, info.lever.col);
-  stage.openDoor(info.door.row, info.door.col);
+// ---- 잠긴 문 (E 로 직접 연다) ----
+events.on('door_channel_started', () => audio.play('door_touch'));
+events.on('door_unlocked', (payload) => {
+  const at = payload as { x: number; z: number };
+  audio.play('door_slide');
+  stage.triggerFlash(at.x, 1.2, at.z, 0x9a7a4a, 220, 2);
+  showReaction('잠금이 풀렸다 — 문이 옆으로 밀린다', 2200);
+});
+events.on('door_opened', (payload) => {
+  const at = payload as { row: number; col: number };
+  stage.openDoor(at.row, at.col);
   minimap.rebuildBase();
-  showReaction('어딘가에서 돌 문이 갈리며 열렸다', 3500);
 });
 events.on('zone_cleared', () => {
   audio.play('zone_clear');
@@ -932,7 +940,7 @@ const systems = [
   Barrels.tick, // 같은 틱에 쏜 화염구·던진 수류탄이 통을 터뜨릴 수 있게 뒤에 둔다
   Mana.tick,
   Altar.tick,
-  Lever.tick,
+  Door.tick,
   Chest.tick,
   Exit.tick,
   Lantern.tick,
@@ -1034,6 +1042,15 @@ function render(alpha: number): void {
     tpsWindowTicks = 0;
   }
 
+  // 미닫이 — 진행률을 셀 크기만큼의 오프셋으로 바꿔 판을 밀어 놓는다.
+  // 틱 사이는 alpha 로 보간한다 (0.75초 동안 4m 를 가로지르므로 계단이 눈에 띈다)
+  for (const door of world.doors) {
+    if (door.opened || door.slide <= 0) continue;
+    const frac = door.prevSlide + (door.slide - door.prevSlide) * alpha;
+    const off = frac * world.level.cellSize;
+    stage.setDoorSlide(door.row, door.col, door.dirX * off, door.dirZ * off);
+  }
+
   const p = world.player;
   stage.updateCamera(
     p.prevX + (p.x - p.prevX) * alpha,
@@ -1073,6 +1090,7 @@ function render(alpha: number): void {
     stunned: p.stunTicks > 0,
     blocking: p.blocking,
     chargeFrac,
+    doorFrac: Door.channelFrac(world),
     // 손에 직접 띄우는 수치 — 왼손 탄약 / 오른손 연타 단계
     ammoText:
       world.weapon.ranged === 'pistol'
@@ -1162,17 +1180,8 @@ function render(alpha: number): void {
     debugOverlay.update(metrics.snapshot(world));
   }
 
-  // 제단/레버 프롬프트 — 상호작용 가능한 것 안내
-  const nearLever = world.level.levers.some((lever) => {
-    const [row, col] = lever.cell;
-    if (row === undefined || col === undefined) return false;
-    if (world.pulledLevers.has(`${row}-${col}`)) return false;
-    const cs = world.level.cellSize;
-    return (
-      Math.hypot(p.x - (col + 0.5) * cs, p.z - (row + 0.5) * cs) <=
-      balance.interaction.leverRadius
-    );
-  });
+  // 제단/문 프롬프트 — 상호작용 가능한 것 안내
+  const nearDoor = world.doorInView !== null && !world.dead && !world.uiOpen;
   const showAltarPrompt =
     world.altarInView && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
   // 출구 발판 위 — 서 있는 동안 계속 띄운다 (3초 뒤 사라지면 못 보고 지나친다).
@@ -1181,7 +1190,7 @@ function render(alpha: number): void {
   const nearChest = world.chestInView !== null && !world.dead && !world.uiOpen;
   altarPrompt!.classList.toggle(
     'visible',
-    showAltarPrompt || (nearLever && !world.dead) || onExit || nearChest,
+    showAltarPrompt || nearDoor || onExit || nearChest,
   );
   if (showAltarPrompt) {
     altarPrompt!.textContent =
@@ -1190,8 +1199,13 @@ function render(alpha: number): void {
       `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
   } else if (nearChest) {
     altarPrompt!.textContent = 'E — 보물상자를 연다';
-  } else if (nearLever) {
-    altarPrompt!.textContent = 'E — 레버를 당긴다';
+  } else if (nearDoor) {
+    // 진행 게이지를 프롬프트 안에 그려 준다 — 손 동작만으로는 얼마나 남았는지 모른다
+    const frac = Door.channelFrac(world);
+    altarPrompt!.textContent =
+      frac > 0
+        ? `잠금을 푸는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%\n문에서 떨어지면 처음부터`
+        : 'E — 문을 연다 (누른 채 기다릴 필요 없이 문 앞에 서 있으면 된다)';
   } else if (onExit) {
     altarPrompt!.textContent = world.exitOpen ? 'E — 구역을 벗어난다' : '출구가 봉인되어 있다';
   }

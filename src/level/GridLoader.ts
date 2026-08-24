@@ -29,6 +29,16 @@ export interface LevelDef {
   triggers?: TriggerDef[];
 }
 
+/** 격자에서 찾아낸 잠긴 문 하나. dirX/dirZ 는 미닫이가 밀려 들어갈 방향(셀 단위) */
+export interface DoorCell {
+  row: number;
+  col: number;
+  x: number;
+  z: number;
+  dirX: number;
+  dirZ: number;
+}
+
 /** 이동을 막는 셀. 잠긴 문(D)과 균열 벽(C)은 열리기 전까지 벽 취급. */
 const SOLID_CHARS = new Set(['#', 'D', 'C']);
 /** 제단 기둥 발자국(가로세로 m). 충돌과 시각 메시가 반드시 같은 값을 쓴다 —
@@ -51,7 +61,8 @@ export class Level {
   readonly props: { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
   readonly exitPos: { x: number; z: number } | null;
   readonly glyphs: GlyphDef[];
-  readonly levers: TriggerDef[];
+  /** 잠긴 문(D) — 문 앞에서 E 로 직접 연다. 미닫이가 밀려 들어갈 축도 여기서 정한다 */
+  readonly doors: DoorCell[];
   readonly rows: number;
   readonly cols: number;
 
@@ -94,9 +105,26 @@ export class Level {
       : null;
 
     this.glyphs = def.glyphs ?? [];
-    this.levers = (def.triggers ?? []).filter(
-      (trigger) => trigger.type === 'lever' && trigger.opens,
-    );
+    // 문은 격자에서 직접 찾는다 — 레버-문 연결(triggers)은 폐지됐다.
+    // 미닫이 방향: 벽이 이어지는 축으로 민다. 문 좌우가 벽이면 벽은 가로로 이어지므로
+    // 가로(X)로 밀어 넣고, 위아래가 벽이면 세로(Z)로 민다
+    this.doors = [];
+    for (let row = 0; row < this.rows; row++) {
+      for (let col = 0; col < this.cols; col++) {
+        if (this.charAt(col, row) !== 'D') continue;
+        const alongX = this.charAt(col - 1, row) === '#' || this.charAt(col + 1, row) === '#';
+        const dirX = alongX ? (this.charAt(col + 1, row) === '#' ? 1 : -1) : 0;
+        const dirZ = alongX ? 0 : this.charAt(col, row + 1) === '#' ? 1 : -1;
+        this.doors.push({
+          row,
+          col,
+          x: (col + 0.5) * this.cellSize,
+          z: (row + 0.5) * this.cellSize,
+          dirX,
+          dirZ,
+        });
+      }
+    }
   }
 
   /** 몸으로 막는 물체를 추가한다 (폭발통 등). 반환값을 removeBlocker 로 되돌린다.
@@ -261,7 +289,6 @@ const COLOR_FLOOR = 0x3a3a44;
 const COLOR_CEILING = 0x2e2e36;
 const COLOR_ALTAR = 0xd8c9a0;
 const COLOR_ALTAR_LIGHT = 0xe0d0a0;
-const COLOR_LEVER = 0xc9a227;
 const COLOR_EXIT = 0x3fae5a;
 /** 봉인된 출구 — 꺼진 돌바닥. 열린 초록과 한눈에 구분돼야 한다 */
 export const COLOR_EXIT_LOCKED = 0x3a3f44;
@@ -355,34 +382,12 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
     }
   }
 
-  // 레버·출구 — 미니맵 색과 동일한 시각물 (지도와 실물 일치)
+  // 출구 — 미니맵 색과 동일한 시각물 (지도와 실물 일치)
   for (let row = 0; row < level.rows; row++) {
     for (let col = 0; col < level.cols; col++) {
       const ch = level.charAt(col, row);
       const x = (col + 0.5) * cs;
       const z = (row + 0.5) * cs;
-
-      if (ch === 'L') {
-        // 레버 — 받침 + 기울어진 노란 손잡이 (작동은 미구현)
-        const base = new THREE.Mesh(
-          new THREE.BoxGeometry(0.5, 0.5, 0.5),
-          new THREE.MeshLambertMaterial({ color: 0x4a4a52 }),
-        );
-        base.position.set(x, 0.25, z);
-        group.add(base);
-        const handle = new THREE.Mesh(
-          new THREE.BoxGeometry(0.09, 0.9, 0.09),
-          new THREE.MeshLambertMaterial({
-            color: COLOR_LEVER,
-            emissive: COLOR_LEVER,
-            emissiveIntensity: 0.25,
-          }),
-        );
-        handle.position.set(x, 0.85, z);
-        handle.rotation.z = 0.5;
-        handle.name = `lever-${row}-${col}`;
-        group.add(handle);
-      }
 
       if (ch === 'X') {
         // 출구 — 바닥 발광 판 + 초록 광원
