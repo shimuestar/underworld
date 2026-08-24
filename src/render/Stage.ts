@@ -530,6 +530,9 @@ export class Stage {
     chargeFrac?: number;
     /** 문 잠금을 푸는 중 진행률 0~1 — 0 이면 손을 대지 않은 상태 */
     doorFrac?: number;
+    /** 소모품을 마시는 중 진행률 0~1 과 그 아이템 색 */
+    drinkFrac?: number;
+    drinkColor?: number;
   }): void {
     this.hands.update(state);
   }

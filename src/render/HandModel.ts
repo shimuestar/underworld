@@ -102,6 +102,8 @@ export class HandModel {
   private blockBlend = 0;
   private readonly gunParts: THREE.Mesh[] = [];
   private readonly hammerParts: THREE.Mesh[] = [];
+  private flask!: THREE.Mesh;
+  private flaskCork!: THREE.Mesh;
   private readonly grenadeParts: THREE.Mesh[] = [];
   private swingUntil = 0;
   private swingStart = 0;
@@ -142,6 +144,17 @@ export class HandModel {
     const hammerBand = box(0.034, 0.034, 0.04, 0x3b3f45); // 자루-머리 이음쇠
     hammerBand.position.set(0, 0.012, -0.29);
     this.hammerParts.push(hammerShaft, hammerHead, hammerBand);
+
+    // 물약병 — 평소엔 숨어 있고 마실 때만 나온다. 색은 마시는 아이템에서 받는다
+    this.flask = box(0.05, 0.082, 0.05, 0xffffff);
+    this.flask.position.set(0, 0.05, -0.05);
+    this.flask.visible = false;
+    this.rightArm.add(this.flask);
+    const cork = box(0.024, 0.03, 0.024, 0x5c4a33);
+    cork.position.set(0, 0.105, -0.05);
+    cork.visible = false;
+    this.flaskCork = cork;
+    this.rightArm.add(cork);
     this.rightArm.add(hammerShaft);
     this.rightArm.add(hammerHead);
     this.rightArm.add(hammerBand);
@@ -306,6 +319,10 @@ export class HandModel {
     chargeFrac?: number;
     /** 문 잠금을 푸는 중 진행률 0~1 — 0 이면 손을 대지 않은 상태 */
     doorFrac?: number;
+    /** 소모품을 마시는 중 진행률 0~1 — 0 이면 안 마시는 중 */
+    drinkFrac?: number;
+    /** 마시는 아이템 색 (0xrrggbb) */
+    drinkColor?: number;
     /** 왼손에 띄울 탄약 수 */
     ammoText?: string;
   }): void {
@@ -412,12 +429,43 @@ export class HandModel {
 
     // 문 조작 — 해머를 내리고 맨손을 문에 얹어 더듬는다.
     // 스윙·처형이 돌고 있으면 그쪽이 이긴다 (때리는 중에 문을 만질 일은 없다)
+    // 마시기 — 해머를 내리고 병을 입가로 올린다. 다 차오를수록 병을 기울인다
+    const drinkFrac = state.drinkFrac ?? 0;
+    const drinking = drinkFrac > 0 && !pose && !finisher;
+    this.flask.visible = drinking;
+    this.flaskCork.visible = drinking;
+    if (drinking) {
+      (this.flask.material as THREE.MeshLambertMaterial).color.setHex(
+        state.drinkColor ?? 0xffffff,
+      );
+      const raise = easeOutCubic(Math.min(1, drinkFrac / DRINK_RAISE_T));
+      const tilt = Math.max(0, (drinkFrac - DRINK_RAISE_T) / (1 - DRINK_RAISE_T));
+      const rest: SwingPose = {
+        rotX: HAMMER_REST_ROT, rotY: REST_RIGHT.rotY,
+        x: REST_RIGHT.pos.x, y: REST_RIGHT.pos.y, z: REST_RIGHT.pos.z, rotZ: REST_RIGHT.rotZ,
+      };
+      const up: SwingPose = {
+        rotX: DRINK_POSE.rotX + tilt * 0.6, // 기울여 넘긴다
+        rotY: DRINK_POSE.rotY,
+        x: DRINK_POSE.x, y: DRINK_POSE.y + tilt * 0.03, z: DRINK_POSE.z,
+        rotZ: DRINK_POSE.rotZ - tilt * 0.35,
+      };
+      pose = {
+        rotX: rest.rotX + (up.rotX - rest.rotX) * raise,
+        rotY: rest.rotY + (up.rotY - rest.rotY) * raise,
+        x: rest.x + (up.x - rest.x) * raise,
+        y: rest.y + (up.y - rest.y) * raise,
+        z: rest.z! + (up.z! - rest.z!) * raise,
+        rotZ: rest.rotZ! + (up.rotZ! - rest.rotZ!) * raise,
+      };
+    }
+
     const doorFrac = state.doorFrac ?? 0;
     // 잠금을 만지는 동안은 해머를 내려놓은 것으로 친다 — 자루가 화면을 가로질러
     // 정작 만지는 손을 가린다. 누른 순간 소리와 함께 사라지므로 의도한 동작으로 읽힌다
-    const bareHand = doorFrac > 0 && !pose && !finisher;
+    const bareHand = drinking || (doorFrac > 0 && !pose && !finisher);
     for (const mesh of this.hammerParts) mesh.visible = !bareHand;
-    if (bareHand) {
+    if (!drinking && bareHand) {
       // 앞으로 뻗어 벽면에 붙인 자세. 손끝이 화면 중앙 살짝 아래에 오게 둔다
       const reach = easeOutCubic(Math.min(1, doorFrac / DOOR_REACH_T));
       // 더듬는 결 — 위아래로 훑으면서 가끔 짧게 눌러 넣는다. 두 주기를 겹쳐
@@ -629,6 +677,12 @@ const SMASH_RIGHT = new THREE.Vector3(0.1, -0.26, -0.56);
 // z 는 대기(-0.6)에서 거의 안 당긴다: 손목을 카메라 쪽으로 끌면 팔뚝이 근평면에
 // 걸려 화면 절반을 덮는 판때기가 된다 (-0.42 에서 실측 확인)
 const DOOR_TOUCH = { rotX: 0.08, rotY: 0.16, x: 0.13, y: -0.12, z: -0.56, rotZ: -0.12 };
+// 마시는 자세 — 병을 화면 오른쪽, 입가 높이로 올린다.
+// z 는 대기(-0.6)보다 오히려 조금 멀리 둔다: 손목을 카메라 쪽으로 당기면 팔뚝이
+// 근평면에 걸려 화면을 덮는 판때기가 된다 (문 조작 자세에서 같은 함정을 겪었다)
+const DRINK_POSE = { rotX: 0.78, rotY: -0.1, x: 0.16, y: -0.15, z: -0.64, rotZ: 0.1 };
+/** 병을 입까지 올리는 데 쓰는 진행률 구간 — 앞 30% 동안 올리고 나머지는 기울인다 */
+const DRINK_RAISE_T = 0.3;
 /** 뻗는 데 쓰는 진행률 구간 — 채널 앞 15% 동안 손이 문에 닿는다 */
 const DOOR_REACH_T = 0.15;
 /** 더듬는 손짓 주파수(Hz) — 셋을 겹쳐 규칙적인 왕복으로 보이지 않게 한다 */

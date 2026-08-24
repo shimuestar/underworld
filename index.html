@@ -311,6 +311,20 @@
       .quick-slot.ready {
         border-color: #6a5f3a;
       }
+      /* 마시는 중 — 그 칸이 아래에서 위로 차오른다. 다 차야 효과가 난다 */
+      .quick-slot.drinking {
+        border-color: #e8c76a;
+      }
+      .quick-slot.drinking::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: var(--fill, 0%);
+        background: rgba(232, 199, 106, 0.28);
+        pointer-events: none;
+      }
       /* 사용 쿨다운 — 아래에서 차오르는 얇은 띠 */
       .quick-slot .cd {
         position: absolute;

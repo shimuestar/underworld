@@ -56,16 +56,22 @@ function makeWorld(): World {
   return world;
 }
 
-/** 퀵슬롯 키를 한 틱 누른다 */
+/** 퀵슬롯 키를 한 틱 누른다 (시전 시작만 — 효과는 아직) */
 function press(world: World, slot: number): void {
   world.input = { ...Input.emptySnapshot(), useSlot: slot };
   Items.tick(world, DT);
   world.input = Input.emptySnapshot();
 }
 
-/** 손 놓고 n 틱 (쿨다운 돌리기) */
+/** 손 놓고 n 틱 (시전·쿨다운 돌리기) */
 function idle(world: World, n: number): void {
   for (let i = 0; i < n; i++) Items.tick(world, DT);
+}
+
+/** 누르고 시전이 끝날 때까지 — 실제로 마신다 */
+function drink(world: World, slot: number): void {
+  press(world, slot);
+  idle(world, CFG.channelTicks);
 }
 
 let world: World;
@@ -147,7 +153,7 @@ describe('퀵슬롯 등록', () => {
   it('칸이 아니라 종류를 기억한다 — 다 써도 등록이 남는다', () => {
     addItem(world, 'potion');
     world.player.health = 10;
-    press(world, 1);
+    drink(world, 1);
     expect(countOf(world, 'potion')).toBe(0);
     expect(world.quickslots[0]).toBe('potion'); // 등록은 그대로
 
@@ -196,7 +202,7 @@ describe('사용', () => {
     const used: { healed: number; left: number }[] = [];
     world.events.on('item_used', (p) => used.push(p as { healed: number; left: number }));
 
-    press(world, 1);
+    drink(world, 1);
     expect(world.player.health).toBe(10 + itemDef('potion').heal);
     expect(countOf(world, 'potion')).toBe(0);
     expect(used[0]).toMatchObject({ healed: itemDef('potion').heal, left: 0 });
@@ -209,7 +215,7 @@ describe('사용', () => {
     addItem(world, 'food');
     world.player.health = 40;
     world.mana.value = 10;
-    press(world, 1);
+    drink(world, 1);
     expect(world.player.health).toBeCloseTo(40 + itemDef('food').heal, 5);
     expect(world.mana.value).toBeCloseTo(10 + itemDef('food').restore, 5);
   });
@@ -217,7 +223,7 @@ describe('사용', () => {
   it('상한을 넘지 않는다', () => {
     addItem(world, 'potion');
     world.player.health = balance.player.healthMax - 5;
-    press(world, 1);
+    drink(world, 1);
     expect(world.player.health).toBe(balance.player.healthMax);
   });
 
@@ -227,7 +233,7 @@ describe('사용', () => {
     const denied: { reason: string }[] = [];
     world.events.on('item_denied', (p) => denied.push(p as { reason: string }));
 
-    press(world, 1);
+    drink(world, 1);
     expect(countOf(world, 'potion')).toBe(1); // 안 줄었다
     expect(denied[0]).toMatchObject({ reason: 'full' });
   });
@@ -241,25 +247,27 @@ describe('사용', () => {
     expect(isUseful(world, 'food')).toBe(true);
   });
 
-  it('공용 쿨다운 — 한 프레임에 들이붓지 못한다', () => {
+  it('공용 쿨다운 — 다 마시자마자 또 마시지 못한다', () => {
     for (let i = 0; i < 3; i++) addItem(world, 'potion');
     world.player.health = 1;
-    press(world, 1);
+    drink(world, 1);
     expect(countOf(world, 'potion')).toBe(2);
     expect(world.itemCooldown).toBe(CFG.useCooldownTicks);
 
     press(world, 1); // 곧바로 또 눌러도
-    expect(countOf(world, 'potion')).toBe(2); // 안 나간다
+    expect(world.itemChannel).toBeNull(); // 시전조차 시작되지 않는다
+    idle(world, CFG.channelTicks);
+    expect(countOf(world, 'potion')).toBe(2);
 
     idle(world, CFG.useCooldownTicks);
-    press(world, 1);
+    drink(world, 1);
     expect(countOf(world, 'potion')).toBe(1); // 쿨다운이 끝나면 다시 나간다
   });
 
   it('다 쓴 칸을 누르면 이유를 알려 준다', () => {
     addItem(world, 'potion');
     world.player.health = 1;
-    press(world, 1);
+    drink(world, 1);
     idle(world, CFG.useCooldownTicks);
 
     const denied: { reason: string }[] = [];
@@ -273,6 +281,95 @@ describe('사용', () => {
     world.input = { ...Input.emptySnapshot(), useSlot: 9 };
     expect(() => Items.tick(world, DT)).not.toThrow();
     expect(world.player.health).toBe(1);
+  });
+});
+
+describe('시전 시간', () => {
+  it('누른 즉시가 아니라 channelTicks 를 다 채워야 효과가 난다', () => {
+    addItem(world, 'potion');
+    world.player.health = 10;
+    press(world, 1);
+    expect(world.itemChannel).toMatchObject({ kind: 'potion', index: 0, total: CFG.channelTicks });
+
+    idle(world, CFG.channelTicks - 1);
+    expect(world.player.health).toBe(10); // 아직 안 마셨다
+    expect(countOf(world, 'potion')).toBe(1); // 아직 안 줄었다
+
+    idle(world, 1);
+    expect(world.itemChannel).toBeNull();
+    expect(world.player.health).toBe(10 + itemDef('potion').heal);
+    expect(countOf(world, 'potion')).toBe(0);
+  });
+
+  it('맞아서 굳으면 끊긴다 — 아이템은 그대로 남는다', () => {
+    addItem(world, 'potion');
+    world.player.health = 10;
+    const broken: unknown[] = [];
+    world.events.on('item_channel_broken', (p) => broken.push(p));
+
+    press(world, 1);
+    idle(world, 10);
+    world.player.stunTicks = 12; // 피격
+    idle(world, 1);
+
+    expect(world.itemChannel).toBeNull();
+    expect(broken).toHaveLength(1);
+    expect(countOf(world, 'potion')).toBe(1); // 잃은 것은 시간뿐
+    expect(world.itemCooldown).toBe(0); // 쿨다운도 안 걸린다
+  });
+
+  it('공격하면 끊긴다', () => {
+    addItem(world, 'potion');
+    world.player.health = 10;
+    press(world, 1);
+    idle(world, 5);
+    world.input = { ...Input.emptySnapshot(), rangedPressed: true };
+    Items.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(world.itemChannel).toBeNull();
+    expect(countOf(world, 'potion')).toBe(1);
+  });
+
+  it('회피해도 끊긴다', () => {
+    addItem(world, 'potion');
+    world.player.health = 10;
+    press(world, 1);
+    idle(world, 5);
+    world.player.dodgeTicks = 6;
+    idle(world, 1);
+    expect(world.itemChannel).toBeNull();
+  });
+
+  it('방패를 들고 있으면 아예 시작되지 않는다 — 가드를 내려야 마신다', () => {
+    addItem(world, 'potion');
+    world.player.health = 10;
+    world.player.blocking = true;
+    const denied: { reason: string }[] = [];
+    world.events.on('item_denied', (p) => denied.push(p as { reason: string }));
+
+    press(world, 1);
+    expect(world.itemChannel).toBeNull();
+    expect(denied[0]).toMatchObject({ reason: 'blocking' });
+  });
+
+  it('마시는 중에 또 누르면 무시된다 (겹쳐 마시지 않는다)', () => {
+    for (let i = 0; i < 2; i++) addItem(world, 'potion');
+    world.player.health = 10;
+    press(world, 1);
+    const denied: { reason: string }[] = [];
+    world.events.on('item_denied', (p) => denied.push(p as { reason: string }));
+    press(world, 1);
+    expect(denied[0]).toMatchObject({ reason: 'busy' });
+    expect(world.itemChannel!.ticks).toBeGreaterThan(0); // 처음 것이 계속 돈다
+  });
+
+  it('channelFrac 이 0→1 로 진행을 알려 준다', () => {
+    addItem(world, 'potion');
+    world.player.health = 10;
+    expect(Items.channelFrac(world)).toBe(0);
+    press(world, 1);
+    idle(world, Math.round(CFG.channelTicks / 2));
+    expect(Items.channelFrac(world)).toBeCloseTo(0.5, 1);
   });
 });
 

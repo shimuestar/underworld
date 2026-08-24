@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
+import { addItem, countOf, initInventory } from '../core/Inventory';
 import { World } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemies } from '../level/Spawner';
@@ -56,6 +57,7 @@ function pressInteract(world: World): void {
 let world: World;
 beforeEach(() => {
   world = makeWorld();
+  initInventory(world); // 상점의 물약은 가방으로 들어간다 — 칸이 없으면 살 수도 없다
 });
 
 /** 제단 옆(서쪽 1.2m)에 서서 제단(+X)을 바라본다 */
@@ -231,7 +233,9 @@ describe('제단 상점', () => {
   it('재입고 대기 거절은 골드·상한 거절보다 우선해 알려준다', () => {
     world.gold = 1000;
     world.player.health = 10;
-    expect(Altar.purchase(world, 'heal')).toBe(true);
+    for (let i = 0; i < shop.heal.stock; i++) {
+      expect(Altar.purchase(world, 'heal')).toBe(true); // 재고를 다 산다
+    }
     world.gold = 0; // 돈까지 없는 상태
     const denied: { reason: string }[] = [];
     world.events.on('shop_denied', (payload) => denied.push(payload as { reason: string }));
@@ -239,7 +243,7 @@ describe('제단 상점', () => {
     expect(denied[0]!.reason).toBe('cooldown');
   });
 
-  it('HP·마나·수류탄·배터리도 각각 산다', () => {
+  it('물약·수류탄·배터리도 각각 산다 — 물약은 회복이 아니라 가방으로', () => {
     world.gold = 1000;
     world.player.health = 40;
     world.mana.value = 10;
@@ -247,9 +251,11 @@ describe('제단 상점', () => {
     world.lantern.spares = 0;
 
     expect(Altar.purchase(world, 'heal')).toBe(true);
-    expect(world.player.health).toBe(40 + shop.heal.amount);
+    expect(countOf(world, 'potion')).toBe(shop.heal.amount);
+    expect(world.player.health).toBe(40); // 그 자리에서 낫지는 않는다
     expect(Altar.purchase(world, 'mana')).toBe(true);
-    expect(world.mana.value).toBe(10 + shop.mana.amount);
+    expect(countOf(world, 'mana')).toBe(shop.mana.amount);
+    expect(world.mana.value).toBe(10);
     expect(Altar.purchase(world, 'grenade')).toBe(true);
     expect(world.weapon.grenades).toBe(1 + shop.grenade.amount);
     expect(Altar.purchase(world, 'battery')).toBe(true);
@@ -270,13 +276,40 @@ describe('제단 상점', () => {
 
   it('이미 가득 차 있으면 거절 — 골드를 낭비하지 않는다', () => {
     world.gold = 1000;
-    world.player.health = balance.player.healthMax;
+    world.weapon.grenades = balance.weapons.grenade.ammoMax;
     const denied: { reason: string }[] = [];
     world.events.on('shop_denied', (payload) => denied.push(payload as { reason: string }));
 
-    expect(Altar.purchase(world, 'heal')).toBe(false);
+    expect(Altar.purchase(world, 'grenade')).toBe(false);
     expect(world.gold).toBe(1000);
     expect(denied[0]!.reason).toBe('full');
+  });
+
+  it('만피여도 물약은 산다 — 지금 낫자는 게 아니라 챙겨 두는 것이다', () => {
+    world.gold = 1000;
+    world.player.health = balance.player.healthMax;
+    world.mana.value = balance.mana.max;
+    expect(Altar.purchase(world, 'heal')).toBe(true);
+    expect(Altar.purchase(world, 'mana')).toBe(true);
+    expect(countOf(world, 'potion')).toBe(shop.heal.amount);
+    expect(countOf(world, 'mana')).toBe(shop.mana.amount);
+  });
+
+  it('가방이 가득이면 물약을 못 산다 — 여기서의 full 은 체력이 아니라 가방이다', () => {
+    world.gold = 1000;
+    world.player.health = 10;
+    const per = balance.items.stackMax;
+    const kinds = ['potion', 'mana', 'food'] as const;
+    for (let i = 0; i < world.inventory.length * per; i++) {
+      addItem(world, kinds[Math.floor(i / per) % kinds.length]!);
+    }
+    const denied: { reason: string }[] = [];
+    world.events.on('shop_denied', (payload) => denied.push(payload as { reason: string }));
+
+    expect(Altar.shopState(world, 'heal').full).toBe(true);
+    expect(Altar.purchase(world, 'heal')).toBe(false);
+    expect(denied[0]!.reason).toBe('full');
+    expect(world.gold).toBe(1000);
   });
 
   it('shopState 가 UI 표시용 보유량·상한·구매 가능 여부를 준다', () => {

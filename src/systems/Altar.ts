@@ -6,6 +6,7 @@
 //    되살리려면 git 이력의 aggressionMultiplier / enter()의 상한 SET 블록을 참조할 것.
 
 import { balance } from '../core/Balance';
+import { addItem, countOf, hasRoom } from '../core/Inventory';
 import type { World } from '../core/World';
 
 /** 제단 상점 품목 */
@@ -92,26 +93,36 @@ export interface ShopState {
   canBuy: boolean;
 }
 
+/** 한 종류만으로 가방을 채웠을 때의 상한 — 상점 표시에 쓰는 값 */
+function bagCap(): number {
+  return balance.items.cols * balance.items.rows * balance.items.stackMax;
+}
+
 export function shopState(world: World, item: ShopItem): ShopState {
   const shop = balance.altar.shop;
-  const p = world.player;
   const w = world.weapon;
   let price: number;
   let amount: number;
   let stockMax: number;
   let have: number;
   let max: number;
+  // 가방 품목은 '체력이 가득'이 아니라 '가방이 가득'으로 막힌다
+  let bagFull = false;
 
   switch (item) {
+    // 체력·마나는 즉시 회복이 아니라 물약을 판다 — 가방에 자리가 있어야 살 수 있다.
+    // '가득'의 뜻도 체력이 아니라 가방이다 (만피여도 챙겨 둘 수 있어야 한다)
     case 'heal':
       ({ price, amount, stock: stockMax } = shop.heal);
-      have = Math.round(p.health);
-      max = balance.player.healthMax;
+      have = countOf(world, 'potion');
+      max = bagCap();
+      bagFull = !hasRoom(world, 'potion');
       break;
     case 'mana':
       ({ price, amount, stock: stockMax } = shop.mana);
-      have = Math.round(world.mana.value);
-      max = balance.mana.max;
+      have = countOf(world, 'mana');
+      max = bagCap();
+      bagFull = !hasRoom(world, 'mana');
       break;
     case 'ammo':
       ({ price, amount, stock: stockMax } = shop.ammo);
@@ -135,7 +146,7 @@ export function shopState(world: World, item: ShopItem): ShopState {
   let stock = world.shopStock[item] ?? stockMax;
   if (stock <= 0 && world.tick >= readyTick) stock = stockMax;
 
-  const full = have >= max;
+  const full = bagFull || have >= max;
   const poor = world.gold < price;
   const cooldown = stock > 0 ? 0 : Math.max(0, readyTick - world.tick);
   return {
@@ -161,14 +172,13 @@ export function purchase(world: World, item: ShopItem): boolean {
   }
 
   world.gold -= state.price;
-  const p = world.player;
   const w = world.weapon;
   switch (item) {
     case 'heal':
-      p.health = Math.min(state.max, p.health + state.amount);
+      for (let i = 0; i < state.amount; i++) addItem(world, 'potion');
       break;
     case 'mana':
-      world.mana.value = Math.min(state.max, world.mana.value + state.amount);
+      for (let i = 0; i < state.amount; i++) addItem(world, 'mana');
       break;
     case 'ammo':
       w.reserve = Math.min(state.max, w.reserve + state.amount);

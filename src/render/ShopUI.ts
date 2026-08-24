@@ -4,9 +4,10 @@
 import type { World } from '../core/World';
 import * as Altar from '../systems/Altar';
 
-const ROWS: { item: Altar.ShopItem; name: string; unit: string }[] = [
-  { item: 'heal', name: '체력 회복', unit: 'HP' },
-  { item: 'mana', name: '마나 회복', unit: '마나' },
+// bag: 가방에 들어가는 품목 — 보유량을 "가방 N개"로 읽어 준다 (상한은 의미가 없다)
+const ROWS: { item: Altar.ShopItem; name: string; unit: string; bag?: boolean }[] = [
+  { item: 'heal', name: '체력 물약', unit: '개', bag: true },
+  { item: 'mana', name: '마나 물약', unit: '개', bag: true },
   { item: 'ammo', name: '권총탄', unit: '발' },
   { item: 'grenade', name: '수류탄', unit: '개' },
   { item: 'battery', name: '예비 배터리', unit: '개' },
@@ -108,7 +109,10 @@ export class ShopUI {
     panel.appendChild(title);
 
     const sub = document.createElement('div');
-    sub.textContent = `오염 ${world.corruption.applied}/100   여기서 죽으면 이 자리에서 다시 시작한다`;
+    sub.textContent =
+      `오염 ${world.corruption.applied}/100   여기서 죽으면 이 자리에서 다시 시작한다\n` +
+      `물약은 그 자리에서 마시는 게 아니라 가방에 담긴다 — 1~5 로 쓴다`;
+    sub.style.whiteSpace = 'pre';
     sub.style.cssText = 'color:#8a8f9a;margin-bottom:14px;';
     panel.appendChild(sub);
 
@@ -155,7 +159,7 @@ export class ShopUI {
       line.appendChild(gain);
 
       const have = document.createElement('span');
-      have.textContent = `${s.have}/${s.max}`;
+      have.textContent = row.bag ? `가방 ${s.have}개` : `${s.have}/${s.max}`;
       have.style.cssText = 'color:#8a8f9a;width:74px;';
       line.appendChild(have);
 

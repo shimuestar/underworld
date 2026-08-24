@@ -434,6 +434,10 @@ export class World {
   /** 소모품 공용 사용 쿨다운 — 한 프레임에 물약을 들이붓지 못하게 */
   itemCooldown = 0;
 
+  /** 마시는 중 — 끝까지 가야 효과가 난다. 끊기면 아이템은 소모되지 않는다.
+   *  PlayerMove 가 이걸 보고 걸음을 늦추고, 손 연출도 여기서 읽는다 */
+  itemChannel: { kind: ItemKind; index: number; ticks: number; total: number } | null = null;
+
   /** 보물상자 — Chest 가 연다 */
   chests: ChestState[] = [];
 

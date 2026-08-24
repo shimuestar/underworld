@@ -66,6 +66,7 @@ export function tick(world: World, dt: number): void {
   // 밀리는 동안은 발이 안 붙는다 — 밀림과 이동이 더해지는 구조라 배율로 눌러 준다
   if (shoved) speed *= balance.playerKnockback.moveSpeedMul;
   if (p.blocking) speed *= balance.block.speedMul; // 방어 중 감속 페널티
+  if (world.itemChannel) speed *= balance.items.channelMoveSpeedMul; // 마시는 중엔 못 뛴다
   world.level.slideMove(p, balance.player.radius, wx * speed * dt, wz * speed * dt);
   resolveEnemyOverlap(world);
 }

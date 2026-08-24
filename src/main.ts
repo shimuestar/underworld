@@ -6,7 +6,7 @@ import { DebugOverlay } from './render/DebugOverlay';
 import { Input } from './core/Input';
 import { Loop } from './core/Loop';
 import { World, type ItemKind } from './core/World';
-import { countOf, initInventory, itemDef } from './core/Inventory';
+import { countOf, initInventory, itemColor, itemDef } from './core/Inventory';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt } from './level/Spawner';
@@ -302,6 +302,8 @@ for (const name of [
   'item_picked',
   'item_gained',
   'item_used',
+  'item_channel_started',
+  'item_channel_broken',
   'item_denied',
   'item_dropped',
   'inventory_full',
@@ -667,12 +669,23 @@ const DENY_TEXT: Record<string, string> = {
   none: '다 썼다',
   full: '이미 가득 차 있다',
   cooldown: '아직 못 쓴다',
+  busy: '이미 마시는 중',
+  blocking: '방패를 내려야 마신다',
 };
 events.on('item_denied', (payload) => {
   const info = payload as { kind?: ItemKind; reason: string };
   if (info.reason === 'cooldown') return; // 연타는 조용히 무시 — 매번 뜨면 시끄럽다
   const name = info.kind ? itemDef(info.kind).name : '';
   showReaction(`${name ? name + ' — ' : ''}${DENY_TEXT[info.reason] ?? info.reason}`, 1100);
+});
+events.on('item_channel_started', (payload) => {
+  const kind = (payload as { kind: ItemKind }).kind;
+  audio.play('door_touch'); // 뚜껑을 여는 짧은 소리 — 문 만지는 소리를 같이 쓴다
+  showReaction(`${itemDef(kind).name}을 마신다…`, 1200);
+});
+events.on('item_channel_broken', (payload) => {
+  const kind = (payload as { kind: ItemKind }).kind;
+  showReaction(`${itemDef(kind).name} — 마시다 말았다`, 1200);
 });
 events.on('item_dropped', (payload) => {
   const info = payload as { kind: ItemKind; count: number };
@@ -803,6 +816,8 @@ function respawnAtAltar(): void {
   world.weapon.muzzleFlash = 0;
   world.weapon.grenades = balance.weapons.grenade.ammoMax; // 보급 상한
   world.weapon.meleeCooldown = 0;
+  world.itemChannel = null; // 마시다 죽었으면 거기서 끊는다 (아이템은 그대로 남는다)
+  world.itemCooldown = 0;
   world.mana.value = 0;
   world.mana.chainIndex = 0;
   world.mana.outOfCombatTicks = 0;
@@ -859,7 +874,7 @@ events.on('altar_entered', () => {
   setUiOpen(true);
 });
 const SHOP_LABEL: Record<string, string> = {
-  heal: '체력', mana: '마나', ammo: '권총탄', grenade: '수류탄', battery: '배터리',
+  heal: '체력 물약', mana: '마나 물약', ammo: '권총탄', grenade: '수류탄', battery: '배터리',
 };
 events.on('shop_purchased', (payload) => {
   const buy = payload as {
@@ -881,7 +896,7 @@ events.on('shop_denied', (payload) => {
     deny.reason === 'cooldown'
       ? `${label} — 재입고까지 ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
       : deny.reason === 'full'
-        ? `${label} — 이미 가득 찼다`
+        ? `${label} — ${deny.item === 'heal' || deny.item === 'mana' ? '가방이 가득 찼다' : '이미 가득 찼다'}`
         : `골드 부족 — ◆ ${deny.price} 필요`,
     1400,
   );
@@ -1093,6 +1108,8 @@ const quickCells = Array.from({ length: balance.items.quickslots }, (_, i) => {
 function syncQuickslots(): void {
   const view = quickslotView(world);
   const cdFrac = world.itemCooldown / balance.items.useCooldownTicks;
+  const channel = world.itemChannel;
+  const chFrac = Items.channelFrac(world);
   view.forEach((slot, i) => {
     const ui = quickCells[i]!;
     if (!slot.kind) {
@@ -1108,6 +1125,9 @@ function syncQuickslots(): void {
     ui.dot.style.background = slot.color;
     ui.dot.style.boxShadow = dim ? 'none' : `0 0 6px ${slot.color}`;
     ui.num.textContent = String(slot.count);
+    // 마시는 중인 칸 — 아래에서 위로 차오른다. 다 차야 효과가 난다는 걸 그대로 보여 준다
+    ui.cell.style.setProperty('--fill', channel?.index === i ? `${chFrac * 100}%` : '0%');
+    if (channel?.index === i) ui.cell.classList.add('drinking');
   });
   // 쿨다운 띠 — 칸마다 그리지 않고 첫 칸에만 (공용 쿨다운이라 하나면 충분하다)
   const bar = quickCells[0]!.cell;
@@ -1182,6 +1202,8 @@ function render(alpha: number): void {
     blocking: p.blocking,
     chargeFrac,
     doorFrac: Door.channelFrac(world),
+    drinkFrac: Items.channelFrac(world),
+    drinkColor: world.itemChannel ? itemColor(world.itemChannel.kind) : undefined,
     // 손에 직접 띄우는 수치 — 왼손 탄약 / 오른손 연타 단계
     ammoText:
       world.weapon.ranged === 'pistol'
