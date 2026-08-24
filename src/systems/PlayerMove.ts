@@ -67,6 +67,8 @@ export function tick(world: World, dt: number): void {
   if (shoved) speed *= balance.playerKnockback.moveSpeedMul;
   if (p.blocking) speed *= balance.block.speedMul; // 방어 중 감속 페널티
   if (world.itemChannel) speed *= balance.items.channelMoveSpeedMul; // 마시는 중엔 못 뛴다
+  // 시위를 당기는 동안 발이 무거워진다 (마시기와 같은 자리·같은 규약)
+  if ((world.weapon.bowDraw ?? 0) > 0) speed *= balance.weapons.bow.drawMoveSpeedMul;
   world.level.slideMove(p, balance.player.radius, wx * speed * dt, wz * speed * dt);
   resolveEnemyOverlap(world);
 }

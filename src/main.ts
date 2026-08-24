@@ -89,6 +89,8 @@ const world = new World(events, {
     reloading: 0,
     muzzleFlash: 0,
     grenades: balance.weapons.grenade.startCount,
+    arrows: balance.weapons.bow.startCount,
+    bowDraw: 0,
     meleeCooldown: 0,
     grenadeCharge: 0,
     comboStep: 0,
@@ -304,6 +306,11 @@ for (const name of [
   'item_picked',
   'item_gained',
   'item_used',
+  'arrow_loosed',
+  'arrow_impact',
+  'arrow_recovered',
+  'arrow_broken',
+  'quiver_full',
   'item_channel_started',
   'item_channel_broken',
   'item_denied',
@@ -721,6 +728,39 @@ events.on('inventory_full', () => {
   showReaction('가방이 가득 찼다 — Tab 에서 쓰거나 버려야 한다', 2000);
 });
 events.on('gold_picked', () => audio.play('pickup_gold'));
+// ---- 활 ----
+events.on('bow_draw_started', () => audio.play('reload_start'));
+events.on('arrow_impact', (payload) => {
+  const hit = payload as { x: number; y: number; z: number; hitEnemy: boolean };
+  audio.play(hit.hitEnemy ? 'hit_flesh' : 'hit_wall');
+});
+let quiverFullUntil = 0;
+events.on('quiver_full', () => {
+  // 화살 위에 서 있으면 매 틱 뜬다 — 가방 안내와 같은 간격으로 솎는다
+  if (performance.now() < quiverFullUntil) return;
+  quiverFullUntil = performance.now() + 2500;
+  showReaction('화살통이 가득 찼다', 1600);
+});
+events.on('arrow_loosed', (payload) => {
+  const shot = payload as { chargeFrac: number; damage: number; remaining: number };
+  audio.play('bow_twang');
+  stage.triggerRecoil();
+  // 풀차지일 때만 알린다 — 매 발 뜨면 잔소리가 된다
+  if (shot.chargeFrac >= 0.999) showReaction(`풀차지 ${Math.round(shot.damage)}`, 700);
+});
+let arrowPickUntil = 0;
+events.on('arrow_recovered', (payload) => {
+  audio.play('pickup_gold');
+  const info = payload as { arrows: number };
+  if (performance.now() < arrowPickUntil) return; // 여러 대를 한 번에 주우면 시끄럽다
+  arrowPickUntil = performance.now() + 500;
+  showReaction(`화살 회수 (${info.arrows})`, 800);
+});
+events.on('arrow_broken', () => {
+  if (performance.now() < arrowPickUntil) return;
+  arrowPickUntil = performance.now() + 500;
+  showReaction('화살이 부러졌다', 900);
+});
 const PARRY_SPARK_COLOR = 0xbfe0ff; // 패링은 청백색 (텔레그래프 청색 계열)
 events.on('guard_clash', (payload) => {
   const c = payload as { kind: string; x: number; z: number };
@@ -838,6 +878,8 @@ function respawnAtAltar(): void {
   world.weapon.reloading = 0;
   world.weapon.muzzleFlash = 0;
   world.weapon.grenades = balance.weapons.grenade.ammoMax; // 보급 상한
+  world.weapon.arrows = balance.weapons.bow.ammoMax;
+  world.weapon.bowDraw = 0;
   world.weapon.meleeCooldown = 0;
   world.itemChannel = null; // 마시다 죽었으면 거기서 끊는다 (아이템은 그대로 남는다)
   world.itemCooldown = 0;
@@ -897,7 +939,8 @@ events.on('altar_entered', () => {
   setUiOpen(true);
 });
 const SHOP_LABEL: Record<string, string> = {
-  heal: '체력 물약', mana: '마나 물약', ammo: '권총탄', grenade: '수류탄', battery: '배터리',
+  heal: '체력 물약', mana: '마나 물약', ammo: '권총탄', arrow: '화살',
+  grenade: '수류탄', battery: '배터리',
 };
 events.on('shop_purchased', (payload) => {
   const buy = payload as {
@@ -1066,7 +1109,7 @@ function simulate(dt: number): void {
 /** 무적 중 되돌릴 자원 — 골드·경험치는 제외한다 (상점을 시험할 수 없게 된다) */
 function snapshotResources(): {
   health: number; mana: number; mag: number; reserve: number; grenades: number;
-  battery: number; spares: number; stamina: number; exhausted: boolean;
+  arrows: number; battery: number; spares: number; stamina: number; exhausted: boolean;
 } {
   return {
     health: world.player.health,
@@ -1074,6 +1117,7 @@ function snapshotResources(): {
     mag: world.weapon.mag,
     reserve: world.weapon.reserve,
     grenades: world.weapon.grenades,
+    arrows: world.weapon.arrows ?? 0,
     battery: world.lantern.battery,
     spares: world.lantern.spares,
     stamina: world.stamina.value,
@@ -1087,6 +1131,7 @@ function restoreResources(keep: ReturnType<typeof snapshotResources>): void {
   world.weapon.mag = keep.mag;
   world.weapon.reserve = keep.reserve;
   world.weapon.grenades = keep.grenades;
+  world.weapon.arrows = keep.arrows;
   world.lantern.battery = keep.battery;
   world.lantern.spares = keep.spares;
   world.stamina.value = keep.stamina;
@@ -1241,6 +1286,12 @@ function render(alpha: number): void {
     world.weapon.ranged === 'grenade' && world.weapon.grenadeCharge > 0
       ? world.weapon.grenadeCharge / balance.weapons.grenade.maxChargeTicks
       : 0;
+  // 활 당김은 chargeFrac 과 따로 둔다 — 화살은 직선이라 투척 궤적을 띄우면 안 되고,
+  // 궤적 미리보기가 chargeFrac 을 보고 그려진다
+  const bowDrawFrac =
+    world.weapon.ranged === 'bow'
+      ? (world.weapon.bowDraw ?? 0) / balance.weapons.bow.maxDrawTicks
+      : 0;
   // 왼손에 든 원거리 무기 (오른손 해머는 항상 보인다)
   stage.setHandWeapon(world.weapon.ranged);
   stage.updateHands({
@@ -1248,6 +1299,7 @@ function render(alpha: number): void {
     stunned: p.stunTicks > 0,
     blocking: p.blocking,
     chargeFrac,
+    bowDrawFrac,
     doorFrac: Door.channelFrac(world),
     drinkFrac: Items.channelFrac(world),
     drinkColor: world.itemChannel ? itemColor(world.itemChannel.kind) : undefined,
@@ -1257,7 +1309,9 @@ function render(alpha: number): void {
         ? world.weapon.reloading > 0
           ? '↻'
           : String(world.weapon.mag)
-        : String(world.weapon.grenades),
+        : world.weapon.ranged === 'bow'
+          ? String(world.weapon.arrows ?? 0)
+          : String(world.weapon.grenades),
   });
 
   // 수류탄 차징 궤적 미리보기 — 실제 투척 물리와 동일한 시뮬레이션
@@ -1323,10 +1377,16 @@ function render(alpha: number): void {
   document.getElementById('status-gold')!.textContent = `◆ ${world.gold}   XP ${world.xp}`;
   syncQuickslots();
   // 원거리(좌클릭) / 근접(우클릭) 두 슬롯. 원거리는 휠로 교체
+  const bowDraw = wpn.bowDraw ?? 0;
+  const drawPips = bowDraw > 0
+    ? `  ${'▮'.repeat(Math.round((bowDraw / balance.weapons.bow.maxDrawTicks) * 6)).padEnd(6, '▯')}`
+    : '';
   document.getElementById('slot-ranged')!.textContent =
     wpn.ranged === 'pistol'
       ? `LMB 권총 ${wpn.mag}/${wpn.reserve}${wpn.reloading > 0 ? ' …' : ''}`
-      : `LMB 수류탄 ×${wpn.grenades}`;
+      : wpn.ranged === 'bow'
+        ? `LMB 활 ×${wpn.arrows ?? 0}${drawPips}`
+        : `LMB 수류탄 ×${wpn.grenades}`;
   // 연속타 단계 — 다음 타가 강타면 눈에 띄게 표시
   const step = wpn.comboTimer > 0 ? wpn.comboStep : 0;
   const finisher = balance.weapons.hammer.combo.finisherStep;

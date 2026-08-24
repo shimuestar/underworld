@@ -249,6 +249,26 @@
       "pierceBarrier": false,
       "muzzleFlash": { "intensity": 2.4, "radiusMul": 0.5, "ticks": 2 }
     },
+    "bow": {
+      "_comment": "활 — 당겨 쏘는 투사체 무기. 권총(22)보다 최대 피해는 높지만 당기는 시간이 든다. 쏜 화살은 벽·적에게서 주워 다시 쓴다 — 대신 회수할 때 recoverChance 로 부러진다. 권총은 돈이 드는 화력, 활은 손이 드는 화력",
+      "ammoMax": 40,
+      "startCount": 12,
+      "_drawNote": "maxDrawTicks 까지 당길수록 빠르고 아프다. minDrawTicks 보다 짧게 떼면 아예 안 나간다 — 스쳐 누른 클릭으로 화살을 버리지 않게",
+      "maxDrawTicks": 36,
+      "minDrawTicks": 8,
+      "damageMin": 18,
+      "damageMax": 45,
+      "speedMin": 30,
+      "speedMax": 55,
+      "radius": 0.15,
+      "lifeTicks": 240,
+      "cooldownTicks": 20,
+      "drawMoveSpeedMul": 0.55,
+      "_noiseNote": "권총(12.0)보다 훨씬 조용한 것이 활의 값이다 — 한 마리씩 조용히 걷어내는 무기",
+      "noiseRadius": 4.0,
+      "_recoverNote": "회수할 때 이 확률로 살아남는다. 1.0 이면 화살이 무한 순환해 제단에서 살 이유가 사라진다",
+      "recoverChance": 0.75
+    },
     "grenade": {
       "ammoMax": 4,
       "startCount": 3,
@@ -316,6 +336,14 @@
     "food": {
       "dropChance": 0.15,
       "magnetRadius": 3.2
+    },
+    "_arrowNote": "회수 화살 — 다른 바닥 아이템과 같은 자리에 둔다. Pickups 가 무기(weapons.bow) 설정을 읽지 않게 하기 위한 것. stickPullback 은 벽에 꽂힌 화살을 날아온 방향으로 물려 놓는 거리 (벽면에 딱 붙으면 자석이 벽 안쪽을 향한다)",
+    "arrow": {
+      "magnetRadius": 3.2,
+      "restHeight": 0.18,
+      "stickPullback": 0.26,
+      "scatterRadius": 0.45,
+      "noMagnetTicks": 20
     },
     "gold": {
       "dropChance": 0.65,
@@ -396,7 +424,9 @@
       "mana": { "price": 15, "amount": 1, "stock": 3 },
       "ammo": { "price": 12, "amount": 20, "stock": 3 },
       "grenade": { "price": 25, "amount": 1, "stock": 2 },
-      "battery": { "price": 20, "amount": 1, "stock": 1, "sparesMax": 4 }
+      "battery": { "price": 20, "amount": 1, "stock": 1, "sparesMax": 4 },
+      "_arrowNote": "화살은 주워 쓰는 자원이라 권총탄보다 싸되 재고를 적게 둔다 — 회수를 못 한 채 급할 때만 사는 자리",
+      "arrow": { "price": 10, "amount": 8, "stock": 2 }
     }
   },
 

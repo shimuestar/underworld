@@ -105,6 +105,8 @@ export class HandModel {
   private flask!: THREE.Mesh;
   private flaskCork!: THREE.Mesh;
   private readonly grenadeParts: THREE.Mesh[] = [];
+  private readonly bowParts: THREE.Mesh[] = [];
+  private nockedArrow!: THREE.Mesh;
   private swingUntil = 0;
   private swingStart = 0;
   private swingIndex = 0;
@@ -186,6 +188,28 @@ export class HandModel {
     this.gunParts.push(grip);
     this.leftArm.add(grip);
 
+    // 활 — 손잡이(riser) + 위아래 림 + 시위. 적 궁수의 활과 같은 나무색이라
+    // "저놈이 든 것과 같은 물건"으로 읽힌다
+    const bowWood = 0x5c4426;
+    const riser = box(0.03, 0.16, 0.035, bowWood);
+    riser.position.set(0, 0.02, -0.13);
+    const limbUp = box(0.026, 0.2, 0.03, bowWood);
+    limbUp.position.set(0, 0.15, -0.14);
+    limbUp.rotation.x = -0.22;
+    const limbDown = box(0.026, 0.2, 0.03, bowWood);
+    limbDown.position.set(0, -0.11, -0.14);
+    limbDown.rotation.x = 0.22;
+    const string = box(0.006, 0.44, 0.006, 0xd8d2c4);
+    string.position.set(0, 0.02, -0.1);
+    this.bowParts.push(riser, limbUp, limbDown, string);
+    for (const mesh of this.bowParts) this.leftArm.add(mesh);
+    // 시위에 물린 화살 — 당기는 동안 뒤로 끌린다
+    const nocked = box(0.018, 0.018, 0.5, 0x6b5233);
+    nocked.position.set(0, 0.02, -0.2);
+    this.nockedArrow = nocked;
+    this.bowParts.push(nocked);
+    this.leftArm.add(nocked);
+
     const grenadeBall = new THREE.Mesh(
       new THREE.SphereGeometry(0.05, 8, 8),
       new THREE.MeshLambertMaterial({ color: 0x3d4a2e }),
@@ -252,9 +276,12 @@ export class HandModel {
   }
 
   /** 왼손에 든 원거리 무기 교체 (해머는 항상 오른손에 있다) */
-  setWeapon(kind: 'hammer' | 'grenade' | 'pistol'): void {
-    for (const mesh of this.gunParts) mesh.visible = kind !== 'grenade';
+  setWeapon(kind: 'hammer' | 'grenade' | 'pistol' | 'bow'): void {
+    // 셋 다 명시적으로 끈다 — 예전처럼 `!== 'grenade'` 로 두면 활을 들어도
+    // 권총이 화면에 남는다
+    for (const mesh of this.gunParts) mesh.visible = kind === 'pistol' || kind === 'hammer';
     for (const mesh of this.grenadeParts) mesh.visible = kind === 'grenade';
+    for (const mesh of this.bowParts) mesh.visible = kind === 'bow';
   }
 
   /** step: 1·2·3 연속타 단계. 직전 타의 끝 자세에서 그대로 이어진다.
@@ -319,6 +346,8 @@ export class HandModel {
     chargeFrac?: number;
     /** 문 잠금을 푸는 중 진행률 0~1 — 0 이면 손을 대지 않은 상태 */
     doorFrac?: number;
+    /** 활 시위를 당긴 정도 0~1 */
+    bowDrawFrac?: number;
     /** 소모품을 마시는 중 진행률 0~1 — 0 이면 안 마시는 중 */
     drinkFrac?: number;
     /** 마시는 아이템 색 (0xrrggbb) */
@@ -547,6 +576,10 @@ export class HandModel {
     // 수류탄 — 차징 중엔 뒤로 당기고, 투척 시 앞으로 밀기
     gunZ += 0.14 * (state.chargeFrac ?? 0);
     gunRot -= 0.35 * (state.chargeFrac ?? 0);
+    // 활 당김 — 활 자체는 앞으로 밀고 시위에 물린 화살만 뒤로 끌어 "당긴다"를 만든다
+    const bowFrac = state.bowDrawFrac ?? 0;
+    if (this.nockedArrow.visible) this.nockedArrow.position.z = -0.2 + bowFrac * 0.17;
+    gunZ -= 0.05 * bowFrac;
     if (now < this.throwUntil) {
       const t = 1 - (this.throwUntil - now) / 240;
       gunZ -= 0.2 * Math.sin(t * Math.PI);

@@ -10,9 +10,9 @@ import { addItem, countOf, hasRoom } from '../core/Inventory';
 import type { World } from '../core/World';
 
 /** 제단 상점 품목 */
-export type ShopItem = 'heal' | 'mana' | 'ammo' | 'grenade' | 'battery';
+export type ShopItem = 'heal' | 'mana' | 'ammo' | 'arrow' | 'grenade' | 'battery';
 
-export const SHOP_ITEMS: ShopItem[] = ['heal', 'mana', 'ammo', 'grenade', 'battery'];
+export const SHOP_ITEMS: ShopItem[] = ['heal', 'mana', 'ammo', 'arrow', 'grenade', 'battery'];
 
 export function tick(world: World, _dt: number): void {
   const altar = world.level.altarPos;
@@ -129,6 +129,12 @@ export function shopState(world: World, item: ShopItem): ShopState {
       have = w.reserve;
       max = balance.weapons.pistol.ammoMax;
       break;
+    // 화살은 주워 쓰는 자원이라 가방이 아니라 무기 탄약이다 — 권총탄과 같은 분기
+    case 'arrow':
+      ({ price, amount, stock: stockMax } = shop.arrow);
+      have = world.weapon.arrows ?? 0;
+      max = balance.weapons.bow.ammoMax;
+      break;
     case 'grenade':
       ({ price, amount, stock: stockMax } = shop.grenade);
       have = w.grenades;
@@ -182,6 +188,9 @@ export function purchase(world: World, item: ShopItem): boolean {
       break;
     case 'ammo':
       w.reserve = Math.min(state.max, w.reserve + state.amount);
+      break;
+    case 'arrow':
+      w.arrows = Math.min(state.max, (w.arrows ?? 0) + state.amount);
       break;
     case 'grenade':
       w.grenades = Math.min(state.max, w.grenades + state.amount);

@@ -143,6 +143,8 @@ const MUZZLE_OFFSET = { x: -0.17, y: -0.1, z: -0.72 }; // 카메라 로컬: 왼�
 // 적 부속물 색
 /** 벽 잔존물 수명 — 화살은 좀 더 오래 남는다 (눈에 띄는 물건이라). 끝 DECAL_FADE_MS 동안 옅어진다 */
 const STUCK_ARROW_MS = 14000;
+/** 바닥에 눕힌 회수 화살의 높이 (시각 상수 — 줍는 판정은 Pickups 가 따로 본다) */
+const GROUND_ARROW_Y = 0.1;
 const BULLET_MARK_MS = 10000;
 const DECAL_FADE_MS = 2000;
 
@@ -501,7 +503,7 @@ export class Stage {
     this.hands.triggerRecoil();
   }
 
-  setHandWeapon(kind: 'hammer' | 'grenade' | 'pistol'): void {
+  setHandWeapon(kind: 'hammer' | 'grenade' | 'pistol' | 'bow'): void {
     this.hands.setWeapon(kind);
   }
 
@@ -571,6 +573,8 @@ export class Stage {
     chargeFrac?: number;
     /** 문 잠금을 푸는 중 진행률 0~1 — 0 이면 손을 대지 않은 상태 */
     doorFrac?: number;
+    /** 활 시위를 당긴 정도 0~1 */
+    bowDrawFrac?: number;
     /** 소모품을 마시는 중 진행률 0~1 과 그 아이템 색 */
     drinkFrac?: number;
     drinkColor?: number;
@@ -2070,6 +2074,31 @@ export class Stage {
       body.add(neck);
       group.add(body);
       group.add(new THREE.PointLight(color, 0.8, 4.5, 0));
+    } else if (kind === 'arrow') {
+      // 회수 화살 — 날아가던 화살과 같은 실루엣(샤프트 + 회색 촉)이라
+      // "저기 내가 쏜 것"이 바로 읽힌다. 바닥에 눕혀 둔다
+      const piece = new THREE.Group();
+      piece.name = 'gem';
+      const shaft = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04, 0.04, 0.62),
+        new THREE.MeshLambertMaterial({ color: 0x6b5233 }),
+      );
+      piece.add(shaft);
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, 0.07, 0.12),
+        new THREE.MeshLambertMaterial({
+          color: 0xb9c0c9,
+          emissive: 0xb9c0c9,
+          emissiveIntensity: 0.35,
+        }),
+      );
+      head.position.z = -0.35;
+      piece.add(head);
+      // 샤프트는 이미 로컬 Z(수평)로 뻗어 있다 — 여기서 X 로 90도 돌리면
+      // 오히려 세워져 바닥을 뚫는다 (실측: 높이 0.46m, 바닥 아래 -0.09m).
+      // 눕힌 채로 두고 syncGroundItems 의 Y 회전만 받는다
+      group.add(piece);
+      group.add(new THREE.PointLight(0xb9c0c9, 0.35, 3.0, 0));
     } else if (kind === 'food') {
       // 음식 — 약병과 헷갈리지 않게 뼈다귀 고기. 뼈가 살점을 관통해 한 덩어리로 보인다.
       // 회전·축소는 'gem' 그룹에만 걸린다 — 살점의 납작한 비율(scale)이 뼈까지
@@ -2183,12 +2212,19 @@ export class Stage {
         this.scene.add(group);
       }
       // 자석에 걸리면 로직이 계산한 높이(item.y)로 날아간다. 아니면 제자리 부유
+      // 골드·화살은 바닥에 놓인 물건이라 떠서 흔들리지 않는다.
+      // 화살은 눕혀 둔 것이라 물약처럼 가슴 높이에서 까딱거리면 안 된다
+      const grounded = item.kind === 'gold' || item.kind === 'arrow';
       const bob =
-        item.y ?? (item.kind === 'gold' ? 0.12 : 0.55 + Math.sin(now / 400 + item.id) * 0.1);
+        item.y ??
+        (grounded ? (item.kind === 'gold' ? 0.12 : GROUND_ARROW_Y)
+                  : 0.55 + Math.sin(now / 400 + item.id) * 0.1);
       group.position.set(item.x, bob, item.z);
       const gem = group.getObjectByName('gem');
       // 빨려드는 동안은 빠르게 회전하고 살짝 작아진다 (몸으로 들어가는 느낌)
-      if (gem) gem.rotation.y = now / (item.magnet ? 90 : item.kind === 'gold' ? 1400 : 700);
+      // 화살도 골드처럼 아주 느리게만 돈다 — 빙글빙글 돌면 주울 물건이 아니라
+      // 장식으로 보인다
+      if (gem) gem.rotation.y = now / (item.magnet ? 90 : grounded ? 1400 : 700);
       const shrink = item.magnet ? 0.78 : 1;
       group.scale.setScalar(group.scale.x + (shrink - group.scale.x) * 0.25);
     }

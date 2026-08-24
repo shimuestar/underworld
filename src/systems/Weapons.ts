@@ -14,6 +14,14 @@ import { alertEnemy,
   type World,
 } from '../core/World';
 
+/** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
+ *  활을 넣으면서 실제로 방패·경직·무기 교체 세 곳이 bowDraw 를 안 지워
+ *  "방패를 들면 시위가 영영 당겨진 채 남는" 상태가 됐다 */
+function cancelRangedCharge(w: World['weapon']): void {
+  w.grenadeCharge = 0;
+  w.bowDraw = 0;
+}
+
 export function tick(world: World, _dt: number): void {
   const w = world.weapon;
   const pistol = balance.weapons.pistol;
@@ -51,7 +59,7 @@ export function tick(world: World, _dt: number): void {
     if (next !== w.ranged) {
       w.ranged = next;
       w.reloading = 0;
-      w.grenadeCharge = 0;
+      cancelRangedCharge(w);
       world.events.emit('weapon_switched', { weapon: next, slot: 'ranged' });
     }
   }
@@ -59,6 +67,7 @@ export function tick(world: World, _dt: number): void {
   // 경직/회피 대시 중에는 아무것도 못 한다 (기억해 둔 입력도 버린다)
   if (world.player.stunTicks > 0 || world.player.dodgeTicks > 0) {
     w.meleeBufferTicks = 0;
+    cancelRangedCharge(w);
     return;
   }
 
@@ -69,7 +78,7 @@ export function tick(world: World, _dt: number): void {
   if (wantsMelee && w.meleeCooldown <= 0 && w.swingImpact === 0) {
     w.meleeBufferTicks = 0;
     startHammerSwing(world);
-    w.grenadeCharge = 0; // 근접을 섞으면 차징은 끊긴다
+    cancelRangedCharge(w); // 근접을 섞으면 차징은 끊긴다
     return;
   }
   if (world.input.meleePressed) {
@@ -78,10 +87,13 @@ export function tick(world: World, _dt: number): void {
 
   // 원거리(좌클릭)는 왼손 = 방패 손이라 방어 중에는 쓸 수 없다
   if (world.player.blocking) {
-    w.grenadeCharge = 0;
+    cancelRangedCharge(w);
     return;
   }
 
+  // 재장전은 권총만 한다. 이 블록이 무기 분기보다 앞에 있어서, 가드가 없으면
+  // 활로 바꾼 뒤에도 남아 있던 장전이 끝나며 권총 탄창을 채운다
+  if (w.reloading > 0 && w.ranged !== 'pistol') w.reloading = 0;
   if (w.reloading > 0) {
     w.reloading--;
     if (w.reloading === 0) {
@@ -112,6 +124,14 @@ export function tick(world: World, _dt: number): void {
       throwGrenade(world, w.grenadeCharge / grenade.maxChargeTicks);
       w.grenadeCharge = 0;
     }
+    return;
+  }
+
+  // ---- 활 ----
+  // 이 분기가 없으면 활이 아래 권총 코드로 흘러내려 탄창을 소모하며 총을 쏜다.
+  // 유니온에 'bow' 를 넣어도 TypeScript 는 이 fall-through 를 잡아주지 않는다
+  if (w.ranged === 'bow') {
+    drawBow(world);
     return;
   }
 
@@ -404,6 +424,81 @@ export function grenadeThrowSpeed(chargeFrac: number): number {
     grenade.throwSpeedMin +
     (grenade.throwSpeedMax - grenade.throwSpeedMin) * Math.min(1, Math.max(0, chargeFrac))
   );
+}
+
+/** 활 — 시위를 당겼다 놓는다. 오래 당길수록 빠르고 아프다.
+ *  짧게 스친 클릭으로 화살을 버리지 않게 minDrawTicks 아래는 아예 안 나간다 */
+function drawBow(world: World): void {
+  const w = world.weapon;
+  const bow = balance.weapons.bow;
+  const arrows = w.arrows ?? 0;
+
+  if (arrows <= 0) {
+    if (world.input.rangedPressed) world.events.emit('weapon_empty', { weapon: 'bow' });
+    w.bowDraw = 0;
+    return;
+  }
+  if (w.cooldown > 0) {
+    w.bowDraw = 0;
+    return;
+  }
+
+  const draw = w.bowDraw ?? 0;
+  if (world.input.rangedHeld) {
+    w.bowDraw = Math.min(draw + 1, bow.maxDrawTicks);
+    if (draw === 0) world.events.emit('bow_draw_started', {});
+    return;
+  }
+  if (draw <= 0) return;
+
+  w.bowDraw = 0;
+  // 덜 당기고 놓았다 — 화살은 그대로 있고 시위만 풀린다
+  if (draw < bow.minDrawTicks) {
+    world.events.emit('bow_draw_released', { charged: false });
+    return;
+  }
+  // 당김 비율은 "쏠 수 있게 된 지점"부터 센다. draw/maxDrawTicks 로 재면
+  // 최소 당김(8/36)이 이미 0.22 라 damageMin(18)이 영영 안 나온다 — 두 값이
+  // 따로 놀지 않게 minDrawTicks~maxDrawTicks 구간을 0~1 로 편다
+  loose(world, (draw - bow.minDrawTicks) / (bow.maxDrawTicks - bow.minDrawTicks));
+}
+
+/** 화살을 놓는다 — 중력을 받지 않는 직선 투사체. 명중·관통 판정은 Projectiles가 한다 */
+function loose(world: World, chargeFrac: number): void {
+  const w = world.weapon;
+  const bow = balance.weapons.bow;
+  const p = world.player;
+  const frac = Math.min(1, Math.max(0, chargeFrac));
+
+  w.arrows = (w.arrows ?? 0) - 1;
+  w.cooldown = bow.cooldownTicks;
+
+  const speed = bow.speedMin + (bow.speedMax - bow.speedMin) * frac;
+  const damage = bow.damageMin + (bow.damageMax - bow.damageMin) * frac;
+  const cosPitch = Math.cos(p.pitch);
+  const dx = -Math.sin(p.yaw) * cosPitch;
+  const dy = Math.sin(p.pitch);
+  const dz = -Math.cos(p.yaw) * cosPitch;
+  const oy = p.y + balance.player.eyeHeight;
+
+  world.projectiles.push({
+    id: 300000 + world.tick, // 활 화살 id 대역 (화염구 1~ / 적 100000~ / 수류탄 200000~)
+    owner: 'player',
+    kind: 'arrow',
+    recoverable: true, // 꽂히거나 맞으면 주울 수 있게 남는다
+    x: p.x, y: oy, z: p.z,
+    prevX: p.x, prevY: oy, prevZ: p.z,
+    vx: dx * speed, vy: dy * speed, vz: dz * speed,
+    lifeTicks: bow.lifeTicks,
+    damage,
+    burnTicks: 0,
+    burnDamagePerTick: 0,
+    radius: bow.radius,
+  });
+
+  // 활은 조용하다 — 총성(12m)과 달리 바로 옆만 깬다
+  alertNearby(world, p.x, p.z, bow.noiseRadius);
+  world.events.emit('arrow_loosed', { chargeFrac: frac, damage, remaining: w.arrows });
 }
 
 /** 수류탄 — 포물선 투척 (차징 비율만큼 멀리). 폭발은 Projectiles가 처리 */

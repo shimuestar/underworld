@@ -103,6 +103,9 @@ export interface ProjectileState {
   appliesWeb?: boolean;
   /** 플레이어 투사체로 공중에서 부술 수 있다 (족장이 던진 바위) */
   breakable?: boolean;
+  /** 회수 가능한 내 화살 — 꽂히거나 적을 맞히면 바닥 아이템으로 남는다.
+   *  적 궁수의 화살은 이 표식이 없어 렌더 잔존물로만 남는다 */
+  recoverable?: boolean;
 }
 
 export interface SpellState {
@@ -204,7 +207,7 @@ export interface InventorySlot {
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
-  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold';
+  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow';
   x: number;
   z: number;
   /** kind==='sigil' 일 때만 */
@@ -236,10 +239,10 @@ export interface LanternState {
 }
 
 export type MeleeWeaponKind = 'hammer';
-export type RangedWeaponKind = 'pistol' | 'grenade';
+export type RangedWeaponKind = 'pistol' | 'grenade' | 'bow';
 export type WeaponKind = MeleeWeaponKind | RangedWeaponKind;
 /** 원거리 슬롯 교체 순서 (휠) */
-export const RANGED_WEAPONS: RangedWeaponKind[] = ['pistol', 'grenade'];
+export const RANGED_WEAPONS: RangedWeaponKind[] = ['pistol', 'bow', 'grenade'];
 
 export interface WeaponState {
   /** 장착한 근접 무기 (우클릭) */
@@ -258,6 +261,11 @@ export interface WeaponState {
   muzzleFlash: number;
   /** 수류탄 소지 수 (소모성) */
   grenades: number;
+  /** 화살 소지 수 (상한 balance.weapons.bow.ammoMax).
+   *  가방(ItemKind)이 아니라 무기 탄약이다 — 권총 reserve 와 같은 자리 */
+  arrows?: number;
+  /** 시위를 당긴 틱 (0 = 안 당김). maxDrawTicks 에서 최대 */
+  bowDraw?: number;
   /** 해머/수류탄 공용 스윙 쿨다운 */
   meleeCooldown: number;
   /** 후딜 중에 눌린 근접 입력을 기억하는 남은 틱 — 풀리는 즉시 이어 친다 */

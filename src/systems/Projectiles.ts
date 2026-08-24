@@ -7,6 +7,7 @@ import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef } from '../core/SigilData';
 import { type EnemyState, pushEnemy, alertEnemy,
+  hitBarrel,
   igniteBarrel,
   playerBlocks,
   pushPlayer,
@@ -265,36 +266,54 @@ function moveProjectiles(world: World, dt: number): void {
       }
       // 폭발통에 꽂혔다 — 마법·화염구는 즉발이다 (총·해머의 누적 규칙과 다르다)
       if (hitBarrelTarget) {
-        igniteBarrel(hitBarrelTarget);
-        world.events.emit('spell_impact', {
-          x: proj.x + dirX * hitT,
-          y: proj.y + dirY * hitT,
-          z: proj.z + dirZ * hitT,
-          hitEnemy: true,
-        });
+        const bx = proj.x + dirX * hitT;
+        const by = proj.y + dirY * hitT;
+        const bz = proj.z + dirZ * hitT;
+        if (proj.kind === 'arrow') {
+          // 화살은 운동 에너지다 — 총알·해머와 같은 규약으로 도화선만 짧아진다.
+          // 즉발로 두면 조용한 활이 시끄러운 권총(3발)보다 나아져 역할이 무너진다
+          hitBarrel(hitBarrelTarget, balance.barrel.fuseByHits);
+          world.events.emit('barrel_hit', {
+            id: hitBarrelTarget.id,
+            hits: hitBarrelTarget.hits,
+            fuseTicks: hitBarrelTarget.fuseTicks,
+            x: hitBarrelTarget.x,
+            z: hitBarrelTarget.z,
+          });
+          world.events.emit('arrow_impact', { x: bx, y: by, z: bz, hitEnemy: true });
+          if (proj.recoverable) dropArrow(world, bx, bz, true);
+        } else {
+          igniteBarrel(hitBarrelTarget);
+          world.events.emit('spell_impact', { x: bx, y: by, z: bz, hitEnemy: true });
+        }
         world.projectiles.splice(i, 1);
         continue;
       }
 
-      // 착탄
-      world.events.emit('spell_impact', {
+      // 착탄 — 화살은 마법 착탄음(spell_impact)이 아니라 제 소리를 낸다.
+      // 이 갈래가 없으면 적 궁수의 화살까지 무음이 된다
+      const impact = {
         x: proj.x + dirX * hitT,
         y: proj.y + dirY * hitT,
         z: proj.z + dirZ * hitT,
-        // 허공이 아니라 무언가에 닿았다 — 착탄 연출이 붙어야 한다
         hitEnemy: hitEnemy !== null || hitPlayer || hitProjectile !== null,
-      });
+      };
+      // 허공이 아니라 무언가에 닿았다 — 착탄 연출이 붙어야 한다
+      world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', impact);
 
-      // 화살은 벽·바닥에 꽂힌 채 남는다 (렌더 전용 잔존물)
+      // 화살은 벽·바닥에 꽂힌 채 남는다 (렌더 전용 잔존물 — 적 화살도 포함)
       if (proj.kind === 'arrow' && !hitEnemy && !hitPlayer) {
-        world.events.emit('arrow_stuck', {
-          x: proj.x + dirX * hitT,
-          y: proj.y + dirY * hitT,
-          z: proj.z + dirZ * hitT,
-          dx: dirX,
-          dy: dirY,
-          dz: dirZ,
-        });
+        const sx = proj.x + dirX * hitT;
+        const sy = proj.y + dirY * hitT;
+        const sz = proj.z + dirZ * hitT;
+        if (proj.recoverable) {
+          // 주울 수 있는 화살은 바닥 아이템이 진짜 물건이다 — 데칼까지 그리면
+          // 벽에 꽂힌 화살과 그 앞에 떨어진 화살이 겹쳐 두 대로 보인다.
+          // 벽면에 딱 붙여 두면 자석이 벽 안쪽을 향하므로 날아온 방향으로 물려 놓는다
+          dropArrow(world, sx - dirX * balance.pickups.arrow.stickPullback, sz - dirZ * balance.pickups.arrow.stickPullback);
+        } else {
+          world.events.emit('arrow_stuck', { x: sx, y: sy, z: sz, dx: dirX, dy: dirY, dz: dirZ });
+        }
       }
 
       // 방패 판정은 폭발보다 먼저 확정한다 — 폭풍/흡인이 kbTicks 를 세우면
@@ -374,6 +393,26 @@ function moveProjectiles(world: World, dt: number): void {
   }
 }
 
+/** 회수 가능한 화살 한 대를 바닥에 남긴다.
+ *  부러짐 판정은 여기서 하지 않는다 — 줍는 순간에 굴려야 "왜 안 늘었지"를
+ *  안내로 설명할 수 있다. 여기서 굴리면 화살이 애초에 안 생겨 보이지도 않는다 */
+let nextArrowItemId = 600000; // 처치 드랍(500000~)과 가방 버리기(700000~) 사이
+function dropArrow(world: World, x: number, z: number, scatter = false): void {
+  const cfg = balance.pickups.arrow;
+  // 적에게서 떨어진 화살은 처치 드랍(골드·물약)과 같은 점에 놓이므로 흩는다
+  const angle = scatter ? Math.random() * Math.PI * 2 : 0;
+  const r = scatter ? cfg.scatterRadius : 0;
+  world.groundItems.push({
+    id: nextArrowItemId++,
+    kind: 'arrow',
+    amount: 1,
+    x: x + Math.cos(angle) * r,
+    z: z + Math.sin(angle) * r,
+    // 코앞에서 쏘면 뽑기도 전에 빨려 들어가 회수가 순간이동으로 보인다
+    noMagnetTicks: cfg.noMagnetTicks,
+  });
+}
+
 function applyProjectileHit(
   world: World,
   proj: (typeof world.projectiles)[number],
@@ -395,7 +434,9 @@ function applyProjectileHit(
         z: enemy.z,
       });
     } else {
-      // 그 외 투사체(반사된 마법 등)는 방패에 막힌다
+      // 그 외 투사체(반사된 마법 등)는 방패에 막힌다.
+      // 막힌 화살도 튕겨 발밑에 떨어진다 — 맞히든 막히든 화살은 회수 대상이다
+      if (proj.recoverable) dropArrow(world, enemy.x, enemy.z);
       world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'shield' });
       return;
     }
@@ -403,6 +444,7 @@ function applyProjectileHit(
 
   // 마법 방어막(warden) — 반사된 투사체가 아니면 무효 (7.2 피드백)
   if (def.magicBarrier?.blocksMagic && barrierUp(def, enemy) && !proj.deflected) {
+    if (proj.recoverable) dropArrow(world, enemy.x, enemy.z);
     world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'magic' });
     return;
   }
@@ -412,11 +454,25 @@ function applyProjectileHit(
   enemy.health -= damage;
   enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
   if (proj.burnDamagePerTick > 0) enemy.burnDamagePerTick = proj.burnDamagePerTick;
+  // 맞은 화살은 그 자리에 떨어진다 (적이 죽어도 시체 자리에 남는다).
+  // 처치 드랍도 같은 점에 쏟아지므로 조금 흩어 놓는다
+  if (proj.recoverable) dropArrow(world, enemy.x, enemy.z, true);
+  // 맞았으면 깬다 — 활은 소리가 작을 뿐(noiseRadius 4) 맞은 놈까지 자면 곤란하다
+  if (proj.owner === 'player' && enemy.health > 0 && enemy.ai === 'idle') {
+    alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
+    world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type });
+  }
   if (enemy.health <= 0) {
     enemy.alive = false;
     if (proj.owner === 'player') {
-      // 마법 처치도 마나 0 — 마나는 패링/처형 경로로만 (combat.md §5)
-      world.events.emit('spell_kill', { enemyType: enemy.type });
+      // 활은 마법이 아니라 무기다 — 여기서 안 가르면 활 처치가 마법 처치로 집계된다.
+      // 어느 쪽이든 마나는 0 이다 (Mana 는 두 이벤트를 모두 구독하지 않는다)
+      if (proj.kind === 'arrow') {
+        world.events.emit('weapon_kill', { weapon: 'bow', enemyType: enemy.type });
+      } else {
+        // 마법 처치도 마나 0 — 마나는 패링/처형 경로로만 (combat.md §5)
+        world.events.emit('spell_kill', { enemyType: enemy.type });
+      }
     } else {
       // 동료 오사 — 플레이어 전과가 아니므로 처치 통계·마나 경로에서 제외
       world.events.emit('friendly_fire_kill', { enemyType: enemy.type });

@@ -72,7 +72,9 @@ export function rollDrops(world: World, enemyType: string, x: number, z: number)
 
 /** 바닥에 놓인 높이 (kind별) — 자석에 걸리기 전 기준 높이 */
 function restHeight(kind: string): number {
-  return kind === 'gold' ? 0.12 : 0.55;
+  if (kind === 'gold') return 0.12;
+  if (kind === 'arrow') return balance.pickups.arrow.restHeight; // 눕혀 놓인 화살
+  return 0.55;
 }
 
 /** 이 아이템을 지금 주울 이유가 있는가.
@@ -80,6 +82,10 @@ function restHeight(kind: string): number {
  *  당장 필요 없어도 챙겨 뒀다 쓰는 게 가방의 값이고, 대신 가득 차면 바닥에 남는다 */
 function wants(world: World, kind: string): boolean {
   if (kind === 'gold') return true;
+  // 화살은 가방이 아니라 무기 탄약이다 — 상한이 차면 권총탄처럼 바닥에 남는다
+  if (kind === 'arrow') {
+    return (world.weapon.arrows ?? 0) < balance.weapons.bow.ammoMax;
+  }
   return hasRoom(world, kind as ItemKind);
 }
 
@@ -93,6 +99,7 @@ export function tick(world: World, dt: number): void {
   const targetY = balance.player.eyeHeight * mag.targetHeightMul; // 가슴 높이
   // 반경 안에 들어왔는데 가방이 가득이라 못 문 것이 있었는가 (틱당 한 번만 알린다)
   let blocked = false;
+  let quiverBlocked = false;
 
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
     const item = world.groundItems[i]!;
@@ -107,7 +114,9 @@ export function tick(world: World, dt: number): void {
       const radius =
         item.kind === 'gold'
           ? cfg.gold.magnetRadius
-          : item.kind === 'mana'
+          : item.kind === 'arrow'
+            ? cfg.arrow.magnetRadius
+            : item.kind === 'mana'
             ? cfg.manaPotion.magnetRadius
             : item.kind === 'food'
               ? cfg.food.magnetRadius
@@ -116,7 +125,10 @@ export function tick(world: World, dt: number): void {
       // 가방이 가득이면 걸리지 않는다 — 자리가 날 때 오라고 남겨둔다.
       // 다만 코앞까지 왔는데 아무 반응이 없으면 "왜 안 주워지지"가 되므로 한 번 알린다
       if (!wants(world, item.kind)) {
-        blocked = true;
+        // 화살통과 가방은 다른 물건이다 — 같은 안내를 쓰면
+        // "가방을 비우라"는 엉뚱한 말을 화살 위에서 듣게 된다
+        if (item.kind === 'arrow') quiverBlocked = true;
+        else blocked = true;
         continue;
       }
       item.magnet = true;
@@ -139,6 +151,20 @@ export function tick(world: World, dt: number): void {
     }
 
     // 몸에 닿음
+    // 화살 — 가방을 거치지 않고 탄약으로 바로 들어간다 (골드와 같은 빠른 경로).
+    // 다만 무한 순환을 막으려고 여기서 부러짐을 굴린다. 꽂힐 때가 아니라 줍는
+    // 순간에 굴려야 "주웠는데 왜 안 늘지"를 안내로 설명할 수 있다
+    if (item.kind === 'arrow') {
+      world.groundItems.splice(i, 1);
+      const bow = balance.weapons.bow;
+      if (Math.random() < bow.recoverChance) {
+        world.weapon.arrows = Math.min(bow.ammoMax, (world.weapon.arrows ?? 0) + 1);
+        world.events.emit('arrow_recovered', { arrows: world.weapon.arrows });
+      } else {
+        world.events.emit('arrow_broken', { arrows: world.weapon.arrows ?? 0 });
+      }
+      continue;
+    }
     if (item.kind === 'gold') {
       world.groundItems.splice(i, 1);
       world.gold += item.amount ?? 0;
@@ -160,4 +186,5 @@ export function tick(world: World, dt: number): void {
   }
 
   if (blocked) world.events.emit('inventory_full', {});
+  if (quiverBlocked) world.events.emit('quiver_full', {});
 }
