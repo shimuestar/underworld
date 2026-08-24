@@ -33,7 +33,7 @@ export interface PlayerState {
   sprintTapTicks?: number;
   /** 조금 이르게 누른 패링의 유효 잔여 틱 — 무기가 도달하면 그때 성립한다 */
   parryBufferTicks?: number;
-  /** 방어 중 (Space 홀드) — 정면 피해 경감, 이동·사격 제한 */
+  /** 방어 중 (Shift 홀드) — 정면 피해 경감, 이동·사격 제한 */
   blocking: boolean;
   /** Space를 누르고 있는 누적 틱 — tapThreshold 이내에 떼면 패링 */
   reactionHeldTicks: number;

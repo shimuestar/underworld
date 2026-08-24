@@ -7,7 +7,7 @@ export interface InputSnapshot {
   /** -1(S) ~ +1(W, 전방) */
   moveForward: number;
   sprint: boolean;
-  /** 이번 틱에 질주 키(Shift)를 새로 눌렀는가 (엣지 — 연타 회피 판정용) */
+  /** 이번 틱에 질주 키(Space)를 새로 눌렀는가 (엣지 — 연타 회피 판정용) */
   sprintPressed: boolean;
   /** 이번 틱 동안 누적된 마우스 이동량 (포인터 락 중에만) */
   lookDX: number;
@@ -26,9 +26,9 @@ export interface InputSnapshot {
   rangedHeld: boolean;
   /** 이번 틱에 재장전 키가 눌렸는가 (엣지) */
   reload: boolean;
-  /** 이번 틱에 반응 키(Space)가 눌렸는가 (엣지) */
+  /** 이번 틱에 반응 키(Shift)가 눌렸는가 (엣지) */
   reactionPressed: boolean;
-  /** 반응 키(Space)를 누르고 있는가 (홀드 = 방패 방어) */
+  /** 반응 키(Shift)를 누르고 있는가 (홀드 = 방패 방어) */
   reactionHeld: boolean;
   /** 이번 틱에 반응 키를 뗐는가 (엣지 — 짧은 탭이었으면 패링 판정) */
   reactionReleased: boolean;
@@ -44,6 +44,8 @@ export interface InputSnapshot {
 
 /** 퀵슬롯 키 — 순서대로 1~5 번 칸 */
 const DIGIT_CODES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
+/** 반응(패링·방어) 키 — 좌·우 시프트를 한 키로 본다 */
+const SHIFT_CODES = ['ShiftLeft', 'ShiftRight'];
 
 export class Input {
   private keys = new Set<string>();
@@ -87,7 +89,11 @@ export class Input {
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
       this.keys.add(e.code);
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.sprintPresses++;
+      // 질주 — 스페이스. 브라우저 기본 스크롤을 막는다
+      if (e.code === 'Space') {
+        e.preventDefault();
+        this.sprintPresses++;
+      }
       if (e.code === 'KeyF') this.lanternToggles++;
       if (e.code === 'KeyB') this.batterySwaps++;
       if (e.code === 'KeyR') this.reloads++;
@@ -96,16 +102,17 @@ export class Input {
       // 퀵슬롯 1~5 — 마지막에 누른 것 하나만 남긴다 (한 틱에 두 개를 쓸 일은 없다)
       const digit = DIGIT_CODES.indexOf(e.code);
       if (digit >= 0) this.useSlot = digit + 1;
-      // 반응(패링/방어) — 스페이스. 누른 순간과 뗀 순간을 모두 엣지로 잡는다
-      if (e.code === 'Space') {
-        e.preventDefault();
+      // 반응(패링/방어) — 시프트. 누른 순간과 뗀 순간을 모두 엣지로 잡는다.
+      // 좌·우 시프트를 한 키처럼 다룬다: 왼쪽을 쥔 채 오른쪽을 눌렀다 떼도
+      // "손을 뗐다"가 되면 안 되므로, 둘 다 떨어진 순간에만 릴리즈로 친다
+      if (SHIFT_CODES.includes(e.code) && !this.reactionDown) {
         this.reactionClicks++;
         this.reactionDown = true;
       }
     });
     window.addEventListener('keyup', (e) => {
       this.keys.delete(e.code);
-      if (e.code === 'Space' && this.reactionDown) {
+      if (SHIFT_CODES.includes(e.code) && this.reactionDown && !this.shiftHeld()) {
         this.reactionDown = false;
         this.reactionReleases++;
       }
@@ -177,6 +184,10 @@ export class Input {
     }
   }
 
+  private shiftHeld(): boolean {
+    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+  }
+
   /** 눌린 상태를 전부 해제 — 일시정지·포커스 상실 시 키가 눌린 채 남지 않게 */
   releaseHeld(): void {
     this.keys.clear();
@@ -194,7 +205,7 @@ export class Input {
     const snapshot: InputSnapshot = {
       moveX: (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0),
       moveForward: (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0),
-      sprint: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+      sprint: this.keys.has('Space'),
       sprintPressed: this.sprintPresses > 0,
       lookDX: this.dx,
       lookDY: this.dy,

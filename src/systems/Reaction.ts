@@ -27,7 +27,7 @@ export function tick(world: World, _dt: number): void {
   if (p.iframeTicks > 0) p.iframeTicks--;
   if (p.reactionBufferTicks > 0) p.reactionBufferTicks--;
 
-  // 방어 (Space 홀드) — 누른 첫 틱부터 즉시 성립한다. 경직/대시 중 불가.
+  // 방어 (Shift 홀드) — 누른 첫 틱부터 즉시 성립한다. 경직/대시 중 불가.
   // 피해 처리는 Enemies/Projectiles가 playerBlocks()로 판정 (정면 한정, 칩 데미지 관통)
   p.reactionHeldTicks = world.input.reactionHeld ? p.reactionHeldTicks + 1 : 0;
   p.blocking = world.input.reactionHeld && p.stunTicks <= 0 && p.dodgeTicks <= 0;
@@ -45,7 +45,7 @@ export function tick(world: World, _dt: number): void {
     return; // 대시 중 추가 반응 불가
   }
 
-  // Shift 연타 = 회피. 반응 키와 무관하게 여기서 먼저 본다 —
+  // Space 연타 = 회피. 반응 키와 무관하게 여기서 먼저 본다 —
   // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다.
   // 첫 타는 창만 열고, 창이 열려 있는 동안 한 번 더 누르면 나간다
   if (p.sprintTapTicks && p.sprintTapTicks > 0) p.sprintTapTicks--;
@@ -69,7 +69,7 @@ export function tick(world: World, _dt: number): void {
   //
   // 단 이미 해머를 휘두르는 중이면 처형으로 가로채지 않는다. 반응 반경(4.6)이
   // 해머 사거리(3.9)보다 넓어 "경직한 적을 해머로 두들긴다"가 아예 불가능해지기
-  // 때문 — 연결을 시작했으면 3타까지 이어 칠 수 있어야 한다. Space 는 항상 처형이다
+  // 때문 — 연결을 시작했으면 3타까지 이어 칠 수 있어야 한다. Shift 는 항상 처형이다
   const swinging = world.weapon.comboTimer > 0 || world.weapon.swingImpact > 0;
   const executePress = world.input.meleePressed && !swinging;
   if (!freshPress && !buffered && !executePress) return;

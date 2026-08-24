@@ -60,7 +60,7 @@ export class ShopUI {
         this.move(1);
         return;
       }
-      // Space 는 일부러 뺐다 — 전투에서 가장 많이 두들기는 키라 오구매가 난다
+      // Space·Shift 는 일부러 뺐다 — 전투에서 가장 많이 두들기는 키라 오구매가 난다
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         e.preventDefault();
         this.buy(ROWS[this.selected]!.item);

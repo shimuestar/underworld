@@ -1408,7 +1408,7 @@ function render(alpha: number): void {
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
-    'WASD 이동  Shift 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형  Space 짧게=패링·꾹=방어\n' +
+    'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형  Shift 짧게=패링·꾹=방어\n' +
     'Q 마법  1~5 소모품  Tab 가방·각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트';
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
