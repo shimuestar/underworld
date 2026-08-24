@@ -53,6 +53,25 @@ export function rollDrops(world: World, enemyType: string, x: number, z: number)
     world.events.emit('food_dropped', { x, z });
   }
 
+  // 화살통 — 활을 든 적만 떨군다. 이게 없으면 활은 빗나갈 때마다 순손실이라
+  // 제단에서 사 쓰는 무기가 된다 (맞힌 화살 회수만으로는 본전이 안 나온다)
+  if (def.arrowDrop) {
+    const drop = def.arrowDrop;
+    let count = drop.min;
+    while (count < drop.max && Math.random() < drop.extraChance) count++;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      world.groundItems.push({
+        id: nextPickupId++,
+        kind: 'arrow',
+        amount: 1,
+        x: x + Math.cos(angle) * cfg.arrow.scatterRadius,
+        z: z + Math.sin(angle) * cfg.arrow.scatterRadius,
+      });
+    }
+    world.events.emit('arrows_dropped', { count, x, z });
+  }
+
   if (Math.random() < cfg.gold.dropChance || def.boss) {
     const span = cfg.gold.max - cfg.gold.min;
     let amount = cfg.gold.min + Math.round(Math.random() * span);

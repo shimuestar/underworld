@@ -91,6 +91,9 @@ export interface EnemyDef {
   xp: number;
   /** 체급 — 넉백 저항 등에 쓴다 (light / medium / heavy) */
   weight: 'light' | 'medium' | 'heavy';
+  /** 죽을 때 떨구는 화살통 — 화살을 지고 다니는 적만 갖는다.
+   *  min 은 확정, max 까지 extraChance 로 한 대씩 더 굴린다 */
+  arrowDrop?: { min: number; max: number; extraChance: number };
   speed: number;
   damage: number;
   radius: number;

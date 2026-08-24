@@ -7,6 +7,7 @@ import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World, type EnemyState, type ProjectileState } from '../core/World';
 import { Level } from '../level/GridLoader';
+import { enemyDef } from '../core/Entities';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Pickups from './Pickups';
 import * as Projectiles from './Projectiles';
@@ -458,6 +459,52 @@ describe('통·소음·인지', () => {
     Pickups.tick(world, DT);
     expect(quiver).toHaveLength(1);
     expect(bag).toHaveLength(0);
+  });
+});
+
+describe('화살통 드랍', () => {
+  const ARCHER = enemyDef('goblin_archer').arrowDrop!;
+
+  it('궁수는 최소 한 대를 확정으로 떨군다', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.999); // extraChance 실패
+    Pickups.rollDrops(world, 'goblin_archer', 20, 6);
+    expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(ARCHER.min);
+    expect(ARCHER.min).toBe(1);
+  });
+
+  it('드물게 한 대 더 — 최대치를 넘지 않는다', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0); // extraChance 항상 성공
+    Pickups.rollDrops(world, 'goblin_archer', 20, 6);
+    const arrows = world.groundItems.filter((g) => g.kind === 'arrow');
+    expect(arrows).toHaveLength(ARCHER.max);
+    expect(ARCHER.max).toBe(2);
+  });
+
+  it('한 점에 겹쳐 쌓이지 않는다 — 흩뿌린다', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    Pickups.rollDrops(world, 'goblin_archer', 20, 6);
+    for (const a of world.groundItems.filter((g) => g.kind === 'arrow')) {
+      expect(Math.hypot(a.x - 20, a.z - 6)).toBeCloseTo(balance.pickups.arrow.scatterRadius, 5);
+    }
+  });
+
+  it('활을 안 든 적은 화살을 안 떨군다', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    for (const type of ['goblin_runner', 'goblin_spear', 'spider_small', 'warden']) {
+      expect(enemyDef(type).arrowDrop).toBeUndefined();
+      Pickups.rollDrops(world, type, 20, 6);
+    }
+    expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(0);
+  });
+
+  it('떨군 화살은 그대로 주울 수 있다 — 회수 규칙을 그대로 탄다', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0); // 두 대 + 회수도 성공
+    world.weapon.arrows = 0;
+    world.player.x = 20;
+    world.player.z = 6;
+    Pickups.rollDrops(world, 'goblin_archer', 20 + 1, 6);
+    for (let i = 0; i < 200 && world.groundItems.length > 0; i++) Pickups.tick(world, DT);
+    expect(world.weapon.arrows).toBe(ARCHER.max);
   });
 });
 

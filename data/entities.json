@@ -58,6 +58,8 @@
     "goblin_archer": {
       "name": "고블린 궁수",
       "zone": 1, "slice": true,
+      "_arrowDropNote": "화살을 지고 다니는 적만 화살통을 떨군다. min 은 확정, 그 위로는 extraChance 로 한 대씩 더 굴린다 — 흔하면 활이 자급자족이 되고, 없으면 활을 주력으로 쓸 수가 없다",
+      "arrowDrop": { "min": 1, "max": 2, "extraChance": 0.15 },
       "weight": "light", "xp": 15, "health": 25, "speed": 3.0, "damage": 15,
       "radius": 0.5, "height": 1.7,
       "aggroRange": 20, "attackRange": 18, "kiteMinRange": 8,

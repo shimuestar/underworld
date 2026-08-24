@@ -309,6 +309,7 @@ for (const name of [
   'arrow_loosed',
   'arrow_impact',
   'arrow_shielded',
+  'arrows_dropped',
   'arrow_recovered',
   'arrow_broken',
   'quiver_full',
