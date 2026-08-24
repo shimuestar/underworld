@@ -10,6 +10,7 @@ import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt } from './level/Spawner';
 import { Minimap } from './render/Minimap';
+import { PauseMenu } from './render/PauseMenu';
 import { Stage } from './render/Stage';
 import { grenadeThrowSpeed } from './systems/Weapons';
 import * as PlayerMove from './systems/PlayerMove';
@@ -1254,13 +1255,31 @@ const loop = new Loop(balance.loop.tickRate, balance.loop.maxFrameClampSec, {
 // 포인터 락이 풀리면(ESC·알트탭·창 밖 클릭) 곧 화면 밖이라는 뜻이므로 함께 멈춘다.
 // 브라우저가 ESC를 포인터 락 해제로 예약해 두었기 때문에 이게 가장 자연스럽다.
 const pauseOverlay = document.getElementById('pause')!;
+// 메뉴에서 고른 결과는 전부 "멈춤을 푼다 + 포인터 락을 되찾는다"로 끝난다.
+// 락이 걸릴 때까지 기다리지 않고 먼저 재개하는 이유: ESC 직후엔 브라우저가
+// 락을 약 1.25초 거부한다. 락에 재개를 묶어 두면 그동안 화면이 굳어 보인다
+const pauseMenu = new PauseMenu(pauseOverlay, world, {
+  resume: () => {
+    setPaused(false);
+    input.requestLock();
+  },
+  restart: () => location.reload(),
+  loadSave: () => {
+    world.dead = false;
+    respawnAtAltar();
+    setPaused(false);
+    input.requestLock();
+  },
+});
+
 function setPaused(paused: boolean): void {
   if (loop.isPaused === paused) return;
   loop.setPaused(paused);
   world.paused = paused;
-  // 각인 UI·사망·클리어 화면이 떠 있을 때는 정지 안내를 겹쳐 띄우지 않는다
-  const showOverlay = paused && !world.uiOpen && !world.dead && !world.cleared;
-  pauseOverlay.classList.toggle('visible', showOverlay);
+  // 각인 UI·사망·클리어 화면이 떠 있을 때는 정지 메뉴를 겹쳐 띄우지 않는다
+  const showMenu = paused && !world.uiOpen && !world.dead && !world.cleared;
+  if (showMenu) pauseMenu.show();
+  else pauseMenu.hide();
   if (paused) input.releaseHeld(); // 멈춘 사이 눌려 있던 키가 남지 않게
 }
 document.addEventListener('pointerlockchange', () => {

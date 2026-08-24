@@ -70,15 +70,14 @@
       #pause.visible {
         display: flex;
       }
-      /* 클릭을 삼키면 포인터 락을 다시 걸 수 없어 재개가 막힌다 */
+      /* 클릭을 삼키면 포인터 락을 다시 걸 수 없어 재개가 막힌다 —
+         메뉴 패널만 예외로 클릭을 받는다 (Input 이 #pause 안 클릭은 락에서 제외) */
       #pause,
       #death {
         pointer-events: none;
       }
-      #pause .hint {
-        font-size: 14px;
-        color: #98a2b0;
-        letter-spacing: 0;
+      #pause .menu {
+        pointer-events: auto;
       }
       #altar-prompt {
         position: fixed;
@@ -317,10 +316,8 @@
       <div>사망</div>
       <div id="death-hint" style="font-size: 14px">Enter 키로 재시작</div>
     </div>
-    <div id="pause">
-      <div>일시정지</div>
-      <div class="hint">클릭하면 계속 · ESC로 다시 멈춤</div>
-    </div>
+    <!-- 내용은 PauseMenu 가 만든다 -->
+    <div id="pause"></div>
     <div id="altar-prompt"></div>
     <div id="sigil-toast"><div class="name"></div><div class="sub"></div></div>
     <div id="web-overlay"></div>
