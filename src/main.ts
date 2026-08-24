@@ -310,6 +310,7 @@ for (const name of [
   'arrow_impact',
   'arrow_shielded',
   'arrows_dropped',
+  'bow_draw_released',
   'arrow_recovered',
   'arrow_broken',
   'quiver_full',
@@ -732,6 +733,12 @@ events.on('inventory_full', () => {
 events.on('gold_picked', () => audio.play('pickup_gold'));
 // ---- 활 ----
 events.on('bow_draw_started', () => audio.play('reload_start'));
+events.on('bow_draw_released', (payload) => {
+  // 덜 당기고 놓은 것과 R 로 내린 것을 가른다 — 후자만 알린다
+  if (!(payload as { cancelled?: boolean }).cancelled) return;
+  audio.play('reload_end');
+  showReaction('시위를 내렸다', 900);
+});
 // 방패에 막힌 화살 — 판에 꽂힌 채 남는다. 소리·번쩍임은 총알이 막힐 때와 같게
 // (같은 일이 벌어진 것이므로 다른 신호를 쓸 이유가 없다)
 events.on('arrow_shielded', (payload) => {
@@ -1479,7 +1486,7 @@ function render(alpha: number): void {
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형  Shift 짧게=패링·꾹=방어\n' +
-    'Q 마법  1~5 소모품  Tab 가방·각인  R 장전  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트';
+    'Q 마법  1~5 소모품  Tab 가방·각인  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트';
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
   // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)

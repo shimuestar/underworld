@@ -444,11 +444,27 @@ function drawBow(world: World): void {
   }
 
   const draw = w.bowDraw ?? 0;
+
+  // R = 시위를 도로 내린다. 8틱만 넘겨 당기면 손을 떼는 순간 나가 버리므로
+  // "쏘지 않고 물러난다"를 할 방법이 없었다 — 방패를 들거나 해머를 섞으면
+  // 끊기긴 하지만 둘 다 제 값을 치르는 행동이라 취소용으로는 무겁다.
+  // 활을 들었을 때 R(재장전)은 하는 일이 없으니 그 자리를 쓴다
+  if (draw > 0 && world.input.reload) {
+    w.bowDraw = 0;
+    // 좌클릭을 쥔 채로 취소했을 테니 잠가 둔다 — 안 그러면 다음 틱에 곧바로
+    // 다시 당겨져 손을 뗄 때 그대로 발사된다 (취소가 취소가 아니게 된다)
+    w.bowDrawLocked = true;
+    world.events.emit('bow_draw_released', { charged: false, cancelled: true });
+    return;
+  }
+
   if (world.input.rangedHeld) {
+    if (w.bowDrawLocked) return; // 뗐다 다시 눌러야 당겨진다
     w.bowDraw = Math.min(draw + 1, bow.maxDrawTicks);
     if (draw === 0) world.events.emit('bow_draw_started', {});
     return;
   }
+  w.bowDrawLocked = false; // 손을 뗐다 — 다음 클릭부터 다시 당길 수 있다
   if (draw <= 0) return;
 
   w.bowDraw = 0;

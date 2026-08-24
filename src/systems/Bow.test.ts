@@ -367,6 +367,44 @@ describe('시위를 끊는 상황들', () => {
     Weapons.tick(world, DT);
   };
 
+  it('R 로 시위를 내린다 — 화살은 그대로 남는다', () => {
+    // 8틱만 넘겨 당기면 손을 떼는 순간 나가 버려 "쏘지 않고 물러난다"가 안 됐다
+    drawTo(world, 20);
+    const before = world.weapon.arrows;
+    const shots = world.projectiles.length;
+    step(world, { reload: true, rangedHeld: true });
+    expect(world.weapon.bowDraw).toBe(0);
+    expect(world.weapon.arrows).toBe(before); // 안 썼다
+    expect(world.projectiles).toHaveLength(shots); // 안 나갔다
+
+    // 좌클릭을 쥔 채로 두어도 다시 당겨지지 않는다 —
+    // 안 그러면 다음 틱에 재시작해 손을 뗄 때 그대로 발사된다
+    for (let i = 0; i < 30; i++) step(world, { rangedHeld: true });
+    expect(world.weapon.bowDraw).toBe(0);
+
+    // 손을 떼도 그때 발사되지 않는다 (취소가 진짜 취소여야 한다)
+    step(world);
+    expect(world.projectiles).toHaveLength(shots);
+    expect(world.weapon.arrows).toBe(before);
+  });
+
+  it('취소 뒤 다시 눌러 당기면 정상 발사된다 — 무기를 잠그는 게 아니다', () => {
+    drawTo(world, 20);
+    step(world, { reload: true, rangedHeld: true });
+    step(world); // 손을 뗀다 (잠금 해제)
+    for (let i = 0; i < BOW.maxDrawTicks; i++) step(world, { rangedHeld: true });
+    expect(world.weapon.bowDraw).toBe(BOW.maxDrawTicks);
+    step(world);
+    expect(world.projectiles).toHaveLength(1);
+  });
+
+  it('R 은 활을 들었을 때만 취소다 — 권총 재장전을 막지 않는다', () => {
+    world.weapon.ranged = 'pistol';
+    world.weapon.mag = 0;
+    step(world, { reload: true });
+    expect(world.weapon.reloading).toBeGreaterThan(0);
+  });
+
   it('방패를 들면 끊긴다 — 안 끊으면 영영 당겨진 채로 남는다', () => {
     drawTo(world, 20);
     world.player.blocking = true;
