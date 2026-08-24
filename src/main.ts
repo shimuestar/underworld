@@ -1120,6 +1120,26 @@ const systems = [
 function simulate(dt: number): void {
   world.input = input.sample();
 
+  // 한 키 체계 — 근접·처형과 상호작용은 논리적으로 한 키다.
+  // 상호작용 대상 앞에서는 근접 키가 상호작용이 되고(1순위),
+  // 대상이 없으면 상호작용 키가 근접·처형이 된다. *_InView 는 지난 틱에
+  // 시스템들이 계산한 값이라 한 틱(16ms) 늦지만 체감할 수 없다.
+  // 레버 관문(byLever)은 손으로 못 여니 대상으로 안 친다 — 관문 앞 전투에서
+  // 근접이 헛손질로 바뀌면 안 된다. 봉인된 출구도 같은 이유로 제외.
+  if (!world.dead && !world.uiOpen) {
+    const interactable =
+      (world.doorInView !== null && !world.doorInView.byLever) ||
+      world.leverInView !== null ||
+      world.chestInView !== null ||
+      (world.altarInView && !world.altarEnteredThisApproach) ||
+      (world.onExitPad && world.exitOpen);
+    if (interactable && world.input.meleePressed) {
+      world.input = { ...world.input, meleePressed: false, interactPressed: true };
+    } else if (!interactable && world.input.interactPressed && !world.input.meleePressed) {
+      world.input = { ...world.input, interactPressed: false, meleePressed: true };
+    }
+  }
+
   // Menu 버튼 = Tab. 가방·각인 창은 스냅샷을 안 거치는 raw 입력이라 여기서 본다.
   // 렌더 루프에서 읽으면 안 된다 — 폴링은 틱에서 도는데 렌더는 다른 속도로 돌아
   // 같은 엣지를 두 프레임이 먹고 창이 열렸다 곧바로 닫힌다 (실측으로 확인)
@@ -1482,7 +1502,8 @@ function render(alpha: number): void {
     'visible',
     showAltarPrompt || nearDoor || nearLever || onExit || nearChest,
   );
-  const IK = keyLabel('E', 'interact'); // 상호작용 키 표기 — 아래 프롬프트 공통
+  // 상호작용 키 표기 — 한 키 체계라 근접 키를 안내한다 (E 도 여전히 동작한다)
+  const IK = keyLabel('우클릭', 'melee');
   // 사망 화면 힌트 — 죽은 뒤에 패드를 집거나 내려놔도 표기가 따라온다
   if (world.dead) {
     const dk = keyLabel('Enter', 'interact');
@@ -1543,9 +1564,9 @@ function render(alpha: number): void {
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     (input.usingPad
-      ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 원거리(${padBtn('cycleWeapon')} 교체)  ${padBtn('melee')} 근접·처형  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
+      ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 원거리(${padBtn('cycleWeapon')} 교체)  ${padBtn('melee')} 근접·처형·상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
         `${padBtn('cast')} 마법  D-패드 소모품  ${padBtn('inventory')} 가방·각인  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴  ${padBtn('battery')} 배터리  ${padBtn('pause')} 일시정지·키 설정`
-      : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형  Shift 짧게=패링·꾹=방어\n' +
+      : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형·상호작용  Shift 짧게=패링·꾹=방어\n' +
         'Q 마법  1~5 소모품  Tab 가방·각인  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트');
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
