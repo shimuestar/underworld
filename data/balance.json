@@ -312,12 +312,14 @@
     "batteryMax": 100,
     "drainPerTick": 0.028,
     "spareCells": 2,
-    "intensity": 2.2,
-    "radius": 30.0,
+    "_brightNote": "2026-08 증광. 방을 밝히는 건 빔이 아니라 잔광이다 — 빔만 2.2→4.6 으로 올리면 평균 휘도가 6.45→6.72 로 거의 안 변하고(좁은 원뿔이라 화면 대부분을 못 덮는다), 잔광만 0.4→1.4·5→12 로 올리면 6.45→19.10 이 된다. 더 밝게 해 달라는 요청은 spillIntensity 부터 만질 것",
+    "_angleNote": "angleDeg 는 일부러 15 로 뒀다 — 이 값이 곧 적에게 들키는 각도라(noticeNote 참조) 밝기를 올리려고 넓히면 은신 규칙이 같이 바뀐다",
+    "intensity": 4.6,
+    "radius": 38.0,
     "angleDeg": 15,
-    "penumbra": 0.45,
-    "spillIntensity": 0.4,
-    "spillRadius": 5.0,
+    "penumbra": 0.55,
+    "spillIntensity": 1.4,
+    "spillRadius": 12.0,
     "_noticeNote": "랜턴 빔에 잡히면 적이 시야각과 무관하게 즉시 알아챈다 — 어둠 속에서 빛을 든 쪽이 먼저 들킨다. 각은 빔과 같은 angleDeg 를 쓰고(보이는 빔 = 들키는 빔), 거리는 따로 둔다 — radius(30m) 끝자락은 너무 흐려 들킬 만큼 밝지 않다. 랜턴을 끄면(F) 이 경로가 통째로 꺼진다",
  "noticeRange": 20.0,
  "flickerWarnSec": 5,
@@ -328,7 +330,10 @@
     "torchColor": "#FF8C3B",
     "torchIntensity": 2.2,
     "torchDistance": 9.0,
-    "torchHeight": 2.6
+    "torchHeight": 2.6,
+    "_flashNote": "폭발·처형·문 개방 섬광의 기준 밝기/사거리. 예전엔 lantern.intensity·radius 를 그대로 빌려 썼는데, 랜턴을 밝히면 게임의 모든 섬광이 같이 두 배가 된다 — 떼어내 고정했다 (예전 값 2.2 / 30×0.9)",
+    "flashIntensity": 2.2,
+    "flashDistance": 27.0
   },
 
   "door": {

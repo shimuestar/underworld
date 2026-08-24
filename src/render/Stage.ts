@@ -457,7 +457,7 @@ export class Stage {
     this.camera.add(this.muzzleLight);
 
     // 처형 섬광 — 강타 지점에서 순간적으로 터지는 빛 (씬 소속: 적 위치에 놓는다)
-    this.executeFlash = new THREE.PointLight(0xffe6b0, 0, lp.radius * 0.9, 0);
+    this.executeFlash = new THREE.PointLight(0xffe6b0, 0, balance.lighting.flashDistance, 0);
     this.executeFlash.visible = false;
     this.scene.add(this.executeFlash);
 
@@ -961,7 +961,7 @@ export class Stage {
     this.executeFlash.visible = flashLeft > 0;
     if (flashLeft > 0) {
       const f = flashLeft / this.executeFlashMs;
-      this.executeFlash.intensity = balance.lantern.intensity * this.executeFlashPower * f * f;
+      this.executeFlash.intensity = balance.lighting.flashIntensity * this.executeFlashPower * f * f;
     }
   }
 
