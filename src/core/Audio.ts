@@ -31,6 +31,7 @@ export type SoundName =
   | 'corruption_up'
   | 'door_touch'
   | 'lever_pull'
+  | 'enemy_alert'
   | 'door_slide'
   | 'bow_twang'
   | 'headshot'
@@ -475,6 +476,12 @@ export class GameAudio {
         // 문에 손을 얹는 순간 — 마른 돌을 긁는 짧은 소리
         this.noise(0.12, 0.22, 900, 0.0);
         this.tone(140, 0.05, 'square', 0.25);
+        break;
+      case 'enemy_alert':
+        // 들켰다 — 짧게 치솟는 두 음. 놀란 숨소리 대신 쓰는 신호음이라
+        // 짧고 날카롭게 두고, 여럿이 동시에 깨도 겹치지 않게 main 이 솎아 낸다
+        this.tone(520, 0.07, 'square', 0.32, 0, 760);
+        this.tone(880, 0.1, 'triangle', 0.28, 0.05);
         break;
       case 'lever_pull':
         // 육중한 금속 걸쇠가 넘어가는 딸깍 — 그 뒤에 문 갈리는 소리가 따로 난다

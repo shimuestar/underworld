@@ -250,10 +250,38 @@ interface EnemyVisual {
   plateCanvas: HTMLCanvasElement;
   /** 마지막으로 그린 상태 키 — 변화 시에만 다시 그린다 */
   plateKey: string;
+  /** 인지 표시 (!) — 알아챈 순간 머리 위에서 튀어오르며 뜬다.
+   *  언제 떴는지는 Stage.alertAt 이 적 id 로 따로 들고 있다 (아래 markAlert 주석) */
+  alert: THREE.Sprite;
 }
 
 const PLATE_W = 256;
 const PLATE_H = 72;
+
+/** 인지 표시가 떠 있는 시간(ms)과 튀어오르는 구간 */
+const ALERT_MS = 1100;
+const ALERT_POP_MS = 160;
+
+/** 느낌표 텍스처 — 모든 적이 같은 그림을 쓰므로 한 번만 만든다 */
+let alertTexture: THREE.CanvasTexture | null = null;
+function getAlertTexture(): THREE.CanvasTexture {
+  if (alertTexture) return alertTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = 'bold 54px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // 어두운 테두리를 먼저 깔아 벽·적 몸통 어느 쪽 앞에서도 형태가 남게 한다
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.strokeText('!', 32, 34);
+  ctx.fillStyle = '#ffd24a';
+  ctx.fillText('!', 32, 34);
+  alertTexture = new THREE.CanvasTexture(canvas);
+  return alertTexture;
+}
 
 /** 남은 칸 수별 바 색. 마지막 칸(1)만 잔량에 따라 초록→노랑→빨강으로 변한다 */
 const PLATE_BAR_COLORS = ['#b070e8', '#4fc3ff']; // 2칸째 보라, 3칸째 하늘 (여유분)
@@ -511,6 +539,17 @@ export class Stage {
 
   triggerParry(result: string): void {
     this.hands.triggerParry(result);
+  }
+
+  /** 알아챈 시각 — 적 id 로 들고 있다.
+   *  시각 객체(EnemyVisual)에 직접 적으면, 아직 한 번도 그려지지 않은 적이
+   *  그 프레임에 알아채는 경우 표시가 통째로 사라진다 (실측으로 확인).
+   *  여기 적어 두면 다음 동기화 때 시각 객체가 생기면서 그대로 이어 붙는다 */
+  private readonly alertAt = new Map<number, number>();
+
+  /** 인지 표시 — 알아챈 순간 머리 위에서 튀어올랐다 옅어진다 */
+  markAlert(enemyId: number): void {
+    this.alertAt.set(enemyId, performance.now());
   }
 
   flashShield(enemyId: number): void {
@@ -1108,6 +1147,22 @@ export class Stage {
     plate.visible = false;
     group.add(plate);
 
+    // 인지 표시 — 이름표보다 한 뼘 위. 알아챈 순간에만 잠깐 뜬다
+    const alert = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: getAlertTexture(),
+        transparent: true,
+        depthWrite: false,
+        // depthTest 는 켠 채로 둔다 — 벽 너머로 비치면 "안 보이는 적이 어디 있는지"까지
+        // 알려 주는 투시가 된다. 이름표(plate)와 같은 규약
+      }),
+    );
+    alert.position.y = def.height + (def.boss ? 1.5 : 1.15);
+    alert.visible = false;
+    alert.renderOrder = 5;
+    alert.name = 'alert-mark';
+    group.add(alert);
+
     const visual: EnemyVisual = {
       group,
       torso,
@@ -1121,6 +1176,7 @@ export class Stage {
       plateTexture,
       plateCanvas,
       plateKey: '',
+      alert,
     };
 
     // 지면 강타 범위 원 — 예고 중에만 보인다. 반경은 매 프레임 attack.aoeRadius 로 맞춘다.
@@ -1329,6 +1385,24 @@ export class Stage {
       for (const material of visual.flashMaterials) {
         material.emissive.set(emissive);
         material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
+      }
+
+      // 인지 표시 — 뛰어올랐다(팝) 잠깐 머물고 옅어진다
+      const alertStart = this.alertAt.get(enemy.id);
+      const alertLeft = alertStart === undefined ? 0 : alertStart + ALERT_MS - now;
+      visual.alert.visible = alertLeft > 0;
+      if (alertStart !== undefined && alertLeft <= 0) this.alertAt.delete(enemy.id);
+      if (alertLeft > 0) {
+        const age = now - alertStart!;
+        // 앞 구간은 살짝 넘겼다 돌아오는 탄성 — 시선이 걸리게
+        const pop =
+          age < ALERT_POP_MS ? 1.35 - 0.35 * Math.pow(1 - age / ALERT_POP_MS, 2) : 1;
+        const scale = (def2.boss ? 1.5 : 1.05) * pop;
+        visual.alert.scale.set(scale, scale, 1);
+        const fade = Math.min(1, alertLeft / 320); // 끝 0.32초 동안만 옅어진다
+        (visual.alert.material as THREE.SpriteMaterial).opacity = fade;
+        visual.alert.position.y =
+          def2.height + (def2.boss ? 1.5 : 1.15) + (1 - Math.min(1, age / ALERT_POP_MS)) * -0.25;
       }
 
       // 이름표 — 어그로 후에만. 체력·패링 카운터가 바뀔 때만 다시 그린다
@@ -1620,7 +1694,9 @@ export class Stage {
       });
       visual.plateTexture.dispose();
       visual.plate.material.dispose();
+      visual.alert.material.dispose(); // 텍스처는 전 적이 공유하므로 건드리지 않는다
       this.enemyVisuals.delete(id);
+      this.alertAt.delete(id); // 죽은 적의 표시 시각까지 들고 있지 않는다
     }
   }
 

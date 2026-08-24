@@ -458,13 +458,26 @@ events.on('enemy_cast', (payload) => {
 // 보스가 처음 알아채는 순간 — 포효로 조우를 알린다
 // 랜턴에 들킨 첫 순간만 알려 준다 — 한 마리씩 깰 때마다 뜨면 잔소리가 된다
 let lanternSpottedUntil = 0;
+/** 인지 효과음은 솎아 낸다 — 보스 포효로 열 마리가 한꺼번에 깨면 열 번 겹쳐 터진다 */
+let alertSoundUntil = 0;
+const ALERT_SOUND_GAP_MS = 220;
 events.on('enemy_alerted', (payload) => {
-  const info = payload as { enemyType: string; lantern?: boolean };
+  const info = payload as { enemyId?: number; enemyType: string; lantern?: boolean };
+  // 머리 위 표시는 마리마다 (누가 나를 봤는지가 정보다)
+  if (info.enemyId !== undefined) stage.markAlert(info.enemyId);
+  // 소리는 한 번만 (겹치면 소리가 뭉개져 오히려 안 들린다).
+  // 보스는 포효가 곧 인지음이므로 신호음을 겹쳐 내지 않는다
+  const now = performance.now();
+  const boss = enemyDef(info.enemyType).boss;
+  if (!boss && now >= alertSoundUntil) {
+    alertSoundUntil = now + ALERT_SOUND_GAP_MS;
+    audio.play('enemy_alert');
+  }
   if (info.lantern && performance.now() > lanternSpottedUntil) {
     lanternSpottedUntil = performance.now() + 4000;
     showReaction('랜턴 불빛에 들켰다', 1400);
   }
-  if (!enemyDef(info.enemyType).boss) return;
+  if (!boss) return;
   audio.play('boss_roar');
   stage.triggerCameraKick(0.7, 420);
   showReaction(`${enemyDef(info.enemyType).name ?? '보스'}가 포효한다`, 2500);

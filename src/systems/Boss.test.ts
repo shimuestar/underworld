@@ -682,6 +682,8 @@ describe('보스 포효 — 주변을 함께 깨운다', () => {
     expect(blind.ai).toBe('chase');
     expect(far.ai).toBe('idle'); // 반경 밖은 그대로 잔다
     expect(alerted.map((a) => a.enemyId).sort()).toEqual([boss.id, near.id, blind.id].sort());
+    // 머리 위 인지 표시가 이 id 로 대상을 고른다 — 하나라도 빠지면 표시가 안 뜬다
+    expect(alerted.every((a) => typeof a.enemyId === 'number')).toBe(true);
   });
 
   it('보스가 아니면 주변을 깨우지 않는다', () => {
