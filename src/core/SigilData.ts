@@ -43,3 +43,13 @@ export function sigilColor(id: string): number {
 export function isActiveSkill(def: SigilDef): boolean {
   return def.tier !== 'passive';
 }
+
+/** 정의된 모든 스킬 id (데이터 순서) */
+export function allSigilIds(): string[] {
+  return [...byId.keys()];
+}
+
+/** 이 빌드에서 실제로 동작하는가 — 액티브는 시전(cast)이, 패시브는 효과(slice)가 구현돼야 한다 */
+export function isImplemented(def: SigilDef): boolean {
+  return isActiveSkill(def) ? def.cast !== undefined : def.slice;
+}

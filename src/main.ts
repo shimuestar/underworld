@@ -40,7 +40,7 @@ import { ShopUI } from './render/ShopUI';
 import { InventoryUI, quickslotView } from './render/InventoryUI';
 import { SKILL_KEYS, SkillUI } from './render/SkillUI';
 import { itemIconSvg } from './render/ItemIcons';
-import { sigilDef } from './core/SigilData';
+import { allSigilIds, isImplemented, sigilDef } from './core/SigilData';
 import levelJson from '../data/levels/z01_f1.json';
 
 const app = document.getElementById('app');
@@ -228,6 +228,12 @@ window.addEventListener('keydown', (e) => {
     }
     showReaction(killed > 0 ? `(테스트) 시야 내 ${killed}마리 처치` : '(테스트) 시야에 적 없음');
     console.log('[debug] 시야 내 몰살', killed);
+  }
+  // 테스트용 스킬 전부 획득 — 구현된 것만. 오염은 안 쌓인다 (슬라이스 검증 시 제거)
+  if (e.code === 'KeyU' && !world.dead && !world.uiOpen) {
+    const n = grantAllSkills();
+    showReaction(n > 0 ? `(테스트) 구현된 스킬 ${n}종 획득 — Tab 에서 확인` : '(테스트) 구현된 스킬은 이미 다 가졌다', 2000);
+    console.log('[debug] 스킬 전부 획득', n);
   }
   // 테스트용 마나 풀충전 — 마법 튜닝 편의 (슬라이스 검증 시 제거)
   if (e.code === 'KeyO' && !world.dead) {
@@ -986,6 +992,22 @@ events.on('dodge_step', () => stage.triggerParry('normal'));
 events.on('shot_blocked', (payload) => {
   stage.flashShield((payload as { enemyId: number }).enemyId);
 });
+/** 테스트 — 구현된 스킬을 전부 익힌다. 패시브는 빈 부위에 새겨지고 액티브는 빈 칸에
+ *  올라간다(4종이라 칸 4개에 딱 맞는다). 오염 대기는 되돌려 밸런스 검증을 더럽히지 않는다 */
+function grantAllSkills(): number {
+  const pendingBefore = world.corruption.pending;
+  let granted = 0;
+  for (const id of allSigilIds()) {
+    const def = sigilDef(id);
+    if (!isImplemented(def)) continue;
+    if (world.sigils.inventory.includes(id)) continue;
+    Sigils.acquire(world, id);
+    granted++;
+  }
+  world.corruption.pending = pendingBefore;
+  return granted;
+}
+
 function restartAfterDeath(): void {
   if (world.respawn) respawnAtAltar();
   else location.reload();
@@ -1648,7 +1670,7 @@ function render(alpha: number): void {
       ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 원거리(${padBtn('cycleWeapon')} 교체)  ${padBtn('melee')} 근접·처형·상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
         `${padBtn('cycleSkill')} 스킬 교체  ${padBtn('cast')} 스킬 사용  D-패드 소모품  ${padBtn('inventory')} 가방→스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴(길게=배터리)  ${padBtn('pause')} 일시정지·키 설정`
       : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형·상호작용  Shift 짧게=패링·꾹=방어\n' +
-        'Z·X·C·V 스킬  Q 스킬 교체·휠클릭 사용  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트');
+        'Z·X·C·V 스킬  Q 스킬 교체·휠클릭 사용  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G/U 테스트(U=스킬 전부)');
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
   // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)
@@ -1758,6 +1780,9 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__input = input;
   (window as unknown as Record<string, unknown>).__stage = stage; // 씬 그래프 검증용
 }
+
+// ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)
+if (new URLSearchParams(location.search).has('skills')) grantAllSkills();
 
 loop.start();
 events.emit('loop_started', { tickRate: balance.loop.tickRate, level: levelJson.id });
