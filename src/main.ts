@@ -364,7 +364,7 @@ for (const name of [
   'sigil_detached',
   'skill_slot_changed',
   'skill_selected',
-  'lightning_cast',
+  'channel_ended',
   'frost_nova',
   'frost_impact',
   'enemy_frozen',
@@ -500,17 +500,37 @@ events.on('stamina_blocked', () => {
   audio.play('stamina_empty');
   showReaction('스태미너 부족 — 회피 불가', 1000);
 });
-events.on('shot_blocked', () => audio.play('shot_blocked'));
+// 방패 튕김음 — 채널형 빔은 초당 10번 막힌다. 그 속도로 같은 소리를 울리면 기관총이 된다.
+// 총(14틱=233ms)·화살은 이 간격보다 느려 영향이 없다
+const BLOCKED_SOUND_MIN_MS = 110;
+let lastBlockedSoundMs = 0;
+events.on('shot_blocked', () => {
+  const now = performance.now();
+  if (now - lastBlockedSoundMs < BLOCKED_SOUND_MIN_MS) return;
+  lastBlockedSoundMs = now;
+  audio.play('shot_blocked');
+});
 events.on('dodge_step', () => audio.play('dodge'));
 events.on('cast_spell', (payload) => {
-  const cast = (payload as { cast?: string }).cast;
-  const sigil = (payload as { sigil?: string }).sigil;
-  if (sigil) stage.triggerCast(sigilColor(sigil)); // 해머가 지팡이가 된다 — 머리에서 스킬 색 마력
+  const { cast, sigil, channel } = payload as { cast?: string; sigil?: string; channel?: boolean };
+  // 해머가 지팡이가 된다 — 머리에서 스킬 색 마력.
+  // 채널(관통 뇌창)은 붙들고 있는 내내 내민 자세로 붙잡아 둔다
+  if (sigil && channel) stage.setChannel(true, sigilColor(sigil));
+  else if (sigil) stage.triggerCast(sigilColor(sigil));
   audio.play(cast === 'beam' ? 'cast_lightning' : cast === 'nova' ? 'cast_frost' : cast === 'blink' ? 'blink' : 'cast_fire');
+  if (channel) audio.startBeam(); // 시작 크랙 위에 이어지는 전류음을 깐다
 });
-events.on('lightning_cast', (payload) => {
-  const b = payload as { sx: number; sy: number; sz: number; ex: number; ey: number; ez: number };
-  stage.spawnLightning(b.sx, b.sy, b.sz, b.ex, b.ey, b.ez);
+// 채널이 끊겼다 — 손을 뗐거나, 마나가 말랐거나, 경직에 걸렸거나
+events.on('channel_ended', () => {
+  stage.setChannel(false);
+  stage.clearLightningBeam();
+  audio.stopBeam();
+});
+// 뇌창 빔 — 채널이 도는 동안 매 틱 온다. 끝점만 넘기고 지직거림은 렌더가 매 프레임 흔든다
+events.on('lightning_beam', (payload) => {
+  const b = payload as { ex: number; ey: number; ez: number; pulse?: boolean };
+  stage.setLightningBeam(b.ex, b.ey, b.ez, b.pulse === true);
+  if (b.pulse) audio.beamPulse(); // 한 타마다 전류음이 한 번 지직 — 박자를 소리로도 준다
 });
 events.on('frost_nova', (payload) => {
   const n = payload as { x: number; z: number; radius: number; scale?: number };
@@ -969,6 +989,7 @@ events.on('sigil_acquired', (payload) => {
 });
 
 events.on('player_died', () => {
+  Projectiles.endChannel(world);
   if (world.godMode) return; // 무적 중에는 사망 화면도 뜨지 않는다 (자원은 틱 끝에 되돌아간다)
   const dk = keyLabel('Enter', 'interact');
   deathHint!.textContent = world.respawn ? `${dk} — 제단에서 부활` : `${dk} 키로 재시작`;
@@ -1300,6 +1321,10 @@ function simulate(dt: number): void {
     if (keep) restoreResources(keep);
     // 스킬 테스트 — 마나만 무한. 무적과 같은 자리·같은 방식 (시스템은 손대지 않는다)
     if (world.skillTestMode) world.mana.value = balance.mana.max;
+  } else {
+    // 시스템이 멈춘 사이(사망·창 열림·클리어) 채널이 스스로 못 끊는다 —
+    // 그냥 두면 빔이 화면에 얼어붙고 전류음이 남는다
+    Projectiles.endChannel(world);
   }
   world.tick++;
   tpsWindowTicks++;
@@ -1803,7 +1828,10 @@ function setPaused(paused: boolean): void {
   const showMenu = paused && !world.uiOpen && !world.dead && !world.cleared;
   if (showMenu) pauseMenu.show();
   else pauseMenu.hide();
-  if (paused) input.releaseHeld(); // 멈춘 사이 눌려 있던 키가 남지 않게
+  if (paused) {
+    input.releaseHeld(); // 멈춘 사이 눌려 있던 키가 남지 않게
+    Projectiles.endChannel(world); // 틱이 멈추면 채널이 스스로 못 끊는다 — 전류음이 남는다
+  }
 }
 // 설정 화면을 닫으면 일시정지 메뉴로 돌아온다 (게임은 멈춘 채)
 gamepadUI.onClose = () => pauseMenu.show();

@@ -126,6 +126,8 @@ export class HandModel {
   private corruptionStage = -1;
   /** 시전 — 해머를 지팡이처럼 내미는 동안. 머리의 마력 구체가 스킬 색으로 번쩍인다 */
   private castStart = 0;
+  /** 채널 시전 중인가 — 지팡이를 내민 자세로 붙잡아 둔다 */
+  private channeling = false;
   private castUntil = 0;
   private castOrb!: THREE.Group;
   private castOrbMat!: THREE.MeshBasicMaterial;
@@ -332,6 +334,23 @@ export class HandModel {
     this.castLight.color.setHex(color);
   }
 
+  /** 채널 시전(관통 뇌창) — 붙들고 있는 동안 지팡이를 내민 자세로 붙잡아 둔다.
+   *  한 타마다 triggerCast 를 부르면 100ms 마다 팔이 되돌아왔다 나가 덜덜거린다 */
+  setChannel(on: boolean, color = 0xffffff): void {
+    if (on === this.channeling) return;
+    this.channeling = on;
+    const now = performance.now();
+    if (on) {
+      this.castStart = now; // 내미는 동작은 정상 속도로 — 자세가 튀지 않게
+      this.castOrbMat.color.setHex(color);
+      this.castLight.color.setHex(color);
+    } else {
+      // 끝나는 동작만 이어 붙인다 — 내민 자세(k=1)에서 대기로 돌아온다
+      this.castStart = now - CAST_MS * CAST_HOLD_T;
+      this.castUntil = now + CAST_MS * (1 - CAST_HOLD_T);
+    }
+  }
+
   /** 해머 머리(지팡이 끝)의 월드 좌표 — 투사체·빔의 시각적 출발점 */
   staffTipWorld(out: THREE.Vector3): THREE.Vector3 {
     return this.castOrb.getWorldPosition(out);
@@ -487,19 +506,20 @@ export class HandModel {
     }
 
     // 시전 — 지팡이처럼 앞으로 쭉 내밀었다가 돌아온다. 스윙 중이면 스윙이 이긴다
-    const casting = now < this.castUntil;
+    const casting = this.channeling || now < this.castUntil;
     if (casting && !pose) {
       const t = (now - this.castStart) / CAST_MS;
       const rest: SwingPose = {
         rotX: HAMMER_REST_ROT, rotY: REST_RIGHT.rotY,
         x: REST_RIGHT.pos.x, y: REST_RIGHT.pos.y, z: REST_RIGHT.pos.z, rotZ: REST_RIGHT.rotZ,
       };
-      const k =
-        t < CAST_THRUST_T
-          ? easeOutCubic(t / CAST_THRUST_T)
-          : t < CAST_HOLD_T
-            ? 1
-            : 1 - easeInCubic((t - CAST_HOLD_T) / (1 - CAST_HOLD_T));
+      const k = this.channeling
+        ? easeOutCubic(Math.min(1, t / CAST_THRUST_T)) // 한 번 내밀고 그 자세로 고정
+        : t < CAST_THRUST_T
+            ? easeOutCubic(t / CAST_THRUST_T)
+            : t < CAST_HOLD_T
+              ? 1
+              : 1 - easeInCubic((t - CAST_HOLD_T) / (1 - CAST_HOLD_T));
       pose = {
         rotX: rest.rotX + (CAST_POSE.rotX - rest.rotX) * k,
         rotY: rest.rotY + (CAST_POSE.rotY - rest.rotY) * k,
@@ -513,7 +533,12 @@ export class HandModel {
     this.castOrb.visible = casting;
     if (casting) {
       const t = (now - this.castStart) / CAST_MS;
-      const flare = t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8;
+      // 채널 중에는 꺼지지 않고 지직거린다 — 계속 흐르고 있다는 신호
+      const flare = this.channeling
+        ? 0.72 + 0.28 * Math.sin(now / 28)
+        : t < 0.2
+          ? t / 0.2
+          : 1 - (t - 0.2) / 0.8;
       const sc = 0.5 + 0.9 * flare;
       this.castOrb.scale.set(sc, sc, sc);
       this.castOrbMat.opacity = Math.min(1, flare * 1.2);

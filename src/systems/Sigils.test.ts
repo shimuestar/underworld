@@ -371,6 +371,15 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     world.input = { ...Input.emptySnapshot(), castPressed: true, useSkill: n };
     Projectiles.tick(world, DT);
     world.input = Input.emptySnapshot();
+    Projectiles.endChannel(world); // 탭 = 눌렀다 뗀 것 — 채널형(뇌창)은 여기서 끊긴다
+  }
+  /** 스킬 칸 n 을 ticks 틱 동안 붙들고 있는다 (떼지 않는다) */
+  function holdSlot(n: number, ticks: number): void {
+    for (let i = 0; i < ticks; i++) {
+      world.input = { ...Input.emptySnapshot(), castPressed: i === 0, useSkill: i === 0 ? n : 0, skillHeld: n };
+      Projectiles.tick(world, DT);
+    }
+    world.input = Input.emptySnapshot();
   }
   let nextEnemyId = 1000;
   function add(type: string, x: number, z: number): EnemyState {
@@ -398,6 +407,93 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(aside.health).toBe(full);
     expect(world.mana.value).toBe(100 - fx['manaCost']!);
     expect(Projectiles.skillCooldown(world, 'sig_lightning')).toBe(fx['cooldownTicks']);
+  });
+
+  it('관통 뇌창: 붙들고 있으면 pulseTicks 마다 한 타씩 계속 나간다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    const e = runnerAhead(6);
+    e.health = 1000;
+    const pulses = 4;
+    holdSlot(1, 1 + fx['pulseTicks']! * (pulses - 1)); // 첫 타는 누른 틱에 바로
+    expect(e.health).toBe(1000 - fx['damage']! * pulses);
+    expect(world.mana.value).toBe(100 - fx['manaCost']! * pulses); // 마나는 한 타마다
+    expect(world.spell.channel).toBeTruthy(); // 아직 붙들고 있다
+    expect(Projectiles.skillCooldown(world, 'sig_lightning')).toBe(0); // 뻗는 동안은 안 쉰다
+  });
+
+  it('관통 뇌창: 손을 떼면 그 틱에 멈추고, 그때서야 쿨다운이 걸린다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    const e = runnerAhead(6);
+    e.health = 1000;
+    holdSlot(1, 1 + fx['pulseTicks']! * 2); // 3타
+    const health = e.health;
+    const ended: { reason?: string }[] = [];
+    world.events.on('channel_ended', (p) => ended.push(p as { reason?: string }));
+    world.input = Input.emptySnapshot(); // 뗐다
+    Projectiles.tick(world, DT);
+    expect(world.spell.channel).toBeFalsy();
+    expect(ended).toEqual([expect.objectContaining({ reason: 'released' })]);
+    expect(Projectiles.skillCooldown(world, 'sig_lightning')).toBe(fx['cooldownTicks']);
+    for (let i = 0; i < 30; i++) Projectiles.tick(world, DT);
+    expect(e.health).toBe(health); // 뗀 뒤로는 한 타도 더 안 들어간다
+  });
+
+  it('관통 뇌창: 마나가 마르면 붙들고 있어도 저절로 끊긴다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    const fx = sigilDef('sig_lightning').effects;
+    world.mana.value = fx['manaCost']! * 2 + 1; // 두 타 분
+    const e = runnerAhead(6);
+    e.health = 1000;
+    holdSlot(1, 10);
+    expect(e.health).toBe(1000 - fx['damage']! * 2);
+    expect(world.spell.channel).toBeFalsy();
+    expect(Projectiles.skillCooldown(world, 'sig_lightning')).toBeGreaterThan(0);
+  });
+
+  it('관통 뇌창: 정확히 안 겨눠도 조준선 근처의 적에게 저절로 휜다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    // 앞 6m, 옆 1.4m — 빔 폭(0.7)+몸(0.5) 밖이지만 보정 원뿔(14도, 여기선 13.1도) 안
+    const off = runnerAhead(6, 1.4);
+    off.health = 1000;
+    castSlot(1);
+    expect(off.health).toBe(1000 - fx['damage']!);
+  });
+
+  it('관통 뇌창: 보정 원뿔 밖의 적에게는 휘지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const wide = runnerAhead(3, 1.4); // 25도 — 원뿔(14도) 밖
+    wide.health = 1000;
+    castSlot(1);
+    expect(wide.health).toBe(1000);
+  });
+
+  it('관통 뇌창: 원뿔 안이라도 벽 너머의 적에게는 휘지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const behindWall = add('goblin_runner', 18, 8.5); // z>8 은 벽 안 — 11.8도라 원뿔 안이다
+    behindWall.health = 1000;
+    castSlot(1);
+    expect(behindWall.health).toBe(1000);
+  });
+
+  it('관통 뇌창: 원뿔 안에 둘이면 가장 가까운 쪽으로 휜다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    const near = runnerAhead(8, 1.9); // 13.4도
+    const far = runnerAhead(12, 1.4); // 6.6도 — 더 정면이지만 멀다
+    near.health = 1000;
+    far.health = 1000;
+    castSlot(1);
+    expect(near.health).toBe(1000 - fx['damage']!);
+    expect(far.health).toBe(1000); // 가까운 쪽으로 휜 빔의 선 밖
   });
 
   it('관통 뇌창: 방패병이 정면에서 받아 내면 뒤의 적은 무사하다', () => {
@@ -495,10 +591,10 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     e.frozenDamage = fx['breakDamage']!;
     const ended: { shattered?: boolean }[] = [];
     world.events.on('enemy_freeze_ended', (p) => ended.push(p as { shattered?: boolean }));
-    castSlot(1); // 뇌창 90 → ×1.5 = 135, + 깨질 때 14 = 149
+    castSlot(1); // 뇌창 한 타 12 → ×1.5 = 18, + 깨질 때 14 = 32
     const bolt = sigilDef('sig_lightning').effects['damage']!;
     const shatterHit = bolt * fx['hitShatterMul']! + fx['breakDamage']!;
-    expect(shatterHit).toBe(149); // 2026-08 결정
+    expect(shatterHit).toBe(32); // 2026-08 채널 전환 후
     expect(e.health).toBe(1000 - shatterHit);
     expect(e.freezeTicks).toBe(0);
     expect(ended).toEqual([expect.objectContaining({ shattered: true })]);
@@ -581,7 +677,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(scales[3]).toBe(fx['firstHitFxScale']);
   });
 
-  it('서리 폭발: 폭발통에 맞으면 통이 점화되고 그 자리에서도 광역 빙결이 터진다 — 통 발밑에 서리 자국', () => {
+  it('서리 볼트: 폭발통에 맞으면 통이 점화되고 그 자리에서도 광역 빙결이 터진다 — 통 발밑에 서리 자국', () => {
     Sigils.acquire(world, 'sig_frost');
     world.mana.value = 100;
     const fx = sigilDef('sig_frost').effects;
@@ -599,7 +695,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(impacts[0]).toMatchObject({ surface: 'floor', x: 14, z: 6 });
   });
 
-  it('서리 폭발: 적을 직격하면 그 적의 발밑 바닥에 서리 자국이 생긴다', () => {
+  it('서리 볼트: 적을 직격하면 그 적의 발밑 바닥에 서리 자국이 생긴다', () => {
     Sigils.acquire(world, 'sig_frost');
     world.mana.value = 100;
     const hit = runnerAhead(6);
@@ -614,7 +710,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(impacts[0]!.z).toBeCloseTo(hit.z, 5);
   });
 
-  it('서리 폭발: 아무도 안 맞고 벽에 닿아도 그 자리에서 터져 주변 적이 언다', () => {
+  it('서리 볼트: 아무도 안 맞고 벽에 닿아도 그 자리에서 터져 주변 적이 언다', () => {
     Sigils.acquire(world, 'sig_frost');
     world.mana.value = 100;
     const fx = sigilDef('sig_frost').effects;

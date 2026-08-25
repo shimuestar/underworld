@@ -513,6 +513,10 @@ function drawPlate(
   }
 }
 const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 그린다 (근접부 왜곡 방지)
+// 뇌창 빔 — 마디 수·흔들림 폭·한 타 섬광이 남는 시간
+const BEAM_SEGMENTS = 12;
+const BEAM_JITTER = 0.32;
+const BEAM_PULSE_MS = 90;
 /** 화염구가 지팡이 끝에서 판정 위치로 합쳐지는 시간 */
 const LAUNCH_BLEND_MS = 260;
 const TRACER_WIDTH = 0.022;
@@ -719,8 +723,24 @@ export class Stage {
   }
 
   /** 시전 — 해머를 지팡이처럼 내밀고 머리에서 스킬 색 마력이 터진다 */
+  /** 뻗어 있는 뇌창 빔 — 채널이 끝날 때까지 살아 있다 */
+  private beam: {
+    group: THREE.Group;
+    mat: THREE.MeshBasicMaterial;
+    segs: THREE.Mesh[];
+    spark: THREE.Mesh;
+    light: THREE.PointLight;
+  } | null = null;
+  private beamEnd: THREE.Vector3 | null = null;
+  private beamPulseAt = 0;
+
   triggerCast(color: number): void {
     this.hands.triggerCast(color);
+  }
+
+  /** 채널 시전 — 붙들고 있는 동안 지팡이를 내민 채로 둔다 */
+  setChannel(on: boolean, color = 0xffffff): void {
+    this.hands.setChannel(on, color);
   }
 
   /** 지팡이 끝(해머 머리) 월드 좌표 — 마법의 시각적 출발점 */
@@ -1241,55 +1261,87 @@ export class Stage {
   }
 
   /** 발사 궤적 — 총구(카메라 오른쪽 아래)에서 착탄점까지, tracerTicks 동안 페이드 아웃 */
-  /** 관통 뇌창 — 눈에서 끝점까지 꺾이는 번개. 마디마다 옆으로 튀고, 짧게 남았다 사라진다 */
-  spawnLightning(sx: number, sy: number, sz: number, ex: number, ey: number, ez: number): void {
-    void sx; void sy; void sz; // 판정 원점(눈)은 안 쓴다 — 그림은 지팡이 끝에서 나간다
-    const start = this.staffTip();
-    const end = new THREE.Vector3(ex, ey, ez);
-    const total = start.distanceTo(end);
-    const segments = Math.max(3, Math.min(14, Math.round(total / 1.6)));
-    const dir = end.clone().sub(start).normalize();
-    const side = new THREE.Vector3(-dir.z, 0, dir.x);
-    const up = new THREE.Vector3(0, 1, 0);
-    const points: THREE.Vector3[] = [start];
-    for (let i = 1; i < segments; i++) {
-      const t = i / segments;
-      const jitter = 0.35 * Math.sin(t * Math.PI); // 가운데가 가장 크게 튄다
-      points.push(
-        start.clone().lerp(end, t)
-          .addScaledVector(side, (Math.random() - 0.5) * 2 * jitter)
-          .addScaledVector(up, (Math.random() - 0.5) * 2 * jitter * 0.6),
-      );
-    }
-    points.push(end);
+  /** 관통 뇌창 — 붙들고 있는 동안 계속 붙어 있는 빔. 끝점만 갱신하고,
+   *  마디의 지직거림은 매 프레임 새로 흔든다 (틱마다 다시 만들면 한 발씩 쏘는 것처럼 보인다) */
+  setLightningBeam(ex: number, ey: number, ez: number, pulse: boolean): void {
+    this.beamEnd ??= new THREE.Vector3();
+    this.beamEnd.set(ex, ey, ez);
+    if (pulse) this.beamPulseAt = performance.now();
+    if (this.beam) return;
+
     const group = new THREE.Group();
     const mat = new THREE.MeshBasicMaterial({
       color: 0xbfe6ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    let first: THREE.Mesh | null = null;
-    for (let i = 0; i < points.length - 1; i++) {
-      const a = points[i]!;
-      const b = points[i + 1]!;
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, a.distanceTo(b)), mat);
-      seg.position.copy(a).add(b).multiplyScalar(0.5);
-      seg.lookAt(b);
+    const segs: THREE.Mesh[] = [];
+    for (let i = 0; i < BEAM_SEGMENTS; i++) {
+      // 길이 1 짜리 상자를 매 프레임 늘였다 줄인다 — 지오메트리를 다시 만들지 않는다
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 1), mat);
       group.add(seg);
-      first ??= seg;
+      segs.push(seg);
     }
     const spark = new THREE.Mesh(
-      new THREE.SphereGeometry(0.22, 8, 6),
+      new THREE.SphereGeometry(0.26, 8, 6),
       new THREE.MeshBasicMaterial({ color: 0xe8f6ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }),
     );
-    spark.position.copy(end);
     group.add(spark);
-    const light = new THREE.PointLight(0x9fd8ff, 4, 9, 0);
-    light.position.copy(start.clone().lerp(end, 0.5));
+    const light = new THREE.PointLight(0x9fd8ff, 4, 10, 0);
     group.add(light);
     this.scene.add(group);
-    this.tracers.push({ group, beam: first ?? spark, spark, bornMs: performance.now(), lifeMs: 160 });
+    this.beam = { group, mat, segs, spark, light };
   }
 
-  /** 서리 폭발 — 푸른 껍질이 반경까지 부풀며 옅어진다 (폭발 연출의 색 다른 형제) */
+  /** 채널이 끊겼다 — 빔을 걷는다 */
+  clearLightningBeam(): void {
+    this.beamEnd = null;
+    const beam = this.beam;
+    if (!beam) return;
+    this.beam = null;
+    this.scene.remove(beam.group);
+    for (const seg of beam.segs) seg.geometry.dispose();
+    beam.mat.dispose();
+    beam.spark.geometry.dispose();
+    (beam.spark.material as THREE.Material).dispose();
+  }
+
+  /** 매 프레임 — 지팡이 끝에서 끝점까지 마디를 다시 흔든다. 손이 움직이면 빔도 따라온다 */
+  private updateLightningBeam(): void {
+    const beam = this.beam;
+    const end = this.beamEnd;
+    if (!beam || !end) return;
+    const start = this.staffTip();
+    const total = start.distanceTo(end);
+    if (total < 0.01) return;
+    const side = new THREE.Vector3(end.z - start.z, 0, start.x - end.x).normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+
+    const a = start.clone();
+    const b = new THREE.Vector3();
+    for (let i = 0; i < BEAM_SEGMENTS; i++) {
+      const t = (i + 1) / BEAM_SEGMENTS;
+      // 양 끝은 붙어 있고 가운데가 가장 크게 튄다
+      const amp = BEAM_JITTER * Math.sin(t * Math.PI);
+      b.copy(start).lerp(end, t)
+        .addScaledVector(side, (Math.random() - 0.5) * 2 * amp)
+        .addScaledVector(up, (Math.random() - 0.5) * 2 * amp * 0.6);
+      const seg = beam.segs[i]!;
+      seg.position.copy(a).add(b).multiplyScalar(0.5);
+      seg.lookAt(b);
+      seg.scale.z = Math.max(0.001, a.distanceTo(b));
+      a.copy(b);
+    }
+    // 한 타가 들어간 직후에 밝게 튄다 — 계속 흐르는 중에도 박자가 보인다
+    const since = performance.now() - this.beamPulseAt;
+    const punch = since < BEAM_PULSE_MS ? 1 - since / BEAM_PULSE_MS : 0;
+    beam.mat.opacity = 0.72 + 0.28 * punch;
+    beam.spark.position.copy(end);
+    beam.spark.scale.setScalar(0.85 + 0.5 * punch);
+    (beam.spark.material as THREE.MeshBasicMaterial).opacity = 0.7 + 0.3 * punch;
+    beam.light.position.copy(start).lerp(end, 0.5);
+    beam.light.intensity = 3 + 3 * punch;
+  }
+
+  /** 서리 볼트 — 푸른 껍질이 반경까지 부풀며 옅어진다 (폭발 연출의 색 다른 형제) */
   spawnNova(x: number, z: number, radius: number): void {
     const now = performance.now();
     const light = new THREE.PointLight(0x9fe0ff, 5, radius * 2.5, 0);
@@ -2999,6 +3051,7 @@ export class Stage {
   };
 
   render(): void {
+    this.updateLightningBeam();
     this.updateTracers();
     this.updateParticles();
     this.updateExplosions();

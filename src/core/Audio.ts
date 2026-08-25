@@ -82,6 +82,8 @@ const MASTER_GAIN = 0.25;
 export class GameAudio {
   private ctx: AudioContext | null = null;
   private out: AudioNode | null = null;
+  /** 이어지는 전류음 — 채널 시전이 끝날 때 끈다 */
+  private beam: { gain: GainNode; nodes: (OscillatorNode | AudioBufferSourceNode)[] } | null = null;
 
   /** 사용자 제스처(클릭) 시점에 호출 — 오디오 컨텍스트 생성/재개 */
   unlock(): void {
@@ -97,6 +99,72 @@ export class GameAudio {
       this.out = compressor;
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
+  /** 채널 시전(관통 뇌창) — 붙들고 있는 동안 이어지는 전류음.
+   *  한 타마다 cast_lightning 을 울리면 기관총이 되므로, 시작 크랙 위에 이 웅웅거림을 깐다 */
+  startBeam(): void {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== 'running' || this.beam) return;
+    const t0 = ctx.currentTime;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(0.5 * MASTER_GAIN, t0 + 0.06);
+    gain.connect(this.out ?? ctx.destination);
+
+    // 톱니 두 겹을 살짝 어긋나게 — 맥놀이가 전류의 지직거림이 된다
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = 118;
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sawtooth';
+    osc2.frequency.value = 124.5;
+    // 밴드패스를 통과한 노이즈 — 위에 얹히는 쉭 소리
+    const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const hiss = ctx.createBufferSource();
+    hiss.buffer = buffer;
+    hiss.loop = true;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 2600;
+    band.Q.value = 0.8;
+    const hissGain = ctx.createGain();
+    hissGain.gain.value = 0.35;
+
+    osc.connect(gain);
+    osc2.connect(gain);
+    hiss.connect(band).connect(hissGain).connect(gain);
+    osc.start(t0);
+    osc2.start(t0);
+    hiss.start(t0);
+    this.beam = { gain, nodes: [osc, osc2, hiss] };
+  }
+
+  /** 한 타가 들어갔다 — 이어지는 전류음 위에 순간적으로 세게 지직거린다 */
+  beamPulse(): void {
+    const beam = this.beam;
+    const ctx = this.ctx;
+    if (!beam || !ctx) return;
+    const t0 = ctx.currentTime;
+    const base = 0.5 * MASTER_GAIN;
+    beam.gain.gain.cancelScheduledValues(t0);
+    beam.gain.gain.setValueAtTime(base * 1.7, t0);
+    beam.gain.gain.exponentialRampToValueAtTime(base, t0 + 0.05);
+  }
+
+  /** 채널이 끊겼다 — 짧게 꺼지며 끝을 남긴다 */
+  stopBeam(): void {
+    const beam = this.beam;
+    const ctx = this.ctx;
+    if (!beam || !ctx) return;
+    this.beam = null;
+    const t0 = ctx.currentTime;
+    beam.gain.gain.cancelScheduledValues(t0);
+    beam.gain.gain.setValueAtTime(Math.max(0.0001, beam.gain.gain.value), t0);
+    beam.gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.09);
+    for (const node of beam.nodes) node.stop(t0 + 0.1);
   }
 
   play(name: SoundName): void {

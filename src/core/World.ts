@@ -112,6 +112,8 @@ export interface SpellState {
   cooldown: number;
   /** 스킬 id → 남은 쿨다운 틱 */
   cooldowns?: Record<string, number>;
+  /** 채널 중인 스킬(관통 뇌창) — 키를 붙들고 있는 동안만 산다. pulse 는 다음 타까지 남은 틱 */
+  channel?: { sigilId: string; pulse: number } | null;
 }
 
 /** 바닥에 떨어진 각인. 접근하면 획득 */

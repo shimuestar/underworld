@@ -5,7 +5,7 @@
 import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { sigilDef } from '../core/SigilData';
+import { sigilDef, type SigilDef } from '../core/SigilData';
 import { alertEnemy, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type World } from '../core/World';
 
 let nextProjectileId = 1;
@@ -27,22 +27,27 @@ export function tick(world: World, dt: number): void {
   const cds = world.spell.cooldowns;
   if (cds) for (const id of Object.keys(cds)) if (cds[id]! > 0) cds[id]!--;
 
+  const canCast =
+    world.player.stunTicks <= 0 && world.player.dodgeTicks <= 0 && !world.player.blocking;
+
+  // 채널형 스킬(관통 뇌창)은 엣지가 아니라 "붙들고 있는 칸"을 본다 — 떼면 그 틱에 끊긴다
+  const heldSlot =
+    world.input.skillHeld > 0
+      ? world.input.skillHeld - 1
+      : world.input.selectedSkillHeld
+        ? world.selectedSkill
+        : -1;
+  tickChannel(world, heldSlot, canCast);
+
   // 칸 직접 지정(Z·X·C·V)이 우선, 없으면 선택한 칸(가운데 클릭 · 패드 Y)
   const slot = world.input.useSkill > 0 ? world.input.useSkill - 1 : world.input.useSelectedSkill ? world.selectedSkill : -1;
-  if (
-    slot >= 0 &&
-    world.player.stunTicks <= 0 &&
-    world.player.dodgeTicks <= 0 &&
-    !world.player.blocking
-  ) {
-    tryCast(world, slot);
-  }
+  if (slot >= 0 && canCast) tryCast(world, slot);
 
   moveProjectiles(world, dt);
   applyBurns(world);
 }
 
-/** 스킬 쿨다운 — 스킬별로 따로 돈다. 서리 폭발이 3초 쉰다고 화염구까지 막히면 안 된다 */
+/** 스킬 쿨다운 — 스킬별로 따로 돈다. 서리 볼트가 3초 쉰다고 화염구까지 막히면 안 된다 */
 export function skillCooldown(world: World, id: string): number {
   return world.spell.cooldowns?.[id] ?? 0;
 }
@@ -76,6 +81,12 @@ function tryCast(world: World, slotIndex: number): void {
   }
   if (skillCooldown(world, sigilId) > 0) return; // 연타는 조용히 — 매번 뜨면 시끄럽다
 
+  // 채널형(관통 뇌창)은 비용·쿨다운 규약이 다르다 — 마나는 한 타마다, 쿨다운은 끝날 때
+  if (def.cast === 'beam') {
+    startChannel(world, sigilId, def);
+    return;
+  }
+
   // 스킬이 manaCost 를 명시하면 그 값, 없으면 티어 기본값
   const cost =
     def.effects['manaCost'] ?? balance.spellCost[def.tier as keyof typeof balance.spellCost] ?? 0;
@@ -90,9 +101,6 @@ function tryCast(world: World, slotIndex: number): void {
   switch (def.cast) {
     case 'projectile':
       castProjectile(world, def.effects);
-      break;
-    case 'beam':
-      castBeam(world, def.effects);
       break;
     case 'nova':
       castNova(world, def.effects);
@@ -140,14 +148,114 @@ function skillDamage(world: World, enemy: EnemyState, damage: number, source: st
   }
 }
 
-/** 관통 뇌창 — 즉발 빔. 조준선 위의 적을 앞에서부터 pierce 명까지 꿰뚫는다.
- *  벽에서 멈추고, 방패에 막히면 거기서 끊긴다 (번개도 방패는 못 뚫는다) */
-function castBeam(world: World, effects: Record<string, number>): void {
-  const { ox, oy, oz, dx, dy, dz } = aim(world);
-  const hx0 = -Math.sin(world.player.yaw);
-  const hz0 = -Math.cos(world.player.yaw);
+/** 채널 시작 — 붙들고 있는 동안 pulseTicks 마다 한 타씩 나간다.
+ *  마나는 한 타마다 깎이고, 쿨다운은 채널이 끝날 때 걸린다 (붙들고 있는 내내 쉬는 건 말이 안 된다) */
+function startChannel(world: World, sigilId: string, def: SigilDef): void {
+  if (world.spell.channel?.sigilId === sigilId) return; // 이미 뻗고 있다
+  const cost = def.effects['manaCost'] ?? 0;
+  if (world.mana.value < cost) {
+    world.events.emit('cast_failed', { reason: 'no_mana', cost, current: world.mana.value });
+    return;
+  }
+  world.spell.channel = { sigilId, pulse: 0 };
+  // 시전음·연쇄 리셋은 채널당 한 번 — 한 타마다 울리면 기관총이 된다
+  world.events.emit('cast_spell', { sigil: sigilId, cost, cast: def.cast, channel: true });
+  firePulse(world, def);
+}
+
+/** 채널 한 타 — 마나를 깎고 피해를 넣은 뒤 다음 타까지의 간격을 잰다.
+ *  빔이 뻗는 그림 자체는 매 틱이다 — 피해만 이 간격으로 들어간다 */
+function firePulse(world: World, def: SigilDef): void {
+  world.mana.value -= def.effects['manaCost'] ?? 0;
+  castBeam(world, def.effects, true);
+  const channel = world.spell.channel;
+  if (channel) channel.pulse = Math.max(1, def.effects['pulseTicks'] ?? 6);
+}
+
+/** 붙들고 있는 동안만 이어진다 — 손을 떼거나, 마나가 마르거나, 경직·회피·방어에 걸리면 끊긴다 */
+function tickChannel(world: World, heldSlot: number, canCast: boolean): void {
+  const channel = world.spell.channel;
+  if (!channel) return;
+  const def = sigilDef(channel.sigilId);
+  if (!canCast || heldSlot < 0 || world.skillSlots[heldSlot] !== channel.sigilId) {
+    endChannel(world, 'released');
+    return;
+  }
+  const cost = def.effects['manaCost'] ?? 0;
+  if (world.mana.value < cost) {
+    world.events.emit('cast_failed', { reason: 'no_mana', cost, current: world.mana.value });
+    endChannel(world, 'no_mana');
+    return;
+  }
+  if (channel.pulse > 0) channel.pulse--;
+  if (channel.pulse <= 0) firePulse(world, def);
+  else castBeam(world, def.effects, false); // 타 사이에도 빔은 붙어 있다 — 그림만 갱신
+}
+
+/** 채널을 끊는다. 여기서 비로소 쿨다운이 걸린다 — 일시정지·사망처럼 밖에서도 끊는다 */
+export function endChannel(world: World, reason = 'released'): void {
+  const channel = world.spell.channel;
+  if (!channel) return;
+  world.spell.channel = null;
+  world.spell.cooldowns ??= {};
+  world.spell.cooldowns[channel.sigilId] = sigilDef(channel.sigilId).effects['cooldownTicks'] ?? 0;
+  world.events.emit('channel_ended', { sigil: channel.sigilId, reason });
+}
+
+/** 조준 보정 대상 — 조준선에서 maxDeg 안, 벽에 안 가린 적 중 가장 가까운 하나.
+ *  정확히 겨누지 않아도 빔이 그쪽으로 휜다. 벽 너머로는 휘지 않는다 */
+function assistTarget(
+  world: World,
+  ox: number,
+  oz: number,
+  hx: number,
+  hz: number,
+  range: number,
+  maxDeg: number,
+): EnemyState | null {
+  if (maxDeg <= 0) return null;
+  const minCos = Math.cos((maxDeg * Math.PI) / 180);
+  let best: EnemyState | null = null;
+  let bestDist = Infinity;
+  for (const enemy of world.enemies) {
+    if (!enemy.alive) continue;
+    const rx = enemy.x - ox;
+    const rz = enemy.z - oz;
+    const dist = Math.hypot(rx, rz);
+    if (dist < 0.001 || dist > range || dist >= bestDist) continue;
+    if ((rx * hx + rz * hz) / dist < minCos) continue; // 조준 원뿔 밖
+    if (!world.level.hasLineOfSight(ox, oz, enemy.x, enemy.z)) continue;
+    best = enemy;
+    bestDist = dist;
+  }
+  return best;
+}
+
+/** 뻗어 있는 빔을 한 틱 갱신한다. 조준선 위의 적을 앞에서부터 pierce 명까지 꿰뚫고,
+ *  벽에서 멈추고, 방패에 막히면 거기서 끊긴다 (번개도 방패는 못 뚫는다).
+ *  겨눈 방향에 아무도 없어도 aimAssistDeg 안에 적이 있으면 그쪽으로 휜다.
+ *  damaging 이 false 면 어디까지 닿는지만 계산한다 — 피해는 pulseTicks 마다 한 번 */
+function castBeam(world: World, effects: Record<string, number>, damaging = true): void {
+  const { ox, oy, oz } = aim(world);
   const range = effects['range'] ?? 20;
   const width = effects['width'] ?? 0.5;
+
+  let hx0 = -Math.sin(world.player.yaw);
+  let hz0 = -Math.cos(world.player.yaw);
+  // 위아래 기울기 — 판정은 평면이고 그림만 기운다. 조준 보정이 붙으면 그 적의 가슴을 향한다
+  const cosPitch = Math.max(0.2, Math.cos(world.player.pitch));
+  let slopeY = Math.sin(world.player.pitch) / cosPitch;
+
+  const target = assistTarget(world, ox, oz, hx0, hz0, range, effects['aimAssistDeg'] ?? 0);
+  if (target) {
+    const rx = target.x - ox;
+    const rz = target.z - oz;
+    const dist = Math.hypot(rx, rz);
+    hx0 = rx / dist;
+    hz0 = rz / dist;
+    slopeY = (enemyDef(target.type).height * 0.55 - oy) / dist;
+  }
+
   const wallT = world.level.wallRayT(ox, oz, hx0, hz0);
   let maxT = Math.min(range, wallT > 0 ? wallT : range);
 
@@ -169,21 +277,22 @@ function castBeam(world: World, effects: Record<string, number>): void {
   for (const { enemy, t } of candidates) {
     if (hits.length >= pierce) break;
     if (shieldBlocksProjectile(enemyDef(enemy.type), enemy, ox, oz)) {
-      world.events.emit('shot_blocked', { enemyId: enemy.id, source: 'lightning' });
+      if (damaging) world.events.emit('shot_blocked', { enemyId: enemy.id, source: 'lightning' });
       maxT = t; // 방패가 빔을 받아 낸다 — 뒤의 적은 무사
       break;
     }
-    skillDamage(world, enemy, effects['damage'] ?? 0, 'lightning');
+    if (damaging) skillDamage(world, enemy, effects['damage'] ?? 0, 'lightning');
     hits.push(enemy.id);
   }
-  world.events.emit('lightning_cast', {
+  // 매 틱 나간다 — 렌더는 이걸 받아 빔을 붙여 두고, pulse 인 틱에만 밝게 튄다
+  world.events.emit('lightning_beam', {
     sx: ox, sy: oy, sz: oz,
-    ex: ox + dx * maxT, ey: oy + dy * maxT, ez: oz + dz * maxT,
-    hits,
+    ex: ox + hx0 * maxT, ey: oy + slopeY * maxT, ez: oz + hz0 * maxT,
+    hits, assisted: target !== null, pulse: damaging,
   });
 }
 
-/** 서리 폭발(icebolt) — 얼음 화살을 쏜다. 무엇에 닿든 그 자리에서 frostBurst 가 터진다.
+/** 서리 볼트(icebolt) — 얼음 화살을 쏜다. 무엇에 닿든 그 자리에서 frostBurst 가 터진다.
  *  직격 피해는 없다 — 피해는 광역 빙결이 깨질 때 들어간다 */
 function castIceBolt(world: World, effects: Record<string, number>): void {
   const { ox, oy, oz, dx, dy, dz } = aim(world);
@@ -208,7 +317,7 @@ function castNova(world: World, effects: Record<string, number>): void {
   frostBurst(world, world.player.x, world.player.z, effects);
 }
 
-/** 서리 폭발의 실체 — (cx,cz) 주위 radius 안, 벽에 가리지 않은 적에게 서리를 한 겹 쌓는다.
+/** 서리 볼트의 실체 — (cx,cz) 주위 radius 안, 벽에 가리지 않은 적에게 서리를 한 겹 쌓는다.
  *  피해는 겹마다 damageFirst + damageStep×(겹-1) 을 즉시 받고(damageCapStack 에서 멈춤), 겹 수에 따라: 1 = 약한 둔화 / 2 = 완전 둔화 /
  *  3 = 빙결(깨질 때 breakDamage 한 번 더) / 4+ = 빙결 freezeExtraTicks 씩 연장.
  *  겹은 둔화가 다 풀리면(Enemies) 0 으로 돌아간다.
@@ -495,7 +604,7 @@ function moveProjectiles(world: World, dt: number): void {
         } else {
           igniteBarrel(hitBarrelTarget);
           world.events.emit('spell_impact', { x: bx, y: by, z: bz, hitEnemy: true });
-          // 얼음 화살 — 통도 터지지만 그 자리에서 서리 폭발도 같이 터진다.
+          // 얼음 화살 — 통도 터지지만 그 자리에서 서리 볼트도 같이 터진다.
           // 얼어 선 적들이 그 자리에서 폭발을 맞는 조합이다 (Barrels 는 이 뒤에 돈다)
           if (proj.kind === 'frost' && proj.owner === 'player') {
             const fx = sigilDef('sig_frost').effects;

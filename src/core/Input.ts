@@ -43,6 +43,10 @@ export interface InputSnapshot {
   /** 스킬 시전 — castPressed 는 "어떤 스킬이든 눌렀다", useSkill 은 몇 번 칸인지 (1~4, 0 = 없음) */
   castPressed: boolean;
   useSkill: number;
+  /** 스킬 키를 붙들고 있는가 (1~4, 0 = 없음) — 채널형 스킬(관통 뇌창)이 이걸 본다 */
+  skillHeld: number;
+  /** 선택한 스킬 칸의 키(가운데 클릭 · 패드 cast)를 붙들고 있는가 */
+  selectedSkillHeld: boolean;
   /** 스킬 교체 — 선택 칸을 다음 칸으로 (Q · 패드 cycleSkill) */
   cycleSkill: boolean;
   /** 선택한 스킬 칸 사용 (가운데 클릭 · 패드 cast) */
@@ -89,6 +93,7 @@ export class Input {
   private useSkill = 0;
   private cycleSkills = 0;
   private useSelected = 0;
+  private useSelectedDown = false;
   /** 패드 랜턴 버튼을 붙든 틱 — holdTicks 를 넘기면 배터리 교체, 짧게 떼면 켜고 끄기 */
   private padLanternHeld = 0;
   private padLanternSwapped = false;
@@ -175,11 +180,13 @@ export class Input {
       if (e.button === 1) {
         e.preventDefault();
         this.useSelected++;
+        this.useSelectedDown = true;
       }
     });
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.rangedDown = false;
       if (e.button === 2) this.meleeDown = false;
+      if (e.button === 1) this.useSelectedDown = false;
     });
     window.addEventListener('wheel', (e) => {
       if (!this.pointerLocked) return;
@@ -189,6 +196,7 @@ export class Input {
       this.meleeDown = false;
       this.rangedDown = false;
       this.reactionDown = false;
+      this.useSelectedDown = false;
     });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
   }
@@ -233,6 +241,7 @@ export class Input {
     this.meleeDown = false;
     this.rangedDown = false;
     this.reactionDown = false;
+    this.useSelectedDown = false;
   }
 
   get pointerLocked(): boolean {
@@ -271,6 +280,13 @@ export class Input {
     else if (pad.pressed('skill2')) padSkill = 2;
     else if (pad.pressed('skill3')) padSkill = 3;
     else if (pad.pressed('skill4')) padSkill = 4;
+    // 붙들고 있는 스킬 칸 — 채널형 스킬은 엣지가 아니라 이걸 본다
+    let padSkillHeld = 0;
+    if (pad.held('skill1')) padSkillHeld = 1;
+    else if (pad.held('skill2')) padSkillHeld = 2;
+    else if (pad.held('skill3')) padSkillHeld = 3;
+    else if (pad.held('skill4')) padSkillHeld = 4;
+    const keySkillHeld = SKILL_CODES.findIndex((code) => this.keys.has(code)) + 1;
     let padSlot = 0;
     if (pad.pressed('slot1')) padSlot = 1;
     else if (pad.pressed('slot2')) padSlot = 2;
@@ -303,6 +319,8 @@ export class Input {
       reactionReleased: this.reactionReleases > 0 || pad.released('reaction'),
       castPressed: this.useSkill !== 0 || padSkill !== 0 || this.useSelected > 0 || pad.pressed('cast'),
       useSkill: this.useSkill !== 0 ? this.useSkill : padSkill,
+      skillHeld: keySkillHeld !== 0 ? keySkillHeld : padSkillHeld,
+      selectedSkillHeld: this.useSelectedDown || pad.held('cast'),
       cycleSkill: this.cycleSkills > 0 || pad.pressed('cycleSkill'),
       useSelectedSkill: this.useSelected > 0 || pad.pressed('cast'),
       interactPressed: this.interacts > 0 || pad.pressed('interact'),
@@ -349,6 +367,8 @@ export class Input {
       reactionReleased: false,
       castPressed: false,
       useSkill: 0,
+      skillHeld: 0,
+      selectedSkillHeld: false,
       cycleSkill: false,
       useSelectedSkill: false,
       interactPressed: false,
