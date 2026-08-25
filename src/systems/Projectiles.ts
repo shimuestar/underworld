@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef } from '../core/SigilData';
-import { alertEnemy, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, shatterIfFrozen, type BarrelState, type EnemyState, type ProjectileState, type World } from '../core/World';
+import { alertEnemy, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type World } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -130,7 +130,7 @@ function castProjectile(world: World, effects: Record<string, number>): void {
 function skillDamage(world: World, enemy: EnemyState, damage: number, source: string): void {
   if (enemy.ai === 'idle') enemy.ai = 'chase';
   // 서리 자신의 피해는 얼음을 깨지 않는다 — 다른 스킬(뇌창 등)은 깬다
-  const dealt = source === 'frost' ? damage : shatterIfFrozen(world.events, enemy, damage);
+  const dealt = source === 'frost' ? damage : applyFrostOnHit(world.events, enemy, damage);
   enemy.health -= dealt;
   world.events.emit('enemy_damaged', { enemyId: enemy.id, amount: dealt, source });
   if (enemy.health <= 0 && enemy.alive) {
@@ -228,7 +228,8 @@ function frostBurst(world: World, cx: number, cz: number, effects: Record<string
     const damage = (effects['damageFirst'] ?? 0) + (capped - 1) * (effects['damageStep'] ?? 0);
     if (stacks >= 3) {
       const freeze = (effects['freezeTicks'] ?? 0) + (stacks - 3) * (effects['freezeExtraTicks'] ?? 0);
-      enemy.freezeTicks = Math.max(enemy.freezeTicks ?? 0, freeze);
+      // 겹이 쌓여도 freezeMaxTicks 를 넘지 않는다 — 계속 얼려 두는 건 없다
+      enemy.freezeTicks = Math.min(effects['freezeMaxTicks'] ?? Infinity, Math.max(enemy.freezeTicks ?? 0, freeze));
       enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, enemy.freezeTicks + (effects['afterFreezeSlowTicks'] ?? 0));
       enemy.slowMul = effects['slowMul'] ?? 0.5;
       enemy.frozenDamage = effects['breakDamage'] ?? damage; // 깨질 때 한 번 — 겹이 쌓여도 같다
@@ -702,7 +703,7 @@ function applyProjectileHit(
   // 동료 오사는 위력이 줄어든다 — 사고로 보이되 한 방에 죽지는 않게
   const damage =
     proj.owner === 'enemy' ? proj.damage * balance.enemyAi.friendlyFireDamageMul : proj.damage;
-  enemy.health -= shatterIfFrozen(world.events, enemy, damage);
+  enemy.health -= applyFrostOnHit(world.events, enemy, damage);
   enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
   if (proj.burnDamagePerTick > 0) enemy.burnDamagePerTick = proj.burnDamagePerTick;
   // 맞은 화살은 그 자리에 떨어진다 (적이 죽어도 시체 자리에 남는다).
@@ -778,7 +779,7 @@ function explodeFireball(
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     const damage = damageAt(dist);
     // 방어막은 폭발을 막지 못한다 (화염은 사방에서 온다)
-    enemy.health -= shatterIfFrozen(world.events, enemy, damage);
+    enemy.health -= applyFrostOnHit(world.events, enemy, damage);
     enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
     if (proj.burnDamagePerTick > 0) enemy.burnDamagePerTick = proj.burnDamagePerTick;
     if (enemy.health <= 0) {
@@ -841,7 +842,7 @@ function implodeBolt(
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     // 적이 쏜 것이면 동료 오사 규칙을 따른다 (사고로 보이되 한 방에 죽지 않게)
     const mul = proj.owner === 'enemy' ? balance.enemyAi.friendlyFireDamageMul : 1;
-    enemy.health -= shatterIfFrozen(world.events, enemy, sp.damage * falloff * mul);
+    enemy.health -= applyFrostOnHit(world.events, enemy, sp.damage * falloff * mul);
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit(
@@ -951,7 +952,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
       });
     }
 
-    enemy.health -= shatterIfFrozen(world.events, enemy, damage);
+    enemy.health -= applyFrostOnHit(world.events, enemy, damage);
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('weapon_kill', { weapon: 'grenade', enemyType: enemy.type });

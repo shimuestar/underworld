@@ -9,7 +9,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef, shieldBlocksProjectile } from '../core/Entities';
-import { alertEnemy, igniteBarrel, pushEnemy, pushPlayer, shatterIfFrozen, type BarrelState, type EnemyState, type World } from '../core/World';
+import { alertEnemy, igniteBarrel, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   for (const barrel of world.barrels) {
@@ -75,7 +75,7 @@ function explode(world: World, barrel: BarrelState): void {
       });
     }
 
-    enemy.health -= shatterIfFrozen(world.events, enemy, damage);
+    enemy.health -= applyFrostOnHit(world.events, enemy, damage);
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('weapon_kill', { weapon: 'barrel', enemyType: enemy.type });

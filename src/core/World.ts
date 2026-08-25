@@ -139,17 +139,26 @@ export function pushEnemy(
  *  깨우는 곳이 여섯 군데(시야·랜턴·보스 포효·총소리·화염구·폭발통)라 한 군데서만
  *  멈칫을 걸면 나머지는 느낌표가 뜨자마자 달려든다. balance 는 호출부가 읽어 넘긴다
  *  (pushPlayer 와 같은 규약 — World 는 데이터에 의존하지 않는다) */
-/** 얼어 있는 적이 서리가 아닌 공격을 받으면 얼음이 그 자리에서 깨진다 — 피해는 hitShatterMul 배,
- *  대신 깨질 때 피해(breakDamage)는 없다. 적에게 피해를 주는 모든 지점이 이걸 거친다(화상 DoT 제외 —
- *  화염구 한 발이면 빙결이 곧바로 풀려 버린다). 돌려주는 값이 실제로 넣을 피해다 */
-export function shatterIfFrozen(events: Events, enemy: EnemyState, damage: number): number {
-  if ((enemy.freezeTicks ?? 0) <= 0) return damage;
-  enemy.freezeTicks = 0;
-  enemy.frozenDamage = 0;
-  events.emit('enemy_freeze_ended', {
-    enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, shattered: true,
-  });
-  return damage * (sigilDef('sig_frost').effects['hitShatterMul'] ?? 1);
+/** 서리 걸린 적이 서리가 아닌 공격을 받을 때의 피해 — 돌려주는 값이 실제로 넣을 피해다.
+ *  얼어 있으면: 얼음이 그 자리에서 깨지고(enemy_freeze_ended{shattered}) 피해×hitShatterMul + 깨질 때 피해.
+ *  둔화만 걸려 있으면: 1겹 ×hitMulStack1, 2겹 이상 ×hitMulStack2.
+ *  적에게 피해를 주는 모든 지점이 거친다(서리 자신·화상 DoT 제외 — 화염구 한 발이면 빙결이 곧바로 풀린다) */
+export function applyFrostOnHit(events: Events, enemy: EnemyState, damage: number): number {
+  const fx = sigilDef('sig_frost').effects;
+  if ((enemy.freezeTicks ?? 0) > 0) {
+    const breakDamage = enemy.frozenDamage ?? 0;
+    enemy.freezeTicks = 0;
+    enemy.frozenDamage = 0;
+    events.emit('enemy_freeze_ended', {
+      enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, shattered: true,
+    });
+    return damage * (fx['hitShatterMul'] ?? 1) + breakDamage;
+  }
+  const stacks = enemy.frostStacks ?? 0;
+  if (stacks >= 1 && (enemy.slowTicks ?? 0) > 0) {
+    return damage * (stacks === 1 ? (fx['hitMulStack1'] ?? 1) : (fx['hitMulStack2'] ?? 1));
+  }
+  return damage;
 }
 
 export function alertEnemy(enemy: EnemyState, noticeTicks: number): void {

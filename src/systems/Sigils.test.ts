@@ -483,7 +483,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(hit.frostStacks).toBe(0);
   });
 
-  it('빙결 중 다른 공격을 받으면 얼음이 깨지며 피해 1.2배, 깨질 때 피해는 없다', () => {
+  it('빙결 중 다른 공격을 받으면 얼음이 깨지며 피해 1.5배 + 깨질 때 피해 14', () => {
     Sigils.acquire(world, 'sig_lightning');
     world.mana.value = 100;
     const fx = sigilDef('sig_frost').effects;
@@ -495,21 +495,57 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     e.frozenDamage = fx['breakDamage']!;
     const ended: { shattered?: boolean }[] = [];
     world.events.on('enemy_freeze_ended', (p) => ended.push(p as { shattered?: boolean }));
-    castSlot(1); // 뇌창 90 → ×1.2 = 108
+    castSlot(1); // 뇌창 90 → ×1.5 = 135, + 깨질 때 14 = 149
     const bolt = sigilDef('sig_lightning').effects['damage']!;
-    expect(e.health).toBe(1000 - bolt * fx['hitShatterMul']!);
+    const shatterHit = bolt * fx['hitShatterMul']! + fx['breakDamage']!;
+    expect(shatterHit).toBe(149); // 2026-08 결정
+    expect(e.health).toBe(1000 - shatterHit);
     expect(e.freezeTicks).toBe(0);
     expect(ended).toEqual([expect.objectContaining({ shattered: true })]);
-    // 깨질 때 피해는 없다 — 시간이 지나도 더 안 깎인다
+    // 깨질 때 피해는 이미 들어갔다 — 시간이 지나도 두 번 안 깎인다
     for (let i = 0; i < 5; i++) Enemies.tick(world, DT);
-    expect(e.health).toBe(1000 - bolt * fx['hitShatterMul']!);
+    expect(e.health).toBe(1000 - shatterHit);
     expect(e.frozenDamage).toBe(0);
-    // 얼어 있지 않으면 배율이 없다
-    castSlot(1); // 쿨다운 — 안 나간다
+    // 깨진 뒤 둔화 상태(겹 유지)에선 둔화 배율이 붙는다 — 겹 0 이면 배율이 없다
+    e.frostStacks = 0;
     world.spell.cooldowns = {};
     world.mana.value = 100;
     castSlot(1);
-    expect(e.health).toBe(1000 - bolt * fx['hitShatterMul']! - bolt);
+    expect(e.health).toBe(1000 - shatterHit - bolt);
+  });
+
+  it('둔화만 걸린 적은 1겹 ×1.1, 2겹 이상 ×1.2 로 더 아프다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 300;
+    const fx = sigilDef('sig_frost').effects;
+    const bolt = sigilDef('sig_lightning').effects['damage']!;
+    const e = runnerAhead(6);
+    e.health = 1000;
+    e.frostStacks = 1;
+    e.slowTicks = 100;
+    e.slowMul = 0.7;
+    castSlot(1);
+    expect(e.health).toBeCloseTo(1000 - bolt * fx['hitMulStack1']!, 6);
+    expect(fx['hitMulStack1']).toBe(1.1);
+    e.frostStacks = 2;
+    world.spell.cooldowns = {};
+    castSlot(1);
+    expect(e.health).toBeCloseTo(1000 - bolt * fx['hitMulStack1']! - bolt * fx['hitMulStack2']!, 6);
+    expect(fx['hitMulStack2']).toBe(1.2);
+    expect(e.freezeTicks ?? 0).toBe(0); // 둔화는 깨질 것이 없다 — 그대로 둔화
+  });
+
+  it('빙결은 겹이 쌓여도 freezeMaxTicks(3초)를 넘지 않는다', () => {
+    Sigils.acquire(world, 'sig_frost');
+    world.mana.value = 500;
+    const fx = sigilDef('sig_frost').effects;
+    const e = runnerAhead(6);
+    e.health = 100000;
+    const shoot = (): void => { world.spell.cooldowns = {}; castSlot(1); flyBolt(); };
+    for (let i = 0; i < 6; i++) shoot(); // 6겹
+    expect(e.frostStacks).toBe(6);
+    expect(e.freezeTicks).toBe(fx['freezeMaxTicks']);
+    expect(fx['freezeMaxTicks']).toBe(180);
   });
 
   it('서리 자신의 피해는 얼음을 깨지 않는다 (겹 4 = 연장), 화상 DoT 도 깨지 않는다', () => {
