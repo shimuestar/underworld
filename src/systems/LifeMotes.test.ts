@@ -54,12 +54,24 @@ function ticks(n: number): void {
 }
 
 describe('흩뿌리기', () => {
-  it('처치 이벤트로 체급만큼 흩뿌린다 — 가벼운 적과 중간 적이 다르다', () => {
+  it('처치 이벤트로 체급 범위 안의 개수를 흩뿌린다 — 양 끝이 모두 나온다', () => {
+    const light = CFG.countByWeight.light;
+    vi.spyOn(Math, 'random').mockReturnValue(0); // 최소
     world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 30, z: 30 });
-    expect(world.lifeMotes.length).toBe(CFG.countByWeight.light);
-    world.events.emit('enemy_died', { enemyType: 'goblin_spear', x: 30, z: 30 });
-    expect(world.lifeMotes.length).toBe(CFG.countByWeight.light + CFG.countByWeight.medium);
-    expect(CFG.countByWeight.medium).toBeGreaterThan(CFG.countByWeight.light);
+    expect(world.lifeMotes.length).toBe(light.min);
+    world.lifeMotes.length = 0;
+    vi.spyOn(Math, 'random').mockReturnValue(0.999999); // 최대
+    world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 30, z: 30 });
+    expect(world.lifeMotes.length).toBe(light.max);
+  });
+
+  it('데이터 — 회복이 후하지 않고 체급 차이가 작다 (2026-08 결정)', () => {
+    const { light, medium, heavy } = CFG.countByWeight;
+    for (const r of [light, medium, heavy]) expect(r.min).toBeLessThanOrEqual(r.max);
+    // 가벼운 적 평균 3 HP 안팎 — 처음 6 이 너무 후했다
+    expect(((light.min + light.max) / 2) * CFG.healPerMote).toBeLessThanOrEqual(3);
+    // 무거운 적이라고 크게 더 주지 않는다
+    expect((heavy.max - light.max) * CFG.healPerMote).toBeLessThanOrEqual(2);
   });
 
   it('scatterRadius 안에 떨어지고, 처음엔 자석에 안 걸려 있다', () => {
@@ -80,9 +92,9 @@ describe('자석', () => {
       healedTotal += (p as { healed: number }).healed;
     });
     LifeMotes.spawn(world, 'goblin_runner', world.player.x + 1.5, world.player.z); // 반경 안
+    const gain = world.lifeMotes.length * CFG.healPerMote;
     ticks(120);
     expect(world.lifeMotes.length).toBe(0);
-    const gain = CFG.countByWeight.light * CFG.healPerMote;
     expect(world.player.health).toBe(50 + gain);
     expect(healedTotal).toBe(gain);
   });
@@ -97,12 +109,13 @@ describe('자석', () => {
   it('한번 걸리면 물러나도 끝까지 따라온다 — 따라오는 동안은 늙지 않는다', () => {
     world.player.health = 50;
     LifeMotes.spawn(world, 'goblin_runner', world.player.x + 2, world.player.z);
+    const gain = world.lifeMotes.length * CFG.healPerMote;
     ticks(1);
     expect(world.lifeMotes.every((m) => m.homing)).toBe(true);
     world.player.x += 20; // 멀리 물러난다
     ticks(CFG.lifeTicks + 60); // 수명보다 오래 기다려도 사라지지 않고 도착한다
     expect(world.lifeMotes.length).toBe(0);
-    expect(world.player.health).toBe(50 + CFG.countByWeight.light * CFG.healPerMote);
+    expect(world.player.health).toBe(50 + gain);
   });
 });
 
@@ -122,20 +135,22 @@ describe('멀리서 죽이면', () => {
       expired += (p as { count: number }).count;
     });
     LifeMotes.spawn(world, 'goblin_runner', world.player.x + 10, world.player.z);
+    const spawned = world.lifeMotes.length;
     ticks(CFG.lifeTicks - 1);
-    expect(world.lifeMotes.length).toBe(CFG.countByWeight.light);
+    expect(world.lifeMotes.length).toBe(spawned);
     ticks(1);
     expect(world.lifeMotes.length).toBe(0);
-    expect(expired).toBe(CFG.countByWeight.light);
+    expect(expired).toBe(spawned);
   });
 
   it('사라지기 전에 다가가면 여전히 빨려 온다', () => {
     world.player.health = 50;
     LifeMotes.spawn(world, 'goblin_runner', world.player.x + 10, world.player.z);
+    const gain = world.lifeMotes.length * CFG.healPerMote;
     ticks(CFG.lifeTicks - 30);
     world.player.x += 10; // 입자 곁으로
     ticks(120);
     expect(world.lifeMotes.length).toBe(0);
-    expect(world.player.health).toBe(50 + CFG.countByWeight.light * CFG.healPerMote);
+    expect(world.player.health).toBe(50 + gain);
   });
 });

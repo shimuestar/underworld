@@ -16,10 +16,11 @@ export function init(world: World): void {
   });
 }
 
-/** 체급에 따라 몇 개를 흩뿌린다 — 무거운 적일수록 많이 */
+/** 체급별 범위 안에서 랜덤 개수를 흩뿌린다 (양 끝 포함). 체급 차이는 일부러 작다 */
 export function spawn(world: World, enemyType: string, x: number, z: number): void {
   const cfg = balance.lifeMotes;
-  const count = cfg.countByWeight[enemyDef(enemyType).weight] ?? cfg.countByWeight.light;
+  const range = cfg.countByWeight[enemyDef(enemyType).weight] ?? cfg.countByWeight.light;
+  const count = range.min + Math.floor(Math.random() * (range.max - range.min + 1));
   for (let i = 0; i < count; i++) {
     const ang = Math.random() * Math.PI * 2;
     const r = Math.sqrt(Math.random()) * cfg.scatterRadius; // 원판에 고르게

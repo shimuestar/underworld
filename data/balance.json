@@ -402,8 +402,13 @@
 
   "lifeMotes": {
     "_comment": "생명 입자 — 적이 죽으면 그 자리에 흩뿌려지고, 플레이어가 magnetRadius 안에 들어오면 빨려 들어와 HP 를 healPerMote 씩 채운다. 멀리서 죽이면 그 자리에 남았다가 lifeTicks 뒤 사라진다 (마지막 fadeTicks 동안 옅어진다). 한번 자석에 걸리면 물러나도 끝까지 따라온다",
-    "healPerMote": 2,
-    "countByWeight": { "light": 3, "medium": 5, "heavy": 8 },
+    "_healNote": "2026-08: 입자당 2 → 1, 개수 3/5/8 고정 → 범위 랜덤. 처치당 평균 6/10/16 HP 가 너무 후해서 절반으로 줄였고(평균 3/4/4.5), 종류별 격차도 좁혔다 — 무거운 적을 잡는 보상은 XP·드랍이지 회복이 아니다",
+    "healPerMote": 1,
+    "countByWeight": {
+      "light": { "min": 2, "max": 4 },
+      "medium": { "min": 3, "max": 5 },
+      "heavy": { "min": 3, "max": 6 }
+    },
     "scatterRadius": 0.7,
     "hoverHeight": 0.9,
     "absorbHeight": 1.2,
