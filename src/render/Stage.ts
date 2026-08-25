@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
 import { currentAttack, enemyDef, healthBarState, shieldLowered } from '../core/Entities';
-import { sigilColor } from '../core/SigilData';
+import { sigilColor, sigilDef } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, glyphTexture } from '../level/GridLoader';
 import type {
   BarrelState,
@@ -123,7 +123,8 @@ const HIT_FLASH_HZ = 26; // 초당 명멸 횟수 (아주 빠르게)
 const WINDUP_TINT = 0x0e2440; // 예비 동작의 옅은 예고 (본 섬광은 종료 4t 전)
 const BURN_TINT = 0x8f3300; // 화상 중
 /** 서리에 얼어붙은 적 — 차가운 푸른 발광. 불(BURN_TINT)이 붙어 있으면 불이 이긴다 */
-const FROST_TINT = 0x2f7fc4;
+const FROST_TINT = 0x2f7fc4; // 둔화 단계
+const FREEZE_TINT = 0x6fc2ff; // 완전 빙결 — 더 밝고 차갑다
 const ICE_COLOR = 0xbfe8ff;
 // 화상 표시 — 발광은 텔레그래프·스태거 색에 가려지므로 불티로 따로 알린다
 const BURN_EMBER_MS = 85; // 적 하나당 불티 생성 간격
@@ -1659,6 +1660,7 @@ export class Stage {
       else if (enemy.ai === 'windup') emissive = WINDUP_TINT;
       else if (enemy.ai === 'staggered') emissive = STAGGER_COLOR;
       else if (enemy.burnTicks > 0) emissive = BURN_TINT;
+      else if ((enemy.freezeTicks ?? 0) > 0) emissive = FREEZE_TINT;
       else if ((enemy.slowTicks ?? 0) > 0) emissive = FROST_TINT;
 
       // 화상 — 몸에서 불티가 계속 피어오른다. 발광색은 다른 상태에 가려지므로
@@ -1678,8 +1680,11 @@ export class Stage {
       if (visual.ice) {
         visual.ice.visible = frozen;
         if (frozen) {
-          const left = Math.min(1, (enemy.slowTicks ?? 0) / 60); // 마지막 1초에 줄어든다
-          const sc = 0.55 + 0.45 * left;
+          // 완전 빙결 동안은 결정이 꽉 차 있고, 풀린 뒤 둔화가 끝나 갈수록 녹아 작아진다
+          const solid = (enemy.freezeTicks ?? 0) > 0;
+          const slowTotal = Math.max(1, sigilDef('sig_frost').effects['slowTicks'] ?? 1);
+          const left = Math.min(1, (enemy.slowTicks ?? 0) / slowTotal);
+          const sc = solid ? 1 : 0.35 + 0.65 * left;
           visual.ice.scale.set(sc, sc, sc);
         }
       }

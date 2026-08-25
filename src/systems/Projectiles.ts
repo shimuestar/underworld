@@ -174,7 +174,8 @@ function castBeam(world: World, effects: Record<string, number>): void {
   });
 }
 
-/** 서리 폭발 — 내 주위 radius 안의 적을 얼려 느리게 하고 살짝 다친다. 벽 너머는 안 닿는다 */
+/** 서리 폭발 — 내 주위 radius 안의 적을 freezeTicks 동안 완전히 세우고, 이어 slowTicks 까지 느리게 한다.
+ *  살짝 다치기도 한다. 벽 너머는 안 닿는다 */
 function castNova(world: World, effects: Record<string, number>): void {
   const p = world.player;
   const radius = effects['radius'] ?? 5;
@@ -183,6 +184,7 @@ function castNova(world: World, effects: Record<string, number>): void {
     if (!enemy.alive) continue;
     if (Math.hypot(enemy.x - p.x, enemy.z - p.z) > radius) continue;
     if (!world.level.hasLineOfSight(p.x, p.z, enemy.x, enemy.z)) continue;
+    enemy.freezeTicks = Math.max(enemy.freezeTicks ?? 0, effects['freezeTicks'] ?? 0);
     enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, effects['slowTicks'] ?? 0);
     enemy.slowMul = effects['slowMul'] ?? 0.5;
     slowed.push(enemy.id);

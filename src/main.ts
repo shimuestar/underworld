@@ -367,6 +367,7 @@ for (const name of [
   'lightning_cast',
   'frost_nova',
   'enemy_thawed',
+  'enemy_freeze_ended',
   'blink',
   'altar_entered',
   'altar_bypassed',

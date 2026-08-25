@@ -420,11 +420,54 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     const near = runnerAhead(3);
     const far = runnerAhead(fx['radius']! + 2);
     castSlot(1);
+    expect(near.freezeTicks).toBe(fx['freezeTicks']);
     expect(near.slowTicks).toBe(fx['slowTicks']);
     expect(near.slowMul).toBe(fx['slowMul']);
     expect(near.health).toBe(enemyDef('goblin_runner').health - fx['damage']!);
     expect(far.slowTicks ?? 0).toBe(0);
     expect(far.health).toBe(enemyDef('goblin_runner').health);
+  });
+
+  it('빙결: freezeTicks 동안 이동도 공격 예고도 멈추고, 풀리면 둔화 상태로 이어진다', () => {
+    const e = add('goblin_spear', 12, 6); // 6m — 추격 거리
+    e.ai = 'chase';
+    e.freezeTicks = 30;
+    e.slowTicks = 90;
+    e.slowMul = 0.4;
+    const x0 = e.x;
+    const yaw0 = e.yaw;
+    const ended: number[] = [];
+    world.events.on('enemy_freeze_ended', (p) => ended.push((p as { enemyId: number }).enemyId));
+    for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+    expect(e.x).toBe(x0); // 한 발짝도 못 움직였다
+    expect(e.yaw).toBe(yaw0); // 몸도 못 돌렸다
+    expect(e.ai).toBe('chase'); // 공격 예고로 넘어가지 않았다
+    expect(ended).toEqual([e.id]);
+    expect(e.freezeTicks).toBe(0);
+    expect(e.slowTicks).toBe(60); // 빙결 동안에도 전체 지속은 흘렀다
+    for (let i = 0; i < 10; i++) Enemies.tick(world, DT);
+    expect(e.x).toBeLessThan(x0); // 이제 (느리게) 다가온다
+  });
+
+  it('둔화는 돌진에도 걸린다 — 얼렸는데 전속력으로 달려들면 안 된다', () => {
+    const quick = add('goblin_runner', 24, 6);
+    const slow = add('goblin_runner', 24, 6);
+    slow.slowTicks = 60;
+    slow.slowMul = 0.4;
+    for (const r of [quick, slow]) {
+      r.ai = 'charging';
+      r.attackMode = 'charge'; // 돌진 공격 정의(chargeSpeed)를 쓰게
+      r.chargeTargetX = 6;
+      r.chargeTargetZ = 6;
+      r.timer = 30;
+    }
+    const q0 = quick.x;
+    const s0 = slow.x;
+    Enemies.tick(world, DT);
+    const qMoved = q0 - quick.x;
+    const sMoved = s0 - slow.x;
+    expect(qMoved).toBeGreaterThan(0);
+    expect(sMoved).toBeCloseTo(qMoved * 0.4, 3);
   });
 
   it('해동: 둔화가 끝나는 틱에 enemy_thawed 가 한 번 난다', () => {

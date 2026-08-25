@@ -23,6 +23,18 @@ export function tick(world: World, dt: number): void {
 
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
+    // 빙결 — AI 를 아예 안 돌린다: 이동·회전·공격 예고·돌진·방패 추적 전부 멈춘다.
+    // 하던 동작은 얼음이 풀리면 그 자리에서 이어진다
+    if ((enemy.freezeTicks ?? 0) > 0) {
+      enemy.freezeTicks = (enemy.freezeTicks ?? 0) - 1;
+      enemy.prevX = enemy.x;
+      enemy.prevZ = enemy.z;
+      if (enemy.freezeTicks === 0) {
+        world.events.emit('enemy_freeze_ended', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      }
+      if ((enemy.slowTicks ?? 0) > 0) enemy.slowTicks = (enemy.slowTicks ?? 0) - 1;
+      continue;
+    }
     tickEnemy(world, enemy, dt);
     // 피탄 경직 소진은 행동 뒤에 — 앞에서 줄이면 마지막 틱에 움직여버린다
     if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
@@ -359,7 +371,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       const tdist = Math.hypot(tdx, tdz);
       if (tdist > 0.01) {
         enemy.yaw = Math.atan2(-tdx, -tdz);
-        moveAvoiding(world, enemy, def, tdx / tdist, tdz / tdist, attack.chargeSpeed! * dt);
+        moveAvoiding(world, enemy, def, tdx / tdist, tdz / tdist, attack.chargeSpeed! * slowFactor(enemy) * dt);
       }
       // 겨눈 자리에 닿았거나(몸 반경), 플레이어가 그대로 서 있어 이미 사거리거나, 시간이 다하면 친다
       if (tdist <= def.radius || dist <= def.attackRange || enemy.timer <= 0) {
@@ -573,9 +585,15 @@ function separation(world: World, enemy: EnemyState): { x: number; z: number } {
 }
 
 /** 목표 방향 + 아군 회피를 합쳐 한 발짝 이동. 피탄 경직 중에는 발이 묶인다 */
-/** 이동 속도 — 서리에 얼면 slowMul 배로 느려진다 (공격 리듬은 그대로다) */
+/** 서리 둔화 배율 — 빙결이 풀린 뒤 slowTicks 가 남아 있는 동안 slowMul, 아니면 1.
+ *  걷기·옆걸음·돌진이 전부 이걸 탄다 (돌진만 빠지면 "얼렸는데 달려든다"가 된다) */
+function slowFactor(enemy: EnemyState): number {
+  return (enemy.slowTicks ?? 0) > 0 ? (enemy.slowMul ?? 1) : 1;
+}
+
+/** 이동 속도 — 둔화 배율을 곱한다 (공격 리듬은 그대로다) */
 function moveSpeed(enemy: EnemyState, def: ReturnType<typeof enemyDef>): number {
-  return (enemy.slowTicks ?? 0) > 0 ? def.speed * (enemy.slowMul ?? 1) : def.speed;
+  return def.speed * slowFactor(enemy);
 }
 
 function moveAvoiding(
@@ -724,7 +742,7 @@ function chargeForward(
   if (attack.chargeRunTicks !== undefined) return;
   if (dist <= def.attackRange) return; // 이미 닿는 거리 — 더 파고들지 않는다
   enemy.yaw = Math.atan2(-distX, -distZ); // 달려드는 동안은 방향을 갱신한다
-  moveAvoiding(world, enemy, def, distX / dist, distZ / dist, attack.chargeSpeed * dt);
+  moveAvoiding(world, enemy, def, distX / dist, distZ / dist, attack.chargeSpeed * slowFactor(enemy) * dt);
 }
 
 /** 무기가 닿는 최대 거리 (적 중심 기준) — impact 판정 거리와 같아야 한다 */

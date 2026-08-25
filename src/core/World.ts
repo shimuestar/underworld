@@ -349,7 +349,9 @@ export interface EnemyState {
   /** 화상 잔여 틱 (Projectiles가 피해 적용) */
   burnTicks: number;
   burnDamagePerTick: number;
-  /** 서리 둔화 — 남은 틱과 속도 배율 (Projectiles 의 nova 가 건다, Enemies 가 줄인다) */
+  /** 서리 — freezeTicks 동안은 완전히 굳는다(이동·회전·공격·돌진 없음). slowTicks 는 빙결을
+   *  포함한 전체 지속이라, 빙결이 풀린 뒤 남은 동안 slowMul 배로 느리다 (Projectiles nova → Enemies) */
+  freezeTicks?: number;
   slowTicks?: number;
   slowMul?: number;
   /** 보스 전용 — 연속 패링 누적 (parriesToStagger 도달 시 스태거) */
