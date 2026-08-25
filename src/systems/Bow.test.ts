@@ -553,7 +553,7 @@ describe('데이터', () => {
   it('활이 원거리 교체 순환에 들어 있다', () => {
     expect(balance.weapons.bow.ammoMax).toBeGreaterThan(0);
     expect(BOW.damageMin).toBeLessThanOrEqual(BOW.damageMax); // 고정 피해(min==max) 허용
-    expect(BOW.damageMin).toBe(balance.weapons.pistol.damage * 2); // 화살 = 총알의 2배 (2026-08 결정)
+    expect(BOW.damageMin).toBe(44); // 2026-08-25: 총알을 절반(11)으로 줄이며 '화살 = 총알 2배' 연결은 풀었다 — 화살은 44 그대로
     expect(BOW.speedMin).toBeLessThan(BOW.speedMax);
     expect(BOW.minDrawTicks).toBeLessThan(BOW.maxDrawTicks);
     expect(BOW.recoverChance).toBeGreaterThan(0);
