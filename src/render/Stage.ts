@@ -126,6 +126,10 @@ const BURN_TINT = 0x8f3300; // 화상 중
 const FROST_TINT = 0x2f7fc4; // 둔화 단계
 const FREEZE_TINT = 0x6fc2ff; // 완전 빙결 — 더 밝고 차갑다
 const ICE_COLOR = 0xbfe8ff;
+/** 서리 자국 — 반지름(m)·수명(ms)·면에서 띄우는 거리(m) */
+const FROST_DECAL_RADIUS = 2.2;
+const FROST_DECAL_MS = 5200;
+const FROST_DECAL_LIFT = 0.03;
 // 화상 표시 — 발광은 텔레그래프·스태거 색에 가려지므로 불티로 따로 알린다
 const BURN_EMBER_MS = 85; // 적 하나당 불티 생성 간격
 const BURN_EMBER_LIFE_MS = 520;
@@ -283,6 +287,53 @@ const ALERT_POP_MS = 160;
 /** 느낌표 텍스처 — 모든 적이 같은 그림을 쓰므로 한 번만 만든다 */
 let alertTexture: THREE.CanvasTexture | null = null;
 let glowTexture: THREE.CanvasTexture | null = null;
+let frostTexture: THREE.CanvasTexture | null = null;
+
+/** 서리 자국 텍스처 — 가운데가 짙고 가장자리로 스러지는 얼음막 위에 결정 줄기가 사방으로 뻗는다.
+ *  한 장을 만들어 모든 자국이 돌려 쓴다 (회전을 달리해 같은 무늬로 안 보이게) */
+function getFrostTexture(): THREE.CanvasTexture {
+  if (frostTexture) return frostTexture;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const c = size / 2;
+  const film = ctx.createRadialGradient(c, c, 0, c, c, c);
+  film.addColorStop(0, 'rgba(214,240,255,0.85)');
+  film.addColorStop(0.45, 'rgba(180,222,250,0.5)');
+  film.addColorStop(0.8, 'rgba(160,210,245,0.18)');
+  film.addColorStop(1, 'rgba(160,210,245,0)');
+  ctx.fillStyle = film;
+  ctx.fillRect(0, 0, size, size);
+  // 결정 줄기 — 중심에서 뻗는 가지들, 끝으로 갈수록 가늘고 옅다
+  ctx.strokeStyle = 'rgba(235,248,255,0.9)';
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 14; i++) {
+    const ang = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
+    const len = c * (0.45 + Math.random() * 0.5);
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(c, c);
+    ctx.lineTo(c + Math.cos(ang) * len, c + Math.sin(ang) * len);
+    ctx.stroke();
+    // 곁가지
+    for (let j = 0; j < 3; j++) {
+      const t = 0.3 + Math.random() * 0.5;
+      const bx = c + Math.cos(ang) * len * t;
+      const by = c + Math.sin(ang) * len * t;
+      const side = ang + (Math.random() < 0.5 ? 0.7 : -0.7);
+      const bl = len * (0.15 + Math.random() * 0.2);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(side) * bl, by + Math.sin(side) * bl);
+      ctx.stroke();
+    }
+  }
+  frostTexture = new THREE.CanvasTexture(canvas);
+  return frostTexture;
+}
 
 /** 얼음 결정 — 몸통 둘레에 박힌 뾰족한 조각들. 빛을 안 받는 재질이라 어둠에서도 얼음빛이다 */
 function makeIceShards(def: { radius: number; height: number }): THREE.Group {
@@ -524,6 +575,13 @@ export class Stage {
   private readonly projectileLaunch = new Map<number, { ms: number; from: THREE.Vector3 }>();
   private readonly projectileVisuals = new Map<number, THREE.Group>();
   private readonly lifeMoteVisuals = new Map<number, THREE.Sprite>();
+  /** 서리 자국 — 얼음 화살이 닿은 벽·바닥·천장. 녹아 사라질 때까지 산다 */
+  private readonly frostDecals: {
+    group: THREE.Group;
+    film: THREE.MeshBasicMaterial;
+    crystals: THREE.Group;
+    bornMs: number;
+  }[] = [];
   private readonly groundItemVisuals = new Map<number, THREE.Group>();
   private readonly chestVisuals = new Map<number, { group: THREE.Group; lid: THREE.Object3D }>();
   private readonly barrelVisuals = new Map<
@@ -1293,6 +1351,82 @@ export class Stage {
     for (let i = 0; i < 22; i++) shard(0.04 + Math.random() * 0.06, 1.8, 2.8 + Math.random() * 3.2, 1.5 + Math.random() * 2.6, 640, 0.9, 8);
     // 냉기 — 천천히 피어오르며 옅어진다 (음의 중력 = 위로)
     for (let i = 0; i < 8; i++) shard(0.1 + Math.random() * 0.12, 0.6, 0.3 + Math.random() * 0.5, 0.6 + Math.random() * 0.6, 950, 0.35, -0.8);
+  }
+
+  /** 얼음 화살이 닿은 면이 얼어붙는다 — 얼음막(서리 텍스처)이 면에 붙고 법선 쪽으로 결정이 솟는다.
+   *  FROST_DECAL_MS 동안 살다가 마지막 30% 에 녹아 사라진다 */
+  spawnFrostDecal(
+    x: number, y: number, z: number,
+    surface: 'wall' | 'floor' | 'ceiling',
+    axis: 'x' | 'z' | null,
+    dirX: number, dirY: number, dirZ: number,
+  ): void {
+    const group = new THREE.Group();
+    // 법선 — 날아온 방향의 반대쪽. 면에서 살짝 띄워 z-fighting 을 피한다
+    let nx = 0, ny = 0, nz = 0;
+    if (surface === 'floor') ny = 1;
+    else if (surface === 'ceiling') ny = -1;
+    else if (axis === 'x') nx = dirX > 0 ? -1 : 1;
+    else nz = dirZ > 0 ? -1 : 1;
+    void dirY;
+    group.position.set(x + nx * FROST_DECAL_LIFT, y + ny * FROST_DECAL_LIFT, z + nz * FROST_DECAL_LIFT);
+    // 얼음막 — 법선을 향하는 평면. 같은 텍스처라도 돌려 붙여 무늬가 겹쳐 보이지 않게
+    const film = new THREE.MeshBasicMaterial({
+      map: getFrostTexture(), transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(FROST_DECAL_RADIUS * 2, FROST_DECAL_RADIUS * 2), film);
+    plane.lookAt(nx, ny, nz);
+    plane.rotateZ(Math.random() * Math.PI * 2);
+    group.add(plane);
+    // 결정 — 자국 안쪽에 법선 방향으로 솟는다. 가운데가 크고 가장자리는 잘다
+    const crystals = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity: 0.85 });
+    const up = new THREE.Vector3(nx, ny, nz);
+    const tangentA = Math.abs(ny) > 0.5 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const tangentB = new THREE.Vector3().crossVectors(up, tangentA).normalize();
+    tangentA.crossVectors(tangentB, up).normalize();
+    for (let i = 0; i < 9; i++) {
+      const r = (i === 0 ? 0 : 0.25 + Math.random() * 0.6) * FROST_DECAL_RADIUS;
+      const ang = Math.random() * Math.PI * 2;
+      const h = (i === 0 ? 0.55 : 0.18 + Math.random() * 0.3) * (1 - r / FROST_DECAL_RADIUS * 0.5);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(h * 0.22, h, 5), mat);
+      const off = tangentA.clone().multiplyScalar(Math.cos(ang) * r).addScaledVector(tangentB, Math.sin(ang) * r);
+      cone.position.copy(off).addScaledVector(up, h / 2);
+      // 원뿔의 +Y 를 법선에 맞춘다 (살짝 기울여 자연스럽게)
+      cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up.clone().addScaledVector(tangentA, (Math.random() - 0.5) * 0.5).normalize());
+      crystals.add(cone);
+    }
+    group.add(crystals);
+    this.scene.add(group);
+    this.frostDecals.push({ group, film, crystals, bornMs: performance.now() });
+  }
+
+  private updateFrostDecals(): void {
+    const now = performance.now();
+    for (let i = this.frostDecals.length - 1; i >= 0; i--) {
+      const d = this.frostDecals[i]!;
+      const age = (now - d.bornMs) / FROST_DECAL_MS;
+      if (age >= 1) {
+        this.scene.remove(d.group);
+        d.group.traverse((obj) => {
+          if (obj instanceof THREE.Mesh) {
+            obj.geometry.dispose();
+            (obj.material as THREE.Material).dispose();
+          }
+        });
+        this.frostDecals.splice(i, 1);
+        continue;
+      }
+      // 첫 8% 는 퍼지며 나타나고, 마지막 30% 는 녹아 사라진다
+      const grow = Math.min(1, age / 0.08);
+      const melt = age > 0.7 ? 1 - (age - 0.7) / 0.3 : 1;
+      const s = 0.6 + 0.4 * grow;
+      d.group.scale.set(s, s, s);
+      d.film.opacity = 0.95 * grow * melt;
+      const cs = grow * (0.2 + 0.8 * melt);
+      d.crystals.scale.set(cs, cs, cs);
+      d.crystals.visible = cs > 0.02;
+    }
   }
 
   /** 얼음이 깨진 적 — 몸이 잠깐 하얗게 번쩍인다 (피격 플래시와 같은 경로) */
@@ -2795,6 +2929,7 @@ export class Stage {
     this.updateTracers();
     this.updateParticles();
     this.updateExplosions();
+    this.updateFrostDecals();
     this.updateDecals(performance.now());
     this.updateExitLight(performance.now());
     this.renderer.render(this.scene, this.camera);

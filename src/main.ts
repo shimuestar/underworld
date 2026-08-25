@@ -366,6 +366,7 @@ for (const name of [
   'skill_selected',
   'lightning_cast',
   'frost_nova',
+  'frost_impact',
   'enemy_thawed',
   'enemy_freeze_ended',
   'blink',
@@ -524,6 +525,16 @@ events.on('enemy_freeze_ended', (payload) => {
   // 가까이서 깨지면 화면이 살짝 흔들린다 — 파열이 몸에 닿는 느낌
   const d = Math.hypot(t.x - world.player.x, t.z - world.player.z);
   if (d < 7) stage.triggerCameraKick(0.4 * (1 - d / 7), 200);
+});
+// 얼음 화살이 벽·바닥·천장에 닿았다 — 그 면에 서리 자국
+events.on('frost_impact', (payload) => {
+  const f = payload as {
+    x: number; y: number; z: number;
+    surface: 'wall' | 'floor' | 'ceiling';
+    axis: 'x' | 'z' | null;
+    dirX: number; dirY: number; dirZ: number;
+  };
+  stage.spawnFrostDecal(f.x, f.y, f.z, f.surface, f.axis, f.dirX, f.dirY, f.dirZ);
 });
 // 하나라도 얼렸으면 얼려지는 소리 (폭발음과 별개)
 events.on('frost_nova', (payload) => {

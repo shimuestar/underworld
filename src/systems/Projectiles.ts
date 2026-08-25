@@ -491,6 +491,15 @@ function moveProjectiles(world: World, dt: number): void {
       };
       // 허공이 아니라 무언가에 닿았다 — 착탄 연출이 붙어야 한다
       world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', impact);
+      // 얼음 화살이 벽·바닥·천장에 닿았다 — 그 면이 얼어붙는다 (적·통에 맞으면 면이 없다)
+      if (proj.kind === 'frost' && proj.owner === 'player' && !impact.hitEnemy && !hitBarrelTarget) {
+        world.events.emit('frost_impact', {
+          x: impact.x, y: impact.y, z: impact.z,
+          surface: hitSurface,
+          axis: wall.axis,
+          dirX, dirY, dirZ,
+        });
+      }
 
       // 벽·바닥에 꽂힌 화살은 누가 쐈든 못 뽑는다 — 박힌 채로 남기만 한다.
       // 회수는 적을 맞힌 화살에서만 나온다 (한 마리당 한 대)
