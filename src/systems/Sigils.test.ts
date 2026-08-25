@@ -811,10 +811,10 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     e.frozenDamage = fx['breakDamage']!;
     const ended: { shattered?: boolean }[] = [];
     world.events.on('enemy_freeze_ended', (p) => ended.push(p as { shattered?: boolean }));
-    castSlot(1); // 뇌창 한 타 3 → ×1.5 = 4.5, + 깨질 때 14 = 18.5
+    castSlot(1); // 뇌창 한 타 1.5 → ×1.5 = 2.25, + 깨질 때 14 = 16.25
     const bolt = sigilDef('sig_lightning').effects['damage']!;
     const shatterHit = bolt * fx['hitShatterMul']! + fx['breakDamage']!;
-    expect(shatterHit).toBe(18.5); // 2026-08-25 뇌창 피해를 두 번 반으로 줄인 뒤
+    expect(shatterHit).toBe(16.25); // 2026-08-25 뇌창 피해를 세 번 반으로 줄인 뒤
     expect(e.health).toBe(1000 - shatterHit);
     expect(e.freezeTicks).toBe(0);
     expect(ended).toEqual([expect.objectContaining({ shattered: true })]);
