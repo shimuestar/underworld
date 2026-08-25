@@ -253,6 +253,10 @@ interface EnemyVisual {
   nextEmberMs: number;
   /** 해머 적중 명멸이 끝나는 시각 */
   hitFlashUntil: number;
+  /** 감전 — 이 시각까지 몸에 전류가 흐른다 (뇌창에 맞을 때마다 갱신) */
+  zapUntil?: number;
+  /** 전류 마디 — 매 프레임 몸 위 아무 데나 다시 놓아 지직거리게 만든다 */
+  zap?: { group: THREE.Group; mat: THREE.MeshBasicMaterial; segs: THREE.Mesh[] };
   /** 근접 무기 팔 피벗 — 치켜들었다 내리찍는다 */
   arm?: THREE.Group;
   shieldFlashUntil: number;
@@ -295,6 +299,30 @@ let frostTexture: THREE.CanvasTexture | null = null;
  *  한 장을 만들어 모든 자국이 돌려 쓴다 (회전을 달리해 같은 무늬로 안 보이게) */
 let scorchTexture: THREE.CanvasTexture | null = null;
 /** 그을음 — 가운데가 새까맣고 가장자리로 흩어지는 검댕. 얼룩을 몇 개 얹어 원이 아니게 만든다 */
+/** 감전 마디 — 길이 1 짜리 얇은 상자 몇 개. 자리는 매 프레임 다시 잡는다 */
+function makeBodyZap(parent: THREE.Object3D): {
+  group: THREE.Group;
+  mat: THREE.MeshBasicMaterial;
+  segs: THREE.Mesh[];
+} {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({
+    color: ZAP_BODY_COLOR,
+    transparent: true,
+    opacity: 1,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const segs: THREE.Mesh[] = [];
+  for (let i = 0; i < ZAP_BODY_SEGMENTS; i++) {
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 1), mat);
+    group.add(seg);
+    segs.push(seg);
+  }
+  parent.add(group);
+  return { group, mat, segs };
+}
+
 function getScorchTexture(): THREE.CanvasTexture {
   if (scorchTexture) return scorchTexture;
   const size = 128;
@@ -583,6 +611,10 @@ const BARREL_BAND_LIT = 0xff5a2a;
 const BARREL_FUSE_REF_TICKS = 180; // 가장 긴 도화선(3초) 기준으로 깜빡임 속도를 잡는다
 const BARREL_BAND_ZAP = 0x7fd4ff; // 뇌창에 지져지는 중 — 띠가 전기색으로 물든다
 const BARREL_ZAP_ACTIVE_MS = 120; // 이 시간 안에 지져졌으면 "지금 지지는 중"으로 본다
+// 감전 — 뇌창에 맞은 적의 몸을 타고 흐르는 전류
+const ZAP_BODY_MS = 260; // 타 간격(100ms)보다 길어 붙들고 있으면 끊기지 않는다
+const ZAP_BODY_SEGMENTS = 7;
+const ZAP_BODY_COLOR = 0x9fd8ff;
 const BARRIER_SHARD_COUNT = 26;
 const PROJECTILE_DEBRIS_COUNT = 16; // 공중에서 깨진 투사체 파편 // 방어막 파편 — 사망 파편보다 많게 (막이 통째로 터진다)
 const DEATH_PARTICLE_LIFE_MS = 650;
@@ -2142,6 +2174,36 @@ export class Stage {
           hitIntensity = hitLeft / HIT_FLASH_MS; // 잦아들며 멎는다
         }
       }
+      // 감전 — 몸이 푸르게 물들고 전류 마디가 매 프레임 새 자리에서 튄다.
+      // 피격 섬광이 도는 중에는 그쪽이 이긴다 (맞은 순간이 더 중요하다)
+      const zapLeft = (visual.zapUntil ?? 0) - now;
+      if (zapLeft > 0 && hitIntensity <= 0) {
+        emissive = ZAP_BODY_COLOR;
+        hitIntensity = 0.35 + 0.35 * Math.abs(Math.sin(now / 17));
+      }
+      if (zapLeft > 0) {
+        visual.zap ??= makeBodyZap(visual.group);
+        visual.zap.group.visible = true;
+        visual.zap.mat.opacity = Math.min(1, zapLeft / (ZAP_BODY_MS * 0.5));
+        const radius = def2.radius;
+        for (const seg of visual.zap.segs) {
+          const ang = Math.random() * Math.PI * 2;
+          const r = radius * (0.7 + Math.random() * 0.5);
+          seg.position.set(
+            Math.cos(ang) * r,
+            (0.1 + Math.random() * 0.85) * def2.height,
+            Math.sin(ang) * r,
+          );
+          seg.rotation.set(
+            Math.random() * Math.PI,
+            Math.random() * Math.PI,
+            Math.random() * Math.PI,
+          );
+          seg.scale.z = 0.12 + Math.random() * 0.28;
+        }
+      } else if (visual.zap) {
+        visual.zap.group.visible = false;
+      }
       for (const material of visual.flashMaterials) {
         material.emissive.set(emissive);
         material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
@@ -2712,6 +2774,12 @@ export class Stage {
   }
 
   /** 해머 적중 — 몸 전체가 아주 빠르게 명멸한다 */
+  /** 뇌창에 맞았다 — 몸에 전류가 흐른다. 맞을 때마다 시간을 다시 채운다 */
+  electrifyEnemy(enemyId: number): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    if (visual) visual.zapUntil = performance.now() + ZAP_BODY_MS;
+  }
+
   flashEnemyHit(enemyId: number): void {
     const visual = this.enemyVisuals.get(enemyId);
     if (visual) visual.hitFlashUntil = performance.now() + HIT_FLASH_MS;

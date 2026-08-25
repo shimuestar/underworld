@@ -231,56 +231,117 @@ function assistTarget(
   return best;
 }
 
-/** 연쇄 — 처음 맞은 적을 기준으로 반경 chainRange 안에서 가장 가까운 순으로 옮겨붙는다.
- *  반경을 매번 새 대상 기준으로 재면 사슬이 맵 끝까지 뻗어 나가므로, 기준은 처음 맞은 적 하나로 고정한다.
- *  한 번 옮길 때마다 피해가 chainFalloff 배로 줄고, 벽에 가린 적과 이미 맞은 적은 건너뛴다.
- *  방패는 못 끊는다 (전기다) — 마법 방어막에 닿으면 거기서 끊긴다 */
+/** 연쇄가 옮겨붙는 대상 — 적과 폭발통을 가리지 않는다.
+ *  통도 전기를 먹고(지져진 시간이 쌓인다) 그 자리에서 남에게 넘긴다 */
+type ChainNode =
+  | { kind: 'enemy'; enemy: EnemyState }
+  | { kind: 'barrel'; barrel: BarrelState };
+
+function nodeId(node: ChainNode): number {
+  return node.kind === 'enemy' ? node.enemy.id : node.barrel.id;
+}
+function nodeX(node: ChainNode): number {
+  return node.kind === 'enemy' ? node.enemy.x : node.barrel.x;
+}
+function nodeZ(node: ChainNode): number {
+  return node.kind === 'enemy' ? node.enemy.z : node.barrel.z;
+}
+/** 번개가 옮겨붙는 높이 — 몸(통) 가운데 */
+function nodeY(node: ChainNode): number {
+  return node.kind === 'enemy'
+    ? enemyDef(node.enemy.type).height * 0.55
+    : balance.barrel.height * 0.6;
+}
+
+/** 연쇄 — 처음 맞은 대상을 기준으로 반경 chainRange 안에서 가장 가까운 순으로 옮겨붙는다.
+ *  반경을 매번 새 대상 기준으로 재면 사슬이 맵 끝까지 뻗어 나가므로 기준은 하나로 고정한다.
+ *  한 번 옮길 때마다 피해가 chainFalloff 배로 줄고, 벽에 가린 것과 이미 맞은 것은 건너뛴다.
+ *  적의 방패는 못 끊는다 (전기다) — 마법 방어막에 닿으면 거기서 끊긴다.
+ *  통에 옮겨붙으면 피해 대신 지져진 시간이 쌓인다 — 계속 이어 대면 직격과 같은 1.5초에 터진다 */
 function chainLightning(
   world: World,
   effects: Record<string, number>,
-  first: EnemyState,
-  hit: Set<number>,
+  origin: ChainNode,
+  hitEnemies: Set<number>,
+  hitBarrels: Set<number>,
 ): void {
   const chainRange = effects['chainRange'] ?? 0;
   if (chainRange <= 0) return;
   const falloff = effects['chainFalloff'] ?? 1;
+  // 한 번 옮길 때 통이 먹는 시간 — 한 타 간격만큼. 초당 pulseTicks × 10 = 60틱이라
+  // 사슬을 계속 대고 있으면 직접 지지는 것과 같은 속도로 찬다
+  const zapPerLink = Math.max(1, effects['pulseTicks'] ?? 6);
   const links: { ax: number; ay: number; az: number; bx: number; by: number; bz: number }[] = [];
-  let from = first;
+  const zapped: number[] = [];
+  const shocked: number[] = [];
+  const originX = nodeX(origin);
+  const originZ = nodeZ(origin);
+  let from = origin;
   let damage = (effects['damage'] ?? 0) * falloff; // 첫 전이부터 이미 한 번 깎인다
 
   for (;;) {
-    let next: EnemyState | null = null;
-    let nextDist = Infinity;
+    // 아직 안 맞은 적·통을 한 줄로 놓고 그중 가장 가까운 하나를 고른다
+    const candidates: ChainNode[] = [];
     for (const enemy of world.enemies) {
-      if (!enemy.alive || hit.has(enemy.id)) continue;
-      if (Math.hypot(enemy.x - first.x, enemy.z - first.z) > chainRange) continue;
-      const dist = Math.hypot(enemy.x - from.x, enemy.z - from.z);
-      if (dist >= nextDist) continue;
-      if (!world.level.hasLineOfSight(from.x, from.z, enemy.x, enemy.z)) continue;
-      next = enemy;
-      nextDist = dist;
+      if (enemy.alive && !hitEnemies.has(enemy.id)) candidates.push({ kind: 'enemy', enemy });
     }
-    if (!next) break;
-    hit.add(next.id);
-    const nextDef = enemyDef(next.type);
-    if (nextDef.magicBarrier?.blocksMagic && barrierUp(nextDef, next)) {
-      world.events.emit('barrier_blocked', { enemyId: next.id, kind: 'magic' });
-      break; // 마법 방어막이 사슬을 끊는다 (방패는 못 끊는다 — 전기다)
+    for (const barrel of world.barrels) {
+      if (barrel.alive && !hitBarrels.has(barrel.id)) candidates.push({ kind: 'barrel', barrel });
     }
+    const fromX = nodeX(from);
+    const fromZ = nodeZ(from);
+    let node: ChainNode | null = null;
+    let nodeDist = Infinity;
+    for (const candidate of candidates) {
+      const x = nodeX(candidate);
+      const z = nodeZ(candidate);
+      if (Math.hypot(x - originX, z - originZ) > chainRange) continue;
+      const dist = Math.hypot(x - fromX, z - fromZ);
+      if (dist >= nodeDist) continue;
+      if (!world.level.hasLineOfSight(fromX, fromZ, x, z)) continue;
+      node = candidate;
+      nodeDist = dist;
+    }
+    if (!node) break;
+
+    if (node.kind === 'enemy') {
+      hitEnemies.add(nodeId(node));
+      const def = enemyDef(node.enemy.type);
+      if (def.magicBarrier?.blocksMagic && barrierUp(def, node.enemy)) {
+        world.events.emit('barrier_blocked', { enemyId: node.enemy.id, kind: 'magic' });
+        break; // 마법 방어막이 사슬을 끊는다 (방패는 못 끊는다 — 전기다)
+      }
+    } else {
+      hitBarrels.add(nodeId(node));
+    }
+
     links.push({
-      ax: from.x, ay: chestY(from), az: from.z,
-      bx: next.x, by: chestY(next), bz: next.z,
+      ax: nodeX(from), ay: nodeY(from), az: nodeZ(from),
+      bx: nodeX(node), by: nodeY(node), bz: nodeZ(node),
     });
-    skillDamage(world, next, damage, 'lightning_chain');
+    if (node.kind === 'enemy') {
+      skillDamage(world, node.enemy, damage, 'lightning_chain');
+      shocked.push(node.enemy.id);
+    } else {
+      zapBarrel(world, node.barrel, zapPerLink);
+      zapped.push(node.barrel.id);
+    }
     damage *= falloff;
-    from = next;
+    from = node;
   }
-  if (links.length > 0) world.events.emit('lightning_chain', { links });
+  if (links.length > 0) world.events.emit('lightning_chain', { links, hits: shocked, barrels: zapped });
 }
 
-/** 번개가 옮겨붙는 높이 — 몸 가운데 */
-function chestY(enemy: EnemyState): number {
-  return enemyDef(enemy.type).height * 0.55;
+/** 통을 ticks 만큼 지진다 — 때리는 게 아니라 시간이 쌓이는 방식이라
+ *  빔으로 직접 지지든 사슬이 옮겨붙든 같은 저금통에 들어간다 */
+function zapBarrel(world: World, barrel: BarrelState, ticks: number): void {
+  const need = balance.barrel.zapTicks;
+  barrel.zapTicks = (barrel.zapTicks ?? 0) + ticks;
+  world.events.emit('barrel_zapped', {
+    id: barrel.id, x: barrel.x, z: barrel.z,
+    ticks: barrel.zapTicks, needTicks: need,
+  });
+  if (barrel.zapTicks >= need && barrel.fuseTicks < 0) igniteBarrel(barrel);
 }
 
 /** 뻗어 있는 빔을 한 틱 갱신한다. 조준선 위의 적을 앞에서부터 pierce 명까지 꿰뚫고,
@@ -355,15 +416,8 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
     axis = null;
     zapTarget = barrel;
   }
-  if (zapTarget) {
-    // 매 틱 쌓는다 — 피해 타(pulse)와 무관하게 "닿아 있는 시간"이 기준이다
-    zapTarget.zapTicks = (zapTarget.zapTicks ?? 0) + 1;
-    world.events.emit('barrel_zapped', {
-      id: zapTarget.id, x: zapTarget.x, z: zapTarget.z,
-      ticks: zapTarget.zapTicks, needTicks: bcfg.zapTicks,
-    });
-    if (zapTarget.zapTicks >= bcfg.zapTicks && zapTarget.fuseTicks < 0) igniteBarrel(zapTarget);
-  }
+  // 매 틱 쌓는다 — 피해 타(pulse)와 무관하게 "닿아 있는 시간"이 기준이다
+  if (zapTarget) zapBarrel(world, zapTarget, 1);
 
   const candidates: { enemy: EnemyState; t: number }[] = [];
   for (const enemy of world.enemies) {
@@ -397,8 +451,18 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
     hits.push(enemy.id);
     struck.push(enemy);
   }
-  // 연쇄 — 꿰뚫은 적들 말고 "처음 맞은 적"을 기준으로 옮겨붙는다
-  if (damaging && struck.length > 0) chainLightning(world, effects, struck[0]!, new Set(hits));
+  // 연쇄 — 처음 맞은 대상을 기준으로 옮겨붙는다. 적을 못 맞히고 통에서 멈춘 빔이면
+  // 그 통이 시작점이다 (통에 쏴서 주변 적을 지지는 쓰임)
+  if (damaging) {
+    const zappedBarrels = new Set<number>();
+    if (zapTarget) zappedBarrels.add(zapTarget.id);
+    const origin: ChainNode | null = struck[0]
+      ? { kind: 'enemy', enemy: struck[0] }
+      : zapTarget
+        ? { kind: 'barrel', barrel: zapTarget }
+        : null;
+    if (origin) chainLightning(world, effects, origin, new Set(hits), zappedBarrels);
+  }
   // 매 틱 나간다 — 렌더는 이걸 받아 빔을 붙여 두고, pulse 인 틱에만 밝게 튄다
   world.events.emit('lightning_beam', {
     sx: ox, sy: oy, sz: oz,

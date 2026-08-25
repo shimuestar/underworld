@@ -636,17 +636,61 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     world.player.pitch = 0;
   });
 
-  it('관통 뇌창: 폭발통에 막힌 빔은 그 뒤의 적에게 닿지 않는다', () => {
+  it('관통 뇌창: 빔은 폭발통에서 멈추지만, 사슬은 통을 타고 뒤의 적에게 넘어간다', () => {
     Sigils.acquire(world, 'sig_lightning');
     world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
     world.barrels.push({ id: 1, x: 12, z: 6, alive: true, hits: 0, fuseTicks: -1 });
     const behind = add('goblin_runner', 16, 6);
     behind.health = 1000;
     world.player.pitch = -0.15;
     const hits = beamHits(1);
     world.player.pitch = 0;
-    expect(hits).toEqual([]);
-    expect(behind.health).toBe(1000);
+    expect(hits).toEqual([]); // 빔이 꿴 적은 없다 — 통이 막았다
+    expect(behind.health).toBeCloseTo(1000 - fx['damage']! * fx['chainFalloff']!, 6);
+  });
+
+  it('관통 뇌창: 통에 쏘면 통을 시작점으로 주변 적에게 옮겨붙는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    const barrel: BarrelState = { id: 1, x: 12, z: 6, alive: true, hits: 0, fuseTicks: -1 };
+    world.barrels.push(barrel);
+    const beside = add('goblin_runner', 12, 4.2); // 16.7도 — 조준 보정 원뿔(14도) 밖
+    beside.health = 1000;
+    world.player.pitch = -0.15;
+    const hits = beamHits(1);
+    world.player.pitch = 0;
+    expect(hits).toEqual([]); // 빔은 통에서 멈췄다
+    expect(barrel.zapTicks).toBe(1); // 직격은 한 틱씩 쌓인다
+    expect(beside.health).toBeCloseTo(1000 - fx['damage']! * fx['chainFalloff']!, 6);
+  });
+
+  it('관통 뇌창: 적을 맞히면 근처 폭발통으로도 옮겨붙어 지져진다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    const target = runnerAhead(5); // 직격 (11, 6)
+    target.health = 1000;
+    const barrel: BarrelState = { id: 1, x: 13, z: 7.5, alive: true, hits: 0, fuseTicks: -1 };
+    world.barrels.push(barrel); // 직격점에서 2.5m — 사슬의 첫 대상
+    const hits = beamHits(1);
+    expect(hits).toEqual([target.id]);
+    // 사슬 한 칸당 한 타 간격(pulseTicks)만큼 지진다 — 계속 대고 있으면 직격과 같은 1.5초
+    expect(barrel.zapTicks).toBe(fx['pulseTicks']);
+    expect(barrel.hits).toBe(0); // 때린 게 아니다
+  });
+
+  it('관통 뇌창: 사슬로 계속 지진 통도 1.5초면 터진다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const target = runnerAhead(5);
+    target.health = 100000;
+    const barrel: BarrelState = { id: 1, x: 13, z: 7.5, alive: true, hits: 0, fuseTicks: -1 };
+    world.barrels.push(barrel);
+    holdSlot(1, balance.barrel.zapTicks); // 1.5초 붙들고 있는다
+    expect(barrel.zapTicks).toBeGreaterThanOrEqual(balance.barrel.zapTicks);
+    expect(barrel.fuseTicks).toBe(0); // 점화
   });
 
   it('관통 뇌창: 방패병은 번개를 못 막는다 — 정면으로 들고 있어도 그대로 맞고 뒤까지 꿰뚫린다', () => {

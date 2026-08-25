@@ -529,6 +529,7 @@ events.on('channel_ended', () => {
 // 뇌창 빔 — 채널이 도는 동안 매 틱 온다. 끝점만 넘기고 지직거림은 렌더가 매 프레임 흔든다
 events.on('lightning_beam', (payload) => {
   const b = payload as {
+    hits: number[];
     ex: number; ey: number; ez: number; pulse?: boolean;
     surface: 'wall' | 'floor' | 'ceiling' | null; axis: 'x' | 'z' | null;
     dx: number; dz: number;
@@ -538,6 +539,7 @@ events.on('lightning_beam', (payload) => {
   audio.beamPulse(); // 한 타마다 전류음이 한 번 지직 — 박자를 소리로도 준다
   // 벽·바닥·천장에 닿아 있으면 그 자리가 탄다. 적을 맞히는 중이면 그 뒤 벽이 탄다
   if (b.surface) stage.scorchSurface(b.ex, b.ey, b.ez, b.surface, b.axis, b.dx, b.dz);
+  for (const id of b.hits) stage.electrifyEnemy(id); // 꿴 적의 몸에 전류가 흐른다
 });
 // 뇌창이 통을 지지고 있다 — 띠가 전기색으로 물들며 지직거린다
 events.on('barrel_zapped', (payload) => {
@@ -545,7 +547,9 @@ events.on('barrel_zapped', (payload) => {
 });
 // 연쇄 — 적에서 적으로 옮겨붙은 호. 맞은 적은 빔에 맞았을 때와 같이 번쩍인다
 events.on('lightning_chain', (payload) => {
-  stage.spawnChainArc((payload as { links: Parameters<typeof stage.spawnChainArc>[0] }).links);
+  const c = payload as { links: Parameters<typeof stage.spawnChainArc>[0]; hits: number[] };
+  stage.spawnChainArc(c.links);
+  for (const id of c.hits) stage.electrifyEnemy(id);
 });
 events.on('frost_nova', (payload) => {
   const n = payload as { x: number; z: number; radius: number; scale?: number };
