@@ -2058,6 +2058,23 @@ export class Stage {
           );
           group.add(strand); // 꼬리처럼 끌리는 실
           group.add(new THREE.PointLight(WEB_COLOR, 0.5, 5, 0));
+        } else if (proj.kind === 'frost') {
+          // 얼음 화살 — 길쭉한 결정 + 서리빛 후광 + 푸른 광원. 진행 방향으로 눕는다
+          const crystal = new THREE.Mesh(
+            new THREE.OctahedronGeometry(proj.radius * 1.1, 0),
+            new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity: 0.95 }),
+          );
+          crystal.scale.set(0.7, 0.7, 2.6);
+          group.add(crystal);
+          const halo = new THREE.Sprite(
+            new THREE.SpriteMaterial({
+              map: getGlowTexture(), color: 0x9fe0ff, transparent: true, opacity: 0.6,
+              blending: THREE.AdditiveBlending, depthWrite: false,
+            }),
+          );
+          halo.scale.set(proj.radius * 5, proj.radius * 5, 1);
+          group.add(halo);
+          group.add(new THREE.PointLight(0x9fe0ff, 1.4, 5, 0));
         } else if (proj.kind === 'arrow') {
           // 화살 — 나무 화살대 + 회색 촉. 발광하지 않아 어둠 속에서 위협적
           const shaft = new THREE.Mesh(
@@ -2093,7 +2110,7 @@ export class Stage {
       let pz = proj.prevZ + (proj.z - proj.prevZ) * alpha;
       // 내 화염구는 눈(판정 원점)이 아니라 지팡이 끝에서 나온 것처럼 — 처음 LAUNCH_BLEND_MS 동안
       // 지팡이 끝 → 판정 위치로 미끄러져 합쳐진다 (순수 연출, 판정은 그대로)
-      if (proj.kind === 'fireball' && proj.owner === 'player') {
+      if ((proj.kind === 'fireball' || proj.kind === 'frost') && proj.owner === 'player') {
         let launch = this.projectileLaunch.get(proj.id);
         if (!launch) {
           launch = { ms: performance.now(), from: this.staffTip() };
@@ -2105,8 +2122,8 @@ export class Stage {
         pz = launch.from.z + (pz - launch.from.z) * k;
       }
       group.position.set(px, py, pz);
-      if (proj.kind === 'arrow') {
-        // 화살대를 비행 방향으로 정렬 (로컬 -Z가 진행 방향)
+      if (proj.kind === 'arrow' || proj.kind === 'frost') {
+        // 화살대·얼음 결정을 비행 방향으로 정렬 (로컬 -Z가 진행 방향)
         group.lookAt(px - proj.vx, py - proj.vy, pz - proj.vz);
       }
     }

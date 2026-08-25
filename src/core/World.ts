@@ -94,7 +94,7 @@ export interface ProjectileState {
   /** 반응 버튼으로 반사 가능한가 (마법탄 true, 화살 false) */
   deflectable?: boolean;
   /** 렌더 형태 */
-  kind?: 'fireball' | 'magic' | 'arrow' | 'rock' | 'grenade' | 'web';
+  kind?: 'fireball' | 'frost' | 'magic' | 'arrow' | 'rock' | 'grenade' | 'web';
   /** 착탄 시 광역 효과. 시전자가 죽어도 남도록 투사체가 들고 다닌다.
    *  반사되면 그대로 적에게 터진다 */
   splash?: ProjectileSplashDef;

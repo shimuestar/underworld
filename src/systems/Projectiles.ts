@@ -105,6 +105,9 @@ function tryCast(world: World, slotIndex: number): void {
     case 'nova':
       castNova(world, def.effects);
       break;
+    case 'icebolt':
+      castIceBolt(world, def.effects);
+      break;
     case 'blink':
       castBlink(world, def.effects);
       break;
@@ -186,16 +189,40 @@ function castBeam(world: World, effects: Record<string, number>): void {
   });
 }
 
-/** 서리 폭발 — 내 주위 radius 안의 적을 freezeTicks 동안 완전히 세우고, 이어 slowTicks 까지 느리게 한다.
- *  피해는 얼음이 깨지는 순간(enemy_freeze_ended) 들어간다. 벽 너머는 안 닿는다 */
+/** 서리 폭발(icebolt) — 얼음 화살을 쏜다. 무엇에 닿든 그 자리에서 frostBurst 가 터진다.
+ *  직격 피해는 없다 — 피해는 광역 빙결이 깨질 때 들어간다 */
+function castIceBolt(world: World, effects: Record<string, number>): void {
+  const { ox, oy, oz, dx, dy, dz } = aim(world);
+  const speed = effects['speed'] ?? 30;
+  world.projectiles.push({
+    id: nextProjectileId++,
+    owner: 'player',
+    x: ox, y: oy, z: oz,
+    prevX: ox, prevY: oy, prevZ: oz,
+    vx: dx * speed, vy: dy * speed, vz: dz * speed,
+    lifeTicks: effects['lifeTicks'] ?? 90,
+    damage: 0,
+    burnTicks: 0,
+    burnDamagePerTick: 0,
+    radius: effects['boltRadius'] ?? 0.2,
+    kind: 'frost',
+  });
+}
+
+/** 서리 — 내 주위에서 터지는 옛 방식 (데이터가 cast: nova 를 쓰면 이쪽) */
 function castNova(world: World, effects: Record<string, number>): void {
-  const p = world.player;
+  frostBurst(world, world.player.x, world.player.z, effects);
+}
+
+/** 서리 폭발의 실체 — (cx,cz) 주위 radius 안, 벽에 가리지 않은 적을 freezeTicks 동안 완전히
+ *  세우고 이어 slowTicks 까지 느리게 한다. 피해는 얼음이 깨지는 순간(enemy_freeze_ended) 들어간다 */
+function frostBurst(world: World, cx: number, cz: number, effects: Record<string, number>): void {
   const radius = effects['radius'] ?? 5;
   const slowed: number[] = [];
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
-    if (Math.hypot(enemy.x - p.x, enemy.z - p.z) > radius) continue;
-    if (!world.level.hasLineOfSight(p.x, p.z, enemy.x, enemy.z)) continue;
+    if (Math.hypot(enemy.x - cx, enemy.z - cz) > radius) continue;
+    if (!world.level.hasLineOfSight(cx, cz, enemy.x, enemy.z)) continue;
     enemy.freezeTicks = Math.max(enemy.freezeTicks ?? 0, effects['freezeTicks'] ?? 0);
     enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, effects['slowTicks'] ?? 0);
     enemy.slowMul = effects['slowMul'] ?? 0.5;
@@ -204,7 +231,7 @@ function castNova(world: World, effects: Record<string, number>): void {
     slowed.push(enemy.id);
     world.events.emit('enemy_slowed', { enemyId: enemy.id, ticks: enemy.slowTicks });
   }
-  world.events.emit('frost_nova', { x: p.x, z: p.z, radius, slowed });
+  world.events.emit('frost_nova', { x: cx, z: cz, radius, slowed });
 }
 
 /** 그림자 이동 — 보는 방향으로 range 까지 순간이동. 벽에 막히면 그 앞에서 멈춘다.
@@ -254,6 +281,10 @@ function moveProjectiles(world: World, dt: number): void {
 
     proj.lifeTicks--;
     if (proj.lifeTicks <= 0) {
+      // 얼음 화살은 힘이 다해 떨어지는 자리에서도 터진다
+      if (proj.kind === 'frost' && proj.owner === 'player') {
+        frostBurst(world, proj.x, proj.z, sigilDef('sig_frost').effects);
+      }
       if (proj.kind === 'grenade') explodeGrenade(world, proj); // 신관 만료
       world.projectiles.splice(i, 1);
       continue;
@@ -479,6 +510,14 @@ function moveProjectiles(world: World, dt: number): void {
       const shieldedAtImpact =
         hitEnemy !== null && shieldBlocksProjectile(enemyDef(hitEnemy.type), hitEnemy, proj.x, proj.z);
 
+      // 얼음 화살 — 무엇에 닿든 그 자리에서 광역 빙결. 직격 피해는 없다
+      if (proj.kind === 'frost' && proj.owner === 'player') {
+        // 폭발 중심은 닿은 지점에서 날아온 쪽으로 조금 물린다 — 벽 경계에 딱 놓으면 중심이
+        // 벽 셀 안에 들어가 모든 적에게 시야 판정이 실패한다 (실측: 28.00 에서 아무도 안 얼었다)
+        const fx = sigilDef('sig_frost').effects;
+        const back = fx['burstPullback'] ?? 0.3;
+        frostBurst(world, proj.x + dirX * (hitT - back), proj.z + dirZ * (hitT - back), fx);
+      }
       // 화염구는 무엇에 닿든 그 자리에서 터진다 (벽·바닥·적 모두)
       if (proj.kind === 'fireball' && proj.owner === 'player') {
         explodeFireball(
@@ -537,8 +576,8 @@ function moveProjectiles(world: World, dt: number): void {
             world.events.emit('player_died', { tick: world.tick });
           }
         }
-      } else if (hitEnemy) {
-        applyProjectileHit(world, proj, hitEnemy, shieldedAtImpact);
+      } else if (hitEnemy && proj.kind !== 'frost') {
+        applyProjectileHit(world, proj, hitEnemy, shieldedAtImpact); // 얼음 화살은 위에서 터졌다
       }
       world.projectiles.splice(i, 1);
       i = removeBroken(world, hitProjectile, i);

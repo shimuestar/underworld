@@ -414,29 +414,51 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(behind.health).toBe(enemyDef('goblin_runner').health);
   });
 
-  it('서리 폭발: 반경 안의 적은 얼고, 피해는 얼음이 깨질 때 들어간다. 밖은 그대로', () => {
+  /** 얼음 화살이 다 날아갈 때까지 (최대 lifeTicks) 투사체만 돌린다 — 적 AI 는 안 돌린다 */
+  function flyBolt(): void {
+    for (let i = 0; i < 200 && world.projectiles.some((p) => p.kind === 'frost'); i++) {
+      Projectiles.tick(world, DT);
+    }
+  }
+
+  it('서리 폭발: 얼음 화살이 적에 닿으면 그 주변 적이 전부 얼고, 피해는 얼음이 깨질 때', () => {
     Sigils.acquire(world, 'sig_frost');
     world.mana.value = 100;
     const fx = sigilDef('sig_frost').effects;
     const full = enemyDef('goblin_runner').health;
-    const near = runnerAhead(3);
-    const far = runnerAhead(fx['radius']! + 2);
+    const hit = runnerAhead(6); // x=12 — 화살에 직격
+    const near = runnerAhead(12); // x=18 — 직격 지점에서 6m, 반경(8.5) 안
+    const far = runnerAhead(20); // x=26 — 14m 밖
     castSlot(1);
-    expect(near.freezeTicks).toBe(fx['freezeTicks']);
-    expect(near.slowTicks).toBe(fx['slowTicks']);
-    expect(near.slowMul).toBe(fx['slowMul']);
-    expect(near.health).toBe(full); // 얼리는 순간엔 안 다친다
-    expect(near.frozenDamage).toBe(fx['damage']);
-    expect(far.slowTicks ?? 0).toBe(0);
+    expect(world.projectiles.filter((p) => p.kind === 'frost')).toHaveLength(1);
+    expect(hit.freezeTicks ?? 0).toBe(0); // 아직 날아가는 중
+    flyBolt();
+    expect(world.projectiles.filter((p) => p.kind === 'frost')).toHaveLength(0);
+    for (const e of [hit, near]) {
+      expect(e.freezeTicks).toBe(fx['freezeTicks']);
+      expect(e.slowTicks).toBe(fx['slowTicks']);
+      expect(e.health).toBe(full); // 얼리는 순간엔 안 다친다 (직격도 마찬가지)
+      expect(e.frozenDamage).toBe(fx['damage']);
+    }
+    expect(far.freezeTicks ?? 0).toBe(0);
     expect(far.health).toBe(full);
-    // 얼음이 깨지는 틱에 피해가 들어간다 (Enemies 가 enemy_freeze_ended → 주문 시스템이 넣는다)
-    for (let i = 0; i < fx['freezeTicks']! - 1; i++) Enemies.tick(world, DT);
-    expect(near.health).toBe(full);
-    Enemies.tick(world, DT);
+    // 얼음이 깨지는 틱에 둘 다 다친다
+    for (let i = 0; i < fx['freezeTicks']!; i++) Enemies.tick(world, DT);
+    expect(hit.health).toBe(full - fx['damage']!);
     expect(near.health).toBe(full - fx['damage']!);
-    expect(near.frozenDamage).toBe(0);
-    expect(near.freezeTicks).toBe(0);
-    expect(near.slowTicks).toBe(fx['slowTicks']! - fx['freezeTicks']!); // 이어서 둔화
+    expect(hit.slowTicks).toBe(fx['slowTicks']! - fx['freezeTicks']!); // 이어서 둔화
+  });
+
+  it('서리 폭발: 아무도 안 맞고 벽에 닿아도 그 자리에서 터져 주변 적이 언다', () => {
+    Sigils.acquire(world, 'sig_frost');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_frost').effects;
+    const byWall = add('goblin_runner', 22, 7.6); // 사선(z=6)에서 비켜 있고, 벽(x=28) 근처
+    const farBack = add('goblin_runner', 10, 7.6); // 벽에서 18m
+    castSlot(1);
+    flyBolt();
+    expect(byWall.freezeTicks).toBe(fx['freezeTicks']);
+    expect(farBack.freezeTicks ?? 0).toBe(0);
   });
 
   it('빙결: freezeTicks 동안 이동도 공격 예고도 멈추고, 풀리면 둔화 상태로 이어진다', () => {
@@ -567,10 +589,10 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     Projectiles.tick(world, DT);
     world.input = Input.emptySnapshot();
     expect(Projectiles.skillCooldown(world, 'sig_frost')).toBeGreaterThan(0); // 선택 칸 = 서리
-    expect(world.projectiles).toHaveLength(0); // 화염구는 안 나갔다
+    expect(world.projectiles.filter((p) => p.kind === 'fireball')).toHaveLength(0); // 화염구는 안 나갔다
     world.input = { ...Input.emptySnapshot(), castPressed: true, useSkill: 1, useSelectedSkill: true };
     Projectiles.tick(world, DT);
-    expect(world.projectiles).toHaveLength(1); // 직접 지정 Z = 칸 0 화염구
+    expect(world.projectiles.filter((p) => p.kind === 'fireball')).toHaveLength(1); // 직접 지정 Z = 칸 0 화염구
   });
 
   it('스킬 쿨다운은 스킬별이다 — 서리를 쓴 직후에도 뇌창은 나간다', () => {

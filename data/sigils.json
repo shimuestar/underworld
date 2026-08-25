@@ -1,5 +1,5 @@
 {
-  "_conceptNote": "2026-08: 각인 = 스킬. tier passive 는 패시브 스킬 — 각인처럼 부위(slot)에 새겨야 켜진다. 그 외는 액티브 스킬 — 리스트로 갖고 있다가 스킬 퀵슬롯(Z·X·C·V)에 올려 쓴다. cast 가 있는 액티브만 시전이 구현됐다: projectile(화염구) / beam(관통 뇌창) / nova(서리 폭발) / blink(그림자 이동)",
+  "_conceptNote": "2026-08: 각인 = 스킬. tier passive 는 패시브 스킬 — 각인처럼 부위(slot)에 새겨야 켜진다. 그 외는 액티브 스킬 — 리스트로 갖고 있다가 스킬 퀵슬롯(Z·X·C·V)에 올려 쓴다. cast 가 있는 액티브만 시전이 구현됐다: projectile(화염구) / beam(관통 뇌창) / icebolt(서리 폭발 — 얼음 화살이 닿는 곳에서 광역 빙결) / blink(그림자 이동)",
   "_comment": "각인 24종. 부위당 슬롯 1개, 최대 동시 부착 5개. slice=true 만 1구역 범위.",
 
   "sigils": [
@@ -17,7 +17,7 @@
 
     { "id": "sig_reflect",     "name": "반사막", "desc": "반사 판정 창이 넓어진다",      "slot": "leftArm",  "tier": "passive", "zone": 4, "slice": false, "color": "#56d6ff", "effects": { "deflectWindowTicks": 12 } },
     { "id": "sig_absorb",      "name": "흡수 방벽", "desc": "피해 80을 흡수해 절반을 마나로",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": false, "color": "#9b5de5", "effects": { "absorbAmount": 80, "toManaRatio": 0.5 } },
-    { "id": "sig_frost",       "name": "서리 폭발", "desc": "7m 안의 적을 2초 얼려 세운다 — 깨질 때 다치고, 이어 3초 느리다",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": true, "color": "#a8e6ff", "cast": "nova", "effects": { "manaCost": 35, "cooldownTicks": 180, "damage": 15, "freezeTicks": 120, "slowTicks": 300,  "radius": 7, "slowMul": 0.4 } },
+    { "id": "sig_frost",       "name": "서리 폭발", "desc": "얼음 화살을 쏜다 — 닿는 곳 8.5m 안의 적을 2초 얼려 세우고, 깨질 때 다치며, 이어 3초 느리다",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": true, "color": "#a8e6ff", "cast": "icebolt", "effects": { "manaCost": 35, "cooldownTicks": 180, "damage": 15, "freezeTicks": 120, "slowTicks": 300,  "radius": 8.5, "slowMul": 0.4, "speed": 32, "lifeTicks": 90, "boltRadius": 0.22, "burstPullback": 0.35 } },
     { "id": "sig_gravity",     "name": "중력장", "desc": "9m 안의 적을 띄운다",      "slot": "leftArm",  "tier": "large",   "zone": 5, "slice": false, "color": "#7a68b8", "effects": { "radius": 9, "liftTicks": 120 } },
     { "id": "sig_curse",       "name": "저주 부여", "desc": "저주받은 적은 피해를 1.4배 받는다",   "slot": "leftArm",  "tier": "small",   "zone": 4, "slice": false, "color": "#b02fa0", "effects": { "damageTakenMul": 1.4 } },
 
