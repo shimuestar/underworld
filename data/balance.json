@@ -400,6 +400,23 @@
     "attractsCasterRangeMul": 1.8
   },
 
+  "lifeMotes": {
+    "_comment": "생명 입자 — 적이 죽으면 그 자리에 흩뿌려지고, 플레이어가 magnetRadius 안에 들어오면 빨려 들어와 HP 를 healPerMote 씩 채운다. 멀리서 죽이면 그 자리에 남았다가 lifeTicks 뒤 사라진다 (마지막 fadeTicks 동안 옅어진다). 한번 자석에 걸리면 물러나도 끝까지 따라온다",
+    "healPerMote": 2,
+    "countByWeight": { "light": 3, "medium": 5, "heavy": 8 },
+    "scatterRadius": 0.7,
+    "hoverHeight": 0.9,
+    "absorbHeight": 1.2,
+    "magnetRadius": 3.0,
+    "magnetSpeed": 7.0,
+    "magnetAccel": 0.35,
+    "absorbRadius": 0.55,
+    "lifeTicks": 600,
+    "fadeTicks": 90,
+    "color": "#7dffb0",
+    "size": 0.34,
+    "opacity": 0.85
+  },
   "lighting": {
     "torchColor": "#FF8C3B",
     "torchIntensity": 2.2,

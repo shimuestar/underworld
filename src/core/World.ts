@@ -204,6 +204,19 @@ export interface InventorySlot {
   count: number;
 }
 
+/** 생명 입자 — 처치 시 흩뿌려져 가까이 가면 빨려 들어온다 (systems/LifeMotes) */
+export interface LifeMoteState {
+  id: number;
+  x: number;
+  /** 렌더용 높이 — 로직은 XZ 만 본다 */
+  y: number;
+  z: number;
+  ageTicks: number;
+  /** 자석에 걸렸다 — 한번 걸리면 플레이어가 물러나도 계속 따라온다 */
+  homing: boolean;
+  speed: number;
+}
+
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
@@ -480,6 +493,7 @@ export class World {
   projectiles: ProjectileState[] = [];
   spell: SpellState = { cooldown: 0 };
   groundItems: GroundItemState[] = [];
+  lifeMotes: LifeMoteState[] = [];
 
   /** 폭발통 — Barrels 가 도화선을 돌리고 터뜨린다 */
   barrels: BarrelState[] = [];

@@ -24,6 +24,10 @@ export interface MetricsSnapshot {
     dodges: number;
     damageTakenTotal: number;
     timesDamaged: number;
+    /** 생명 입자 — 흡수 개수 / 그로 인한 회복량 / 못 줍고 사라진 개수 */
+    lifeMotesAbsorbed: number;
+    lifeMoteHealTotal: number;
+    lifeMotesExpired: number;
   };
   kills: { weapon: number; execution: number; spell: number; friendlyFire: number; total: number };
   pickups: { potions: number; healed: number; gold: number; xp: number };
@@ -52,6 +56,9 @@ export class Metrics {
   private deflects = 0;
   private dodges = 0;
   private damageTakenTotal = 0;
+  private lifeMotesAbsorbed = 0;
+  private lifeMoteHealTotal = 0;
+  private lifeMotesExpired = 0;
   private timesDamaged = 0;
   private killsWeapon = 0;
   private killsExecution = 0;
@@ -82,6 +89,14 @@ export class Metrics {
     });
     events.on('deflect', () => this.deflects++);
     events.on('dodge_step', () => this.dodges++);
+    events.on('life_mote_absorbed', (payload) => {
+      const info = payload as { count: number; healed: number };
+      this.lifeMotesAbsorbed += info.count;
+      this.lifeMoteHealTotal += info.healed;
+    });
+    events.on('life_mote_expired', (payload) => {
+      this.lifeMotesExpired += (payload as { count: number }).count;
+    });
 
     events.on('weapon_kill', () => this.killsWeapon++);
     events.on('melee_kill', (payload) => {
@@ -169,6 +184,9 @@ export class Metrics {
         dodges: this.dodges,
         damageTakenTotal: this.damageTakenTotal,
         timesDamaged: this.timesDamaged,
+        lifeMotesAbsorbed: this.lifeMotesAbsorbed,
+        lifeMoteHealTotal: this.lifeMoteHealTotal,
+        lifeMotesExpired: this.lifeMotesExpired,
       },
       kills: {
         weapon: this.killsWeapon,

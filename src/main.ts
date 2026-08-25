@@ -23,6 +23,7 @@ import * as Projectiles from './systems/Projectiles';
 import * as Mana from './systems/Mana';
 import * as Items from './systems/Items';
 import * as Pickups from './systems/Pickups';
+import * as LifeMotes from './systems/LifeMotes';
 import * as Progression from './systems/Progression';
 import * as Sigils from './systems/Sigils';
 import * as Stamina from './systems/Stamina';
@@ -967,6 +968,8 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---- 제단 ----
+events.on('life_mote_absorbed', () => audio.play('pickup'));
+
 events.on('altar_entered', () => {
   audio.play('altar_enter');
   shopUI.show(); // 보급 상점 — 무료 보급은 없다. Tab 으로 각인 교체
@@ -1093,6 +1096,7 @@ events.on('corruption_threshold', (payload) => {
 Mana.init(world);
 Sigils.init(world);
 Pickups.init(world);
+LifeMotes.init(world);
 initInventory(world);
 Progression.init(world);
 Corruption.init(world);
@@ -1103,6 +1107,7 @@ const systems = [
   Reaction.tick,
   Sigils.tick,
   Pickups.tick,
+  LifeMotes.tick,
   Items.tick,
   Weapons.tick,
   Projectiles.tick,
@@ -1367,6 +1372,7 @@ function render(alpha: number): void {
   stage.syncEnemies(world.enemies, alpha);
   stage.syncProjectiles(world.projectiles, alpha);
   stage.syncGroundItems(world.groundItems);
+  stage.syncLifeMotes(world.lifeMotes);
   stage.syncBarrels(world.barrels);
   stage.syncChests(world.chests);
   const chargeFrac =

@@ -19,7 +19,8 @@
 ## 보조 카운터
 
 원자료로 함께 덤프한다: 처치 수(총기/근접·처형/마법), 발사 수·명중 수, 피격 횟수·총 피해,
-사망 수, 반사 수, 회피 수, 교전 수, 제단 진입·우회 수, 오염(확정/대기), 세션 틱.
+사망 수, 반사 수, 회피 수, 교전 수, 제단 진입·우회 수, 오염(확정/대기), 세션 틱,
+생명 입자(흡수 개수·회복 총량·못 줍고 사라진 개수 — 사라진 비율이 높으면 원거리 처치가 주력이라는 뜻).
 
 ## 수집·확인 방법
 
@@ -35,6 +36,8 @@
 parry_attempt   { result: 'perfect'|'normal'|'fail', chain, enemyType }
 deflect         { casterId }
 dodge_step      {}
+life_mote_absorbed { count, healed }
+life_mote_expired  { count }
 mana_gained     { amount, source, chain }
 mana_decayed    { amount, wasted }
 mana_lost       { amount, reason }

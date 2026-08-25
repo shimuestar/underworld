@@ -12,6 +12,7 @@ import type {
   ChestState,
   EnemyState,
   GroundItemState,
+  LifeMoteState,
   ProjectileState,
 } from '../core/World';
 import { FINISHER_CONTACT_MS, HandModel } from './HandModel';
@@ -275,12 +276,12 @@ const ALERT_POP_MS = 160;
 
 /** 느낌표 텍스처 — 모든 적이 같은 그림을 쓰므로 한 번만 만든다 */
 let alertTexture: THREE.CanvasTexture | null = null;
-let eyeHaloTexture: THREE.CanvasTexture | null = null;
+let glowTexture: THREE.CanvasTexture | null = null;
 
-/** 안광 후광 — 가운데가 밝고 가장자리로 사라지는 원. 가산 혼합으로 얹어
+/** 부드러운 발광 원 — 안광 후광과 생명 입자가 공유한다. 가운데가 밝고 가장자리로 사라지는 원. 가산 혼합으로 얹어
  *  "빛이 번진다"를 만든다. 한 장을 모든 적이 공유한다 */
-function getEyeHaloTexture(): THREE.CanvasTexture {
-  if (eyeHaloTexture) return eyeHaloTexture;
+function getGlowTexture(): THREE.CanvasTexture {
+  if (glowTexture) return glowTexture;
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
@@ -292,8 +293,8 @@ function getEyeHaloTexture(): THREE.CanvasTexture {
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
-  eyeHaloTexture = new THREE.CanvasTexture(canvas);
-  return eyeHaloTexture;
+  glowTexture = new THREE.CanvasTexture(canvas);
+  return glowTexture;
 }
 
 /** 안광 하나 — unlit 구(가까이서 보이는 알맹이) + 후광 스프라이트(멀리서 보이는 점).
@@ -332,7 +333,7 @@ function makeEyeMaterials(): EyeKit {
     halos: [],
     eyeMat: new THREE.MeshBasicMaterial({ color }),
     haloMat: new THREE.SpriteMaterial({
-      map: getEyeHaloTexture(),
+      map: getGlowTexture(),
       color,
       transparent: true,
       opacity: cfg.haloOpacity,
@@ -492,6 +493,7 @@ export class Stage {
   /** 처형 연출 중 붙잡아 둔 시체 — id → 해제 시각(ms) */
   private readonly heldVictims = new Map<number, number>();
   private readonly projectileVisuals = new Map<number, THREE.Group>();
+  private readonly lifeMoteVisuals = new Map<number, THREE.Sprite>();
   private readonly groundItemVisuals = new Map<number, THREE.Group>();
   private readonly chestVisuals = new Map<number, { group: THREE.Group; lid: THREE.Object3D }>();
   private readonly barrelVisuals = new Map<
@@ -2364,6 +2366,47 @@ export class Stage {
   }
 
   /** 바닥 각인 — 떠서 회전하는 금색 팔면체 + 점광원 */
+  /** 생명 입자 — 가산 발광 스프라이트. 제자리에서 까딱이다 자석에 걸리면 작아지며 날아온다.
+   *  수명 끝 fadeTicks 동안 옅어져 갑자기 꺼지지 않는다 */
+  syncLifeMotes(motes: LifeMoteState[]): void {
+    const cfg = balance.lifeMotes;
+    const now = performance.now();
+    const seen = new Set<number>();
+    for (const m of motes) {
+      seen.add(m.id);
+      let sprite = this.lifeMoteVisuals.get(m.id);
+      if (!sprite) {
+        sprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: getGlowTexture(),
+            color: new THREE.Color(cfg.color),
+            transparent: true,
+            opacity: cfg.opacity,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        );
+        sprite.scale.set(cfg.size, cfg.size, 1);
+        this.lifeMoteVisuals.set(m.id, sprite);
+        this.scene.add(sprite);
+      }
+      const bob = m.homing ? 0 : Math.sin(now / 300 + m.id) * 0.06;
+      sprite.position.set(m.x, m.y + bob, m.z);
+      const left = cfg.lifeTicks - m.ageTicks;
+      const fade = m.homing ? 1 : Math.min(1, left / cfg.fadeTicks);
+      const pulse = 1 + Math.sin(now / 160 + m.id * 1.7) * 0.12;
+      const size = cfg.size * (m.homing ? 0.7 : pulse);
+      sprite.scale.set(size, size, 1);
+      sprite.material.opacity = cfg.opacity * fade;
+    }
+    for (const [id, sprite] of this.lifeMoteVisuals) {
+      if (seen.has(id)) continue;
+      this.scene.remove(sprite);
+      sprite.material.dispose();
+      this.lifeMoteVisuals.delete(id);
+    }
+  }
+
   syncGroundItems(items: GroundItemState[]): void {
     const now = performance.now();
     const seen = new Set<number>();
