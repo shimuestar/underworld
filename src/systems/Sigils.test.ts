@@ -427,6 +427,18 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(far.health).toBe(enemyDef('goblin_runner').health);
   });
 
+  it('해동: 둔화가 끝나는 틱에 enemy_thawed 가 한 번 난다', () => {
+    const e = add('goblin_spear', 20, 6);
+    e.ai = 'chase';
+    e.slowTicks = 3;
+    e.slowMul = 0.4;
+    const thawed: number[] = [];
+    world.events.on('enemy_thawed', (p) => thawed.push((p as { enemyId: number }).enemyId));
+    for (let i = 0; i < 10; i++) Enemies.tick(world, DT);
+    expect(thawed).toEqual([e.id]);
+    expect(e.slowTicks).toBe(0);
+  });
+
   it('서리 둔화: 얼어붙은 적은 같은 시간에 덜 움직인다', () => {
     // 창병은 걸어서 다가온다 (러너는 돌진이라 비교가 안 된다). 둘 다 사거리 밖에서 출발
     const slow = add('goblin_spear', 16, 6);

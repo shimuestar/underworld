@@ -26,7 +26,13 @@ export function tick(world: World, dt: number): void {
     tickEnemy(world, enemy, dt);
     // 피탄 경직 소진은 행동 뒤에 — 앞에서 줄이면 마지막 틱에 움직여버린다
     if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
-    if ((enemy.slowTicks ?? 0) > 0) enemy.slowTicks = (enemy.slowTicks ?? 0) - 1;
+    if ((enemy.slowTicks ?? 0) > 0) {
+      enemy.slowTicks = (enemy.slowTicks ?? 0) - 1;
+      // 얼음이 풀리는 순간 — 연출·사운드가 붙는다 (죽은 채로는 안 풀린다: 위에서 걸렀다)
+      if (enemy.slowTicks === 0) {
+        world.events.emit('enemy_thawed', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      }
+    }
   }
   resolveEnemyOverlaps(world);
 }

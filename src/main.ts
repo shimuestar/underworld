@@ -355,6 +355,7 @@ for (const name of [
   'skill_selected',
   'lightning_cast',
   'frost_nova',
+  'enemy_thawed',
   'blink',
   'altar_entered',
   'altar_bypassed',
@@ -500,6 +501,11 @@ events.on('frost_nova', (payload) => {
   stage.spawnNova(n.x, n.z, n.radius);
 });
 events.on('blink', () => screenFlash(0.6, 140));
+events.on('enemy_thawed', (payload) => {
+  const t = payload as { enemyType: string; x: number; z: number };
+  stage.spawnThaw(t.x, t.z, enemyDef(t.enemyType).height);
+  audio.play('thaw');
+});
 events.on('enemy_cast', (payload) => {
   const info = payload as { enemyType: string; enemyId: number };
   if (info.enemyType === 'goblin_archer') audio.play('bow_twang');

@@ -22,6 +22,7 @@ export type SoundName =
   | 'cast_lightning'
   | 'cast_frost'
   | 'blink'
+  | 'thaw'
   | 'spell_impact'
   | 'pickup'
   | 'gunshot'
@@ -198,6 +199,13 @@ export class GameAudio {
         this.tone(1400, 0.35, 'sine', 0.3, 0, 500);
         this.tone(2100, 0.25, 'triangle', 0.2, 0.05, 900);
         this.noise(0.4, 0.3, 2400);
+        break;
+      case 'thaw':
+        // 해동 — 얼음이 쩍 갈라지고 잔 조각이 흩어진다
+        this.noise(0.07, 0.55, 5000);
+        this.tone(2400, 0.12, 'triangle', 0.25, 0.01, 1500);
+        this.tone(1200, 0.2, 'sine', 0.18, 0.06, 700);
+        this.noise(0.18, 0.2, 2000, 0.05);
         break;
       case 'blink':
         // 그림자 이동 — 순간적으로 빨려 들어가는 하강음

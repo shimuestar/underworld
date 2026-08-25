@@ -122,6 +122,9 @@ const HIT_FLASH_MS = 240;
 const HIT_FLASH_HZ = 26; // 초당 명멸 횟수 (아주 빠르게)
 const WINDUP_TINT = 0x0e2440; // 예비 동작의 옅은 예고 (본 섬광은 종료 4t 전)
 const BURN_TINT = 0x8f3300; // 화상 중
+/** 서리에 얼어붙은 적 — 차가운 푸른 발광. 불(BURN_TINT)이 붙어 있으면 불이 이긴다 */
+const FROST_TINT = 0x2f7fc4;
+const ICE_COLOR = 0xbfe8ff;
 // 화상 표시 — 발광은 텔레그래프·스태거 색에 가려지므로 불티로 따로 알린다
 const BURN_EMBER_MS = 85; // 적 하나당 불티 생성 간격
 const BURN_EMBER_LIFE_MS = 520;
@@ -221,6 +224,8 @@ interface EnemyVisual {
   eyeHalos: THREE.Sprite[];
   /** 가까이서의 후광 기본 크기 (m) */
   eyeHaloBase: number;
+  /** 얼음 결정 — 얼어 있는 동안만 보인다 (처음 얼 때 만든다) */
+  ice?: THREE.Group;
   /** 몸통+머리 서브그룹 — 공격 모션(기울임/내지름)의 피벗 (발 기준) */
   torso: THREE.Group;
   /** 텔레그래프 발광을 적용할 머티리얼들 (몸통/머리/창끝) */
@@ -277,6 +282,26 @@ const ALERT_POP_MS = 160;
 /** 느낌표 텍스처 — 모든 적이 같은 그림을 쓰므로 한 번만 만든다 */
 let alertTexture: THREE.CanvasTexture | null = null;
 let glowTexture: THREE.CanvasTexture | null = null;
+
+/** 얼음 결정 — 몸통 둘레에 박힌 뾰족한 조각들. 빛을 안 받는 재질이라 어둠에서도 얼음빛이다 */
+function makeIceShards(def: { radius: number; height: number }): THREE.Group {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity: 0.85 });
+  const count = 7;
+  for (let i = 0; i < count; i++) {
+    const ang = (i / count) * Math.PI * 2 + Math.random() * 0.5;
+    const h = 0.18 + Math.random() * 0.26; // 실측: 0.12~0.32 는 3m 에서 점으로 보였다
+    const shard = new THREE.Mesh(new THREE.ConeGeometry(0.05 + Math.random() * 0.04, h, 4), mat);
+    const r = def.radius * 0.95;
+    const y = def.height * (0.25 + Math.random() * 0.55);
+    shard.position.set(Math.cos(ang) * r, y, Math.sin(ang) * r);
+    // 바깥·위쪽으로 삐죽 — 몸에서 자라난 결정처럼
+    shard.lookAt(Math.cos(ang) * r * 3, y + 1.2, Math.sin(ang) * r * 3);
+    shard.rotateX(Math.PI / 2);
+    group.add(shard);
+  }
+  return group;
+}
 
 /** 부드러운 발광 원 — 안광 후광과 생명 입자가 공유한다. 가운데가 밝고 가장자리로 사라지는 원. 가산 혼합으로 얹어
  *  "빛이 번진다"를 만든다. 한 장을 모든 적이 공유한다 */
@@ -1202,6 +1227,37 @@ export class Stage {
     this.explosions.push({ light, shell, bornMs: now, radius });
   }
 
+  /** 해동 — 몸에 박혀 있던 얼음이 쩍 갈라져 조각으로 튄다 */
+  spawnThaw(x: number, z: number, height: number): void {
+    const now = performance.now();
+    for (let i = 0; i < 10; i++) {
+      const size = 0.04 + Math.random() * 0.06;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size * 1.6, size),
+        new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity: 0.9 }),
+      );
+      const ang = Math.random() * Math.PI * 2;
+      const oy = height * (0.3 + Math.random() * 0.5);
+      mesh.position.set(x, oy, z);
+      mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      this.scene.add(mesh);
+      const speed = 1.6 + Math.random() * 1.8;
+      this.particles.push({
+        mesh,
+        ox: x, oy, oz: z,
+        vx: Math.cos(ang) * speed,
+        vy: 1.2 + Math.random() * 1.8,
+        vz: Math.sin(ang) * speed,
+        bornMs: now,
+        lifeMs: 520,
+        spinX: (Math.random() - 0.5) * 12,
+        spinY: (Math.random() - 0.5) * 12,
+        spinZ: (Math.random() - 0.5) * 12,
+        gravity: 7,
+      });
+    }
+  }
+
   spawnTracer(ex: number, ey: number, ez: number): void {
     // 시작점은 판정 원점(눈)이 아니라 화면상 총구 위치 (순수 연출)
     const muzzle = new THREE.Vector3(MUZZLE_OFFSET.x, MUZZLE_OFFSET.y, MUZZLE_OFFSET.z);
@@ -1587,6 +1643,7 @@ export class Stage {
       else if (enemy.ai === 'windup') emissive = WINDUP_TINT;
       else if (enemy.ai === 'staggered') emissive = STAGGER_COLOR;
       else if (enemy.burnTicks > 0) emissive = BURN_TINT;
+      else if ((enemy.slowTicks ?? 0) > 0) emissive = FROST_TINT;
 
       // 화상 — 몸에서 불티가 계속 피어오른다. 발광색은 다른 상태에 가려지므로
       // 이것이 "불타는 중"을 알리는 실제 신호다
@@ -1596,6 +1653,20 @@ export class Stage {
       }
 
       // 해머 적중 명멸 — 무엇보다 우선한다. 켜짐/꺼짐을 빠르게 교대해 "번쩍번쩍"
+      // 얼음 결정 — 얼어 있는 동안 몸에 박혀 있다. 남은 시간이 줄면 살짝 작아져 "곧 풀린다"가 읽힌다
+      const frozen = (enemy.slowTicks ?? 0) > 0;
+      if (frozen && !visual.ice) {
+        visual.ice = makeIceShards(enemyDef(enemy.type));
+        visual.torso.add(visual.ice);
+      }
+      if (visual.ice) {
+        visual.ice.visible = frozen;
+        if (frozen) {
+          const left = Math.min(1, (enemy.slowTicks ?? 0) / 60); // 마지막 1초에 줄어든다
+          const sc = 0.55 + 0.45 * left;
+          visual.ice.scale.set(sc, sc, sc);
+        }
+      }
       const hitLeft = visual.hitFlashUntil - now;
       let hitIntensity = 0;
       if (hitLeft > 0) {
