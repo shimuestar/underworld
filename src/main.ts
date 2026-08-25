@@ -546,6 +546,8 @@ events.on('enemy_frozen', (payload) => {
   const f = payload as { enemyId: number; enemyType: string; x: number; z: number };
   stage.spawnFreeze(f.x, f.z, enemyDef(f.enemyType).height);
   stage.flashEnemyShatter(f.enemyId);
+  const d = Math.hypot(f.x - world.player.x, f.z - world.player.z);
+  if (d < 8) stage.triggerCameraKick(0.35 * (1 - d / 8), 180); // 가까이서 얼면 화면도 움찔
 });
 events.on('enemy_cast', (payload) => {
   const info = payload as { enemyType: string; enemyId: number };

@@ -231,6 +231,8 @@ interface EnemyVisual {
   eyeHaloBase: number;
   /** 얼음 결정 — 얼어 있는 동안만 보인다 (처음 얼 때 만든다) */
   ice?: THREE.Group;
+  /** 결정이 이번에 나타난 시각 — 나타나며 크게 잡혔다 제 크기로 줄어드는 팝 */
+  iceShownMs?: number;
   /** 몸통+머리 서브그룹 — 공격 모션(기울임/내지름)의 피벗 (발 기준) */
   torso: THREE.Group;
   /** 텔레그래프 발광을 적용할 머티리얼들 (몸통/머리/창끝) */
@@ -1436,19 +1438,31 @@ export class Stage {
   spawnFreeze(x: number, z: number, height: number): void {
     const now = performance.now();
     const cy = height * 0.55;
-    this.triggerFlash(x, cy, z, 0xbfe8ff, 130, 2.2);
-    const light = new THREE.PointLight(0x9fe0ff, 6, 6, 0);
+    this.triggerFlash(x, cy, z, 0xdff4ff, 190, 3.6);
+    const light = new THREE.PointLight(0x9fe0ff, 6, 9, 0);
     light.position.set(x, cy, z);
     this.scene.add(light);
     const shell = new THREE.Mesh(
       new THREE.SphereGeometry(1, 16, 12),
-      new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity: 0.55, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity: 0.72, depthWrite: false }),
     );
     shell.position.set(x, cy, z);
     this.scene.add(shell);
-    this.explosions.push({ light, shell, bornMs: now, radius: 1.5 });
+    this.explosions.push({ light, shell, bornMs: now, radius: 2.2 });
+    // 바닥 충격 링 — 서리가 바닥을 타고 퍼져 나간다
+    const ringLight = new THREE.PointLight(0x9fe0ff, 0, 1, 0); // 껍질 규약상 광원이 필요하다 — 빛은 안 낸다
+    ringLight.position.set(x, 0.05, z);
+    this.scene.add(ringLight);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.72, 1, 40),
+      new THREE.MeshBasicMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.05, z);
+    this.scene.add(ring);
+    this.explosions.push({ light: ringLight, shell: ring, bornMs: now, radius: 3.4 });
     // 결정이 몸에서 튀어 오른다 — 얼음이 "잡히는" 순간
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 24; i++) {
       const size = 0.04 + Math.random() * 0.06;
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(size, size * 1.8, size),
@@ -1886,8 +1900,18 @@ export class Stage {
         visual.ice = makeIceShards(enemyDef(enemy.type));
         visual.torso.add(visual.ice);
       }
-      // 결정은 완전 빙결 동안만 — 깨지는 순간 파편으로 튀고(spawnThaw), 둔화 단계는 틴트만 남는다
-      if (visual.ice) visual.ice.visible = (enemy.freezeTicks ?? 0) > 0;
+      // 결정은 완전 빙결 동안만 — 깨지는 순간 파편으로 튀고(spawnThaw), 둔화 단계는 틴트만 남는다.
+      // 나타나는 순간엔 1.7배로 잡혔다가 220ms 에 걸쳐 제 크기로 조여든다 — "쩍" 하고 굳는 팝
+      if (visual.ice) {
+        const showIce = (enemy.freezeTicks ?? 0) > 0;
+        if (showIce && !visual.ice.visible) visual.iceShownMs = now;
+        visual.ice.visible = showIce;
+        if (showIce) {
+          const t = Math.min(1, (now - (visual.iceShownMs ?? now)) / 220);
+          const pop = 1 + 0.7 * (1 - t) * (1 - t);
+          visual.ice.scale.set(pop, pop, pop);
+        }
+      }
       const hitLeft = visual.hitFlashUntil - now;
       let hitIntensity = 0;
       if (hitLeft > 0) {
