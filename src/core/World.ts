@@ -567,6 +567,8 @@ export class World {
   exitLockedNotified = false;
   /** 테스트용 무적 — HP·마나·탄약·배터리·스태미너가 소모되지 않는다 (G 토글) */
   godMode = false;
+  /** 스킬 테스트(U · ?skills) — 켜 있는 동안 마나가 매 틱 최대치로 돌아온다 */
+  skillTestMode = false;
 
   /** 출구 개방 여부 — 보스가 죽으면 열린다. 렌더·미니맵이 이 값을 본다 */
   exitOpen = false;

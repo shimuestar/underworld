@@ -231,9 +231,20 @@ window.addEventListener('keydown', (e) => {
   }
   // 테스트용 스킬 전부 획득 — 구현된 것만. 오염은 안 쌓인다 (슬라이스 검증 시 제거)
   if (e.code === 'KeyU' && !world.dead && !world.uiOpen) {
-    const n = grantAllSkills();
-    showReaction(n > 0 ? `(테스트) 구현된 스킬 ${n}종 획득 + 마나 풀충전 — Tab 에서 확인` : '(테스트) 스킬은 이미 다 가졌다 — 마나만 채웠다', 2000);
-    console.log('[debug] 스킬 전부 획득', n);
+    if (world.skillTestMode) {
+      // 두 번째 U — 모드만 끈다. 익힌 스킬은 남고 마나는 다시 닳는다
+      world.skillTestMode = false;
+      showReaction('(테스트) 스킬 테스트 OFF — 마나가 다시 닳는다', 2000);
+    } else {
+      const n = grantAllSkills();
+      showReaction(
+        n > 0
+          ? `(테스트) 스킬 테스트 ON — 구현된 스킬 ${n}종 + 마나 무한 (U 로 끔)`
+          : '(테스트) 스킬 테스트 ON — 마나 무한 (U 로 끔)',
+        2400,
+      );
+    }
+    console.log('[debug] 스킬 테스트', world.skillTestMode);
   }
   // 테스트용 마나 풀충전 — 마법 튜닝 편의 (슬라이스 검증 시 제거)
   if (e.code === 'KeyO' && !world.dead) {
@@ -1013,7 +1024,9 @@ function grantAllSkills(): number {
     granted++;
   }
   world.corruption.pending = pendingBefore;
-  world.mana.value = balance.mana.max; // 스킬을 바로 써 볼 수 있게 — 마나 없는 스킬 모드는 반쪽이다
+  // 모드를 켠다 — 시뮬레이션이 매 틱 마나를 최대치로 되돌려 소비가 무효가 된다
+  world.skillTestMode = true;
+  world.mana.value = balance.mana.max;
   return granted;
 }
 
@@ -1254,6 +1267,8 @@ function simulate(dt: number): void {
     const keep = world.godMode ? snapshotResources() : null;
     for (const system of systems) system(world, dt);
     if (keep) restoreResources(keep);
+    // 스킬 테스트 — 마나만 무한. 무적과 같은 자리·같은 방식 (시스템은 손대지 않는다)
+    if (world.skillTestMode) world.mana.value = balance.mana.max;
   }
   world.tick++;
   tpsWindowTicks++;
@@ -1557,6 +1572,7 @@ function render(alpha: number): void {
   // 무적 — HP·마나 바를 깜빡여 켜져 있다는 걸 계속 알린다 (CSS 애니메이션)
   hpRow.classList.toggle('god', world.godMode === true);
   manaRow.classList.toggle('god', world.godMode === true);
+  manaRow.classList.toggle('skilltest', world.skillTestMode && !world.godMode);
   // 거미줄 — 남은 타수만큼 진하다. 한 대 걷어낼 때마다 눈에 띄게 옅어진다
   const webLeft = (p.webSwingsLeft ?? 0) / balance.web.breakSwings;
   webOverlay.style.opacity = String(webLeft > 0 ? 0.3 + 0.6 * webLeft : 0);
@@ -1673,7 +1689,7 @@ function render(alpha: number): void {
     `spell ${spellHudText()}   스킬 ${world.sigils.inventory.length}개   chain ×${chainMult}\n` +
     `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}\n` +
     bossLine +
-    `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}\n` +
+    `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}${world.skillTestMode ? '   [스킬 테스트]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     (input.usingPad
       ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 원거리(${padBtn('cycleWeapon')} 교체)  ${padBtn('melee')} 근접·처형·상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
