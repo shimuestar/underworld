@@ -581,6 +581,8 @@ const BARREL_BAND_COLOR = 0x8a3b2a;
 const BARREL_BAND_IDLE = 0x2a0f0a;
 const BARREL_BAND_LIT = 0xff5a2a;
 const BARREL_FUSE_REF_TICKS = 180; // 가장 긴 도화선(3초) 기준으로 깜빡임 속도를 잡는다
+const BARREL_BAND_ZAP = 0x7fd4ff; // 뇌창에 지져지는 중 — 띠가 전기색으로 물든다
+const BARREL_ZAP_ACTIVE_MS = 120; // 이 시간 안에 지져졌으면 "지금 지지는 중"으로 본다
 const BARRIER_SHARD_COUNT = 26;
 const PROJECTILE_DEBRIS_COUNT = 16; // 공중에서 깨진 투사체 파편 // 방어막 파편 — 사망 파편보다 많게 (막이 통째로 터진다)
 const DEATH_PARTICLE_LIFE_MS = 650;
@@ -780,6 +782,8 @@ export class Stage {
   } | null = null;
   private beamEnd: THREE.Vector3 | null = null;
   private beamPulseAt = 0;
+  /** 통 id → 마지막으로 뇌창에 지져진 시각 (지직거림을 켤지 판단) */
+  private readonly barrelZapAt = new Map<number, number>();
   /** 뇌창이 지진 자국 — 위치와 "얼마나 태웠는가"를 들고 있다가 같은 자리면 더 태운다 */
   private readonly scorches: {
     mesh: THREE.Mesh;
@@ -3154,17 +3158,29 @@ export class Stage {
         this.barrelVisuals.set(barrel.id, visual);
         this.scene.add(visual.group);
       }
-      // 점화 전에는 잠잠하고, 도화선이 짧을수록 빨리 깜빡인다 (3초 → 1초 → 즉발)
+      // 점화 전에는 잠잠하다. 다만 뇌창에 지져진 통은 전기를 먹은 만큼 띠가 푸르게
+      // 물들고, 지금 지지는 중이면 빠르게 지직거린다 — 얼마나 찼는지가 보여야 한다
       if (barrel.fuseTicks < 0) {
-        visual.band.emissive.set(BARREL_BAND_IDLE);
-        visual.band.emissiveIntensity = 0.25;
-        visual.light.intensity = 0;
+        const charge = Math.min(1, (barrel.zapTicks ?? 0) / cfg.zapTicks);
+        if (charge <= 0) {
+          visual.band.emissive.set(BARREL_BAND_IDLE);
+          visual.band.emissiveIntensity = 0.25;
+          visual.light.intensity = 0;
+          continue;
+        }
+        const zapping = now - (this.barrelZapAt.get(barrel.id) ?? -Infinity) < BARREL_ZAP_ACTIVE_MS;
+        const flick = zapping && Math.sin(now / 22) < 0 ? 0.35 : 1;
+        visual.band.emissive.set(BARREL_BAND_ZAP);
+        visual.band.emissiveIntensity = (0.3 + 1.4 * charge) * flick;
+        visual.light.color.set(BARREL_BAND_ZAP);
+        visual.light.intensity = (zapping ? 1.5 : 0.35) * charge * flick;
         continue;
       }
       const hz = 3 + 9 * (1 - Math.min(1, barrel.fuseTicks / BARREL_FUSE_REF_TICKS));
       const on = Math.sin((now / 1000) * hz * Math.PI * 2) > 0;
       visual.band.emissive.set(on ? BARREL_BAND_LIT : BARREL_BAND_IDLE);
       visual.band.emissiveIntensity = on ? 1.4 : 0.3;
+      visual.light.color.set(BARREL_BAND_LIT); // 지져지다 점화된 통은 색을 되돌린다
       visual.light.intensity = on ? 1.6 : 0.15;
     }
     for (const [id, visual] of this.barrelVisuals) {
@@ -3177,7 +3193,13 @@ export class Stage {
         }
       });
       this.barrelVisuals.delete(id);
+      this.barrelZapAt.delete(id);
     }
+  }
+
+  /** 이 통이 방금 지져졌다 — 지직거림을 켤 시각을 찍어 둔다 */
+  markBarrelZapped(id: number): void {
+    this.barrelZapAt.set(id, performance.now());
   }
 
   private makeBarrel(

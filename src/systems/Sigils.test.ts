@@ -7,7 +7,7 @@ import sigilsJson from '../../data/sigils.json';
 import { enemyDef } from '../core/Entities';
 import { sigilColor, sigilDef } from '../core/SigilData';
 import { Input } from '../core/Input';
-import { World, type EnemyState } from '../core/World';
+import { World, type BarrelState, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
@@ -602,30 +602,88 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(far.health).toBe(1000);
   });
 
-  it('관통 뇌창: 방패에서 끊긴 빔은 벽을 그을리지 않는다', () => {
+  it('관통 뇌창: 마법 방어막에서 끊긴 빔은 그 뒤 벽을 그을리지 않는다', () => {
     Sigils.acquire(world, 'sig_lightning');
     world.mana.value = 100;
-    const spear = add('goblin_spear', 10, 6);
-    spear.yaw = Math.atan2(-(6 - spear.x), -(6 - spear.z)); // 나를 본다 — 방패가 정면
-    spear.ai = 'chase';
+    const warden = add('warden', 12, 6);
+    warden.ai = 'chase';
     const beams: { surface: string | null }[] = [];
     world.events.on('lightning_beam', (p) => beams.push(p as never));
     castSlot(1);
     expect(beams[0]!.surface).toBeNull();
   });
 
-  it('관통 뇌창: 방패병이 정면에서 받아 내면 뒤의 적은 무사하다', () => {
+  it('관통 뇌창: 폭발통을 지지면 시간이 쌓여 터진다 — 끊었다 다시 지져도 누적된다', () => {
     Sigils.acquire(world, 'sig_lightning');
     world.mana.value = 100;
+    const barrel: BarrelState = { id: 1, x: 12, z: 6, alive: true, hits: 0, fuseTicks: -1 };
+    world.barrels.push(barrel);
+    const need = balance.barrel.zapTicks;
+    world.player.pitch = -0.15; // 통은 1.3m — 눈높이(1.6m) 로는 위를 지나간다
+    holdSlot(1, need - 1);
+    expect(barrel.zapTicks).toBe(need - 1);
+    expect(barrel.fuseTicks).toBe(-1); // 아직 안 터진다
+    expect(barrel.hits).toBe(0); // 때린 게 아니다 — 도화선이 짧아지지 않는다
+    // 손을 떼도 지진 시간은 남는다
+    world.input = Input.emptySnapshot();
+    Projectiles.tick(world, DT);
+    expect(barrel.zapTicks).toBe(need - 1);
+    world.spell.cooldowns = {};
+    world.mana.value = 100;
+    holdSlot(1, 1);
+    expect(barrel.zapTicks).toBe(need);
+    expect(barrel.fuseTicks).toBe(0); // 점화 — Barrels 가 이 틱에 터뜨린다
+    world.player.pitch = 0;
+  });
+
+  it('관통 뇌창: 폭발통에 막힌 빔은 그 뒤의 적에게 닿지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    world.barrels.push({ id: 1, x: 12, z: 6, alive: true, hits: 0, fuseTicks: -1 });
+    const behind = add('goblin_runner', 16, 6);
+    behind.health = 1000;
+    world.player.pitch = -0.15;
+    const hits = beamHits(1);
+    world.player.pitch = 0;
+    expect(hits).toEqual([]);
+    expect(behind.health).toBe(1000);
+  });
+
+  it('관통 뇌창: 방패병은 번개를 못 막는다 — 정면으로 들고 있어도 그대로 맞고 뒤까지 꿰뚫린다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
     const spear = add('goblin_spear', 10, 6);
     spear.yaw = Math.atan2(-(6 - spear.x), -(6 - spear.z)); // 나를 본다 — 방패가 정면
     spear.ai = 'chase';
+    spear.health = 1000;
     const behind = runnerAhead(8);
-    const blocked: number[] = [];
-    world.events.on('shot_blocked', (p) => blocked.push((p as { enemyId: number }).enemyId));
-    castSlot(1);
-    expect(blocked).toEqual([spear.id]);
-    expect(behind.health).toBe(enemyDef('goblin_runner').health);
+    behind.health = 1000;
+    const blocked: unknown[] = [];
+    world.events.on('shot_blocked', (p) => blocked.push(p));
+    world.events.on('barrier_blocked', (p) => blocked.push(p));
+    const hits = beamHits(1);
+    // 방패는 물리를 받아 내는 물건이라 전기는 타고 들어간다 (2026-08-25)
+    expect(blocked).toEqual([]);
+    expect(hits).toEqual([spear.id, behind.id]);
+    expect(spear.health).toBe(1000 - fx['damage']!);
+    expect(behind.health).toBe(1000 - fx['damage']!);
+  });
+
+  it('관통 뇌창: 마법 방어막(수호주술사)은 번개도 막고 거기서 빔이 끊긴다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const warden = add('warden', 12, 6);
+    warden.ai = 'chase';
+    const behind = runnerAhead(10);
+    const wardenFull = warden.health;
+    const blocked: { kind?: string }[] = [];
+    world.events.on('barrier_blocked', (p) => blocked.push(p as { kind?: string }));
+    const hits = beamHits(1);
+    expect(hits).toEqual([]);
+    expect(blocked).toEqual([expect.objectContaining({ kind: 'magic' })]);
+    expect(warden.health).toBe(wardenFull);
+    expect(behind.health).toBe(enemyDef('goblin_runner').health); // 뒤의 적도 무사
   });
 
   /** 얼음 화살이 다 날아갈 때까지 (최대 lifeTicks) 투사체만 돌린다 — 적 AI 는 안 돌린다 */

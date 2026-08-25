@@ -234,7 +234,7 @@ function assistTarget(
 /** 연쇄 — 처음 맞은 적을 기준으로 반경 chainRange 안에서 가장 가까운 순으로 옮겨붙는다.
  *  반경을 매번 새 대상 기준으로 재면 사슬이 맵 끝까지 뻗어 나가므로, 기준은 처음 맞은 적 하나로 고정한다.
  *  한 번 옮길 때마다 피해가 chainFalloff 배로 줄고, 벽에 가린 적과 이미 맞은 적은 건너뛴다.
- *  방패를 정면으로 든 적에게 닿으면 거기서 사슬이 끊긴다 (번개도 방패는 못 뚫는다) */
+ *  방패는 못 끊는다 (전기다) — 마법 방어막에 닿으면 거기서 끊긴다 */
 function chainLightning(
   world: World,
   effects: Record<string, number>,
@@ -262,9 +262,10 @@ function chainLightning(
     }
     if (!next) break;
     hit.add(next.id);
-    if (shieldBlocksProjectile(enemyDef(next.type), next, from.x, from.z)) {
-      world.events.emit('shot_blocked', { enemyId: next.id, source: 'lightning_chain' });
-      break;
+    const nextDef = enemyDef(next.type);
+    if (nextDef.magicBarrier?.blocksMagic && barrierUp(nextDef, next)) {
+      world.events.emit('barrier_blocked', { enemyId: next.id, kind: 'magic' });
+      break; // 마법 방어막이 사슬을 끊는다 (방패는 못 끊는다 — 전기다)
     }
     links.push({
       ax: from.x, ay: chestY(from), az: from.z,
@@ -283,7 +284,7 @@ function chestY(enemy: EnemyState): number {
 }
 
 /** 뻗어 있는 빔을 한 틱 갱신한다. 조준선 위의 적을 앞에서부터 pierce 명까지 꿰뚫고,
- *  벽에서 멈추고, 방패에 막히면 거기서 끊긴다 (번개도 방패는 못 뚫는다).
+ *  벽·폭발통에서 멈추고, 마법 방어막에 막히면 거기서 끊긴다 (방패는 전기를 못 막는다).
  *  겨눈 방향에 아무도 없어도 aimAssistDeg 안에 적이 있으면 그쪽으로 휜다.
  *  damaging 이 false 면 어디까지 닿는지만 계산한다 — 피해는 pulseTicks 마다 한 번 */
 function castBeam(world: World, effects: Record<string, number>, damaging = true): void {
@@ -334,6 +335,36 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
     }
   }
 
+  // 폭발통 — 빔은 통에 막혀 멈춘다 (총알과 같은 규약). 다만 때리는 게 아니라 지지는 거라
+  // 한 방에 도화선이 짧아지지 않고, 닿아 있는 시간이 zapTicks 만큼 쌓여야 점화된다
+  const bcfg = balance.barrel;
+  let zapTarget: BarrelState | null = null;
+  for (const barrel of world.barrels) {
+    if (!barrel.alive) continue;
+    const t = rayVsAabb(ox, oy, oz, hx0, slopeY, hz0, {
+      minX: barrel.x - bcfg.collisionRadius,
+      minY: 0,
+      minZ: barrel.z - bcfg.collisionRadius,
+      maxX: barrel.x + bcfg.collisionRadius,
+      maxY: bcfg.height,
+      maxZ: barrel.z + bcfg.collisionRadius,
+    });
+    if (t === null || t >= maxT) continue;
+    maxT = t;
+    surface = null; // 통에 막혔으니 그 뒤 벽은 안 그을린다
+    axis = null;
+    zapTarget = barrel;
+  }
+  if (zapTarget) {
+    // 매 틱 쌓는다 — 피해 타(pulse)와 무관하게 "닿아 있는 시간"이 기준이다
+    zapTarget.zapTicks = (zapTarget.zapTicks ?? 0) + 1;
+    world.events.emit('barrel_zapped', {
+      id: zapTarget.id, x: zapTarget.x, z: zapTarget.z,
+      ticks: zapTarget.zapTicks, needTicks: bcfg.zapTicks,
+    });
+    if (zapTarget.zapTicks >= bcfg.zapTicks && zapTarget.fuseTicks < 0) igniteBarrel(zapTarget);
+  }
+
   const candidates: { enemy: EnemyState; t: number }[] = [];
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
@@ -352,10 +383,13 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
   const pierce = Math.max(1, effects['pierce'] ?? 1);
   for (const { enemy, t } of candidates) {
     if (hits.length >= pierce) break;
-    if (shieldBlocksProjectile(enemyDef(enemy.type), enemy, ox, oz)) {
-      if (damaging) world.events.emit('shot_blocked', { enemyId: enemy.id, source: 'lightning' });
-      maxT = t; // 방패가 빔을 받아 낸다 — 뒤의 적은 무사
-      surface = null; // 방패에서 끊겼으니 벽은 그을리지 않는다
+    // 나무·쇠 방패는 물리를 받아 내는 물건이라 전기는 그냥 타고 들어간다 — 뇌창은 방패를 무시한다.
+    // 다만 마법 방어막(수호주술사)은 마법을 막는 물건이라 번개도 여기서 끊긴다
+    const def = enemyDef(enemy.type);
+    if (def.magicBarrier?.blocksMagic && barrierUp(def, enemy)) {
+      if (damaging) world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'magic' });
+      maxT = t; // 방어막이 빔을 받아 낸다 — 뒤의 적은 무사
+      surface = null;
       axis = null;
       break;
     }

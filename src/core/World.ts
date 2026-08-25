@@ -215,6 +215,9 @@ export interface BarrelState {
   hits: number;
   /** 점화됐으면 0 이상 — 0이 되는 틱에 터진다. -1 은 아직 멀쩡 */
   fuseTicks: number;
+  /** 뇌창이 지진 누적 틱 — balance.barrel.zapTicks 를 넘기면 점화된다.
+   *  때리는 것과 달리 시간이 쌓이는 방식이라 끊어서 지져도 합산된다 */
+  zapTicks?: number;
   /** 몸으로 막는 등록 핸들 (터질 때 뺀다) */
   blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }

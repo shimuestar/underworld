@@ -539,6 +539,10 @@ events.on('lightning_beam', (payload) => {
   // 벽·바닥·천장에 닿아 있으면 그 자리가 탄다. 적을 맞히는 중이면 그 뒤 벽이 탄다
   if (b.surface) stage.scorchSurface(b.ex, b.ey, b.ez, b.surface, b.axis, b.dx, b.dz);
 });
+// 뇌창이 통을 지지고 있다 — 띠가 전기색으로 물들며 지직거린다
+events.on('barrel_zapped', (payload) => {
+  stage.markBarrelZapped((payload as { id: number }).id);
+});
 // 연쇄 — 적에서 적으로 옮겨붙은 호. 맞은 적은 빔에 맞았을 때와 같이 번쩍인다
 events.on('lightning_chain', (payload) => {
   stage.spawnChainArc((payload as { links: Parameters<typeof stage.spawnChainArc>[0] }).links);
