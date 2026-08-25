@@ -439,6 +439,8 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     const d1 = fx['damageFirst']!;
     const d = fx['damage']!;
     const dBreak = fx['breakDamage']!;
+    const frozenEvents: number[] = [];
+    world.events.on('enemy_frozen', (p) => frozenEvents.push((p as { stacks: number }).stacks));
     // 1타 — 얼지 않고 약하게 느려진다, 피해 6
     shoot();
     for (const e of [hit, near]) {
@@ -455,8 +457,10 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(hit.freezeTicks ?? 0).toBe(0);
     expect(hit.slowMul).toBe(fx['slowMul']);
     expect(hit.health).toBe(full - d1 - d);
+    expect(frozenEvents).toEqual([]); // 둔화만으론 빙결 이벤트가 없다
     // 3타 — 빙결 2초, 피해 +12, 깨질 때 15 예약
     shoot();
+    expect(frozenEvents).toEqual([3, 3]); // hit·near 둘 다 얼었다
     expect(hit.frostStacks).toBe(3);
     expect(hit.freezeTicks).toBe(fx['freezeTicks']);
     expect(hit.slowTicks).toBe(fx['freezeTicks']! + fx['afterFreezeSlowTicks']!);

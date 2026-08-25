@@ -222,6 +222,7 @@ function castNova(world: World, effects: Record<string, number>): void {
 function frostBurst(world: World, cx: number, cz: number, effects: Record<string, number>): number {
   const radius = effects['radius'] ?? 5;
   const slowed: number[] = [];
+  const frozen: number[] = [];
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
     if (Math.hypot(enemy.x - cx, enemy.z - cz) > radius) continue;
@@ -235,6 +236,9 @@ function frostBurst(world: World, cx: number, cz: number, effects: Record<string
       enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, enemy.freezeTicks + (effects['afterFreezeSlowTicks'] ?? 0));
       enemy.slowMul = effects['slowMul'] ?? 0.5;
       enemy.frozenDamage = effects['breakDamage'] ?? damage; // 깨질 때 한 번 — 겹이 쌓여도 같다
+      frozen.push(enemy.id);
+      // 얼어붙는 순간(연장 포함) — 적마다 연출이 붙는다
+      world.events.emit('enemy_frozen', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, stacks });
     } else {
       enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, effects['slowTicks'] ?? 0);
       enemy.slowMul = stacks === 1 ? (effects['slowMulLight'] ?? 0.7) : (effects['slowMul'] ?? 0.5);
@@ -248,7 +252,7 @@ function frostBurst(world: World, cx: number, cz: number, effects: Record<string
   combo.count = world.tick - combo.lastTick <= (effects['comboWindowTicks'] ?? 0) ? combo.count + 1 : 1;
   combo.lastTick = world.tick;
   const scale = combo.count === 1 ? (effects['firstHitFxScale'] ?? 1) : 1;
-  world.events.emit('frost_nova', { x: cx, z: cz, radius, slowed, scale, combo: combo.count });
+  world.events.emit('frost_nova', { x: cx, z: cz, radius, slowed, frozen, scale, combo: combo.count });
   return scale;
 }
 

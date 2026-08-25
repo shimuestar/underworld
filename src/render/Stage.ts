@@ -127,7 +127,7 @@ const FROST_TINT = 0x2f7fc4; // 둔화 단계
 const FREEZE_TINT = 0x6fc2ff; // 완전 빙결 — 더 밝고 차갑다
 const ICE_COLOR = 0xbfe8ff;
 /** 서리 자국 — 반지름(m)·수명(ms)·면에서 띄우는 거리(m) */
-const FROST_DECAL_RADIUS = 2.2;
+const FROST_DECAL_RADIUS = 1.3; // 2.2 는 너무 컸다 — 1타 크기(×0.6)로 전부 통일
 const FROST_DECAL_MS = 5200;
 const FROST_DECAL_LIFT = 0.03;
 // 화상 표시 — 발광은 텔레그래프·스태거 색에 가려지므로 불티로 따로 알린다
@@ -1429,6 +1429,53 @@ export class Stage {
       d.crystals.scale.set(cs, cs, cs);
       d.crystals.visible = cs > 0.02;
     }
+  }
+
+  /** 얼어붙는 순간 — 섬광 + 몸을 감싸며 굳는 얼음 껍질 + 튀어 오르는 결정 + 발밑 서리.
+   *  깨질 때(spawnThaw)와 짝이 되게 같은 재료를 쓰되, 이쪽은 안으로 조이는 느낌이라 껍질을 작게·짧게 */
+  spawnFreeze(x: number, z: number, height: number): void {
+    const now = performance.now();
+    const cy = height * 0.55;
+    this.triggerFlash(x, cy, z, 0xbfe8ff, 130, 2.2);
+    const light = new THREE.PointLight(0x9fe0ff, 6, 6, 0);
+    light.position.set(x, cy, z);
+    this.scene.add(light);
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 16, 12),
+      new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity: 0.55, depthWrite: false }),
+    );
+    shell.position.set(x, cy, z);
+    this.scene.add(shell);
+    this.explosions.push({ light, shell, bornMs: now, radius: 1.5 });
+    // 결정이 몸에서 튀어 오른다 — 얼음이 "잡히는" 순간
+    for (let i = 0; i < 14; i++) {
+      const size = 0.04 + Math.random() * 0.06;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size * 1.8, size),
+        new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity: 0.9 }),
+      );
+      const ang = Math.random() * Math.PI * 2;
+      const r = 0.2 + Math.random() * 0.35;
+      const oy = height * (0.2 + Math.random() * 0.7);
+      mesh.position.set(x + Math.cos(ang) * r, oy, z + Math.sin(ang) * r);
+      mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      this.scene.add(mesh);
+      this.particles.push({
+        mesh,
+        ox: mesh.position.x, oy, oz: mesh.position.z,
+        vx: Math.cos(ang) * (0.6 + Math.random() * 0.8),
+        vy: 2.2 + Math.random() * 1.6,
+        vz: Math.sin(ang) * (0.6 + Math.random() * 0.8),
+        bornMs: now,
+        lifeMs: 560,
+        spinX: (Math.random() - 0.5) * 12,
+        spinY: (Math.random() - 0.5) * 12,
+        spinZ: (Math.random() - 0.5) * 12,
+        gravity: 7,
+      });
+    }
+    // 발밑에 서리 — 직격당하지 않은 적도 얼면 발밑이 언다
+    this.spawnFrostDecal(x, 0, z, 'floor', null, 0, -1, 0);
   }
 
   /** 얼음이 깨진 적 — 몸이 잠깐 하얗게 번쩍인다 (피격 플래시와 같은 경로) */

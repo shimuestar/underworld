@@ -367,6 +367,7 @@ for (const name of [
   'lightning_cast',
   'frost_nova',
   'frost_impact',
+  'enemy_frozen',
   'enemy_thawed',
   'enemy_freeze_ended',
   'blink',
@@ -534,11 +535,17 @@ events.on('frost_impact', (payload) => {
     axis: 'x' | 'z' | null;
     dirX: number; dirY: number; dirZ: number; scale?: number;
   };
-  stage.spawnFrostDecal(f.x, f.y, f.z, f.surface, f.axis, f.dirX, f.dirY, f.dirZ, f.scale ?? 1);
+  stage.spawnFrostDecal(f.x, f.y, f.z, f.surface, f.axis, f.dirX, f.dirY, f.dirZ); // 자국은 늘 1타 크기
 });
-// 하나라도 얼렸으면 얼려지는 소리 (폭발음과 별개)
+// 하나라도 실제로 얼어붙었으면 얼려지는 소리 (폭발음과 별개). 둔화만 걸린 건 조용하다
 events.on('frost_nova', (payload) => {
-  if (((payload as { slowed: number[] }).slowed?.length ?? 0) > 0) audio.play('freeze');
+  if (((payload as { frozen?: number[] }).frozen?.length ?? 0) > 0) audio.play('freeze');
+});
+// 얼어붙는 순간 — 적마다 섬광·껍질·결정·발밑 서리, 몸이 잠깐 하얗게
+events.on('enemy_frozen', (payload) => {
+  const f = payload as { enemyId: number; enemyType: string; x: number; z: number };
+  stage.spawnFreeze(f.x, f.z, enemyDef(f.enemyType).height);
+  stage.flashEnemyShatter(f.enemyId);
 });
 events.on('enemy_cast', (payload) => {
   const info = payload as { enemyType: string; enemyId: number };
