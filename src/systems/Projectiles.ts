@@ -256,7 +256,7 @@ function nodeY(node: ChainNode): number {
 /** 연쇄 — 처음 맞은 대상을 기준으로 반경 chainRange 안에서 가장 가까운 순으로 옮겨붙는다.
  *  반경을 매번 새 대상 기준으로 재면 사슬이 맵 끝까지 뻗어 나가므로 기준은 하나로 고정한다.
  *  한 번 옮길 때마다 피해가 chainFalloff 배로 줄고, 벽에 가린 것과 이미 맞은 것은 건너뛴다.
- *  적의 방패는 못 끊는다 (전기다) — 마법 방어막에 닿으면 거기서 끊긴다.
+ *  적의 방패도 마법 방어막도 사슬을 끊지 못한다 (전기다) — 방어막은 피해만 막고 전기는 거쳐 간다.
  *  통에 옮겨붙으면 피해 대신 지져진 시간이 쌓인다 — 계속 이어 대면 직격과 같은 1.5초에 터진다 */
 function chainLightning(
   world: World,
@@ -304,12 +304,14 @@ function chainLightning(
     }
     if (!node) break;
 
+    let blocked = false;
     if (node.kind === 'enemy') {
       hitEnemies.add(nodeId(node));
       const def = enemyDef(node.enemy.type);
+      // 마법 방어막은 피해를 막을 뿐 전기를 끊지는 못한다 — 사슬은 이 적을 거쳐 계속 간다
       if (def.magicBarrier?.blocksMagic && barrierUp(def, node.enemy)) {
         world.events.emit('barrier_blocked', { enemyId: node.enemy.id, kind: 'magic' });
-        break; // 마법 방어막이 사슬을 끊는다 (방패는 못 끊는다 — 전기다)
+        blocked = true;
       }
     } else {
       hitBarrels.add(nodeId(node));
@@ -320,8 +322,8 @@ function chainLightning(
       bx: nodeX(node), by: nodeY(node), bz: nodeZ(node),
     });
     if (node.kind === 'enemy') {
-      skillDamage(world, node.enemy, damage, 'lightning_chain');
-      shocked.push(node.enemy.id);
+      if (!blocked) skillDamage(world, node.enemy, damage, 'lightning_chain');
+      shocked.push(node.enemy.id); // 막혀도 몸에 전기는 흐른다
     } else {
       zapBarrel(world, node.barrel, zapPerLink);
       zapped.push(node.barrel.id);
@@ -434,17 +436,21 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
 
   const hits: number[] = [];
   const struck: EnemyState[] = []; // 연쇄의 출발점이 될 "처음 맞은 적"을 알아야 한다
+  /** 방어막에 막혔지만 전기는 통한 적 — 피해는 0 이어도 사슬의 시작점이 된다 */
+  let conductor: EnemyState | null = null;
   const pierce = Math.max(1, effects['pierce'] ?? 1);
   for (const { enemy, t } of candidates) {
     if (hits.length >= pierce) break;
     // 나무·쇠 방패는 물리를 받아 내는 물건이라 전기는 그냥 타고 들어간다 — 뇌창은 방패를 무시한다.
-    // 다만 마법 방어막(수호주술사)은 마법을 막는 물건이라 번개도 여기서 끊긴다
+    // 다만 마법 방어막(수호주술사)은 마법을 막는 물건이라 피해가 안 들어가고 빔도 여기서 멈춘다.
+    // 그래도 전기는 통한다 — 막힌 그 자리를 시작점으로 옆으로 옮겨붙는다
     const def = enemyDef(enemy.type);
     if (def.magicBarrier?.blocksMagic && barrierUp(def, enemy)) {
       if (damaging) world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'magic' });
       maxT = t; // 방어막이 빔을 받아 낸다 — 뒤의 적은 무사
       surface = null;
       axis = null;
+      conductor = enemy;
       break;
     }
     if (damaging) skillDamage(world, enemy, effects['damage'] ?? 0, 'lightning');
@@ -456,12 +462,16 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
   if (damaging) {
     const zappedBarrels = new Set<number>();
     if (zapTarget) zappedBarrels.add(zapTarget.id);
+    const hitEnemies = new Set(hits);
+    if (conductor) hitEnemies.add(conductor.id); // 다시 노릴 대상은 아니다
     const origin: ChainNode | null = struck[0]
       ? { kind: 'enemy', enemy: struck[0] }
-      : zapTarget
-        ? { kind: 'barrel', barrel: zapTarget }
-        : null;
-    if (origin) chainLightning(world, effects, origin, new Set(hits), zappedBarrels);
+      : conductor
+        ? { kind: 'enemy', enemy: conductor }
+        : zapTarget
+          ? { kind: 'barrel', barrel: zapTarget }
+          : null;
+    if (origin) chainLightning(world, effects, origin, hitEnemies, zappedBarrels);
   }
   // 매 틱 나간다 — 렌더는 이걸 받아 빔을 붙여 두고, pulse 인 틱에만 밝게 튄다
   world.events.emit('lightning_beam', {

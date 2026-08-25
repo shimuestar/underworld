@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import sigilsJson from '../../data/sigils.json';
-import { enemyDef } from '../core/Entities';
 import { sigilColor, sigilDef } from '../core/SigilData';
 import { Input } from '../core/Input';
 import { World, type BarrelState, type EnemyState } from '../core/World';
@@ -714,20 +713,43 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(behind.health).toBe(1000 - fx['damage']!);
   });
 
-  it('관통 뇌창: 마법 방어막(수호주술사)은 번개도 막고 거기서 빔이 끊긴다', () => {
+  it('관통 뇌창: 주술사의 방어막은 피해만 막는다 — 적중이 안 돼도 전기는 옆으로 옮겨붙는다', () => {
     Sigils.acquire(world, 'sig_lightning');
     world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
     const warden = add('warden', 12, 6);
     warden.ai = 'chase';
-    const behind = runnerAhead(10);
+    const behind = runnerAhead(10); // (16, 6) — 주술사에게서 4m
+    behind.health = 1000;
     const wardenFull = warden.health;
     const blocked: { kind?: string }[] = [];
     world.events.on('barrier_blocked', (p) => blocked.push(p as { kind?: string }));
     const hits = beamHits(1);
-    expect(hits).toEqual([]);
+    expect(hits).toEqual([]); // 빔은 꿰지 못하고 방어막에서 멈춘다
     expect(blocked).toEqual([expect.objectContaining({ kind: 'magic' })]);
-    expect(warden.health).toBe(wardenFull);
-    expect(behind.health).toBe(enemyDef('goblin_runner').health); // 뒤의 적도 무사
+    expect(warden.health).toBe(wardenFull); // 주술사는 멀쩡하다
+    // 다만 막힌 그 자리가 사슬의 시작점이 된다 (2026-08-25)
+    expect(behind.health).toBeCloseTo(1000 - fx['damage']! * fx['chainFalloff']!, 6);
+  });
+
+  it('관통 뇌창: 사슬 도중의 주술사는 피해 없이 전기를 넘겨준다 — 거기서 끊기지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    const dmg = fx['damage']!;
+    const fall = fx['chainFalloff']!;
+    const target = runnerAhead(5); // 직격 (11, 6)
+    const warden = add('warden', 13, 7.5); // 직격점에서 2.5m — 사슬 첫 칸
+    const last = add('goblin_runner', 16, 4.6); // 주술사에서 4.2m — 사슬 둘째 칸 (빔 선 밖)
+    target.health = 1000;
+    last.health = 1000;
+    const wardenFull = warden.health;
+    const hits = beamHits(1);
+    expect(hits).toEqual([target.id]);
+    expect(target.health).toBe(1000 - dmg);
+    expect(warden.health).toBe(wardenFull); // 거쳐 가기만 한다
+    // 주술사를 지난 만큼 한 칸이 소모된다 — 그다음은 두 번 깎인 값
+    expect(last.health).toBeCloseTo(1000 - dmg * fall * fall, 6);
   });
 
   /** 얼음 화살이 다 날아갈 때까지 (최대 lifeTicks) 투사체만 돌린다 — 적 AI 는 안 돌린다 */
