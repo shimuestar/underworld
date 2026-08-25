@@ -267,7 +267,8 @@ export class Input {
       this.padLanternSwapped = false;
     }
     let padSkill = 0;
-    if (pad.pressed('skill2')) padSkill = 2;
+    if (pad.pressed('skill1')) padSkill = 1;
+    else if (pad.pressed('skill2')) padSkill = 2;
     else if (pad.pressed('skill3')) padSkill = 3;
     else if (pad.pressed('skill4')) padSkill = 4;
     let padSlot = 0;

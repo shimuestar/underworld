@@ -21,6 +21,7 @@ export const PAD_ACTIONS = [
   { id: 'reload', label: '재장전 / 시위 내리기' },
   { id: 'cast', label: '선택한 스킬 사용 (가운데 클릭)' },
   { id: 'cycleSkill', label: '스킬 교체 — 퀵슬롯 회전 (Q)' },
+  { id: 'skill1', label: '스킬 1 (Z)' },
   { id: 'skill2', label: '스킬 2 (X)' },
   { id: 'skill3', label: '스킬 3 (C)' },
   { id: 'skill4', label: '스킬 4 (V)' },
@@ -70,6 +71,7 @@ export const DEFAULT_BINDINGS: Record<PadAction, number> = {
   reload: 2, // X
   cast: 3, // Y — 선택한 스킬 칸 사용. 칸 직접 지정(skill2~4)은 버튼이 모자라 비워 뒀다
   cycleSkill: 14, // D-패드 ← — 스킬 칸 회전. 배터리가 있던 자리다
+  skill1: -1,
   skill2: -1,
   skill3: -1,
   skill4: -1,
