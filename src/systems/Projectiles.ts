@@ -231,6 +231,57 @@ function assistTarget(
   return best;
 }
 
+/** 연쇄 — 처음 맞은 적을 기준으로 반경 chainRange 안에서 가장 가까운 순으로 옮겨붙는다.
+ *  반경을 매번 새 대상 기준으로 재면 사슬이 맵 끝까지 뻗어 나가므로, 기준은 처음 맞은 적 하나로 고정한다.
+ *  한 번 옮길 때마다 피해가 chainFalloff 배로 줄고, 벽에 가린 적과 이미 맞은 적은 건너뛴다.
+ *  방패를 정면으로 든 적에게 닿으면 거기서 사슬이 끊긴다 (번개도 방패는 못 뚫는다) */
+function chainLightning(
+  world: World,
+  effects: Record<string, number>,
+  first: EnemyState,
+  hit: Set<number>,
+): void {
+  const chainRange = effects['chainRange'] ?? 0;
+  if (chainRange <= 0) return;
+  const falloff = effects['chainFalloff'] ?? 1;
+  const links: { ax: number; ay: number; az: number; bx: number; by: number; bz: number }[] = [];
+  let from = first;
+  let damage = (effects['damage'] ?? 0) * falloff; // 첫 전이부터 이미 한 번 깎인다
+
+  for (;;) {
+    let next: EnemyState | null = null;
+    let nextDist = Infinity;
+    for (const enemy of world.enemies) {
+      if (!enemy.alive || hit.has(enemy.id)) continue;
+      if (Math.hypot(enemy.x - first.x, enemy.z - first.z) > chainRange) continue;
+      const dist = Math.hypot(enemy.x - from.x, enemy.z - from.z);
+      if (dist >= nextDist) continue;
+      if (!world.level.hasLineOfSight(from.x, from.z, enemy.x, enemy.z)) continue;
+      next = enemy;
+      nextDist = dist;
+    }
+    if (!next) break;
+    hit.add(next.id);
+    if (shieldBlocksProjectile(enemyDef(next.type), next, from.x, from.z)) {
+      world.events.emit('shot_blocked', { enemyId: next.id, source: 'lightning_chain' });
+      break;
+    }
+    links.push({
+      ax: from.x, ay: chestY(from), az: from.z,
+      bx: next.x, by: chestY(next), bz: next.z,
+    });
+    skillDamage(world, next, damage, 'lightning_chain');
+    damage *= falloff;
+    from = next;
+  }
+  if (links.length > 0) world.events.emit('lightning_chain', { links });
+}
+
+/** 번개가 옮겨붙는 높이 — 몸 가운데 */
+function chestY(enemy: EnemyState): number {
+  return enemyDef(enemy.type).height * 0.55;
+}
+
 /** 뻗어 있는 빔을 한 틱 갱신한다. 조준선 위의 적을 앞에서부터 pierce 명까지 꿰뚫고,
  *  벽에서 멈추고, 방패에 막히면 거기서 끊긴다 (번개도 방패는 못 뚫는다).
  *  겨눈 방향에 아무도 없어도 aimAssistDeg 안에 적이 있으면 그쪽으로 휜다.
@@ -297,6 +348,7 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
   candidates.sort((a, b) => a.t - b.t);
 
   const hits: number[] = [];
+  const struck: EnemyState[] = []; // 연쇄의 출발점이 될 "처음 맞은 적"을 알아야 한다
   const pierce = Math.max(1, effects['pierce'] ?? 1);
   for (const { enemy, t } of candidates) {
     if (hits.length >= pierce) break;
@@ -309,7 +361,10 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
     }
     if (damaging) skillDamage(world, enemy, effects['damage'] ?? 0, 'lightning');
     hits.push(enemy.id);
+    struck.push(enemy);
   }
+  // 연쇄 — 꿰뚫은 적들 말고 "처음 맞은 적"을 기준으로 옮겨붙는다
+  if (damaging && struck.length > 0) chainLightning(world, effects, struck[0]!, new Set(hits));
   // 매 틱 나간다 — 렌더는 이걸 받아 빔을 붙여 두고, pulse 인 틱에만 밝게 튄다
   world.events.emit('lightning_beam', {
     sx: ox, sy: oy, sz: oz,

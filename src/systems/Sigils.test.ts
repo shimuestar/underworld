@@ -373,6 +373,17 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     world.input = Input.emptySnapshot();
     Projectiles.endChannel(world); // 탭 = 눌렀다 뗀 것 — 채널형(뇌창)은 여기서 끊긴다
   }
+  /** 이번 시전에서 빔이 "직격"한 적 id — 연쇄로 옮겨붙은 피해와 구분해서 본다 */
+  function beamHits(slot: number): number[] {
+    let ids: number[] = [];
+    const off = world.events.on('lightning_beam', (p) => {
+      const b = p as { hits: number[]; pulse?: boolean };
+      if (b.pulse) ids = b.hits;
+    });
+    castSlot(slot);
+    off();
+    return ids;
+  }
   /** 스킬 칸 n 을 ticks 틱 동안 붙들고 있는다 (떼지 않는다) */
   function holdSlot(n: number, ticks: number): void {
     for (let i = 0; i < ticks; i++) {
@@ -398,15 +409,70 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     const fx = sigilDef('sig_lightning').effects;
     const inLine = [1.5, 3, 4.5, 6, 7.5, 9].map((d) => runnerAhead(d)); // 6명 — pierce 5
     const aside = runnerAhead(4, 1.7); // 빔 폭(0.7)+몸(0.5) 밖
-    castSlot(1);
-    const full = enemyDef('goblin_runner').health;
-    const hit = inLine.filter((e) => !e.alive || e.health < full);
-    expect(hit).toHaveLength(fx['pierce']!);
-    expect(inLine[5]!.alive).toBe(true); // 여섯째는 빔이 못 닿는다
-    expect(aside.alive).toBe(true);
-    expect(aside.health).toBe(full);
+    for (const e of [...inLine, aside]) e.health = 1000; // 연쇄까지 받아도 안 죽게
+    const hits = beamHits(1);
+    expect(hits).toEqual(inLine.slice(0, fx['pierce']!).map((e) => e.id));
+    expect(hits).not.toContain(inLine[5]!.id); // 여섯째는 빔이 못 닿는다 (연쇄로는 닿는다)
+    expect(hits).not.toContain(aside.id);
     expect(world.mana.value).toBe(100 - fx['manaCost']!);
     expect(Projectiles.skillCooldown(world, 'sig_lightning')).toBe(fx['cooldownTicks']);
+  });
+
+  it('관통 뇌창: 맞은 적에서 가까운 순으로 옮겨붙고, 한 번마다 피해가 10% 깎인다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    const dmg = fx['damage']!;
+    const fall = fx['chainFalloff']!;
+    const target = runnerAhead(5); // 직격 (11, 6)
+    const a = add('goblin_runner', 13, 7.5); // 직격점에서 2.5m — 첫 전이
+    const b = add('goblin_runner', 16, 4.6); // a 에서 4.2m — 둘째 전이
+    for (const e of [target, a, b]) e.health = 1000;
+    const hits = beamHits(1);
+    expect(hits).toEqual([target.id]); // 빔이 꿴 건 하나 — 나머지는 연쇄다
+    expect(target.health).toBe(1000 - dmg);
+    expect(a.health).toBeCloseTo(1000 - dmg * fall, 6); // 10.8
+    expect(b.health).toBeCloseTo(1000 - dmg * fall * fall, 6); // 9.72
+  });
+
+  it('관통 뇌창: 연쇄 반경은 처음 맞은 적 기준 — 10m 밖은 옮겨붙지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    const target = runnerAhead(5); // 직격 (11, 6)
+    const near = add('goblin_runner', 13, 7.5); // 2.5m — 옮겨붙는다
+    const outOfRange = add('goblin_runner', 22, 7.5); // 직격점에서 11.1m — 밖
+    for (const e of [target, near, outOfRange]) e.health = 1000;
+    castSlot(1);
+    expect(near.health).toBeLessThan(1000);
+    expect(outOfRange.health).toBe(1000);
+    expect(fx['chainRange']).toBe(10);
+  });
+
+  it('관통 뇌창: 벽에 가린 적에게는 옮겨붙지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const target = runnerAhead(5); // 직격 (11, 6)
+    const behindWall = add('goblin_runner', 13, 9); // z>8 은 벽 안 — 3.6m 지만 안 보인다
+    target.health = 1000;
+    behindWall.health = 1000;
+    castSlot(1);
+    expect(behindWall.health).toBe(1000);
+  });
+
+  it('관통 뇌창: 빔이 이미 꿴 적에게는 다시 옮겨붙지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    const first = runnerAhead(4);
+    const second = runnerAhead(7); // 둘 다 빔이 꿴다
+    first.health = 1000;
+    second.health = 1000;
+    const hits = beamHits(1);
+    expect(hits).toEqual([first.id, second.id]);
+    // 둘 다 직격 피해 한 번씩만 — 연쇄로 두 번 맞지 않는다
+    expect(first.health).toBe(1000 - fx['damage']!);
+    expect(second.health).toBe(1000 - fx['damage']!);
   });
 
   it('관통 뇌창: 붙들고 있으면 pulseTicks 마다 한 타씩 계속 나간다', () => {
@@ -491,9 +557,11 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     const far = runnerAhead(12, 1.4); // 6.6도 — 더 정면이지만 멀다
     near.health = 1000;
     far.health = 1000;
-    castSlot(1);
+    const hits = beamHits(1);
+    expect(hits).toEqual([near.id]); // 빔이 꿴 건 가까운 쪽 하나뿐
     expect(near.health).toBe(1000 - fx['damage']!);
-    expect(far.health).toBe(1000); // 가까운 쪽으로 휜 빔의 선 밖
+    // 먼 쪽은 빔의 선 밖 — 다만 연쇄로 한 번 깎인 피해가 옮겨붙는다
+    expect(far.health).toBeCloseTo(1000 - fx['damage']! * fx['chainFalloff']!, 6);
   });
 
   it('관통 뇌창: 빔이 멈춘 면을 벽·바닥·천장으로 알려 준다 (그을림 자리)', () => {

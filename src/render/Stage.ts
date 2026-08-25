@@ -560,6 +560,10 @@ const SCORCH_LIFT = 0.02;
 const SCORCH_MERGE_DIST = 0.65;
 const SCORCH_HEAT_STEP = 0.24; // 한 타마다 이만큼 짙어진다 — 4~5타면 새까맣다
 const SCORCH_MAX = 56;
+// 연쇄 번개 — 적과 적 사이를 잇는 짧은 호. 타 간격(100ms)보다 조금 오래 남아 이어져 보인다
+const CHAIN_ARC_MS = 150;
+const CHAIN_ARC_SEGMENTS = 5;
+const CHAIN_ARC_JITTER = 0.3;
 /** 화염구가 지팡이 끝에서 판정 위치로 합쳐지는 시간 */
 const LAUNCH_BLEND_MS = 260;
 const TRACER_WIDTH = 0.022;
@@ -1340,6 +1344,55 @@ export class Stage {
     group.add(light);
     this.scene.add(group);
     this.beam = { group, mat, segs, spark, light };
+  }
+
+  /** 연쇄 번개 — 적에서 적으로 옮겨붙은 호. 마디마다 튀고 짧게 남았다 사라진다.
+   *  한 타마다 새로 뿌리지만 타 간격보다 조금 오래 살아 끊겨 보이지 않는다 */
+  spawnChainArc(
+    links: { ax: number; ay: number; az: number; bx: number; by: number; bz: number }[],
+  ): void {
+    if (links.length === 0) return;
+    const group = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xdff0ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const up = new THREE.Vector3(0, 1, 0);
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const start = new THREE.Vector3();
+    const end = new THREE.Vector3();
+    let first: THREE.Mesh | null = null;
+    for (const link of links) {
+      start.set(link.ax, link.ay, link.az);
+      end.set(link.bx, link.by, link.bz);
+      const side = new THREE.Vector3(end.z - start.z, 0, start.x - end.x).normalize();
+      a.copy(start);
+      for (let i = 0; i < CHAIN_ARC_SEGMENTS; i++) {
+        const t = (i + 1) / CHAIN_ARC_SEGMENTS;
+        const amp = CHAIN_ARC_JITTER * Math.sin(t * Math.PI); // 양 끝은 몸에 붙고 가운데가 튄다
+        b.copy(start).lerp(end, t)
+          .addScaledVector(side, (Math.random() - 0.5) * 2 * amp)
+          .addScaledVector(up, (Math.random() - 0.5) * 2 * amp);
+        const seg = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, a.distanceTo(b)), mat);
+        seg.position.copy(a).add(b).multiplyScalar(0.5);
+        seg.lookAt(b);
+        group.add(seg);
+        first ??= seg;
+        a.copy(b);
+      }
+      const light = new THREE.PointLight(0x9fd8ff, 2.5, 5, 0);
+      light.position.copy(start).lerp(end, 0.5);
+      group.add(light);
+    }
+    const spark = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 6, 5),
+      new THREE.MeshBasicMaterial({ color: 0xe8f6ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }),
+    );
+    const last = links[links.length - 1]!;
+    spark.position.set(last.bx, last.by, last.bz);
+    group.add(spark);
+    this.scene.add(group);
+    this.tracers.push({ group, beam: first ?? spark, spark, bornMs: performance.now(), lifeMs: CHAIN_ARC_MS });
   }
 
   /** 빔이 닿은 면을 그을린다. 같은 자리를 계속 지지면 자국이 늘지 않고 짙어진다 —
