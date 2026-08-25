@@ -449,6 +449,37 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(hit.slowTicks).toBe(fx['slowTicks']! - fx['freezeTicks']!); // 이어서 둔화
   });
 
+  it('서리 폭발: 폭발통에 맞으면 통이 점화되고 그 자리에서도 광역 빙결이 터진다 — 통 발밑에 서리 자국', () => {
+    Sigils.acquire(world, 'sig_frost');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_frost').effects;
+    world.barrels.push({ id: 1, x: 14, z: 6, alive: true, hits: 0, fuseTicks: -1 });
+    const beside = add('goblin_runner', 17, 7.5); // 통에서 3.4m — 사선 밖
+    world.player.pitch = -0.15; // 통은 눈높이보다 낮다 — 살짝 내려다보고 쏜다 (8m 앞에서 y≈0.4)
+    const impacts: { surface: string; x: number; z: number }[] = [];
+    world.events.on('frost_impact', (p) => impacts.push(p as { surface: string; x: number; z: number }));
+    castSlot(1);
+    flyBolt();
+    expect(world.barrels[0]!.fuseTicks).toBe(0); // 점화
+    expect(beside.freezeTicks).toBe(fx['freezeTicks']); // 통 주변도 언다
+    expect(impacts).toEqual([{ surface: 'floor', x: 14, z: 6, y: 0, axis: null, dirX: expect.any(Number), dirY: expect.any(Number), dirZ: expect.any(Number) }]);
+  });
+
+  it('서리 폭발: 적을 직격하면 그 적의 발밑 바닥에 서리 자국이 생긴다', () => {
+    Sigils.acquire(world, 'sig_frost');
+    world.mana.value = 100;
+    const hit = runnerAhead(6);
+    const impacts: { surface: string; x: number; z: number; y: number }[] = [];
+    world.events.on('frost_impact', (p) => impacts.push(p as { surface: string; x: number; z: number; y: number }));
+    castSlot(1);
+    flyBolt();
+    expect(impacts).toHaveLength(1);
+    expect(impacts[0]!.surface).toBe('floor');
+    expect(impacts[0]!.y).toBe(0);
+    expect(impacts[0]!.x).toBeCloseTo(hit.x, 5);
+    expect(impacts[0]!.z).toBeCloseTo(hit.z, 5);
+  });
+
   it('서리 폭발: 아무도 안 맞고 벽에 닿아도 그 자리에서 터져 주변 적이 언다', () => {
     Sigils.acquire(world, 'sig_frost');
     world.mana.value = 100;

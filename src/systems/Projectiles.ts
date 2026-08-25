@@ -476,6 +476,16 @@ function moveProjectiles(world: World, dt: number): void {
         } else {
           igniteBarrel(hitBarrelTarget);
           world.events.emit('spell_impact', { x: bx, y: by, z: bz, hitEnemy: true });
+          // 얼음 화살 — 통도 터지지만 그 자리에서 서리 폭발도 같이 터진다.
+          // 얼어 선 적들이 그 자리에서 폭발을 맞는 조합이다 (Barrels 는 이 뒤에 돈다)
+          if (proj.kind === 'frost' && proj.owner === 'player') {
+            const fx = sigilDef('sig_frost').effects;
+            frostBurst(world, bx, bz, fx);
+            world.events.emit('frost_impact', {
+              x: hitBarrelTarget.x, y: 0, z: hitBarrelTarget.z,
+              surface: 'floor', axis: null, dirX, dirY, dirZ,
+            });
+          }
         }
         world.projectiles.splice(i, 1);
         continue;
@@ -491,14 +501,21 @@ function moveProjectiles(world: World, dt: number): void {
       };
       // 허공이 아니라 무언가에 닿았다 — 착탄 연출이 붙어야 한다
       world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', impact);
-      // 얼음 화살이 벽·바닥·천장에 닿았다 — 그 면이 얼어붙는다 (적·통에 맞으면 면이 없다)
-      if (proj.kind === 'frost' && proj.owner === 'player' && !impact.hitEnemy && !hitBarrelTarget) {
-        world.events.emit('frost_impact', {
-          x: impact.x, y: impact.y, z: impact.z,
-          surface: hitSurface,
-          axis: wall.axis,
-          dirX, dirY, dirZ,
-        });
+      // 얼음 화살 — 벽·바닥·천장에 닿았으면 그 면이, 적을 맞혔으면 그 적의 발밑 바닥이 얼어붙는다
+      if (proj.kind === 'frost' && proj.owner === 'player') {
+        if (hitEnemy) {
+          world.events.emit('frost_impact', {
+            x: hitEnemy.x, y: 0, z: hitEnemy.z,
+            surface: 'floor', axis: null, dirX, dirY, dirZ,
+          });
+        } else if (!impact.hitEnemy) {
+          world.events.emit('frost_impact', {
+            x: impact.x, y: impact.y, z: impact.z,
+            surface: hitSurface,
+            axis: wall.axis,
+            dirX, dirY, dirZ,
+          });
+        }
       }
 
       // 벽·바닥에 꽂힌 화살은 누가 쐈든 못 뽑는다 — 박힌 채로 남기만 한다.
