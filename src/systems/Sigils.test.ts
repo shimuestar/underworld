@@ -37,8 +37,7 @@ function makeWorld(): World {
     mana: { value: 100, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
-      equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
-      scars: { eye: 0, rightArm: 0, leftArm: 0, heart: 0, spine: 0 },
+      active: null,
     },
     modifiers: Sigils.defaultModifiers(),
     corruption: { applied: 0, pending: 0 },
@@ -88,7 +87,7 @@ describe('각인 색', () => {
   });
 });
 
-describe('각인 드랍과 부착', () => {
+describe('스킬 드랍과 획득', () => {
   it('창병은 어떻게 죽이든 드랍 → 그 자리에 놓이고 접근하면 획득', () => {
     // 처형이 아니어도 (총·해머·오사 무엇이든) 사망하면 떨어진다
     world.events.emit('enemy_died', { enemyType: 'goblin_spear', x: 14, z: 6 });
@@ -99,12 +98,12 @@ describe('각인 드랍과 부착', () => {
     Sigils.tick(world, DT);
     expect(world.sigils.inventory).toHaveLength(0);
 
-    // 접근 → 자동 획득 + 즉시 장착
+    // 접근 → 자동 획득. 첫 액티브라 곧바로 Q 스킬이 된다
     world.player.x = 14 - balance.sigil.pickupRadius + 0.1;
     Sigils.tick(world, DT);
     expect(world.groundItems).toHaveLength(0);
-    expect(world.sigils.equipped.rightArm).toBe('sig_fireball'); // 바로 몸에 새겨진다
-    expect(world.sigils.inventory).toHaveLength(0);
+    expect(world.sigils.inventory).toEqual(['sig_fireball']);
+    expect(world.sigils.active).toBe('sig_fireball');
   });
 
   it('처형으로 죽여도 한 번만 떨어진다 (melee_kill + enemy_died 중복 방지)', () => {
@@ -118,39 +117,42 @@ describe('각인 드랍과 부착', () => {
     expect(world.groundItems).toHaveLength(0);
   });
 
-  it('부착: 페널티는 없고 오염 pending 만 누적된다', () => {
-    world.sigils.inventory.push('sig_fireball');
-    expect(Sigils.attach(world, 'sig_fireball')).toBe(true);
-    expect(world.sigils.equipped.rightArm).toBe('sig_fireball');
+  it('획득: 페널티는 없고 오염 pending 만 부위 비용만큼 누적된다', () => {
+    Sigils.acquire(world, 'sig_fireball');
+    expect(world.sigils.inventory).toContain('sig_fireball');
     expect(world.corruption.pending).toBe(balance.corruption.slotCost.rightArm);
   });
 
-  it('슬롯이 차 있으면 부착 실패', () => {
-    world.sigils.inventory.push('sig_fireball', 'sig_fireball');
-    Sigils.attach(world, 'sig_fireball');
-    expect(Sigils.attach(world, 'sig_fireball')).toBe(false);
+  it('액티브: 처음 얻은 것이 자동 선택되고, 다음 것은 골라야 바뀐다', () => {
+    Sigils.acquire(world, 'sig_fireball');
+    expect(world.sigils.active).toBe('sig_fireball');
+    Sigils.acquire(world, 'sig_lightning');
+    expect(world.sigils.active).toBe('sig_fireball'); // 새 걸 얻어도 손에 든 건 그대로
+    expect(Sigils.select(world, 'sig_lightning')).toBe(true);
+    expect(world.sigils.active).toBe('sig_lightning');
   });
 
-  it('해제: 인벤토리로 돌아오고 효과가 사라진다 (흉터 페널티도 폐지)', () => {
-    world.sigils.inventory.push('sig_dash');
-    Sigils.attach(world, 'sig_dash');
-    expect(world.modifiers.dodgeDistanceMul).toBeCloseTo(1.8);
-    Sigils.detach(world, 'spine');
-    expect(world.modifiers.dodgeDistanceMul).toBe(1);
-    expect(world.sigils.inventory).toContain('sig_dash');
+  it('패시브는 고를 수 없고, 안 가진 스킬도 고를 수 없다', () => {
+    Sigils.acquire(world, 'sig_dash');
+    expect(Sigils.select(world, 'sig_dash')).toBe(false);
+    expect(Sigils.select(world, 'sig_fireball')).toBe(false);
+    expect(world.sigils.active).toBeNull();
   });
 
-  it('돌진 회피(척추): 회피 거리·무적 연장 + 산포 페널티', () => {
-    world.sigils.inventory.push('sig_dash');
-    Sigils.attach(world, 'sig_dash');
+  it('패시브는 갖는 순간 켜진다 — 돌진 회피: 회피 거리·무적 연장', () => {
+    Sigils.acquire(world, 'sig_dash');
     expect(world.modifiers.dodgeDistanceMul).toBeCloseTo(1.8);
     expect(world.modifiers.dodgeIFrameTicks).toBe(12);
   });
 
-  it('암시야(눈): ambient 부스트', () => {
-    world.sigils.inventory.push('sig_darkvision');
-    Sigils.attach(world, 'sig_darkvision');
+  it('암시야: ambient 부스트', () => {
+    Sigils.acquire(world, 'sig_darkvision');
     expect(world.modifiers.ambientVisionBoost).toBeCloseTo(1.0);
+  });
+
+  it('액티브 스킬의 effects 는 패시브 계산에 섞이지 않는다', () => {
+    Sigils.acquire(world, 'sig_fireball');
+    expect(world.modifiers).toEqual(Sigils.defaultModifiers());
   });
 });
 
@@ -161,15 +163,26 @@ describe('화염구', () => {
     world.input = Input.emptySnapshot();
   }
 
-  it('오른팔 각인 없으면 시전 실패', () => {
+  it('액티브 스킬 없으면 시전 실패', () => {
     cast();
     expect(world.projectiles).toHaveLength(0);
     expect(world.mana.value).toBe(100);
   });
 
+  it('시전이 구현되지 않은 스킬은 not_implemented 로 불발 — 빈 투사체를 만들지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    expect(world.sigils.active).toBeNull(); // 미구현은 자동 선택되지 않는다
+    expect(Sigils.select(world, 'sig_lightning')).toBe(true); // 직접 고르는 건 된다
+    world.mana.value = 100;
+    const reasons: string[] = [];
+    world.events.on('cast_failed', (p) => reasons.push((p as { reason: string }).reason));
+    cast();
+    expect(reasons).toEqual(['not_implemented']);
+    expect(world.projectiles).toHaveLength(0);
+  });
+
   it('시전: 마나 소모(각인이 지정한 manaCost) + 연쇄 리셋 + 투사체 생성', () => {
-    world.sigils.inventory.push('sig_fireball');
-    Sigils.attach(world, 'sig_fireball');
+        Sigils.acquire(world, 'sig_fireball');
     world.mana.chainIndex = 2;
     cast();
     expect(world.projectiles).toHaveLength(1);
@@ -178,8 +191,7 @@ describe('화염구', () => {
   });
 
   it('마나 부족 시 불발', () => {
-    world.sigils.inventory.push('sig_fireball');
-    Sigils.attach(world, 'sig_fireball');
+        Sigils.acquire(world, 'sig_fireball');
     world.mana.value = 5;
     cast();
     expect(world.projectiles).toHaveLength(0);
@@ -187,8 +199,7 @@ describe('화염구', () => {
   });
 
   it('적 명중: 45 피해 + 화상, 화상 DoT가 마무리하면 spell_kill', () => {
-    world.sigils.inventory.push('sig_fireball');
-    Sigils.attach(world, 'sig_fireball');
+        Sigils.acquire(world, 'sig_fireball');
     const enemy = runnerAt(10, 6); // 전방 4u
     world.enemies.push(enemy);
     const kills: unknown[] = [];
@@ -203,8 +214,7 @@ describe('화염구', () => {
   });
 
   it('낮은 피해 상황에서 화상 DoT 누적', () => {
-    world.sigils.inventory.push('sig_fireball');
-    Sigils.attach(world, 'sig_fireball');
+        Sigils.acquire(world, 'sig_fireball');
     const enemy = runnerAt(10, 6);
     enemy.health = 200; // 즉사 방지용 가상 체력
     world.enemies.push(enemy);
@@ -217,8 +227,7 @@ describe('화염구', () => {
   });
 
   it('벽에 막히면 소멸', () => {
-    world.sigils.inventory.push('sig_fireball');
-    Sigils.attach(world, 'sig_fireball');
+        Sigils.acquire(world, 'sig_fireball');
     cast();
     let impacts = 0;
     world.events.on('spell_impact', () => impacts++);
@@ -233,8 +242,7 @@ describe('화염구 폭발', () => {
 
   /** 플레이어(6,6)에서 +X로 화염구를 쏴 dist 지점의 적에게 맞힌다 */
   function castAt(): void {
-    world.sigils.inventory.push('sig_fireball');
-    Sigils.attach(world, 'sig_fireball');
+        Sigils.acquire(world, 'sig_fireball');
     world.mana.value = 100;
     world.player.yaw = -Math.PI / 2;
     world.input = { ...Input.emptySnapshot(), castPressed: true };

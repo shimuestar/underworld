@@ -7,6 +7,9 @@ export type SigilSlot = 'eye' | 'rightArm' | 'leftArm' | 'heart' | 'spine';
 export interface SigilDef {
   id: string;
   name: string;
+  /** 한 줄 설명 — 스킬창에 그대로 뜬다 */
+  desc?: string;
+  /** 새겨지는 부위 — 오염 비용 산정에만 쓴다 (2026-08 스킬 개념 이후) */
   slot: SigilSlot;
   tier: 'passive' | 'small' | 'medium' | 'large';
   zone: number;
@@ -32,4 +35,9 @@ export const SIGIL_SLOTS: SigilSlot[] = ['eye', 'rightArm', 'leftArm', 'heart', 
 /** 각인 색 — Three.js·CSS 양쪽에서 쓰게 숫자로 준다 */
 export function sigilColor(id: string): number {
   return Number.parseInt(sigilDef(id).color.slice(1), 16);
+}
+
+/** 액티브 스킬인가 — 골라서 Q 로 쓴다. 패시브는 갖고만 있어도 켜진다 */
+export function isActiveSkill(def: SigilDef): boolean {
+  return def.tier !== 'passive';
 }

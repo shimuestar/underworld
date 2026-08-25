@@ -36,8 +36,7 @@ function makeWorld(): World {
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
-      equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
-      scars: { eye: 0, rightArm: 0, leftArm: 0, heart: 0, spine: 0 },
+      active: null,
     },
     modifiers: Sigils.defaultModifiers(),
     corruption: { applied: 0, pending: 0 },
@@ -358,13 +357,3 @@ describe('오염 정산과 임계', () => {
   });
 });
 
-describe('흉터', () => {
-  it('흉터는 기록되지만 더 이상 페널티를 남기지 않는다 (부착 페널티 폐지)', () => {
-    world.sigils.inventory.push('sig_fireball');
-    Sigils.attach(world, 'sig_fireball');
-
-    Sigils.detach(world, 'rightArm');
-    // 흉터 자체는 남는다 — 이후 다른 용도로 쓸 수 있게 기록만 유지
-    expect(world.sigils.scars.rightArm).toBe(balance.sigil.scarRatio);
-  });
-});

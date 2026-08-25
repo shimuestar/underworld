@@ -4,7 +4,6 @@
 import type { ProjectileSplashDef } from './Entities';
 import type { Events } from './Events';
 import type { InputSnapshot } from './Input';
-import type { SigilSlot } from './SigilData';
 import type { Level } from '../level/GridLoader';
 
 export interface PlayerState {
@@ -49,9 +48,8 @@ export interface PlayerState {
 export interface SigilState {
   /** 소지 중(효과 없음). 부착해야 발동 — economy.md §4 */
   inventory: string[];
-  equipped: Record<SigilSlot, string | null>;
-  /** 흉터 — 각인을 뗀 자국. 페널티 폐지 후에는 기록용 (이후 용도를 위해 남겨둠) */
-  scars: Record<SigilSlot, number>;
+  /** 선택된 액티브 스킬 — Q 로 쓴다. 패시브는 inventory 에 있기만 하면 켜진다 */
+  active: string | null;
 }
 
 /** 부착된 각인에서 매번 재계산되는 파생 수치. Sigils가 갱신한다.

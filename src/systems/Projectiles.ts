@@ -35,7 +35,7 @@ export function tick(world: World, dt: number): void {
 }
 
 function tryCast(world: World): void {
-  const sigilId = world.sigils.equipped.rightArm;
+  const sigilId = world.sigils.active;
   if (!sigilId) {
     world.events.emit('cast_failed', { reason: 'no_sigil' });
     return;
@@ -43,6 +43,11 @@ function tryCast(world: World): void {
   if (world.spell.cooldown > 0) return;
 
   const def = sigilDef(sigilId);
+  // 시전이 구현된 스킬만 나간다 — 데이터만 있는 스킬로 빈 투사체를 만들면 안 된다
+  if (!def.slice) {
+    world.events.emit('cast_failed', { reason: 'not_implemented', id: sigilId });
+    return;
+  }
   // 각인이 manaCost 를 명시하면 그 값, 없으면 티어 기본값
   const cost =
     def.effects['manaCost'] ?? balance.spellCost[def.tier as keyof typeof balance.spellCost] ?? 0;

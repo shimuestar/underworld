@@ -91,7 +91,6 @@ export function open(world: World, chest: ChestState): void {
  *  (효과가 아직 없는 각인만 나오면 "상자를 열었는데 아무 일도 없다"가 된다) */
 function rollSigil(world: World): string | null {
   const owned = new Set<string>(world.sigils.inventory);
-  for (const id of Object.values(world.sigils.equipped)) if (id) owned.add(id);
 
   const all = (sigilsJson.sigils as { id: string }[]).map((s) => s.id);
   const fresh = all.filter((id) => !owned.has(id));

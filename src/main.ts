@@ -113,8 +113,7 @@ const world = new World(events, {
   mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
   sigils: {
     inventory: [],
-    equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
-    scars: { eye: 0, rightArm: 0, leftArm: 0, heart: 0, spine: 0 },
+    active: null,
   },
   modifiers: Sigils.defaultModifiers(),
   corruption: { applied: 0, pending: 0 },
@@ -336,8 +335,7 @@ for (const name of [
   'gold_picked',
   'xp_gained',
   'sigil_acquired',
-  'sigil_attached',
-  'sigil_detached',
+  'skill_selected',
   'altar_entered',
   'altar_bypassed',
   'shop_purchased',
@@ -564,7 +562,7 @@ events.on('explosion', (payload) => {
 events.on('chest_opened', (payload) => {
   const info = payload as { gold: number; sigilId: string | null };
   audio.play('chest_opened');
-  const sigil = info.sigilId ? ` · ${sigilDef(info.sigilId).name} 각인` : '';
+  const sigil = info.sigilId ? ` · ${sigilDef(info.sigilId).name} 스킬` : '';
   showReaction(`보물상자 — ◆ ${info.gold}${sigil}`, 2600);
 });
 // 날아오던 것을 공중에서 깼다 — 바위가 파편으로 흩어진다
@@ -649,7 +647,9 @@ events.on('cast_failed', (payload) => {
   showReaction(
     info.reason === 'no_mana'
       ? `마나 부족 — ${info.cost} 필요 (패링·처형으로 모아야 한다)`
-      : '오른팔에 각인이 없다 — 각인을 주우면 자동으로 새겨진다',
+      : info.reason === 'not_implemented'
+        ? '이 빌드에서는 아직 쓸 수 없는 스킬이다 — Tab 에서 다른 스킬을 고른다'
+        : '액티브 스킬이 없다 — 스킬을 주우면 Q 로 쓸 수 있다',
     2000,
   );
 });
@@ -859,29 +859,22 @@ events.on('shield_broken', (payload) => {
   showReaction('방패 파괴!', 1200);
 });
 // 각인 획득 — 화면 가운데에 각인 색으로 크게 띄운다.
-// 이 시점은 아직 attach 전이라, 슬롯이 비어 있으면 곧 몸에 새겨진다는 뜻이다
 const sigilToast = document.getElementById('sigil-toast')!;
 const sigilToastName = sigilToast.querySelector('.name') as HTMLElement;
 const sigilToastSub = sigilToast.querySelector('.sub') as HTMLElement;
 let sigilToastUntil = 0;
-const SLOT_NAMES: Record<string, string> = {
-  eye: '눈',
-  rightArm: '오른팔',
-  leftArm: '왼팔',
-  heart: '심장',
-  spine: '척추',
-};
 events.on('sigil_acquired', (payload) => {
-  const id = (payload as { id: string }).id;
-  const def = sigilDef(id);
-  const willAttach = world.sigils.equipped[def.slot] === null;
-  const slot = SLOT_NAMES[def.slot] ?? def.slot;
+  const info = payload as { id: string; kind: 'active' | 'passive'; selected: boolean };
+  const def = sigilDef(info.id);
   sigilToastName.textContent = `✦ ${def.name}`;
   sigilToastName.style.color = def.color;
   sigilToastName.style.textShadow = `0 0 12px ${def.color}`;
-  sigilToastSub.textContent = willAttach
-    ? `${slot}에 새겨졌다`
-    : `${slot} 슬롯이 차 있다 — Tab 에서 교체`;
+  sigilToastSub.textContent =
+    info.kind === 'passive'
+      ? '패시브 스킬 — 바로 켜졌다'
+      : info.selected
+        ? `액티브 스킬 — ${keyLabel('Q', 'cast')} 로 쓴다`
+        : `액티브 스킬 — Tab 에서 고르면 ${keyLabel('Q', 'cast')} 로 쓴다`;
   sigilToast.classList.add('visible');
   sigilToastUntil = performance.now() + SIGIL_TOAST_MS;
 });
@@ -1228,8 +1221,8 @@ function restoreResources(keep: ReturnType<typeof snapshotResources>): void {
 }
 
 function spellHudText(): string {
-  const id = world.sigils.equipped.rightArm;
-  if (!id) return '(오른팔 각인 없음)';
+  const id = world.sigils.active;
+  if (!id) return '(액티브 스킬 없음)';
   const def = sigilDef(id);
   const cost = balance.spellCost[def.tier as keyof typeof balance.spellCost] ?? 0;
   let suffix = '';
@@ -1564,16 +1557,16 @@ function render(alpha: number): void {
   const hudText =
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
     `9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}${p.blocking ? '  [방어]' : ''}\n` +
-    `spell ${spellHudText()}   각인 ${world.sigils.inventory.length}개 소지   chain ×${chainMult}\n` +
+    `spell ${spellHudText()}   스킬 ${world.sigils.inventory.length}개   chain ×${chainMult}\n` +
     `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}\n` +
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     (input.usingPad
       ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 원거리(${padBtn('cycleWeapon')} 교체)  ${padBtn('melee')} 근접·처형·상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
-        `${padBtn('cast')} 마법  D-패드 소모품  ${padBtn('inventory')} 가방·각인  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴  ${padBtn('battery')} 배터리  ${padBtn('pause')} 일시정지·키 설정`
+        `${padBtn('cast')} 스킬  D-패드 소모품  ${padBtn('inventory')} 가방·스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴  ${padBtn('battery')} 배터리  ${padBtn('pause')} 일시정지·키 설정`
       : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형·상호작용  Shift 짧게=패링·꾹=방어\n' +
-        'Q 마법  1~5 소모품  Tab 가방·각인  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트');
+        'Q 스킬  1~5 소모품  Tab 가방·스킬  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트');
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
   // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)

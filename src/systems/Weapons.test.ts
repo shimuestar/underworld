@@ -41,8 +41,7 @@ function makeWorld(): World {
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
-      equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
-      scars: { eye: 0, rightArm: 0, leftArm: 0, heart: 0, spine: 0 },
+      active: null,
     },
     modifiers: Sigils.defaultModifiers(),
     corruption: { applied: 0, pending: 0 },

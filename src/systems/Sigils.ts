@@ -4,7 +4,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import { sigilDef, SIGIL_SLOTS, type SigilSlot } from '../core/SigilData';
+import { isActiveSkill, sigilDef } from '../core/SigilData';
 import type { Modifiers, World } from '../core/World';
 
 export function defaultModifiers(): Modifiers {
@@ -55,57 +55,50 @@ export function tick(world: World, _dt: number): void {
     if (item.kind !== 'sigil') continue; // 포션·골드는 Pickups가 줍는다
     if (Math.hypot(p.x - item.x, p.z - item.z) > balance.sigil.pickupRadius) continue;
     world.groundItems.splice(i, 1);
-    const id = item.sigilId!;
-    world.sigils.inventory.push(id);
-    world.events.emit('sigil_acquired', { id });
-    // 주우면 곧바로 몸에 새긴다 — 슬롯이 이미 차 있으면 인벤토리에 남는다
-    attach(world, id);
+    acquire(world, item.sigilId!);
   }
 }
 
-/** 인벤토리의 각인을 해당 부위에 부착. 슬롯이 차 있으면 실패 */
-export function attach(world: World, sigilId: string): boolean {
-  const index = world.sigils.inventory.indexOf(sigilId);
-  if (index < 0) return false;
+/** 스킬 획득 — 갖는 순간 몸에 새겨진다. 패시브는 곧바로 켜지고,
+ *  액티브는 골라 둔 것이 없으면 이것이 선택된다. 오염은 부위 비용만큼 대기(pending)에
+ *  쌓여 제단에서 정산된다 (M6) */
+export function acquire(world: World, sigilId: string): void {
   const def = sigilDef(sigilId);
-  if (world.sigils.equipped[def.slot] !== null) return false;
-
-  world.sigils.inventory.splice(index, 1);
-  world.sigils.equipped[def.slot] = sigilId;
-
-  // 오염은 부착 시 1회 pending 누적, 제단에서 정산 (M6)
+  world.sigils.inventory.push(sigilId);
   const cost = balance.corruption.slotCost[def.slot];
   world.corruption.pending += cost;
-
+  const active = isActiveSkill(def);
+  // 자동 선택은 시전이 구현된 스킬만 — 데이터만 있는 스킬이 Q 에 올라가면 죽은 키가 된다.
+  // 직접 고르는 건 막지 않는다 (select)
+  if (active && def.slice && world.sigils.active === null) world.sigils.active = sigilId;
   recompute(world);
-  world.events.emit('sigil_attached', { id: sigilId, slot: def.slot, corruptionCost: cost });
+  world.events.emit('sigil_acquired', {
+    id: sigilId,
+    kind: active ? 'active' : 'passive',
+    selected: world.sigils.active === sigilId,
+    corruptionCost: cost,
+  });
+}
+
+/** 액티브 스킬 선택 — Q 가 이걸 쓴다. 갖고 있지 않거나 패시브면 실패 */
+export function select(world: World, sigilId: string): boolean {
+  if (!world.sigils.inventory.includes(sigilId)) return false;
+  if (!isActiveSkill(sigilDef(sigilId))) return false;
+  if (world.sigils.active === sigilId) return true;
+  world.sigils.active = sigilId;
+  world.events.emit('skill_selected', { id: sigilId });
   return true;
 }
 
-/** 부위의 각인을 떼어 인벤토리로. 흉터는 기록만 남는다 (페널티 폐지) */
-export function detach(world: World, slot: SigilSlot): boolean {
-  const id = world.sigils.equipped[slot];
-  if (!id) return false;
-  world.sigils.equipped[slot] = null;
-  world.sigils.inventory.push(id);
-  // 누적 최댓값 — 같은 부위 반복 부착/해제로 흉터가 무한히 쌓이지 않는다
-  world.sigils.scars[slot] = Math.max(world.sigils.scars[slot], balance.sigil.scarRatio);
-  recompute(world);
-  world.events.emit('sigil_detached', { id, slot });
-  return true;
-}
-
-/** 부착 상태에서 Modifiers 재계산.
- *  부착 페널티(장전 지연·조준 산포·랜턴 약화 등)는 폐지했다 (2026-08) —
- *  각인은 순수 강화이고, 대가는 오염 정산으로만 치른다 */
+/** 갖고 있는 패시브 스킬로 Modifiers 재계산. 액티브 스킬의 effects 는 시전 수치라
+ *  여기 안 들어온다. 페널티는 없다 (2026-08) — 스킬은 순수 강화, 대가는 오염 정산뿐 */
 export function recompute(world: World): void {
   const mods = defaultModifiers();
 
-  for (const slot of SIGIL_SLOTS) {
-    const id = world.sigils.equipped[slot];
-    if (!id) continue;
-    // 각인 효과 (효과는 흉터와 무관 — 부착 중에만)
-    const effects = sigilDef(id).effects;
+  for (const id of world.sigils.inventory) {
+    const def = sigilDef(id);
+    if (isActiveSkill(def)) continue;
+    const effects = def.effects;
     if (effects['dodgeDistanceMul']) mods.dodgeDistanceMul = effects['dodgeDistanceMul'];
     if (effects['iFrameTicks']) mods.dodgeIFrameTicks = effects['iFrameTicks'];
     if (effects['ambientVisionBoost']) mods.ambientVisionBoost = effects['ambientVisionBoost'];

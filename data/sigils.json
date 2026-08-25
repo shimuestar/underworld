@@ -1,34 +1,35 @@
 {
+  "_conceptNote": "2026-08: 각인 = 스킬. tier passive 는 패시브 스킬(갖고만 있어도 켜진다), 그 외는 액티브 스킬(하나를 골라 Q 로 쓴다). slot 은 오염 비용(corruption.slotCost) 산정에만 남았다",
   "_comment": "각인 24종. 부위당 슬롯 1개, 최대 동시 부착 5개. slice=true 만 1구역 범위.",
 
   "sigils": [
-    { "id": "sig_darkvision",  "name": "암시야",     "slot": "eye",      "tier": "passive", "zone": 1, "slice": true, "color": "#4fb0ff",  "effects": { "ambientVisionBoost": 1.0 } },
-    { "id": "sig_weakpoint",   "name": "약점 투시",   "slot": "eye",      "tier": "passive", "zone": 2, "slice": false, "color": "#00e5c0", "effects": { "showBreakPoints": 1 } },
-    { "id": "sig_trapsense",   "name": "함정 감지",   "slot": "eye",      "tier": "passive", "zone": 2, "slice": false, "color": "#7d5cff", "effects": { "revealTrapsRadius": 12 } },
-    { "id": "sig_lifesight",   "name": "잔명 시야",   "slot": "eye",      "tier": "passive", "zone": 4, "slice": false, "color": "#b9f227", "effects": { "showHealthBars": 1 } },
+    { "id": "sig_darkvision",  "name": "암시야", "desc": "어둠 속에서도 주변이 어렴풋이 보인다",     "slot": "eye",      "tier": "passive", "zone": 1, "slice": true, "color": "#4fb0ff",  "effects": { "ambientVisionBoost": 1.0 } },
+    { "id": "sig_weakpoint",   "name": "약점 투시", "desc": "적의 약점이 드러난다",   "slot": "eye",      "tier": "passive", "zone": 2, "slice": false, "color": "#00e5c0", "effects": { "showBreakPoints": 1 } },
+    { "id": "sig_trapsense",   "name": "함정 감지", "desc": "12m 안의 함정을 알아챈다",   "slot": "eye",      "tier": "passive", "zone": 2, "slice": false, "color": "#7d5cff", "effects": { "revealTrapsRadius": 12 } },
+    { "id": "sig_lifesight",   "name": "잔명 시야", "desc": "적의 남은 체력이 보인다",   "slot": "eye",      "tier": "passive", "zone": 4, "slice": false, "color": "#b9f227", "effects": { "showHealthBars": 1 } },
 
-    { "id": "sig_fireball",    "name": "화염구",      "slot": "rightArm", "tier": "small",   "zone": 1, "slice": true, "color": "#ff6b2b",  "effects": { "damage": 45, "burnTicks": 180, "burnDamagePerTick": 0.15, "speed": 26, "radius": 0.35, "lifeTicks": 120, "cooldownTicks": 30, "manaCost": 22, "explodeRadius": 4.0, "explodeDamage": 30, "explodeFalloffMin": 0.3, "blastRadius": 2.2, "blastKnockback": 4.5, "blastKnockbackTicks": 12 } },
-    { "id": "sig_lightning",   "name": "관통 뇌창",   "slot": "rightArm", "tier": "medium",  "zone": 2, "slice": false, "color": "#ffe14d", "effects": { "damage": 90, "pierce": 5 } },
-    { "id": "sig_acid",        "name": "산성 분사",   "slot": "rightArm", "tier": "small",   "zone": 3, "slice": false, "color": "#7fd13b", "effects": { "armorShred": 0.4 } },
-    { "id": "sig_homing",      "name": "유도 파편",   "slot": "rightArm", "tier": "medium",  "zone": 4, "slice": false, "color": "#ff4fa0", "effects": { "projectiles": 6, "damage": 28 } },
-    { "id": "sig_swiftcast",   "name": "시전 가속",   "slot": "rightArm", "tier": "passive", "zone": 4, "slice": false, "color": "#ffb347", "effects": { "castSpeedMul": 0.7 } },
-    { "id": "sig_execution",   "name": "처형 강화",   "slot": "rightArm", "tier": "passive", "zone": 3, "slice": false, "color": "#e03131", "effects": { "executeManaMul": 1.5 } },
+    { "id": "sig_fireball",    "name": "화염구", "desc": "불덩이를 쏘아 터뜨린다 — 맞은 적은 불탄다",      "slot": "rightArm", "tier": "small",   "zone": 1, "slice": true, "color": "#ff6b2b",  "effects": { "damage": 45, "burnTicks": 180, "burnDamagePerTick": 0.15, "speed": 26, "radius": 0.35, "lifeTicks": 120, "cooldownTicks": 30, "manaCost": 22, "explodeRadius": 4.0, "explodeDamage": 30, "explodeFalloffMin": 0.3, "blastRadius": 2.2, "blastKnockback": 4.5, "blastKnockbackTicks": 12 } },
+    { "id": "sig_lightning",   "name": "관통 뇌창", "desc": "적 다섯을 꿰뚫는 번개",   "slot": "rightArm", "tier": "medium",  "zone": 2, "slice": false, "color": "#ffe14d", "effects": { "damage": 90, "pierce": 5 } },
+    { "id": "sig_acid",        "name": "산성 분사", "desc": "적의 방어를 40% 녹인다",   "slot": "rightArm", "tier": "small",   "zone": 3, "slice": false, "color": "#7fd13b", "effects": { "armorShred": 0.4 } },
+    { "id": "sig_homing",      "name": "유도 파편", "desc": "쫓아가는 파편 여섯",   "slot": "rightArm", "tier": "medium",  "zone": 4, "slice": false, "color": "#ff4fa0", "effects": { "projectiles": 6, "damage": 28 } },
+    { "id": "sig_swiftcast",   "name": "시전 가속", "desc": "시전이 30% 빨라진다",   "slot": "rightArm", "tier": "passive", "zone": 4, "slice": false, "color": "#ffb347", "effects": { "castSpeedMul": 0.7 } },
+    { "id": "sig_execution",   "name": "처형 강화", "desc": "처형 마나 획득 1.5배",   "slot": "rightArm", "tier": "passive", "zone": 3, "slice": false, "color": "#e03131", "effects": { "executeManaMul": 1.5 } },
 
-    { "id": "sig_reflect",     "name": "반사막",      "slot": "leftArm",  "tier": "passive", "zone": 4, "slice": false, "color": "#56d6ff", "effects": { "deflectWindowTicks": 12 } },
-    { "id": "sig_absorb",      "name": "흡수 방벽",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": false, "color": "#9b5de5", "effects": { "absorbAmount": 80, "toManaRatio": 0.5 } },
-    { "id": "sig_frost",       "name": "서리 폭발",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": false, "color": "#a8e6ff", "effects": { "radius": 7, "slowMul": 0.4 } },
-    { "id": "sig_gravity",     "name": "중력장",      "slot": "leftArm",  "tier": "large",   "zone": 5, "slice": false, "color": "#7a68b8", "effects": { "radius": 9, "liftTicks": 120 } },
-    { "id": "sig_curse",       "name": "저주 부여",   "slot": "leftArm",  "tier": "small",   "zone": 4, "slice": false, "color": "#b02fa0", "effects": { "damageTakenMul": 1.4 } },
+    { "id": "sig_reflect",     "name": "반사막", "desc": "반사 판정 창이 넓어진다",      "slot": "leftArm",  "tier": "passive", "zone": 4, "slice": false, "color": "#56d6ff", "effects": { "deflectWindowTicks": 12 } },
+    { "id": "sig_absorb",      "name": "흡수 방벽", "desc": "피해 80을 흡수해 절반을 마나로",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": false, "color": "#9b5de5", "effects": { "absorbAmount": 80, "toManaRatio": 0.5 } },
+    { "id": "sig_frost",       "name": "서리 폭발", "desc": "7m 안의 적을 얼려 느리게 한다",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": false, "color": "#a8e6ff", "effects": { "radius": 7, "slowMul": 0.4 } },
+    { "id": "sig_gravity",     "name": "중력장", "desc": "9m 안의 적을 띄운다",      "slot": "leftArm",  "tier": "large",   "zone": 5, "slice": false, "color": "#7a68b8", "effects": { "radius": 9, "liftTicks": 120 } },
+    { "id": "sig_curse",       "name": "저주 부여", "desc": "저주받은 적은 피해를 1.4배 받는다",   "slot": "leftArm",  "tier": "small",   "zone": 4, "slice": false, "color": "#b02fa0", "effects": { "damageTakenMul": 1.4 } },
 
-    { "id": "sig_manaheart",   "name": "마력 심장",   "slot": "heart",    "tier": "passive", "zone": 3, "slice": false, "color": "#3d7bff", "effects": { "manaMaxMul": 1.6 } },
-    { "id": "sig_overload",    "name": "과부하",      "slot": "heart",    "tier": "passive", "zone": 5, "slice": false, "color": "#ff2d55", "effects": { "freeLargeCastPerEncounter": 1 } },
-    { "id": "sig_drain",       "name": "생명 흡수",   "slot": "heart",    "tier": "passive", "zone": 2, "slice": false, "color": "#c0396f", "effects": { "healOnMeleeKill": 8 } },
-    { "id": "sig_frenzy",      "name": "광란",        "slot": "heart",    "tier": "passive", "zone": 3, "slice": false, "color": "#ff8a3d", "effects": { "lowHpThreshold": 0.3, "damageMul": 1.5 } },
+    { "id": "sig_manaheart",   "name": "마력 심장", "desc": "최대 마나 1.6배",   "slot": "heart",    "tier": "passive", "zone": 3, "slice": false, "color": "#3d7bff", "effects": { "manaMaxMul": 1.6 } },
+    { "id": "sig_overload",    "name": "과부하", "desc": "교전마다 대형 시전 한 번 무료",      "slot": "heart",    "tier": "passive", "zone": 5, "slice": false, "color": "#ff2d55", "effects": { "freeLargeCastPerEncounter": 1 } },
+    { "id": "sig_drain",       "name": "생명 흡수", "desc": "근접 처치마다 체력 8 회복",   "slot": "heart",    "tier": "passive", "zone": 2, "slice": false, "color": "#c0396f", "effects": { "healOnMeleeKill": 8 } },
+    { "id": "sig_frenzy",      "name": "광란", "desc": "체력 30% 아래에서 피해 1.5배",        "slot": "heart",    "tier": "passive", "zone": 3, "slice": false, "color": "#ff8a3d", "effects": { "lowHpThreshold": 0.3, "damageMul": 1.5 } },
 
-    { "id": "sig_dash",        "name": "돌진 회피",   "slot": "spine",    "tier": "passive", "zone": 1, "slice": true, "color": "#35e07a",  "effects": { "dodgeDistanceMul": 1.8, "iFrameTicks": 12 } },
-    { "id": "sig_moment",      "name": "찰나",        "slot": "spine",    "tier": "passive", "zone": 4, "slice": false, "color": "#d9d2c5", "effects": { "slowMoOnPerfectTicks": 24, "timeScale": 0.35 } },
-    { "id": "sig_shadowstep",  "name": "그림자 이동", "slot": "spine",    "tier": "medium",  "zone": 5, "slice": false, "color": "#6d6d9c", "effects": { "range": 20 } },
-    { "id": "sig_unchained",   "name": "연쇄 해방",   "slot": "spine",    "tier": "passive", "zone": 5, "slice": false, "color": "#ffd166", "effects": { "chainCapRemoved": 1, "perTierBonus": 0.4 } },
-    { "id": "sig_nofall",      "name": "낙하 무효",   "slot": "spine",    "tier": "passive", "zone": 3, "slice": false, "color": "#6fbf73", "effects": { "fallDamageMul": 0 } }
+    { "id": "sig_dash",        "name": "돌진 회피", "desc": "회피 거리 1.8배, 무적 12틱",   "slot": "spine",    "tier": "passive", "zone": 1, "slice": true, "color": "#35e07a",  "effects": { "dodgeDistanceMul": 1.8, "iFrameTicks": 12 } },
+    { "id": "sig_moment",      "name": "찰나", "desc": "완벽 패링 순간 시간이 느려진다",        "slot": "spine",    "tier": "passive", "zone": 4, "slice": false, "color": "#d9d2c5", "effects": { "slowMoOnPerfectTicks": 24, "timeScale": 0.35 } },
+    { "id": "sig_shadowstep",  "name": "그림자 이동", "desc": "20m 앞으로 순간이동", "slot": "spine",    "tier": "medium",  "zone": 5, "slice": false, "color": "#6d6d9c", "effects": { "range": 20 } },
+    { "id": "sig_unchained",   "name": "연쇄 해방", "desc": "연쇄 상한이 사라지고 단계마다 +40%",   "slot": "spine",    "tier": "passive", "zone": 5, "slice": false, "color": "#ffd166", "effects": { "chainCapRemoved": 1, "perTierBonus": 0.4 } },
+    { "id": "sig_nofall",      "name": "낙하 무효", "desc": "낙하 피해를 받지 않는다",   "slot": "spine",    "tier": "passive", "zone": 3, "slice": false, "color": "#6fbf73", "effects": { "fallDamageMul": 0 } }
   ]
 }

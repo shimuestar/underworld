@@ -40,8 +40,7 @@ function makeWorld(): World {
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
-      equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
-      scars: { eye: 0, rightArm: 0, leftArm: 0, heart: 0, spine: 0 },
+      active: null,
     },
     modifiers: Sigils.defaultModifiers(),
     corruption: { applied: 0, pending: 0 },
@@ -153,7 +152,7 @@ describe('전리품', () => {
       .filter((s) => s.slice)
       .map((s) => s.id);
     world.sigils.inventory.push(...sliceIds.slice(1));
-    world.sigils.equipped.eye = sliceIds[0]!;
+    world.sigils.inventory.push(sliceIds[0]!);
 
     putChest(world, 6 + 1.5, 6);
     interact(world);

@@ -211,8 +211,8 @@ export class ShopUI {
 
     const hint = document.createElement('div');
     hint.textContent = this.padMode
-      ? 'D-패드 ↑↓ 이동   A 구매   Menu 각인 교체   B 닫기\n재고를 다 쓰면 5분 뒤에 가득 재입고된다'
-      : 'WASD·↑↓ 이동   Enter·좌클릭 구매   1~5 바로 구매   Tab 각인 교체   E / Esc 닫기\n' +
+      ? 'D-패드 ↑↓ 이동   A 구매   Menu 스킬   B 닫기\n재고를 다 쓰면 5분 뒤에 가득 재입고된다'
+      : 'WASD·↑↓ 이동   Enter·좌클릭 구매   1~5 바로 구매   Tab 스킬   E / Esc 닫기\n' +
         '재고를 다 쓰면 5분 뒤에 가득 재입고된다';
     hint.style.cssText =
       'margin-top:16px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;white-space:pre-line;';
