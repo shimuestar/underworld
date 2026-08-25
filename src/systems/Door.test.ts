@@ -65,7 +65,7 @@ function makeWorld(level: Level = makeLevel()): World {
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
-      active: null,
+      equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
     },
     modifiers: Sigils.defaultModifiers(),
     corruption: { applied: 0, pending: 0 },

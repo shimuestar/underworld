@@ -268,6 +268,58 @@
       }
       /* 퀵슬롯 바 — 무기 슬롯 위. 등록만 되고 개수가 0이면 흐리게 남겨 둔다
          (자리가 사라지면 "몇 번이 물약이었지"를 매번 다시 외워야 한다) */
+      /* 스킬 퀵슬롯 바 — 소모품 바 위. Z·X·C·V. 아이템 바와 모양을 달리해 헷갈리지 않게 */
+      #status-skills {
+        display: flex;
+        gap: 5px;
+        justify-content: center;
+        margin-bottom: 4px;
+      }
+      .skill-slot {
+        position: relative;
+        width: 64px;
+        height: 30px;
+        box-sizing: border-box;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid #3a3a44;
+        border-radius: 3px;
+        font: 10px/1 monospace;
+        color: #8a8f9a;
+        overflow: hidden;
+      }
+      .skill-slot .k {
+        position: absolute;
+        top: 3px;
+        left: 4px;
+      }
+      .skill-slot .nm {
+        position: absolute;
+        bottom: 4px;
+        left: 4px;
+        right: 4px;
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: #cfd2da;
+      }
+      .skill-slot .cd {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        height: 2px;
+        background: #7fbfff;
+      }
+      .skill-slot.empty {
+        opacity: 0.35;
+      }
+      .skill-slot.ready {
+        border-color: #4a6a8a;
+      }
+      .skill-slot.nomana .nm,
+      .skill-slot.cool .nm {
+        color: #6c7280;
+      }
       #status-quick {
         display: flex;
         gap: 5px;
@@ -399,6 +451,7 @@
         <span id="status-lantern-text">100% 예비 2</span>
       </div>
       <div id="status-gold">◆ 0</div>
+      <div id="status-skills"></div>
       <div id="status-quick"></div>
       <div id="status-weapons">
         <span class="weapon-slot active" id="slot-ranged">LMB 권총</span>

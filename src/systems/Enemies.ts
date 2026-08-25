@@ -26,6 +26,7 @@ export function tick(world: World, dt: number): void {
     tickEnemy(world, enemy, dt);
     // 피탄 경직 소진은 행동 뒤에 — 앞에서 줄이면 마지막 틱에 움직여버린다
     if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
+    if ((enemy.slowTicks ?? 0) > 0) enemy.slowTicks = (enemy.slowTicks ?? 0) - 1;
   }
   resolveEnemyOverlaps(world);
 }
@@ -178,7 +179,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (def.behavior === 'caster_kite') {
         // 너무 가까우면 물러나고, 시야가 트이면 시전
         if (dist < (def.kiteMinRange ?? 0) && dist > 0) {
-          moveAvoiding(world, enemy, def, -distX / dist, -distZ / dist, def.speed * dt);
+          moveAvoiding(world, enemy, def, -distX / dist, -distZ / dist, moveSpeed(enemy, def) * dt);
         } else if (
           dist <= def.attackRange &&
           world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
@@ -195,7 +196,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           if (!blocker) enemy.strafeBlockedTicks = 0; // 각이 났다 (막힌 채면 포기 상태 유지)
           startWindup(world, enemy, attack);
         } else if (dist > 0) {
-          moveAvoiding(world, enemy, def, distX / dist, distZ / dist, def.speed * dt);
+          moveAvoiding(world, enemy, def, distX / dist, distZ / dist, moveSpeed(enemy, def) * dt);
         }
         break;
       }
@@ -249,7 +250,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         break;
       }
       if (dist > 0) {
-        moveAvoiding(world, enemy, def, distX / dist, distZ / dist, def.speed * dt);
+        moveAvoiding(world, enemy, def, distX / dist, distZ / dist, moveSpeed(enemy, def) * dt);
       }
       break;
     }
@@ -566,6 +567,11 @@ function separation(world: World, enemy: EnemyState): { x: number; z: number } {
 }
 
 /** 목표 방향 + 아군 회피를 합쳐 한 발짝 이동. 피탄 경직 중에는 발이 묶인다 */
+/** 이동 속도 — 서리에 얼면 slowMul 배로 느려진다 (공격 리듬은 그대로다) */
+function moveSpeed(enemy: EnemyState, def: ReturnType<typeof enemyDef>): number {
+  return (enemy.slowTicks ?? 0) > 0 ? def.speed * (enemy.slowMul ?? 1) : def.speed;
+}
+
 function moveAvoiding(
   world: World,
   enemy: EnemyState,
@@ -685,7 +691,7 @@ function strafeForAngle(
   }
 
   const dir = enemy.strafeDir ?? 1;
-  const step = def.speed * strafeCfg.speedMul * dt;
+  const step = moveSpeed(enemy, def) * strafeCfg.speedMul * dt;
   const beforeX = enemy.x;
   const beforeZ = enemy.z;
   world.level.slideMove(enemy, def.radius, perpX * step * dir, perpZ * step * dir);

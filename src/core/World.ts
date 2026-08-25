@@ -2,6 +2,7 @@
 // 이 객체의 상태와 이벤트 버스를 통해서만 통신한다.
 
 import type { ProjectileSplashDef } from './Entities';
+import type { SigilSlot } from './SigilData';
 import type { Events } from './Events';
 import type { InputSnapshot } from './Input';
 import type { Level } from '../level/GridLoader';
@@ -48,8 +49,8 @@ export interface PlayerState {
 export interface SigilState {
   /** 소지 중(효과 없음). 부착해야 발동 — economy.md §4 */
   inventory: string[];
-  /** 선택된 액티브 스킬 — Q 로 쓴다. 패시브는 inventory 에 있기만 하면 켜진다 */
-  active: string | null;
+  /** 부위에 새겨진 패시브 스킬 — 새겨야 켜진다. 액티브는 부위와 무관 (skillSlots) */
+  equipped: Record<SigilSlot, string | null>;
 }
 
 /** 부착된 각인에서 매번 재계산되는 파생 수치. Sigils가 갱신한다.
@@ -107,7 +108,10 @@ export interface ProjectileState {
 }
 
 export interface SpellState {
+  /** (구) 전역 쿨다운 — 지금은 스킬별 cooldowns 를 쓴다 */
   cooldown: number;
+  /** 스킬 id → 남은 쿨다운 틱 */
+  cooldowns?: Record<string, number>;
 }
 
 /** 바닥에 떨어진 각인. 접근하면 획득 */
@@ -345,6 +349,9 @@ export interface EnemyState {
   /** 화상 잔여 틱 (Projectiles가 피해 적용) */
   burnTicks: number;
   burnDamagePerTick: number;
+  /** 서리 둔화 — 남은 틱과 속도 배율 (Projectiles 의 nova 가 건다, Enemies 가 줄인다) */
+  slowTicks?: number;
+  slowMul?: number;
   /** 보스 전용 — 연속 패링 누적 (parriesToStagger 도달 시 스태거) */
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
@@ -502,6 +509,8 @@ export class World {
 
   /** 퀵슬롯 — 1~5 키에 등록된 종류. 칸이 아니라 종류를 기억한다 (balance.items._bindNote) */
   quickslots: (ItemKind | null)[] = [];
+  /** 스킬 퀵슬롯 — 액티브 스킬 id. 키보드 Z·X·C·V (Sigils.ensureSkillSlots 가 칸 수를 맞춘다) */
+  skillSlots: (string | null)[] = [];
 
   /** 소모품 공용 사용 쿨다운 — 한 프레임에 물약을 들이붓지 못하게 */
   itemCooldown = 0;

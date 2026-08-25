@@ -40,7 +40,9 @@ export interface InputSnapshot {
   /** 이번 틱에 반응 키를 뗐는가 (엣지 — 짧은 탭이었으면 패링 판정) */
   reactionReleased: boolean;
   /** 이번 틱에 시전 키(Q)가 눌렸는가 (엣지) */
+  /** 스킬 시전 — castPressed 는 "어떤 스킬이든 눌렀다", useSkill 은 몇 번 칸인지 (1~4, 0 = 없음) */
   castPressed: boolean;
+  useSkill: number;
   /** 이번 틱에 상호작용 키(E)가 눌렸는가 (엣지) */
   interactPressed: boolean;
   /** 원거리 무기 교체 (휠) — -1/0/+1 */
@@ -51,6 +53,7 @@ export interface InputSnapshot {
 
 /** 퀵슬롯 키 — 순서대로 1~5 번 칸 */
 const DIGIT_CODES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
+const SKILL_CODES = ['KeyZ', 'KeyX', 'KeyC', 'KeyV'];
 /** 반응(패링·방어) 키 — 좌·우 시프트를 한 키로 본다 */
 const SHIFT_CODES = ['ShiftLeft', 'ShiftRight'];
 
@@ -79,7 +82,7 @@ export class Input {
   private reactionClicks = 0;
   private reactionDown = false;
   private reactionReleases = 0;
-  private casts = 0;
+  private useSkill = 0;
   private interacts = 0;
   private cycleRanged = 0;
   private useSlot = 0;
@@ -115,7 +118,9 @@ export class Input {
       if (e.code === 'KeyF') this.lanternToggles++;
       if (e.code === 'KeyB') this.batterySwaps++;
       if (e.code === 'KeyR') this.reloads++;
-      if (e.code === 'KeyQ') this.casts++;
+      // 스킬 퀵슬롯 Z·X·C·V — 왼손이 WASD 를 떠나지 않는 자리. 마지막에 누른 것 하나만
+      const skill = SKILL_CODES.indexOf(e.code);
+      if (skill >= 0) this.useSkill = skill + 1;
       if (e.code === 'KeyE') this.interacts++;
       // 퀵슬롯 1~5 — 마지막에 누른 것 하나만 남긴다 (한 틱에 두 개를 쓸 일은 없다)
       const digit = DIGIT_CODES.indexOf(e.code);
@@ -232,6 +237,11 @@ export class Input {
     const padLookX = (axes.lookX * lookMul) / balance.input.mouseSensitivity;
     const padLookY = (axes.lookY * lookMul) / balance.input.mouseSensitivity;
     /** 퀵슬롯 — 패드는 D-패드 4방향까지만 (5번은 자리가 없다) */
+    let padSkill = 0;
+    if (pad.pressed('cast')) padSkill = 1;
+    else if (pad.pressed('skill2')) padSkill = 2;
+    else if (pad.pressed('skill3')) padSkill = 3;
+    else if (pad.pressed('skill4')) padSkill = 4;
     let padSlot = 0;
     if (pad.pressed('slot1')) padSlot = 1;
     else if (pad.pressed('slot2')) padSlot = 2;
@@ -262,7 +272,8 @@ export class Input {
       reactionPressed: this.reactionClicks > 0 || pad.pressed('reaction'),
       reactionHeld: this.reactionDown || pad.held('reaction'),
       reactionReleased: this.reactionReleases > 0 || pad.released('reaction'),
-      castPressed: this.casts > 0 || pad.pressed('cast'),
+      castPressed: this.useSkill !== 0 || padSkill !== 0,
+      useSkill: this.useSkill !== 0 ? this.useSkill : padSkill,
       interactPressed: this.interacts > 0 || pad.pressed('interact'),
       cycleRanged: this.cycleRanged !== 0 ? this.cycleRanged : pad.pressed('cycleWeapon') ? 1 : 0,
       useSlot: this.useSlot !== 0 ? this.useSlot : padSlot,
@@ -277,7 +288,7 @@ export class Input {
     this.reloads = 0;
     this.reactionClicks = 0;
     this.reactionReleases = 0;
-    this.casts = 0;
+    this.useSkill = 0;
     this.interacts = 0;
     this.cycleRanged = 0;
     this.useSlot = 0;
@@ -304,6 +315,7 @@ export class Input {
       reactionHeld: false,
       reactionReleased: false,
       castPressed: false,
+      useSkill: 0,
       interactPressed: false,
       cycleRanged: 0,
       useSlot: 0,

@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import sigilsJson from '../../data/sigils.json';
+import { enemyDef } from '../core/Entities';
 import { sigilColor, sigilDef } from '../core/SigilData';
 import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
+import * as Enemies from './Enemies';
 import * as Mana from './Mana';
 import * as Projectiles from './Projectiles';
 import * as Sigils from './Sigils';
@@ -37,7 +39,7 @@ function makeWorld(): World {
     mana: { value: 100, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
-      active: null,
+      equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
     },
     modifiers: Sigils.defaultModifiers(),
     corruption: { applied: 0, pending: 0 },
@@ -98,12 +100,12 @@ describe('스킬 드랍과 획득', () => {
     Sigils.tick(world, DT);
     expect(world.sigils.inventory).toHaveLength(0);
 
-    // 접근 → 자동 획득. 첫 액티브라 곧바로 Q 스킬이 된다
+    // 접근 → 자동 획득. 시전이 구현된 액티브라 곧바로 스킬 퀵슬롯 1(Z)에 올라간다
     world.player.x = 14 - balance.sigil.pickupRadius + 0.1;
     Sigils.tick(world, DT);
     expect(world.groundItems).toHaveLength(0);
     expect(world.sigils.inventory).toEqual(['sig_fireball']);
-    expect(world.sigils.active).toBe('sig_fireball');
+    expect(world.skillSlots[0]).toBe('sig_fireball');
   });
 
   it('처형으로 죽여도 한 번만 떨어진다 (melee_kill + enemy_died 중복 방지)', () => {
@@ -123,20 +125,40 @@ describe('스킬 드랍과 획득', () => {
     expect(world.corruption.pending).toBe(balance.corruption.slotCost.rightArm);
   });
 
-  it('액티브: 처음 얻은 것이 자동 선택되고, 다음 것은 골라야 바뀐다', () => {
+  it('액티브: 시전이 구현된 스킬은 빈 퀵슬롯에 바로 올라간다 — 다음 것은 다음 칸', () => {
     Sigils.acquire(world, 'sig_fireball');
-    expect(world.sigils.active).toBe('sig_fireball');
-    Sigils.acquire(world, 'sig_lightning');
-    expect(world.sigils.active).toBe('sig_fireball'); // 새 걸 얻어도 손에 든 건 그대로
-    expect(Sigils.select(world, 'sig_lightning')).toBe(true);
-    expect(world.sigils.active).toBe('sig_lightning');
+    expect(world.skillSlots[0]).toBe('sig_fireball');
+    Sigils.acquire(world, 'sig_frost');
+    expect(world.skillSlots[1]).toBe('sig_frost');
+    Sigils.acquire(world, 'sig_acid'); // 데이터만 있는 스킬 — 자동으로는 안 올라간다
+    expect(world.skillSlots).not.toContain('sig_acid');
   });
 
-  it('패시브는 고를 수 없고, 안 가진 스킬도 고를 수 없다', () => {
+  it('퀵슬롯 배치: 같은 스킬은 한 칸에만, 패시브·안 가진 스킬은 못 올린다, null 로 비운다', () => {
+    Sigils.acquire(world, 'sig_fireball');
+    expect(Sigils.assignSkill(world, 2, 'sig_fireball')).toBe(true);
+    expect(world.skillSlots[0]).toBeNull();
+    expect(world.skillSlots[2]).toBe('sig_fireball');
     Sigils.acquire(world, 'sig_dash');
-    expect(Sigils.select(world, 'sig_dash')).toBe(false);
-    expect(Sigils.select(world, 'sig_fireball')).toBe(false);
-    expect(world.sigils.active).toBeNull();
+    expect(Sigils.assignSkill(world, 1, 'sig_dash')).toBe(false);
+    expect(Sigils.assignSkill(world, 1, 'sig_lightning')).toBe(false);
+    expect(Sigils.assignSkill(world, 2, null)).toBe(true);
+    expect(world.skillSlots[2]).toBeNull();
+  });
+
+  it('패시브: 부위가 비어 있으면 줍는 순간 새겨지고, 차 있으면 리스트에만 남는다', () => {
+    Sigils.acquire(world, 'sig_dash'); // 척추
+    expect(world.sigils.equipped.spine).toBe('sig_dash');
+    const pendingAfterFirst = world.corruption.pending;
+    Sigils.acquire(world, 'sig_moment'); // 척추 — 차 있다
+    expect(world.sigils.equipped.spine).toBe('sig_dash');
+    expect(world.sigils.inventory).toContain('sig_moment');
+    expect(world.corruption.pending).toBe(pendingAfterFirst); // 안 새겨졌으니 오염도 없다
+    expect(Sigils.attach(world, 'sig_moment')).toBe(false);
+    expect(Sigils.detach(world, 'spine')).toBe(true);
+    expect(world.modifiers.dodgeDistanceMul).toBe(1); // 떼면 효과가 사라진다
+    expect(Sigils.attach(world, 'sig_moment')).toBe(true);
+    expect(world.sigils.equipped.spine).toBe('sig_moment');
   });
 
   it('패시브는 갖는 순간 켜진다 — 돌진 회피: 회피 거리·무적 연장', () => {
@@ -158,21 +180,21 @@ describe('스킬 드랍과 획득', () => {
 
 describe('화염구', () => {
   function cast(): void {
-    world.input = { ...Input.emptySnapshot(), castPressed: true };
+    world.input = { ...Input.emptySnapshot(), castPressed: true, useSkill: 1 };
     Projectiles.tick(world, DT);
     world.input = Input.emptySnapshot();
   }
 
-  it('액티브 스킬 없으면 시전 실패', () => {
+  it('스킬 칸이 비어 있으면 시전 실패', () => {
     cast();
     expect(world.projectiles).toHaveLength(0);
     expect(world.mana.value).toBe(100);
   });
 
   it('시전이 구현되지 않은 스킬은 not_implemented 로 불발 — 빈 투사체를 만들지 않는다', () => {
-    Sigils.acquire(world, 'sig_lightning');
-    expect(world.sigils.active).toBeNull(); // 미구현은 자동 선택되지 않는다
-    expect(Sigils.select(world, 'sig_lightning')).toBe(true); // 직접 고르는 건 된다
+    Sigils.acquire(world, 'sig_acid');
+    expect(world.skillSlots[0]).toBeNull(); // 미구현은 자동으로 안 올라간다
+    expect(Sigils.assignSkill(world, 0, 'sig_acid')).toBe(true); // 직접 올리는 건 된다
     world.mana.value = 100;
     const reasons: string[] = [];
     world.events.on('cast_failed', (p) => reasons.push((p as { reason: string }).reason));
@@ -245,7 +267,7 @@ describe('화염구 폭발', () => {
         Sigils.acquire(world, 'sig_fireball');
     world.mana.value = 100;
     world.player.yaw = -Math.PI / 2;
-    world.input = { ...Input.emptySnapshot(), castPressed: true };
+    world.input = { ...Input.emptySnapshot(), castPressed: true, useSkill: 1 };
     Projectiles.tick(world, DT);
     world.input = Input.emptySnapshot();
     for (let i = 0; i < 60 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
@@ -339,5 +361,121 @@ describe('화염구 폭발', () => {
 
     castAt();
     expect(explosions.length).toBeGreaterThan(0);
+  });
+});
+
+describe('스킬 시전 — 뇌창·서리·그림자', () => {
+  // 아레나는 한 줄 복도(x 4~28, z 4~8). 플레이어 (6,6) 이 +x 를 본다
+  function castSlot(n: number): void {
+    world.input = { ...Input.emptySnapshot(), castPressed: true, useSkill: n };
+    Projectiles.tick(world, DT);
+    world.input = Input.emptySnapshot();
+  }
+  let nextEnemyId = 1000;
+  function add(type: string, x: number, z: number): EnemyState {
+    const e = spawnEnemyAt(type, x, z, nextEnemyId++);
+    world.enemies.push(e);
+    return e;
+  }
+  /** 앞(+x)으로 dist, 옆(z)으로 side 만큼 */
+  function runnerAhead(dist: number, side = 0): EnemyState {
+    return add('goblin_runner', 6 + dist, 6 + side);
+  }
+
+  it('관통 뇌창: 조준선 위의 적을 pierce 명까지 꿰뚫고, 옆의 적은 무사하다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_lightning').effects;
+    const inLine = [1.5, 3, 4.5, 6, 7.5, 9].map((d) => runnerAhead(d)); // 6명 — pierce 5
+    const aside = runnerAhead(4, 1.7); // 빔 폭(0.7)+몸(0.5) 밖
+    castSlot(1);
+    const full = enemyDef('goblin_runner').health;
+    const hit = inLine.filter((e) => !e.alive || e.health < full);
+    expect(hit).toHaveLength(fx['pierce']!);
+    expect(inLine[5]!.alive).toBe(true); // 여섯째는 빔이 못 닿는다
+    expect(aside.alive).toBe(true);
+    expect(aside.health).toBe(full);
+    expect(world.mana.value).toBe(100 - fx['manaCost']!);
+    expect(Projectiles.skillCooldown(world, 'sig_lightning')).toBe(fx['cooldownTicks']);
+  });
+
+  it('관통 뇌창: 방패병이 정면에서 받아 내면 뒤의 적은 무사하다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const spear = add('goblin_spear', 10, 6);
+    spear.yaw = Math.atan2(-(6 - spear.x), -(6 - spear.z)); // 나를 본다 — 방패가 정면
+    spear.ai = 'chase';
+    const behind = runnerAhead(8);
+    const blocked: number[] = [];
+    world.events.on('shot_blocked', (p) => blocked.push((p as { enemyId: number }).enemyId));
+    castSlot(1);
+    expect(blocked).toEqual([spear.id]);
+    expect(behind.health).toBe(enemyDef('goblin_runner').health);
+  });
+
+  it('서리 폭발: 반경 안의 적은 느려지고 살짝 다친다, 밖은 그대로', () => {
+    Sigils.acquire(world, 'sig_frost');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_frost').effects;
+    const near = runnerAhead(3);
+    const far = runnerAhead(fx['radius']! + 2);
+    castSlot(1);
+    expect(near.slowTicks).toBe(fx['slowTicks']);
+    expect(near.slowMul).toBe(fx['slowMul']);
+    expect(near.health).toBe(enemyDef('goblin_runner').health - fx['damage']!);
+    expect(far.slowTicks ?? 0).toBe(0);
+    expect(far.health).toBe(enemyDef('goblin_runner').health);
+  });
+
+  it('서리 둔화: 얼어붙은 적은 같은 시간에 덜 움직인다', () => {
+    // 창병은 걸어서 다가온다 (러너는 돌진이라 비교가 안 된다). 둘 다 사거리 밖에서 출발
+    const slow = add('goblin_spear', 16, 6);
+    const quick = add('goblin_spear', 24, 6);
+    for (const e of [slow, quick]) e.ai = 'chase';
+    slow.slowTicks = 60;
+    slow.slowMul = 0.4;
+    const s0 = slow.x;
+    const q0 = quick.x;
+    for (let i = 0; i < 20; i++) Enemies.tick(world, DT);
+    const slowMoved = s0 - slow.x;
+    const quickMoved = q0 - quick.x;
+    expect(quickMoved).toBeGreaterThan(0.5);
+    expect(slowMoved).toBeGreaterThan(0);
+    expect(slowMoved).toBeLessThan(quickMoved * 0.6);
+  });
+
+  it('그림자 이동: 보는 방향으로 날아가되 벽 앞에서 멈추고, 잠깐 무적이다', () => {
+    Sigils.acquire(world, 'sig_shadowstep');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_shadowstep').effects;
+    // +x 벽은 x=28. 22m 떨어져 있으니 range(20) 안에서 멈춘다
+    castSlot(1);
+    expect(world.player.x).toBeCloseTo(6 + fx['range']!, 5);
+    expect(world.player.z).toBeCloseTo(6, 5);
+    expect(world.player.prevX).toBe(world.player.x); // 보간 잔상 없음
+    expect(world.player.iframeTicks).toBeGreaterThanOrEqual(fx['iframeTicks']!);
+    expect(world.mana.value).toBe(100 - fx['manaCost']!);
+  });
+
+  it('그림자 이동: 벽이 먼저면 벽 앞에서 멈춘다', () => {
+    Sigils.acquire(world, 'sig_shadowstep');
+    world.mana.value = 100;
+    world.player.x = 20; // 벽(28)까지 8m — range 보다 짧다
+    castSlot(1);
+    expect(world.player.x).toBeLessThan(28 - balance.player.radius + 0.01);
+    expect(world.player.x).toBeGreaterThan(27);
+  });
+
+  it('스킬 쿨다운은 스킬별이다 — 서리를 쓴 직후에도 뇌창은 나간다', () => {
+    Sigils.acquire(world, 'sig_frost');
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 200;
+    castSlot(1);
+    expect(Projectiles.skillCooldown(world, 'sig_frost')).toBeGreaterThan(0);
+    const before = world.mana.value;
+    castSlot(2);
+    expect(world.mana.value).toBeLessThan(before);
+    castSlot(2); // 쿨다운 중 — 조용히 무시, 마나 그대로
+    expect(world.mana.value).toBe(before - sigilDef('sig_lightning').effects['manaCost']!);
   });
 });

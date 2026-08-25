@@ -35,7 +35,7 @@ function makeWorld(): World {
     mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
     sigils: {
       inventory: [],
-      active: null,
+      equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
     },
     modifiers: Sigils.defaultModifiers(),
     corruption: { applied: 0, pending: 0 },
@@ -196,7 +196,7 @@ describe('자석 흡수', () => {
 
     Sigils.tick(world, DT);
     expect(world.groundItems).toHaveLength(0);
-    expect(world.sigils.active).toBe('sig_fireball'); // 주우면 바로 Q 스킬
+    expect(world.skillSlots[0]).toBe('sig_fireball'); // 주우면 바로 스킬 퀵슬롯 1(Z)
   });
 });
 

@@ -38,6 +38,7 @@ import * as Lantern from './systems/Lantern';
 import { enemyDef, healthBarState } from './core/Entities';
 import { ShopUI } from './render/ShopUI';
 import { InventoryUI, quickslotView } from './render/InventoryUI';
+import { SKILL_KEYS, SkillUI } from './render/SkillUI';
 import { itemIconSvg } from './render/ItemIcons';
 import { sigilDef } from './core/SigilData';
 import levelJson from '../data/levels/z01_f1.json';
@@ -113,7 +114,7 @@ const world = new World(events, {
   mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
   sigils: {
     inventory: [],
-    active: null,
+    equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null },
   },
   modifiers: Sigils.defaultModifiers(),
   corruption: { applied: 0, pending: 0 },
@@ -153,7 +154,8 @@ window.addEventListener('keydown', (e) => {
 // 세션 경계에서 콘솔에 스냅샷 자동 출력
 events.on('player_died', () => console.log('[metrics] 사망 시점 스냅샷', metrics.snapshot(world)));
 events.on('zone_cleared', () => console.log('[metrics] 클리어 스냅샷', metrics.snapshot(world)));
-const sigilUI = new InventoryUI(world);
+const inventoryUI = new InventoryUI(world); // I — 가방·소모품
+const skillUI = new SkillUI(world); // Tab — 스킬 (부위 부착 · 퀵슬롯)
 const shopUI = new ShopUI(world);
 /** UI 오버레이 열기/닫기 — 닫을 때 포인터 락을 바로 되찾는다.
  *  안 그러면 메뉴를 나온 뒤 커서가 남아 화면을 한 번 클릭해야 조작이 돌아온다 */
@@ -166,13 +168,19 @@ shopUI.onClose = () => setUiOpen(false);
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Tab') {
     e.preventDefault();
-    // 상점에서 Tab — 각인 교체로 넘어간다 (둘이 겹쳐 뜨지 않게)
+    // 상점에서 Tab — 스킬 창으로 넘어간다 (둘이 겹쳐 뜨지 않게). 제단에서는 패시브를 뗄 수 있다
+    inventoryUI.hide();
     if (shopUI.open) {
       shopUI.hide();
-      setUiOpen(sigilUI.toggle(true));
+      setUiOpen(skillUI.toggle(true));
       return;
     }
-    setUiOpen(sigilUI.toggle());
+    setUiOpen(skillUI.toggle());
+  }
+  if (e.code === 'KeyI') {
+    if (shopUI.open || world.dead) return;
+    skillUI.hide();
+    setUiOpen(inventoryUI.toggle());
   }
 });
 let restartConfirmUntil = 0;
@@ -335,7 +343,12 @@ for (const name of [
   'gold_picked',
   'xp_gained',
   'sigil_acquired',
-  'skill_selected',
+  'sigil_attached',
+  'sigil_detached',
+  'skill_slot_changed',
+  'lightning_cast',
+  'frost_nova',
+  'blink',
   'altar_entered',
   'altar_bypassed',
   'shop_purchased',
@@ -467,7 +480,19 @@ events.on('stamina_blocked', () => {
 });
 events.on('shot_blocked', () => audio.play('shot_blocked'));
 events.on('dodge_step', () => audio.play('dodge'));
-events.on('cast_spell', () => audio.play('cast_fire'));
+events.on('cast_spell', (payload) => {
+  const cast = (payload as { cast?: string }).cast;
+  audio.play(cast === 'beam' ? 'cast_lightning' : cast === 'nova' ? 'cast_frost' : cast === 'blink' ? 'blink' : 'cast_fire');
+});
+events.on('lightning_cast', (payload) => {
+  const b = payload as { sx: number; sy: number; sz: number; ex: number; ey: number; ez: number };
+  stage.spawnLightning(b.sx, b.sy, b.sz, b.ex, b.ey, b.ez);
+});
+events.on('frost_nova', (payload) => {
+  const n = payload as { x: number; z: number; radius: number };
+  stage.spawnNova(n.x, n.z, n.radius);
+});
+events.on('blink', () => screenFlash(0.6, 140));
 events.on('enemy_cast', (payload) => {
   const info = payload as { enemyType: string; enemyId: number };
   if (info.enemyType === 'goblin_archer') audio.play('bow_twang');
@@ -648,8 +673,8 @@ events.on('cast_failed', (payload) => {
     info.reason === 'no_mana'
       ? `마나 부족 — ${info.cost} 필요 (패링·처형으로 모아야 한다)`
       : info.reason === 'not_implemented'
-        ? '이 빌드에서는 아직 쓸 수 없는 스킬이다 — Tab 에서 다른 스킬을 고른다'
-        : '액티브 스킬이 없다 — 스킬을 주우면 Q 로 쓸 수 있다',
+        ? '이 빌드에서는 아직 쓸 수 없는 스킬이다 — Tab 에서 다른 스킬을 올린다'
+        : '빈 스킬 칸 — Tab 에서 액티브 스킬을 올린다',
     2000,
   );
 });
@@ -723,7 +748,7 @@ events.on('item_denied', (payload) => {
   const name = info.kind ? itemDef(info.kind).name : '';
   const deny =
     info.reason === 'empty'
-      ? `빈 퀵슬롯 — ${keyLabel('Tab', 'inventory')} 에서 등록한다`
+      ? `빈 퀵슬롯 — ${keyLabel('I', 'inventory')} 에서 등록한다`
       : (DENY_TEXT[info.reason] ?? info.reason);
   showReaction(`${name ? name + ' — ' : ''}${deny}`, 1100);
 });
@@ -744,7 +769,7 @@ let bagFullUntil = 0;
 events.on('inventory_full', () => {
   if (performance.now() < bagFullUntil) return; // 밟고 서 있으면 매 틱 뜬다
   bagFullUntil = performance.now() + 2500;
-  showReaction(`가방이 가득 찼다 — ${keyLabel('Tab', 'inventory')} 에서 쓰거나 버려야 한다`, 2000);
+  showReaction(`가방이 가득 찼다 — ${keyLabel('I', 'inventory')} 에서 쓰거나 버려야 한다`, 2000);
 });
 events.on('gold_picked', () => audio.play('pickup_gold'));
 // ---- 활 ----
@@ -864,17 +889,25 @@ const sigilToastName = sigilToast.querySelector('.name') as HTMLElement;
 const sigilToastSub = sigilToast.querySelector('.sub') as HTMLElement;
 let sigilToastUntil = 0;
 events.on('sigil_acquired', (payload) => {
-  const info = payload as { id: string; kind: 'active' | 'passive'; selected: boolean };
+  const info = payload as {
+    id: string;
+    kind: 'active' | 'passive';
+    attached?: boolean;
+    slot: number | string;
+  };
   const def = sigilDef(info.id);
   sigilToastName.textContent = `✦ ${def.name}`;
   sigilToastName.style.color = def.color;
   sigilToastName.style.textShadow = `0 0 12px ${def.color}`;
+  const PART: Record<string, string> = { eye: '눈', rightArm: '오른팔', leftArm: '왼팔', heart: '심장', spine: '척추' };
   sigilToastSub.textContent =
     info.kind === 'passive'
-      ? '패시브 스킬 — 바로 켜졌다'
-      : info.selected
-        ? `액티브 스킬 — ${keyLabel('Q', 'cast')} 로 쓴다`
-        : `액티브 스킬 — Tab 에서 고르면 ${keyLabel('Q', 'cast')} 로 쓴다`;
+      ? info.attached
+        ? `패시브 — ${PART[def.slot] ?? def.slot}에 새겨졌다`
+        : `패시브 — ${PART[def.slot] ?? def.slot}이 차 있다. Tab 에서 바꾼다`
+      : typeof info.slot === 'number' && info.slot >= 0
+        ? `액티브 — ${input.usingPad && info.slot === 0 ? padBtn('cast') : SKILL_KEYS[info.slot]} 로 쓴다`
+        : '액티브 — Tab 에서 퀵슬롯에 올린다';
   sigilToast.classList.add('visible');
   sigilToastUntil = performance.now() + SIGIL_TOAST_MS;
 });
@@ -1146,12 +1179,19 @@ function simulate(dt: number): void {
     setPaused(true);
     return;
   }
+  // Menu 는 창이 하나뿐인 패드를 위해 순환한다: 닫힘 → 가방 → 스킬 → 닫힘
   if (input.gamepad.pressed('inventory')) {
     if (shopUI.open) {
       shopUI.hide();
-      setUiOpen(sigilUI.toggle(true));
+      setUiOpen(skillUI.toggle(true));
+    } else if (inventoryUI.open) {
+      inventoryUI.hide();
+      setUiOpen(skillUI.toggle());
+    } else if (skillUI.open) {
+      skillUI.hide();
+      setUiOpen(false);
     } else {
-      setUiOpen(sigilUI.toggle());
+      setUiOpen(inventoryUI.toggle());
     }
   }
   // 상점 — 일시정지 메뉴와 같은 고정 버튼 규약. uiOpen 중엔 게임 시스템이 다
@@ -1221,14 +1261,9 @@ function restoreResources(keep: ReturnType<typeof snapshotResources>): void {
 }
 
 function spellHudText(): string {
-  const id = world.sigils.active;
-  if (!id) return '(액티브 스킬 없음)';
-  const def = sigilDef(id);
-  const cost = balance.spellCost[def.tier as keyof typeof balance.spellCost] ?? 0;
-  let suffix = '';
-  if (world.spell.cooldown > 0) suffix = ' [쿨]';
-  else if (world.mana.value < cost) suffix = ' [마나 부족]';
-  return `${def.name} ${cost}마나${suffix}`;
+  return world.skillSlots
+    .map((id, i) => `${SKILL_KEYS[i]} ${id ? sigilDef(id).name : '-'}`)
+    .join('  ');
 }
 
 let debugOverlayLastUpdate = 0;
@@ -1279,6 +1314,48 @@ const quickCells = Array.from({ length: balance.items.quickslots }, (_, i) => {
     },
   };
 });
+
+const skillBar = document.getElementById('status-skills')!;
+const skillCells = Array.from({ length: balance.skills.quickslots }, (_, i) => {
+  const cell = document.createElement('div');
+  cell.className = 'skill-slot empty';
+  const key = document.createElement('span');
+  key.className = 'k';
+  key.textContent = SKILL_KEYS[i] ?? String(i + 1);
+  const name = document.createElement('span');
+  name.className = 'nm';
+  const cd = document.createElement('span');
+  cd.className = 'cd';
+  cell.append(key, name, cd);
+  skillBar.appendChild(cell);
+  return { cell, key, name, cd };
+});
+
+/** 스킬 퀵슬롯 바 — 이름은 스킬 색, 마나가 모자라면 흐리게, 쿨다운은 아래 띠가 줄어든다 */
+function syncSkillSlots(): void {
+  world.skillSlots.forEach((id, i) => {
+    const ui = skillCells[i];
+    if (!ui) return;
+    ui.key.textContent = input.usingPad && i === 0 ? padBtn('cast') : (SKILL_KEYS[i] ?? String(i + 1));
+    if (!id) {
+      ui.cell.className = 'skill-slot empty';
+      ui.name.textContent = '';
+      ui.cd.style.width = '0';
+      return;
+    }
+    const def = sigilDef(id);
+    const cost =
+      def.effects['manaCost'] ?? balance.spellCost[def.tier as keyof typeof balance.spellCost] ?? 0;
+    const cdLeft = Projectiles.skillCooldown(world, id);
+    const cdMax = def.effects['cooldownTicks'] ?? 0;
+    const cooling = cdLeft > 0;
+    const noMana = world.mana.value < cost;
+    ui.cell.className = `skill-slot ${!def.cast ? 'empty' : cooling ? 'cool' : noMana ? 'nomana' : 'ready'}`;
+    ui.name.textContent = def.name;
+    ui.name.style.color = def.cast && !noMana && !cooling ? def.color : '';
+    ui.cd.style.width = cooling && cdMax > 0 ? `${(cdLeft / cdMax) * 100}%` : '0';
+  });
+}
 
 function syncQuickslots(): void {
   const view = quickslotView(world);
@@ -1462,6 +1539,7 @@ function render(alpha: number): void {
     (battPct <= 20 ? 'low' : '') + (world.lantern.on ? '' : ' off');
   document.getElementById('status-gold')!.textContent = `◆ ${world.gold}   XP ${world.xp}`;
   syncQuickslots();
+  syncSkillSlots();
   // 원거리(좌클릭) / 근접(우클릭) 두 슬롯. 원거리는 휠로 교체
   const bowDraw = wpn.bowDraw ?? 0;
   const drawPips = bowDraw > 0
@@ -1564,9 +1642,9 @@ function render(alpha: number): void {
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     (input.usingPad
       ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 원거리(${padBtn('cycleWeapon')} 교체)  ${padBtn('melee')} 근접·처형·상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
-        `${padBtn('cast')} 스킬  D-패드 소모품  ${padBtn('inventory')} 가방·스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴  ${padBtn('battery')} 배터리  ${padBtn('pause')} 일시정지·키 설정`
+        `${padBtn('cast')} 스킬 1  D-패드 소모품  ${padBtn('inventory')} 가방→스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴  ${padBtn('battery')} 배터리  ${padBtn('pause')} 일시정지·키 설정`
       : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형·상호작용  Shift 짧게=패링·꾹=방어\n' +
-        'Q 스킬  1~5 소모품  Tab 가방·스킬  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트');
+        'Z·X·C·V 스킬  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트');
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
   // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)

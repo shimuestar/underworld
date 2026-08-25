@@ -1140,6 +1140,68 @@ export class Stage {
   }
 
   /** 발사 궤적 — 총구(카메라 오른쪽 아래)에서 착탄점까지, tracerTicks 동안 페이드 아웃 */
+  /** 관통 뇌창 — 눈에서 끝점까지 꺾이는 번개. 마디마다 옆으로 튀고, 짧게 남았다 사라진다 */
+  spawnLightning(sx: number, sy: number, sz: number, ex: number, ey: number, ez: number): void {
+    const start = new THREE.Vector3(sx, sy - 0.25, sz); // 눈보다 살짝 아래 — 손에서 나가는 느낌
+    const end = new THREE.Vector3(ex, ey, ez);
+    const total = start.distanceTo(end);
+    const segments = Math.max(3, Math.min(14, Math.round(total / 1.6)));
+    const dir = end.clone().sub(start).normalize();
+    const side = new THREE.Vector3(-dir.z, 0, dir.x);
+    const up = new THREE.Vector3(0, 1, 0);
+    const points: THREE.Vector3[] = [start];
+    for (let i = 1; i < segments; i++) {
+      const t = i / segments;
+      const jitter = 0.35 * Math.sin(t * Math.PI); // 가운데가 가장 크게 튄다
+      points.push(
+        start.clone().lerp(end, t)
+          .addScaledVector(side, (Math.random() - 0.5) * 2 * jitter)
+          .addScaledVector(up, (Math.random() - 0.5) * 2 * jitter * 0.6),
+      );
+    }
+    points.push(end);
+    const group = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xbfe6ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    let first: THREE.Mesh | null = null;
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i]!;
+      const b = points[i + 1]!;
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, a.distanceTo(b)), mat);
+      seg.position.copy(a).add(b).multiplyScalar(0.5);
+      seg.lookAt(b);
+      group.add(seg);
+      first ??= seg;
+    }
+    const spark = new THREE.Mesh(
+      new THREE.SphereGeometry(0.22, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xe8f6ff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }),
+    );
+    spark.position.copy(end);
+    group.add(spark);
+    const light = new THREE.PointLight(0x9fd8ff, 4, 9, 0);
+    light.position.copy(start.clone().lerp(end, 0.5));
+    group.add(light);
+    this.scene.add(group);
+    this.tracers.push({ group, beam: first ?? spark, spark, bornMs: performance.now(), lifeMs: 160 });
+  }
+
+  /** 서리 폭발 — 푸른 껍질이 반경까지 부풀며 옅어진다 (폭발 연출의 색 다른 형제) */
+  spawnNova(x: number, z: number, radius: number): void {
+    const now = performance.now();
+    const light = new THREE.PointLight(0x9fe0ff, 5, radius * 2.5, 0);
+    light.position.set(x, 1.0, z);
+    this.scene.add(light);
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.55, depthWrite: false }),
+    );
+    shell.position.set(x, 0.6, z);
+    this.scene.add(shell);
+    this.explosions.push({ light, shell, bornMs: now, radius });
+  }
+
   spawnTracer(ex: number, ey: number, ez: number): void {
     // 시작점은 판정 원점(눈)이 아니라 화면상 총구 위치 (순수 연출)
     const muzzle = new THREE.Vector3(MUZZLE_OFFSET.x, MUZZLE_OFFSET.y, MUZZLE_OFFSET.z);
@@ -1200,16 +1262,22 @@ export class Stage {
       const age = (now - tracer.bornMs) / tracer.lifeMs;
       if (age >= 1) {
         this.scene.remove(tracer.group);
-        tracer.beam.geometry.dispose();
-        (tracer.beam.material as THREE.Material).dispose();
-        tracer.spark.geometry.dispose();
-        (tracer.spark.material as THREE.Material).dispose();
+        tracer.group.traverse((obj) => {
+          if (obj instanceof THREE.Mesh) {
+            obj.geometry.dispose();
+            (obj.material as THREE.Material).dispose();
+          }
+        });
         this.tracers.splice(i, 1);
         continue;
       }
       const fade = 1 - age;
       (tracer.beam.material as THREE.MeshBasicMaterial).opacity = 0.9 * fade;
       (tracer.spark.material as THREE.MeshBasicMaterial).opacity = fade;
+      // 번개는 마디가 여럿이고 광원도 달렸다 — 전부 같이 꺼진다
+      tracer.group.traverse((obj) => {
+        if (obj instanceof THREE.PointLight) obj.intensity = 4 * fade;
+      });
     }
   }
 

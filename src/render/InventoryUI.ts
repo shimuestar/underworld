@@ -1,5 +1,5 @@
-// Tab 창 — 퀵슬롯 + 소모품 가방 + 스킬. DOM 오버레이.
-// 스킬(2026-08, 옛 각인): 패시브는 갖고만 있어도 켜지고, 액티브는 하나를 골라 Q 로 쓴다.
+// I 창 — 소모품 퀵슬롯 + 가방. DOM 오버레이. 스킬은 Tab 창(SkillUI)이 따로 맡는다 —
+// 스킬은 아이템이 아니라 리스트라 가방에 들어가지 않는다.
 // 열려 있는 동안 시뮬레이션은 main이 일시정지한다.
 //
 // 조작 규약 하나로 통일한다: 가방 칸을 왼쪽 클릭하면 골라지고, 그 상태에서
@@ -16,19 +16,8 @@ import {
   unbindQuickslot,
 } from '../core/Inventory';
 import { balance } from '../core/Balance';
-import { isActiveSkill, sigilDef, type SigilDef } from '../core/SigilData';
 import { itemIcon } from './ItemIcons';
 import type { ItemKind, World } from '../core/World';
-import * as Sigils from '../systems/Sigils';
-
-/** 각인 색 견본 — 바닥에 떨어진 팔면체와 같은 색이라 주운 것과 목록이 이어진다 */
-function swatch(color: string): HTMLElement {
-  const dot = document.createElement('span');
-  dot.style.cssText =
-    `display:inline-block;width:9px;height:9px;margin-right:7px;` +
-    `background:${color};box-shadow:0 0 6px ${color};vertical-align:baseline;`;
-  return dot;
-}
 
 const CELL = 'width:64px;height:64px;box-sizing:border-box;position:relative;';
 /** 칸(64px) 안에서 숫자·번호와 부딪히지 않는 크기 */
@@ -37,8 +26,6 @@ const ICON_PX = 28;
 export class InventoryUI {
   private readonly root: HTMLDivElement;
   open = false;
-  /** 제단에서 열렸는가 — 각인 해제(교체)는 제단에서만 가능 */
-  private altarMode = false;
   /** 퀵슬롯에 꽂으려고 골라 둔 가방 칸 (-1 = 없음) */
   private picked = -1;
 
@@ -63,8 +50,7 @@ export class InventoryUI {
     });
   }
 
-  show(altarMode: boolean): void {
-    this.altarMode = altarMode;
+  show(): void {
     this.open = true;
     this.picked = -1;
     this.root.style.display = 'flex';
@@ -77,9 +63,9 @@ export class InventoryUI {
     this.root.style.display = 'none';
   }
 
-  toggle(altarMode = false): boolean {
+  toggle(): boolean {
     if (this.open) this.hide();
-    else this.show(altarMode);
+    else this.show();
     return this.open;
   }
 
@@ -99,12 +85,11 @@ export class InventoryUI {
 
     panel.appendChild(this.buildQuickslots());
     panel.appendChild(this.buildBag());
-    panel.appendChild(this.buildSigils());
 
     const hint = document.createElement('div');
     hint.textContent =
-      '가방 칸 클릭 = 고르기 → 퀵슬롯 클릭(또는 1~5) = 등록   ·   액티브 스킬 클릭 = Q 에 올리기   ·   ' +
-      '빈손으로 퀵슬롯 클릭 = 등록 해제   ·   가방 칸 우클릭 = 버리기   ·   Tab 닫기';
+      '가방 칸 클릭 = 고르기 → 퀵슬롯 클릭(또는 1~5) = 등록   ·   ' +
+      '빈손으로 퀵슬롯 클릭 = 등록 해제   ·   가방 칸 우클릭 = 버리기   ·   I 닫기   ·   스킬은 Tab';
     hint.style.cssText = 'margin-top:16px;color:#6c7280;font-size:11px;';
     panel.appendChild(hint);
 
@@ -228,133 +213,6 @@ export class InventoryUI {
   }
 
   // ---- 각인 ----
-  private buildSigils(): HTMLElement {
-    const world = this.world;
-    const box = document.createElement('div');
-    box.style.cssText = 'margin-top:18px;border-top:1px solid #23232b;padding-top:14px;';
-
-    const title = document.createElement('div');
-    title.textContent =
-      (this.altarMode ? '제단 — 스킬' : '스킬') +
-      `  (오염 대기 +${world.corruption.pending} · 확정 ${world.corruption.applied}/${balance.corruption.max})`;
-    title.style.cssText = 'color:#9fe870;margin-bottom:10px;font-size:15px;';
-    box.appendChild(title);
-
-    const owned = world.sigils.inventory.map((id) => sigilDef(id));
-    if (owned.length === 0) {
-      const empty = document.createElement('div');
-      empty.textContent = '없음 — 창병을 완벽 패링 후 처형하거나 보물상자를 열면 스킬이 나온다';
-      empty.style.color = '#555c66';
-      box.appendChild(empty);
-      return box;
-    }
-
-    const columns = document.createElement('div');
-    columns.style.cssText = 'display:flex;gap:26px;align-items:flex-start;';
-    columns.appendChild(this.buildActiveColumn(owned.filter(isActiveSkill)));
-    columns.appendChild(this.buildPassiveColumn(owned.filter((d) => !isActiveSkill(d))));
-    box.appendChild(columns);
-    return box;
-  }
-
-  /** 액티브 — 하나를 골라 Q 로 쓴다. 고른 것은 색 테두리 + Q 표식 */
-  private buildActiveColumn(defs: SigilDef[]): HTMLElement {
-    const world = this.world;
-    const col = document.createElement('div');
-    col.style.cssText = 'flex:1;min-width:250px;';
-    col.appendChild(columnHeader('액티브', '하나를 골라 Q 로 쓴다'));
-    if (defs.length === 0) col.appendChild(dimLine('없음'));
-    for (const def of defs) {
-      const selected = world.sigils.active === def.id;
-      const cost =
-        def.effects['manaCost'] ??
-        balance.spellCost[def.tier as keyof typeof balance.spellCost] ??
-        0;
-      const row = skillRow(def, selected ? def.color : null);
-      row.style.cursor = 'pointer';
-      const head = row.querySelector('.head') as HTMLElement;
-      head.appendChild(badge(`${cost} 마나`, '#8a8f9a'));
-      if (selected) head.appendChild(badge('Q 사용 중', def.color));
-      else head.appendChild(badge('클릭해서 고르기', '#7fbfff'));
-      if (!def.slice) head.appendChild(badge('이 빌드에선 효과 없음', '#e04444'));
-      row.onclick = () => {
-        Sigils.select(world, def.id);
-        this.rebuild();
-      };
-      col.appendChild(row);
-    }
-    return col;
-  }
-
-  /** 패시브 — 갖고 있으면 켜진다. 할 일이 없으니 누를 것도 없다 */
-  private buildPassiveColumn(defs: SigilDef[]): HTMLElement {
-    const col = document.createElement('div');
-    col.style.cssText = 'flex:1;min-width:250px;';
-    col.appendChild(columnHeader('패시브', '갖고 있으면 켜진다'));
-    if (defs.length === 0) col.appendChild(dimLine('없음'));
-    for (const def of defs) {
-      const row = skillRow(def, null);
-      const head = row.querySelector('.head') as HTMLElement;
-      head.appendChild(def.slice ? badge('켜짐', '#3fae5a') : badge('이 빌드에선 효과 없음', '#e04444'));
-      col.appendChild(row);
-    }
-    return col;
-  }
-}
-
-function columnHeader(name: string, sub: string): HTMLElement {
-  const el = document.createElement('div');
-  el.style.cssText = 'margin-bottom:6px;';
-  const strong = document.createElement('span');
-  strong.textContent = name;
-  strong.style.cssText = 'color:#cfd2da;font-size:14px;margin-right:8px;';
-  const hint = document.createElement('span');
-  hint.textContent = sub;
-  hint.style.cssText = 'color:#6c7280;font-size:11px;';
-  el.append(strong, hint);
-  return el;
-}
-
-function dimLine(text: string): HTMLElement {
-  const el = document.createElement('div');
-  el.textContent = text;
-  el.style.cssText = 'color:#555c66;padding:2px 0;';
-  return el;
-}
-
-function badge(text: string, color: string): HTMLElement {
-  const el = document.createElement('span');
-  el.textContent = text;
-  el.style.cssText =
-    `margin-left:8px;padding:0 6px;border:1px solid ${color};color:${color};` +
-    'font-size:10px;line-height:16px;border-radius:2px;white-space:nowrap;';
-  return el;
-}
-
-/** 스킬 한 줄 — 색 견본 + 이름 (+표식들) / 아래에 설명. 고른 액티브는 왼쪽 테두리가 그 색 */
-function skillRow(def: SigilDef, accent: string | null): HTMLElement {
-  const row = document.createElement('div');
-  row.style.cssText =
-    'padding:5px 8px;margin:2px 0;border-left:3px solid ' +
-    (accent ?? 'transparent') +
-    ';' +
-    (accent ? `background:${accent}14;` : '');
-  const head = document.createElement('div');
-  head.className = 'head';
-  head.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;color:#cfd2da;';
-  head.appendChild(swatch(def.color));
-  const name = document.createElement('span');
-  name.textContent = def.name;
-  name.style.color = def.color;
-  head.appendChild(name);
-  row.appendChild(head);
-  if (def.desc) {
-    const desc = document.createElement('div');
-    desc.textContent = def.desc;
-    desc.style.cssText = 'color:#8a8f9a;font-size:11px;margin:1px 0 0 16px;';
-    row.appendChild(desc);
-  }
-  return row;
 }
 
 /** 퀵슬롯에 든 종류 — HUD 바가 읽는다 */

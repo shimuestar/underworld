@@ -19,6 +19,9 @@ export type SoundName =
   | 'dodge'
   | 'cast_fire'
   | 'cast_fizzle'
+  | 'cast_lightning'
+  | 'cast_frost'
+  | 'blink'
   | 'spell_impact'
   | 'pickup'
   | 'gunshot'
@@ -183,6 +186,23 @@ export class GameAudio {
         // 화염 방출 — 저음 스윕 + 노이즈
         this.tone(320, 0.3, 'sawtooth', 0.5, 0, 140);
         this.noise(0.25, 0.5, 700);
+        break;
+      case 'cast_lightning':
+        // 뇌창 — 날카로운 고음 크랙 + 짧은 노이즈 파열
+        this.tone(1800, 0.08, 'sawtooth', 0.35, 0, 400);
+        this.noise(0.12, 0.6, 3500);
+        this.tone(140, 0.16, 'square', 0.3, 0.02, 60);
+        break;
+      case 'cast_frost':
+        // 서리 — 유리 같은 고음이 내려앉고 차가운 노이즈가 퍼진다
+        this.tone(1400, 0.35, 'sine', 0.3, 0, 500);
+        this.tone(2100, 0.25, 'triangle', 0.2, 0.05, 900);
+        this.noise(0.4, 0.3, 2400);
+        break;
+      case 'blink':
+        // 그림자 이동 — 순간적으로 빨려 들어가는 하강음
+        this.tone(900, 0.14, 'triangle', 0.4, 0, 120);
+        this.noise(0.08, 0.25, 600);
         break;
       case 'cast_fizzle':
         // 마나 부족 — 힘없는 하강음

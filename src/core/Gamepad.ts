@@ -19,7 +19,10 @@ export const PAD_ACTIONS = [
   { id: 'cycleWeapon', label: '원거리 무기 교체' },
   { id: 'interact', label: '상호작용 (문 · 제단 · 상자)' },
   { id: 'reload', label: '재장전 / 시위 내리기' },
-  { id: 'cast', label: '스킬 사용' },
+  { id: 'cast', label: '스킬 1 (Z)' },
+  { id: 'skill2', label: '스킬 2 (X)' },
+  { id: 'skill3', label: '스킬 3 (C)' },
+  { id: 'skill4', label: '스킬 4 (V)' },
   { id: 'lantern', label: '랜턴 켜기 · 끄기' },
   { id: 'battery', label: '배터리 교체' },
   { id: 'inventory', label: '가방 · 스킬 열기' },
@@ -63,7 +66,10 @@ export const DEFAULT_BINDINGS: Record<PadAction, number> = {
   cycleWeapon: 4, // LB
   interact: 0, // A
   reload: 2, // X
-  cast: 3, // Y
+  cast: 3, // Y — 스킬 1. 나머지 스킬 칸은 버튼이 모자라 비워 뒀다 (설정 화면에서 건다)
+  skill2: -1,
+  skill3: -1,
+  skill4: -1,
   lantern: 11, // R3
   battery: 14, // D-패드 ←
   inventory: 9, // Menu

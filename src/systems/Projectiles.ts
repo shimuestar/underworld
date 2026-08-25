@@ -20,35 +20,58 @@ let nextProjectileId = 1;
 
 export function tick(world: World, dt: number): void {
   if (world.spell.cooldown > 0) world.spell.cooldown--;
+  const cds = world.spell.cooldowns;
+  if (cds) for (const id of Object.keys(cds)) if (cds[id]! > 0) cds[id]!--;
 
+  const slot = world.input.useSkill;
   if (
-    world.input.castPressed &&
+    slot > 0 &&
     world.player.stunTicks <= 0 &&
     world.player.dodgeTicks <= 0 &&
     !world.player.blocking
   ) {
-    tryCast(world);
+    tryCast(world, slot - 1);
   }
 
   moveProjectiles(world, dt);
   applyBurns(world);
 }
 
-function tryCast(world: World): void {
-  const sigilId = world.sigils.active;
+/** 스킬 쿨다운 — 스킬별로 따로 돈다. 서리 폭발이 3초 쉰다고 화염구까지 막히면 안 된다 */
+export function skillCooldown(world: World, id: string): number {
+  return world.spell.cooldowns?.[id] ?? 0;
+}
+
+/** 시전 원점(눈)과 조준 방향 */
+function aim(world: World): { ox: number; oy: number; oz: number; dx: number; dy: number; dz: number } {
+  const p = world.player;
+  const cosPitch = Math.cos(p.pitch);
+  return {
+    ox: p.x,
+    oy: p.y + balance.player.eyeHeight,
+    oz: p.z,
+    dx: -Math.sin(p.yaw) * cosPitch,
+    dy: Math.sin(p.pitch),
+    dz: -Math.cos(p.yaw) * cosPitch,
+  };
+}
+
+/** 스킬 퀵슬롯 index 의 액티브 스킬을 시전한다. 실패 사유는 cast_failed 로 알린다 */
+function tryCast(world: World, slotIndex: number): void {
+  const sigilId = world.skillSlots[slotIndex] ?? null;
   if (!sigilId) {
-    world.events.emit('cast_failed', { reason: 'no_sigil' });
+    world.events.emit('cast_failed', { reason: 'empty_slot', slot: slotIndex });
     return;
   }
-  if (world.spell.cooldown > 0) return;
-
   const def = sigilDef(sigilId);
   // 시전이 구현된 스킬만 나간다 — 데이터만 있는 스킬로 빈 투사체를 만들면 안 된다
-  if (!def.slice) {
+  if (!def.cast) {
     world.events.emit('cast_failed', { reason: 'not_implemented', id: sigilId });
     return;
   }
-  // 각인이 manaCost 를 명시하면 그 값, 없으면 티어 기본값
+  if (skillCooldown(world, sigilId) > 0) return; // 연타는 조용히 — 매번 뜨면 시끄럽다
+
+  // 스킬이 manaCost 를 명시하면 그 값, 없으면 티어 기본값
   const cost =
     def.effects['manaCost'] ?? balance.spellCost[def.tier as keyof typeof balance.spellCost] ?? 0;
   if (world.mana.value < cost) {
@@ -56,22 +79,35 @@ function tryCast(world: World): void {
     return;
   }
 
-  const p = world.player;
-  const effects = def.effects;
-  const cosPitch = Math.cos(p.pitch);
-  const dx = -Math.sin(p.yaw) * cosPitch;
-  const dy = Math.sin(p.pitch);
-  const dz = -Math.cos(p.yaw) * cosPitch;
-  const oy = p.y + balance.player.eyeHeight;
-  const speed = effects['speed'] ?? 20;
-
   world.mana.value -= cost;
-  world.spell.cooldown = effects['cooldownTicks'] ?? 0;
+  world.spell.cooldowns ??= {};
+  world.spell.cooldowns[sigilId] = def.effects['cooldownTicks'] ?? 0;
+  switch (def.cast) {
+    case 'projectile':
+      castProjectile(world, def.effects);
+      break;
+    case 'beam':
+      castBeam(world, def.effects);
+      break;
+    case 'nova':
+      castNova(world, def.effects);
+      break;
+    case 'blink':
+      castBlink(world, def.effects);
+      break;
+  }
+  world.events.emit('cast_spell', { sigil: sigilId, cost, cast: def.cast });
+}
+
+/** 화염구 — 직선 투사체. 맞으면 터지고 화상을 남긴다 (explodeFireball) */
+function castProjectile(world: World, effects: Record<string, number>): void {
+  const { ox, oy, oz, dx, dy, dz } = aim(world);
+  const speed = effects['speed'] ?? 20;
   world.projectiles.push({
     id: nextProjectileId++,
     owner: 'player',
-    x: p.x, y: oy, z: p.z,
-    prevX: p.x, prevY: oy, prevZ: p.z,
+    x: ox, y: oy, z: oz,
+    prevX: ox, prevY: oy, prevZ: oz,
     vx: dx * speed, vy: dy * speed, vz: dz * speed,
     lifeTicks: effects['lifeTicks'] ?? 120,
     damage: effects['damage'] ?? 0,
@@ -80,7 +116,106 @@ function tryCast(world: World): void {
     radius: effects['radius'] ?? 0.3,
     kind: 'fireball',
   });
-  world.events.emit('cast_spell', { sigil: sigilId, cost });
+}
+
+/** 스킬 피해 — 처치면 spell_kill + enemy_died. 여러 시전이 같은 규약을 쓴다 */
+function skillDamage(world: World, enemy: EnemyState, damage: number, source: string): void {
+  if (enemy.ai === 'idle') enemy.ai = 'chase';
+  enemy.health -= damage;
+  world.events.emit('enemy_damaged', { enemyId: enemy.id, amount: damage, source });
+  if (enemy.health <= 0 && enemy.alive) {
+    enemy.alive = false;
+    world.events.emit('spell_kill', { enemyType: enemy.type, source });
+    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+  }
+}
+
+/** 관통 뇌창 — 즉발 빔. 조준선 위의 적을 앞에서부터 pierce 명까지 꿰뚫는다.
+ *  벽에서 멈추고, 방패에 막히면 거기서 끊긴다 (번개도 방패는 못 뚫는다) */
+function castBeam(world: World, effects: Record<string, number>): void {
+  const { ox, oy, oz, dx, dy, dz } = aim(world);
+  const hx0 = -Math.sin(world.player.yaw);
+  const hz0 = -Math.cos(world.player.yaw);
+  const range = effects['range'] ?? 20;
+  const width = effects['width'] ?? 0.5;
+  const wallT = world.level.wallRayT(ox, oz, hx0, hz0);
+  let maxT = Math.min(range, wallT > 0 ? wallT : range);
+
+  const candidates: { enemy: EnemyState; t: number }[] = [];
+  for (const enemy of world.enemies) {
+    if (!enemy.alive) continue;
+    const rx = enemy.x - ox;
+    const rz = enemy.z - oz;
+    const t = rx * hx0 + rz * hz0;
+    if (t < 0 || t > maxT) continue;
+    const perp = Math.abs(rx * hz0 - rz * hx0);
+    if (perp > width + enemyDef(enemy.type).radius) continue;
+    candidates.push({ enemy, t });
+  }
+  candidates.sort((a, b) => a.t - b.t);
+
+  const hits: number[] = [];
+  const pierce = Math.max(1, effects['pierce'] ?? 1);
+  for (const { enemy, t } of candidates) {
+    if (hits.length >= pierce) break;
+    if (shieldBlocksProjectile(enemyDef(enemy.type), enemy, ox, oz)) {
+      world.events.emit('shot_blocked', { enemyId: enemy.id, source: 'lightning' });
+      maxT = t; // 방패가 빔을 받아 낸다 — 뒤의 적은 무사
+      break;
+    }
+    skillDamage(world, enemy, effects['damage'] ?? 0, 'lightning');
+    hits.push(enemy.id);
+  }
+  world.events.emit('lightning_cast', {
+    sx: ox, sy: oy, sz: oz,
+    ex: ox + dx * maxT, ey: oy + dy * maxT, ez: oz + dz * maxT,
+    hits,
+  });
+}
+
+/** 서리 폭발 — 내 주위 radius 안의 적을 얼려 느리게 하고 살짝 다친다. 벽 너머는 안 닿는다 */
+function castNova(world: World, effects: Record<string, number>): void {
+  const p = world.player;
+  const radius = effects['radius'] ?? 5;
+  const slowed: number[] = [];
+  for (const enemy of world.enemies) {
+    if (!enemy.alive) continue;
+    if (Math.hypot(enemy.x - p.x, enemy.z - p.z) > radius) continue;
+    if (!world.level.hasLineOfSight(p.x, p.z, enemy.x, enemy.z)) continue;
+    enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, effects['slowTicks'] ?? 0);
+    enemy.slowMul = effects['slowMul'] ?? 0.5;
+    slowed.push(enemy.id);
+    world.events.emit('enemy_slowed', { enemyId: enemy.id, ticks: enemy.slowTicks });
+    if ((effects['damage'] ?? 0) > 0) skillDamage(world, enemy, effects['damage']!, 'frost');
+  }
+  world.events.emit('frost_nova', { x: p.x, z: p.z, radius, slowed });
+}
+
+/** 그림자 이동 — 보는 방향으로 range 까지 순간이동. 벽에 막히면 그 앞에서 멈춘다.
+ *  잠깐 무적이라 포위를 빠져나가는 용도다 */
+function castBlink(world: World, effects: Record<string, number>): void {
+  const p = world.player;
+  const hx = -Math.sin(p.yaw);
+  const hz = -Math.cos(p.yaw);
+  const range = effects['range'] ?? 10;
+  const step = balance.skills.blinkStep;
+  const fromX = p.x;
+  const fromZ = p.z;
+  let travelled = 0;
+  while (travelled < range) {
+    const len = Math.min(step, range - travelled);
+    const bx = p.x;
+    const bz = p.z;
+    world.level.slideMove(p, balance.player.radius, hx * len, hz * len);
+    const moved = Math.hypot(p.x - bx, p.z - bz);
+    if (moved < len * 0.5) break; // 벽 — 더 못 간다
+    travelled += len;
+  }
+  // 보간 잔상 방지 — 이전 위치도 도착점으로 맞춘다 (렌더가 prev→now 를 섞는다)
+  p.prevX = p.x;
+  p.prevZ = p.z;
+  p.iframeTicks = Math.max(p.iframeTicks, effects['iframeTicks'] ?? 0);
+  world.events.emit('blink', { fromX, fromZ, toX: p.x, toZ: p.z, distance: travelled });
 }
 
 /** 부순 적 투사체를 배열에서 뺀다. 자기 자신을 먼저 지운 뒤 호출해야 한다 —
