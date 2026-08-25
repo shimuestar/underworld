@@ -459,6 +459,8 @@ function drawPlate(
   }
 }
 const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 그린다 (근접부 왜곡 방지)
+/** 화염구가 지팡이 끝에서 판정 위치로 합쳐지는 시간 */
+const LAUNCH_BLEND_MS = 260;
 const TRACER_WIDTH = 0.022;
 
 // 사망 파편 (시각 상수)
@@ -517,6 +519,8 @@ export class Stage {
   private readonly enemyVisuals = new Map<number, EnemyVisual>();
   /** 처형 연출 중 붙잡아 둔 시체 — id → 해제 시각(ms) */
   private readonly heldVictims = new Map<number, number>();
+  /** 플레이어 화염구의 시각 출발점 — 지팡이 끝에서 나와 판정 위치로 수렴한다 */
+  private readonly projectileLaunch = new Map<number, { ms: number; from: THREE.Vector3 }>();
   private readonly projectileVisuals = new Map<number, THREE.Group>();
   private readonly lifeMoteVisuals = new Map<number, THREE.Sprite>();
   private readonly groundItemVisuals = new Map<number, THREE.Group>();
@@ -651,6 +655,17 @@ export class Stage {
 
   triggerGrenadeThrow(): void {
     this.hands.triggerGrenadeThrow();
+  }
+
+  /** 시전 — 해머를 지팡이처럼 내밀고 머리에서 스킬 색 마력이 터진다 */
+  triggerCast(color: number): void {
+    this.hands.triggerCast(color);
+  }
+
+  /** 지팡이 끝(해머 머리) 월드 좌표 — 마법의 시각적 출발점 */
+  staffTip(): THREE.Vector3 {
+    this.camera.updateMatrixWorld();
+    return this.hands.staffTipWorld(new THREE.Vector3());
   }
 
   triggerParry(result: string): void {
@@ -1167,7 +1182,8 @@ export class Stage {
   /** 발사 궤적 — 총구(카메라 오른쪽 아래)에서 착탄점까지, tracerTicks 동안 페이드 아웃 */
   /** 관통 뇌창 — 눈에서 끝점까지 꺾이는 번개. 마디마다 옆으로 튀고, 짧게 남았다 사라진다 */
   spawnLightning(sx: number, sy: number, sz: number, ex: number, ey: number, ez: number): void {
-    const start = new THREE.Vector3(sx, sy - 0.25, sz); // 눈보다 살짝 아래 — 손에서 나가는 느낌
+    void sx; void sy; void sz; // 판정 원점(눈)은 안 쓴다 — 그림은 지팡이 끝에서 나간다
+    const start = this.staffTip();
     const end = new THREE.Vector3(ex, ey, ez);
     const total = start.distanceTo(end);
     const segments = Math.max(3, Math.min(14, Math.round(total / 1.6)));
@@ -2074,9 +2090,22 @@ export class Stage {
         this.projectileVisuals.set(proj.id, group);
         this.scene.add(group);
       }
-      const px = proj.prevX + (proj.x - proj.prevX) * alpha;
-      const py = proj.prevY + (proj.y - proj.prevY) * alpha;
-      const pz = proj.prevZ + (proj.z - proj.prevZ) * alpha;
+      let px = proj.prevX + (proj.x - proj.prevX) * alpha;
+      let py = proj.prevY + (proj.y - proj.prevY) * alpha;
+      let pz = proj.prevZ + (proj.z - proj.prevZ) * alpha;
+      // 내 화염구는 눈(판정 원점)이 아니라 지팡이 끝에서 나온 것처럼 — 처음 LAUNCH_BLEND_MS 동안
+      // 지팡이 끝 → 판정 위치로 미끄러져 합쳐진다 (순수 연출, 판정은 그대로)
+      if (proj.kind === 'fireball' && proj.owner === 'player') {
+        let launch = this.projectileLaunch.get(proj.id);
+        if (!launch) {
+          launch = { ms: performance.now(), from: this.staffTip() };
+          this.projectileLaunch.set(proj.id, launch);
+        }
+        const k = Math.min(1, (performance.now() - launch.ms) / LAUNCH_BLEND_MS);
+        px = launch.from.x + (px - launch.from.x) * k;
+        py = launch.from.y + (py - launch.from.y) * k;
+        pz = launch.from.z + (pz - launch.from.z) * k;
+      }
       group.position.set(px, py, pz);
       if (proj.kind === 'arrow') {
         // 화살대를 비행 방향으로 정렬 (로컬 -Z가 진행 방향)
@@ -2093,6 +2122,7 @@ export class Stage {
         }
       });
       this.projectileVisuals.delete(id);
+      this.projectileLaunch.delete(id);
     }
   }
 

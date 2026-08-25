@@ -124,6 +124,12 @@ export class HandModel {
   private shieldArrowSlot = 0;
   private readonly skinMaterials: THREE.MeshLambertMaterial[] = [];
   private corruptionStage = -1;
+  /** 시전 — 해머를 지팡이처럼 내미는 동안. 머리의 마력 구체가 스킬 색으로 번쩍인다 */
+  private castStart = 0;
+  private castUntil = 0;
+  private castOrb!: THREE.Group;
+  private castOrbMat!: THREE.MeshBasicMaterial;
+  private castLight!: THREE.PointLight;
 
   constructor() {
     // ---- 오른팔 = 해머 (근접, 우클릭) ----
@@ -146,6 +152,17 @@ export class HandModel {
     const hammerBand = box(0.034, 0.034, 0.04, 0x3b3f45); // 자루-머리 이음쇠
     hammerBand.position.set(0, 0.012, -0.29);
     this.hammerParts.push(hammerShaft, hammerHead, hammerBand);
+
+    // 마력 구체 — 해머 머리 바로 앞. 평소엔 숨어 있고 시전하는 순간만 스킬 색으로 부풀었다 꺼진다.
+    // 광원도 달아 손 주변 벽이 잠깐 그 색으로 물든다 (지팡이 끝에서 마법이 나온다는 그림)
+    this.castOrb = new THREE.Group();
+    this.castOrb.position.set(0, 0.012, -0.46);
+    this.castOrbMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
+    this.castOrb.add(new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), this.castOrbMat));
+    this.castLight = new THREE.PointLight(0xffffff, 0, 3.5, 0);
+    this.castOrb.add(this.castLight);
+    this.castOrb.visible = false;
+    this.rightArm.add(this.castOrb);
 
     // 물약병 — 평소엔 숨어 있고 마실 때만 나온다. 색은 마시는 아이템에서 받는다
     this.flask = box(0.05, 0.082, 0.05, 0xffffff);
@@ -307,6 +324,19 @@ export class HandModel {
     this.throwUntil = performance.now() + 240;
   }
 
+  /** 시전 — 해머를 앞으로 내밀고 머리에서 스킬 색 마력이 터진다 */
+  triggerCast(color: number): void {
+    this.castStart = performance.now();
+    this.castUntil = this.castStart + CAST_MS;
+    this.castOrbMat.color.setHex(color);
+    this.castLight.color.setHex(color);
+  }
+
+  /** 해머 머리(지팡이 끝)의 월드 좌표 — 투사체·빔의 시각적 출발점 */
+  staffTipWorld(out: THREE.Vector3): THREE.Vector3 {
+    return this.castOrb.getWorldPosition(out);
+  }
+
   /** 방어 성공 — 브레이서 섬광, 화살이면 방패에 꽂힌다 */
   triggerBlockHit(kind?: string): void {
     const now = performance.now();
@@ -454,6 +484,40 @@ export class HandModel {
       else if (e < t2) pose = mix(step.windup, step.strike, easeInCubic((e - t1) / step.strikeMs));
       else if (e < t3) pose = step.strike; // 그대로 버틴다 — 연결 대기
       else pose = mix(step.strike, rest, easeOutCubic((e - t3) / step.returnMs));
+    }
+
+    // 시전 — 지팡이처럼 앞으로 쭉 내밀었다가 돌아온다. 스윙 중이면 스윙이 이긴다
+    const casting = now < this.castUntil;
+    if (casting && !pose) {
+      const t = (now - this.castStart) / CAST_MS;
+      const rest: SwingPose = {
+        rotX: HAMMER_REST_ROT, rotY: REST_RIGHT.rotY,
+        x: REST_RIGHT.pos.x, y: REST_RIGHT.pos.y, z: REST_RIGHT.pos.z, rotZ: REST_RIGHT.rotZ,
+      };
+      const k =
+        t < CAST_THRUST_T
+          ? easeOutCubic(t / CAST_THRUST_T)
+          : t < CAST_HOLD_T
+            ? 1
+            : 1 - easeInCubic((t - CAST_HOLD_T) / (1 - CAST_HOLD_T));
+      pose = {
+        rotX: rest.rotX + (CAST_POSE.rotX - rest.rotX) * k,
+        rotY: rest.rotY + (CAST_POSE.rotY - rest.rotY) * k,
+        x: rest.x + (CAST_POSE.x - rest.x) * k,
+        y: rest.y + (CAST_POSE.y - rest.y) * k,
+        z: rest.z! + (CAST_POSE.z - rest.z!) * k,
+        rotZ: rest.rotZ! + (CAST_POSE.rotZ - rest.rotZ!) * k,
+      };
+    }
+    // 마력 구체 — 순간 부풀었다(20%) 서서히 꺼진다. 자세와 별개로 언제나 돈다
+    this.castOrb.visible = casting;
+    if (casting) {
+      const t = (now - this.castStart) / CAST_MS;
+      const flare = t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8;
+      const sc = 0.5 + 0.9 * flare;
+      this.castOrb.scale.set(sc, sc, sc);
+      this.castOrbMat.opacity = Math.min(1, flare * 1.2);
+      this.castLight.intensity = 3.2 * flare;
     }
 
     // 문 조작 — 해머를 내리고 맨손을 문에 얹어 더듬는다.
@@ -642,6 +706,10 @@ export class HandModel {
 
 // 해머 대기(치켜든) 각도와 내리침 호 크기 (+x 회전 = 무기 끝이 위로)
 const HAMMER_REST_ROT = 0.95; // 헤드가 어깨 위 (완전히 세우면 화면 중앙을 가린다)
+/** 시전 동작 — 지팡이 내밀기. 머리가 화면 중앙 아래쪽에 오도록 앞·안쪽으로 */
+const CAST_MS = 420;
+const CAST_THRUST_T = 0.3;
+const CAST_HOLD_T = 0.55;
 // 연속타 안무 — 1타 우상→좌하, 2타 좌하→우상(올려치기), 3타 위→아래(강타).
 // 각도 규약: rotX + = 무기 끝이 위 / rotY + = 왼쪽, − = 오른쪽
 interface SwingPose {
@@ -706,6 +774,7 @@ const REST_RIGHT = {
 };
 /** 내리치는 동안 손목이 옮겨가는 위치 — 화면 중앙 살짝 오른쪽, 앞으로 */
 const SMASH_RIGHT = new THREE.Vector3(0.1, -0.26, -0.56);
+const CAST_POSE = { rotX: 0.22, rotY: 0.28, x: 0.12, y: -0.2, z: -0.5, rotZ: -0.1 };
 // 문 잠금을 더듬는 자세 — 손을 조준점 오른쪽 아래로 들어 올려 벽면에 붙인다.
 // z 는 대기(-0.6)에서 거의 안 당긴다: 손목을 카메라 쪽으로 끌면 팔뚝이 근평면에
 // 걸려 화면 절반을 덮는 판때기가 된다 (-0.42 에서 실측 확인)

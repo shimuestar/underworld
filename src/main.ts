@@ -40,7 +40,7 @@ import { ShopUI } from './render/ShopUI';
 import { InventoryUI, quickslotView } from './render/InventoryUI';
 import { SKILL_KEYS, SkillUI } from './render/SkillUI';
 import { itemIconSvg } from './render/ItemIcons';
-import { allSigilIds, isImplemented, sigilDef } from './core/SigilData';
+import { allSigilIds, isImplemented, sigilColor, sigilDef } from './core/SigilData';
 import levelJson from '../data/levels/z01_f1.json';
 
 const app = document.getElementById('app');
@@ -490,6 +490,8 @@ events.on('shot_blocked', () => audio.play('shot_blocked'));
 events.on('dodge_step', () => audio.play('dodge'));
 events.on('cast_spell', (payload) => {
   const cast = (payload as { cast?: string }).cast;
+  const sigil = (payload as { sigil?: string }).sigil;
+  if (sigil) stage.triggerCast(sigilColor(sigil)); // 해머가 지팡이가 된다 — 머리에서 스킬 색 마력
   audio.play(cast === 'beam' ? 'cast_lightning' : cast === 'nova' ? 'cast_frost' : cast === 'blink' ? 'blink' : 'cast_fire');
 });
 events.on('lightning_cast', (payload) => {
