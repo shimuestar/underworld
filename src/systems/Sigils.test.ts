@@ -417,7 +417,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(Projectiles.skillCooldown(world, 'sig_lightning')).toBe(fx['cooldownTicks']);
   });
 
-  it('관통 뇌창: 끊기지 않고 2.5초를 지지면 감전돼 1초 동안 그 자세로 굳는다', () => {
+  it('관통 뇌창: 끊기지 않고 1.5초를 지지면 감전돼 1초 동안 그 자세로 굳는다', () => {
     Sigils.acquire(world, 'sig_lightning');
     world.mana.value = 500;
     const fx = sigilDef('sig_lightning').effects;
