@@ -23,14 +23,15 @@ export function tick(world: World, dt: number): void {
   const cds = world.spell.cooldowns;
   if (cds) for (const id of Object.keys(cds)) if (cds[id]! > 0) cds[id]!--;
 
-  const slot = world.input.useSkill;
+  // 칸 직접 지정(Z·X·C·V)이 우선, 없으면 선택한 칸(가운데 클릭 · 패드 Y)
+  const slot = world.input.useSkill > 0 ? world.input.useSkill - 1 : world.input.useSelectedSkill ? world.selectedSkill : -1;
   if (
-    slot > 0 &&
+    slot >= 0 &&
     world.player.stunTicks <= 0 &&
     world.player.dodgeTicks <= 0 &&
     !world.player.blocking
   ) {
-    tryCast(world, slot - 1);
+    tryCast(world, slot);
   }
 
   moveProjectiles(world, dt);

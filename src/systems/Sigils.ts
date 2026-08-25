@@ -47,8 +47,9 @@ export function init(world: World): void {
   });
 }
 
-/** 바닥 각인 줍기 — 접근하면 자동 획득 */
+/** 바닥 각인 줍기 — 접근하면 자동 획득. 스킬 교체 입력도 여기서 받는다 */
 export function tick(world: World, _dt: number): void {
+  if (world.input.cycleSkill) cycleSkill(world);
   if (world.groundItems.length === 0) return;
   const p = world.player;
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
@@ -83,6 +84,7 @@ export function acquire(world: World, sigilId: string): void {
       const slots = ensureSkillSlots(world);
       slot = slots.indexOf(null);
       if (slot >= 0) slots[slot] = sigilId;
+      settleSelection(world);
     }
     world.events.emit('sigil_acquired', { id: sigilId, kind: 'active', slot, corruptionCost: cost });
     return;
@@ -115,6 +117,30 @@ export function detach(world: World, slot: SigilSlot): boolean {
   return true;
 }
 
+/** 선택 칸을 다음으로 돌린다 — 빈 칸은 건너뛰고 끝에서 처음으로 돈다. 전부 비었으면 그대로 */
+export function cycleSkill(world: World, dir = 1): boolean {
+  const slots = ensureSkillSlots(world);
+  const n = slots.length;
+  for (let step = 1; step <= n; step++) {
+    const i = (((world.selectedSkill + dir * step) % n) + n) % n;
+    if (slots[i] !== null) {
+      if (i === world.selectedSkill) return false; // 찬 칸이 하나뿐
+      world.selectedSkill = i;
+      world.events.emit('skill_selected', { index: i, id: slots[i] });
+      return true;
+    }
+  }
+  return false;
+}
+
+/** 선택 칸이 비면 찬 칸으로 옮긴다 — 빈 칸을 가리킨 채 두면 사용 키가 헛방이다 */
+function settleSelection(world: World): void {
+  const slots = world.skillSlots;
+  if (slots[world.selectedSkill] !== null) return;
+  const first = slots.findIndex((id) => id !== null);
+  if (first >= 0) world.selectedSkill = first;
+}
+
 /** 스킬 퀵슬롯에 액티브를 올린다 (null 이면 비운다). 같은 스킬은 한 칸에만 */
 export function assignSkill(world: World, index: number, sigilId: string | null): boolean {
   const slots = ensureSkillSlots(world);
@@ -126,6 +152,7 @@ export function assignSkill(world: World, index: number, sigilId: string | null)
     if (dup >= 0) slots[dup] = null;
   }
   slots[index] = sigilId;
+  settleSelection(world);
   world.events.emit('skill_slot_changed', { index, id: sigilId });
   return true;
 }

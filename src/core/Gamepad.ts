@@ -19,12 +19,13 @@ export const PAD_ACTIONS = [
   { id: 'cycleWeapon', label: '원거리 무기 교체' },
   { id: 'interact', label: '상호작용 (문 · 제단 · 상자)' },
   { id: 'reload', label: '재장전 / 시위 내리기' },
-  { id: 'cast', label: '스킬 1 (Z)' },
+  { id: 'cast', label: '선택한 스킬 사용 (가운데 클릭)' },
+  { id: 'cycleSkill', label: '스킬 교체 — 퀵슬롯 회전 (Q)' },
   { id: 'skill2', label: '스킬 2 (X)' },
   { id: 'skill3', label: '스킬 3 (C)' },
   { id: 'skill4', label: '스킬 4 (V)' },
-  { id: 'lantern', label: '랜턴 켜기 · 끄기' },
-  { id: 'battery', label: '배터리 교체' },
+  { id: 'lantern', label: '랜턴 켜기 · 끄기 (길게 = 배터리 교체)' },
+  { id: 'battery', label: '배터리 교체 (기본은 랜턴 길게)' },
   { id: 'inventory', label: '가방 · 스킬 열기' },
   { id: 'pause', label: '일시정지 (메뉴 · 이 설정 화면)' },
   { id: 'slot1', label: '퀵슬롯 1' },
@@ -54,7 +55,8 @@ export function buttonName(index: number): string {
  *  - 패링은 타이밍이 생명이라 트리거(행정 있음)보다 LB 가 낫지만, 방패를 "당겨 든다"는
  *    감각이 LT 쪽이 강해 LT 로 뒀다. 늦게 들어간다고 느끼면 리매핑에서 LB 로 바꾸면 된다
  *  - 회피는 소울류 관례대로 B
- *  - 퀵슬롯은 D-패드 ↑→↓ 셋 (소모품이 3종류라 충분하다). 남은 ← 는 배터리 교체
+ *  - 퀵슬롯은 D-패드 ↑→↓ 셋 (소모품이 3종류라 충분하다). 남은 ← 는 스킬 교체
+ *  - 배터리 교체는 R3 를 길게 — 랜턴 조작 둘을 한 버튼에
  *  - View 는 일시정지에 남겨 둔다 — 패드만 쓰는 사람이 메뉴·이 설정 화면에 오는
  *    유일한 길이라, 다른 기능을 걸면 스스로를 가둔다 */
 export const DEFAULT_BINDINGS: Record<PadAction, number> = {
@@ -66,12 +68,13 @@ export const DEFAULT_BINDINGS: Record<PadAction, number> = {
   cycleWeapon: 4, // LB
   interact: 0, // A
   reload: 2, // X
-  cast: 3, // Y — 스킬 1. 나머지 스킬 칸은 버튼이 모자라 비워 뒀다 (설정 화면에서 건다)
+  cast: 3, // Y — 선택한 스킬 칸 사용. 칸 직접 지정(skill2~4)은 버튼이 모자라 비워 뒀다
+  cycleSkill: 14, // D-패드 ← — 스킬 칸 회전. 배터리가 있던 자리다
   skill2: -1,
   skill3: -1,
   skill4: -1,
   lantern: 11, // R3
-  battery: 14, // D-패드 ←
+  battery: -1, // 랜턴(R3) 길게 누르기가 맡는다 — 버튼이 모자라 한 버튼에 둘을 얹었다
   inventory: 9, // Menu
   pause: 8, // View — 이게 없으면 패드만 쓰는 사람은 이 설정 화면에 영영 못 온다
   slot1: 12, // D-패드 ↑

@@ -346,6 +346,7 @@ for (const name of [
   'sigil_attached',
   'sigil_detached',
   'skill_slot_changed',
+  'skill_selected',
   'lightning_cast',
   'frost_nova',
   'blink',
@@ -906,7 +907,7 @@ events.on('sigil_acquired', (payload) => {
         ? `패시브 — ${PART[def.slot] ?? def.slot}에 새겨졌다`
         : `패시브 — ${PART[def.slot] ?? def.slot}이 차 있다. Tab 에서 바꾼다`
       : typeof info.slot === 'number' && info.slot >= 0
-        ? `액티브 — ${input.usingPad && info.slot === 0 ? padBtn('cast') : SKILL_KEYS[info.slot]} 로 쓴다`
+        ? `액티브 — ${input.usingPad ? `${padBtn('cycleSkill')} 로 골라 ${padBtn('cast')}` : SKILL_KEYS[info.slot]} 로 쓴다`
         : '액티브 — Tab 에서 퀵슬롯에 올린다';
   sigilToast.classList.add('visible');
   sigilToastUntil = performance.now() + SIGIL_TOAST_MS;
@@ -1336,7 +1337,8 @@ function syncSkillSlots(): void {
   world.skillSlots.forEach((id, i) => {
     const ui = skillCells[i];
     if (!ui) return;
-    ui.key.textContent = input.usingPad && i === 0 ? padBtn('cast') : (SKILL_KEYS[i] ?? String(i + 1));
+    ui.key.textContent =
+      (world.selectedSkill === i ? '▸ ' : '') + (SKILL_KEYS[i] ?? String(i + 1));
     if (!id) {
       ui.cell.className = 'skill-slot empty';
       ui.name.textContent = '';
@@ -1350,7 +1352,9 @@ function syncSkillSlots(): void {
     const cdMax = def.effects['cooldownTicks'] ?? 0;
     const cooling = cdLeft > 0;
     const noMana = world.mana.value < cost;
-    ui.cell.className = `skill-slot ${!def.cast ? 'empty' : cooling ? 'cool' : noMana ? 'nomana' : 'ready'}`;
+    ui.cell.className =
+      `skill-slot ${!def.cast ? 'empty' : cooling ? 'cool' : noMana ? 'nomana' : 'ready'}` +
+      (world.selectedSkill === i ? ' selected' : '');
     ui.name.textContent = def.name;
     ui.name.style.color = def.cast && !noMana && !cooling ? def.color : '';
     ui.cd.style.width = cooling && cdMax > 0 ? `${(cdLeft / cdMax) * 100}%` : '0';
@@ -1642,9 +1646,9 @@ function render(alpha: number): void {
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     (input.usingPad
       ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 원거리(${padBtn('cycleWeapon')} 교체)  ${padBtn('melee')} 근접·처형·상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
-        `${padBtn('cast')} 스킬 1  D-패드 소모품  ${padBtn('inventory')} 가방→스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴  ${padBtn('battery')} 배터리  ${padBtn('pause')} 일시정지·키 설정`
+        `${padBtn('cycleSkill')} 스킬 교체  ${padBtn('cast')} 스킬 사용  D-패드 소모품  ${padBtn('inventory')} 가방→스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴(길게=배터리)  ${padBtn('pause')} 일시정지·키 설정`
       : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형·상호작용  Shift 짧게=패링·꾹=방어\n' +
-        'Z·X·C·V 스킬  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트');
+        'Z·X·C·V 스킬  Q 스킬 교체·휠클릭 사용  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G 테스트');
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
   // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)

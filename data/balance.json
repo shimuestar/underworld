@@ -16,7 +16,9 @@
       "lookSpeed": 3.4,
       "lookCurve": 2.0,
       "triggerThreshold": 0.35,
-      "activeTimeoutMs": 4000
+      "activeTimeoutMs": 4000,
+      "_holdNote": "패드 랜턴 버튼을 이만큼 붙들면 배터리 교체다 (짧게는 켜고 끄기). 버튼이 모자라 한 버튼에 둘을 얹었다",
+      "holdTicks": 18
     }
   },
 

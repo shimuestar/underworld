@@ -195,7 +195,7 @@ export class SkillUI {
     const head = document.createElement('div');
     head.textContent = this.picked
       ? `스킬 퀵슬롯 — ${sigilDef(this.picked).name} 을(를) 올릴 칸을 고른다`
-      : '스킬 퀵슬롯 — 전투 중 Z·X·C·V 로 쓴다';
+      : '스킬 퀵슬롯 — Z·X·C·V 로 바로 쓰거나, Q 로 칸을 돌려 가운데 클릭으로 쓴다';
     head.style.cssText = `color:${this.picked ? '#e8c76a' : '#9fe870'};margin-bottom:6px;`;
     wrap.appendChild(head);
     const bar = document.createElement('div');
@@ -207,8 +207,9 @@ export class SkillUI {
         'background:rgba(0,0,0,0.55);border:1px solid ' +
         (this.picked ? '#e8c76a' : id ? '#4a6a8a' : '#3a3a44') + ';padding:4px 6px;';
       const key = document.createElement('div');
-      key.textContent = SKILL_KEYS[i] ?? String(i + 1);
-      key.style.cssText = 'font-size:10px;color:#8a8f9a;';
+      const selected = world.selectedSkill === i && id !== null;
+      key.textContent = (selected ? '▸ ' : '') + (SKILL_KEYS[i] ?? String(i + 1)) + (selected ? '  선택됨' : '');
+      key.style.cssText = `font-size:10px;color:${selected ? '#e8c76a' : '#8a8f9a'};`;
       cell.appendChild(key);
       const name = document.createElement('div');
       if (id) {

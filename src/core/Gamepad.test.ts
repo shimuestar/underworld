@@ -40,7 +40,8 @@ describe('기본 매핑', () => {
   it('전투에 필요한 기능은 전부 걸려 있다 — 빈 채로 출발하지 않는다', () => {
     for (const { id } of PAD_ACTIONS) {
       // 퀵슬롯 4번만 예외다 — 버튼이 모자라고 소모품이 3종류뿐이라 비워 뒀다
-      if (id === 'slot4' || id.startsWith('skill')) continue; // 버튼이 모자라 비워 둔 칸들
+      // 버튼이 모자라 비워 둔 것들: 퀵슬롯 4, 스킬 칸 직접 지정, 배터리(랜턴 길게가 맡는다)
+      if (id === 'slot4' || id.startsWith('skill') || id === 'battery') continue;
       expect(DEFAULT_BINDINGS[id]).toBeGreaterThanOrEqual(0);
     }
   });

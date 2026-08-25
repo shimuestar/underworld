@@ -466,6 +466,45 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.player.x).toBeGreaterThan(27);
   });
 
+  it('스킬 교체(Q): 빈 칸을 건너뛰며 돌고, 끝에서 처음으로 온다', () => {
+    Sigils.acquire(world, 'sig_fireball'); // 칸 0
+    Sigils.acquire(world, 'sig_frost'); // 칸 1
+    Sigils.assignSkill(world, 3, 'sig_frost'); // 칸 1 → 3. 칸 1·2 는 빈다
+    expect(world.selectedSkill).toBe(0);
+    const cycle = (): void => {
+      world.input = { ...Input.emptySnapshot(), cycleSkill: true };
+      Sigils.tick(world, DT);
+      world.input = Input.emptySnapshot();
+    };
+    cycle();
+    expect(world.selectedSkill).toBe(3); // 1·2 건너뜀
+    cycle();
+    expect(world.selectedSkill).toBe(0); // 처음으로
+  });
+
+  it('선택 칸이 비면 찬 칸으로 옮겨 간다 — 사용 키가 헛방이 되지 않게', () => {
+    Sigils.acquire(world, 'sig_fireball');
+    Sigils.acquire(world, 'sig_frost');
+    world.selectedSkill = 0;
+    Sigils.assignSkill(world, 0, null);
+    expect(world.selectedSkill).toBe(1);
+  });
+
+  it('선택한 스킬 사용(가운데 클릭): 선택 칸의 스킬이 나간다, 직접 지정(Z~V)이 우선', () => {
+    Sigils.acquire(world, 'sig_fireball');
+    Sigils.acquire(world, 'sig_frost');
+    world.mana.value = 200;
+    world.selectedSkill = 1;
+    world.input = { ...Input.emptySnapshot(), castPressed: true, useSelectedSkill: true };
+    Projectiles.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(Projectiles.skillCooldown(world, 'sig_frost')).toBeGreaterThan(0); // 선택 칸 = 서리
+    expect(world.projectiles).toHaveLength(0); // 화염구는 안 나갔다
+    world.input = { ...Input.emptySnapshot(), castPressed: true, useSkill: 1, useSelectedSkill: true };
+    Projectiles.tick(world, DT);
+    expect(world.projectiles).toHaveLength(1); // 직접 지정 Z = 칸 0 화염구
+  });
+
   it('스킬 쿨다운은 스킬별이다 — 서리를 쓴 직후에도 뇌창은 나간다', () => {
     Sigils.acquire(world, 'sig_frost');
     Sigils.acquire(world, 'sig_lightning');

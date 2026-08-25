@@ -511,6 +511,8 @@ export class World {
   quickslots: (ItemKind | null)[] = [];
   /** 스킬 퀵슬롯 — 액티브 스킬 id. 키보드 Z·X·C·V (Sigils.ensureSkillSlots 가 칸 수를 맞춘다) */
   skillSlots: (string | null)[] = [];
+  /** 선택된 스킬 칸 — Q(패드 cycleSkill)로 회전, 가운데 클릭(패드 cast)으로 쓴다 */
+  selectedSkill = 0;
 
   /** 소모품 공용 사용 쿨다운 — 한 프레임에 물약을 들이붓지 못하게 */
   itemCooldown = 0;
