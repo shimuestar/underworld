@@ -450,15 +450,17 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
   });
 
   it('둔화는 돌진에도 걸린다 — 얼렸는데 전속력으로 달려들면 안 된다', () => {
-    const quick = add('goblin_runner', 24, 6);
-    const slow = add('goblin_runner', 24, 6);
+    // 창병의 돌진 공격(chargeAttack.chargeSpeed). 러너는 돌진 공격이 없고 그냥 빨리 걷는다
+    // 겹치면 분리 로직이 서로 밀어내 이동량을 더럽힌다 — 복도 폭 안에서 2m 떨어뜨린다
+    const quick = add('goblin_spear', 24, 5);
+    const slow = add('goblin_spear', 24, 7);
     slow.slowTicks = 60;
     slow.slowMul = 0.4;
     for (const r of [quick, slow]) {
       r.ai = 'charging';
       r.attackMode = 'charge'; // 돌진 공격 정의(chargeSpeed)를 쓰게
       r.chargeTargetX = 6;
-      r.chargeTargetZ = 6;
+      r.chargeTargetZ = r.z; // 제 줄을 따라 곧장 -x 로
       r.timer = 30;
     }
     const q0 = quick.x;
