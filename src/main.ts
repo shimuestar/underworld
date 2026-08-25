@@ -232,7 +232,7 @@ window.addEventListener('keydown', (e) => {
   // 테스트용 스킬 전부 획득 — 구현된 것만. 오염은 안 쌓인다 (슬라이스 검증 시 제거)
   if (e.code === 'KeyU' && !world.dead && !world.uiOpen) {
     const n = grantAllSkills();
-    showReaction(n > 0 ? `(테스트) 구현된 스킬 ${n}종 획득 — Tab 에서 확인` : '(테스트) 구현된 스킬은 이미 다 가졌다', 2000);
+    showReaction(n > 0 ? `(테스트) 구현된 스킬 ${n}종 획득 + 마나 풀충전 — Tab 에서 확인` : '(테스트) 스킬은 이미 다 가졌다 — 마나만 채웠다', 2000);
     console.log('[debug] 스킬 전부 획득', n);
   }
   // 테스트용 마나 풀충전 — 마법 튜닝 편의 (슬라이스 검증 시 제거)
@@ -1013,6 +1013,7 @@ function grantAllSkills(): number {
     granted++;
   }
   world.corruption.pending = pendingBefore;
+  world.mana.value = balance.mana.max; // 스킬을 바로 써 볼 수 있게 — 마나 없는 스킬 모드는 반쪽이다
   return granted;
 }
 
