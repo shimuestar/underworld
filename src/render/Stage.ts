@@ -1244,35 +1244,61 @@ export class Stage {
     this.explosions.push({ light, shell, bornMs: now, radius });
   }
 
-  /** 해동 — 몸에 박혀 있던 얼음이 쩍 갈라져 조각으로 튄다 */
+  /** 얼음이 깨진다 — 섬광 + 부푸는 서리 껍질 + 파편 여럿(큰 덩이·잔 조각) + 피어오르는 냉기.
+   *  빙결이 끝나는 순간이 피해가 들어가는 순간이라, 눈에 확 띄어야 "지금 맞았다"가 읽힌다 */
   spawnThaw(x: number, z: number, height: number): void {
     const now = performance.now();
-    for (let i = 0; i < 10; i++) {
-      const size = 0.04 + Math.random() * 0.06;
+    const cy = height * 0.55;
+    // 섬광 — 짧고 세게. 공유 광원(executeFlash)이라 겹치면 마지막 것이 이긴다
+    this.triggerFlash(x, cy, z, 0xdff4ff, 150, 2.6);
+    // 서리 껍질 — 부풀며 옅어진다 (폭발 연출의 얼음 형제, 작은 반경)
+    const shellLight = new THREE.PointLight(0x9fe0ff, 6, 7, 0);
+    shellLight.position.set(x, cy, z);
+    this.scene.add(shellLight);
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 16, 12),
+      new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity: 0.6, depthWrite: false }),
+    );
+    shell.position.set(x, cy, z);
+    this.scene.add(shell);
+    this.explosions.push({ light: shellLight, shell, bornMs: now, radius: 2.4 });
+
+    const shard = (size: number, tall: number, speed: number, up: number, life: number, opacity: number, gravity: number): void => {
       const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(size, size * 1.6, size),
-        new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity: 0.9 }),
+        new THREE.BoxGeometry(size, size * tall, size),
+        new THREE.MeshBasicMaterial({ color: ICE_COLOR, transparent: true, opacity }),
       );
       const ang = Math.random() * Math.PI * 2;
-      const oy = height * (0.3 + Math.random() * 0.5);
+      const oy = height * (0.2 + Math.random() * 0.7);
       mesh.position.set(x, oy, z);
       mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
       this.scene.add(mesh);
-      const speed = 1.6 + Math.random() * 1.8;
       this.particles.push({
         mesh,
         ox: x, oy, oz: z,
         vx: Math.cos(ang) * speed,
-        vy: 1.2 + Math.random() * 1.8,
+        vy: up,
         vz: Math.sin(ang) * speed,
         bornMs: now,
-        lifeMs: 520,
-        spinX: (Math.random() - 0.5) * 12,
-        spinY: (Math.random() - 0.5) * 12,
-        spinZ: (Math.random() - 0.5) * 12,
-        gravity: 7,
+        lifeMs: life,
+        spinX: (Math.random() - 0.5) * 14,
+        spinY: (Math.random() - 0.5) * 14,
+        spinZ: (Math.random() - 0.5) * 14,
+        gravity,
       });
-    }
+    };
+    // 큰 덩이 — 느리고 무겁게 떨어진다
+    for (let i = 0; i < 5; i++) shard(0.14 + Math.random() * 0.1, 1.3, 1.6 + Math.random() * 1.4, 1.8 + Math.random() * 1.2, 820, 0.95, 9);
+    // 잔 조각 — 사방으로 빠르게 튄다
+    for (let i = 0; i < 22; i++) shard(0.04 + Math.random() * 0.06, 1.8, 2.8 + Math.random() * 3.2, 1.5 + Math.random() * 2.6, 640, 0.9, 8);
+    // 냉기 — 천천히 피어오르며 옅어진다 (음의 중력 = 위로)
+    for (let i = 0; i < 8; i++) shard(0.1 + Math.random() * 0.12, 0.6, 0.3 + Math.random() * 0.5, 0.6 + Math.random() * 0.6, 950, 0.35, -0.8);
+  }
+
+  /** 얼음이 깨진 적 — 몸이 잠깐 하얗게 번쩍인다 (피격 플래시와 같은 경로) */
+  flashEnemyShatter(enemyId: number): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    if (visual) visual.hitFlashUntil = performance.now() + 170;
   }
 
   spawnTracer(ex: number, ey: number, ez: number): void {

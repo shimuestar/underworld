@@ -209,11 +209,13 @@ export class GameAudio {
         this.noise(0.05, 0.3, 5200, 0.24);
         break;
       case 'thaw':
-        // 해동 — 얼음이 쩍 갈라지고 잔 조각이 흩어진다
-        this.noise(0.07, 0.55, 5000);
-        this.tone(2400, 0.12, 'triangle', 0.25, 0.01, 1500);
-        this.tone(1200, 0.2, 'sine', 0.18, 0.06, 700);
-        this.noise(0.18, 0.2, 2000, 0.05);
+        // 얼음 파열 — 묵직한 쿵 + 두 번 쩍 갈라지는 크랙 + 유리 조각이 흩어지는 긴 꼬리
+        this.tone(85, 0.22, 'square', 0.5, 0, 40);
+        this.noise(0.09, 0.85, 4500);
+        this.noise(0.07, 0.6, 5200, 0.045);
+        this.tone(2600, 0.34, 'sine', 0.28, 0.03, 900);
+        this.tone(3400, 0.28, 'triangle', 0.2, 0.06, 1500);
+        this.noise(0.38, 0.28, 2600, 0.08);
         break;
       case 'blink':
         // 그림자 이동 — 순간적으로 빨려 들어가는 하강음

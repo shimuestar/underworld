@@ -517,9 +517,13 @@ events.on('frost_nova', (payload) => {
 events.on('blink', () => screenFlash(0.6, 140));
 // 얼음이 깨지는 순간 — 파편이 튀고 소리가 나며 (주문 시스템이) 피해를 넣는다
 events.on('enemy_freeze_ended', (payload) => {
-  const t = payload as { enemyType: string; x: number; z: number };
+  const t = payload as { enemyId: number; enemyType: string; x: number; z: number };
   stage.spawnThaw(t.x, t.z, enemyDef(t.enemyType).height);
+  stage.flashEnemyShatter(t.enemyId);
   audio.play('thaw');
+  // 가까이서 깨지면 화면이 살짝 흔들린다 — 파열이 몸에 닿는 느낌
+  const d = Math.hypot(t.x - world.player.x, t.z - world.player.z);
+  if (d < 7) stage.triggerCameraKick(0.4 * (1 - d / 7), 200);
 });
 // 하나라도 얼렸으면 얼려지는 소리 (폭발음과 별개)
 events.on('frost_nova', (payload) => {
