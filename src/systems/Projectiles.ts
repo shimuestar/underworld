@@ -215,12 +215,12 @@ function castNova(world: World, effects: Record<string, number>): void {
 }
 
 /** 서리 폭발의 실체 — (cx,cz) 주위 radius 안, 벽에 가리지 않은 적에게 서리를 한 겹 쌓는다.
- *  매 겹 damage 를 즉시 받고, 겹 수에 따라: 1 = 약한 둔화 / 2 = 완전 둔화 / 3 = 빙결(깨질 때 damage 한 번 더)
- *  / 4+ = 빙결 freezeExtraTicks 씩 연장. 겹은 둔화가 다 풀리면(Enemies) 0 으로 돌아간다.
+ *  첫 겹은 damageFirst, 둘째부터 damage 를 즉시 받고, 겹 수에 따라: 1 = 약한 둔화 / 2 = 완전 둔화 /
+ *  3 = 빙결(깨질 때 breakDamage 한 번 더) / 4+ = 빙결 freezeExtraTicks 씩 연장.
+ *  겹은 둔화가 다 풀리면(Enemies) 0 으로 돌아간다.
  *  이펙트 크기(scale)는 연속 시전 수로 정한다 — 첫 타는 작게, 둘째부터 제 크기 */
 function frostBurst(world: World, cx: number, cz: number, effects: Record<string, number>): number {
   const radius = effects['radius'] ?? 5;
-  const damage = effects['damage'] ?? 0;
   const slowed: number[] = [];
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
@@ -228,19 +228,20 @@ function frostBurst(world: World, cx: number, cz: number, effects: Record<string
     if (!world.level.hasLineOfSight(cx, cz, enemy.x, enemy.z)) continue;
     const stacks = (enemy.frostStacks ?? 0) + 1;
     enemy.frostStacks = stacks;
+    const damage = stacks === 1 ? (effects['damageFirst'] ?? effects['damage'] ?? 0) : (effects['damage'] ?? 0);
     if (stacks >= 3) {
       const freeze = (effects['freezeTicks'] ?? 0) + (stacks - 3) * (effects['freezeExtraTicks'] ?? 0);
       enemy.freezeTicks = Math.max(enemy.freezeTicks ?? 0, freeze);
       enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, enemy.freezeTicks + (effects['afterFreezeSlowTicks'] ?? 0));
       enemy.slowMul = effects['slowMul'] ?? 0.5;
-      enemy.frozenDamage = damage; // 깨질 때 한 번 — 겹이 쌓여도 종전과 같다
+      enemy.frozenDamage = effects['breakDamage'] ?? damage; // 깨질 때 한 번 — 겹이 쌓여도 같다
     } else {
       enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, effects['slowTicks'] ?? 0);
       enemy.slowMul = stacks === 1 ? (effects['slowMulLight'] ?? 0.7) : (effects['slowMul'] ?? 0.5);
     }
     slowed.push(enemy.id);
     world.events.emit('enemy_slowed', { enemyId: enemy.id, ticks: enemy.slowTicks, stacks });
-    if (damage > 0) skillDamage(world, enemy, damage, 'frost'); // 매 타 같은 피해 (죽으면 겹은 의미 없다)
+    if (damage > 0) skillDamage(world, enemy, damage, 'frost'); // 첫 타는 약하게, 둘째부터 제 피해
   }
   // 연속 시전 — 창 안에 이어지면 겹, 아니면 처음부터
   const combo = world.frostCombo;

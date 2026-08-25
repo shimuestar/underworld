@@ -421,7 +421,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     }
   }
 
-  it('서리 중첩: 1타 약한 둔화 → 2타 완전 둔화 → 3타 빙결(깨질 때 한 번 더) → 4타 빙결 +1초. 매 타 같은 피해', () => {
+  it('서리 중첩: 1타 약한 둔화(6) → 2타 완전 둔화(12) → 3타 빙결(12, 깨질 때 15) → 4타 빙결 +1초(12)', () => {
     Sigils.acquire(world, 'sig_frost');
     world.mana.value = 500;
     const fx = sigilDef('sig_frost').effects;
@@ -436,40 +436,44 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
       castSlot(1);
       flyBolt();
     };
-    // 1타 — 얼지 않고 약하게 느려진다, 피해 15
+    const d1 = fx['damageFirst']!;
+    const d = fx['damage']!;
+    const dBreak = fx['breakDamage']!;
+    // 1타 — 얼지 않고 약하게 느려진다, 피해 6
     shoot();
     for (const e of [hit, near]) {
       expect(e.frostStacks).toBe(1);
       expect(e.freezeTicks ?? 0).toBe(0);
       expect(e.slowMul).toBe(fx['slowMulLight']);
       expect(e.slowTicks).toBe(fx['slowTicks']);
-      expect(e.health).toBe(full - fx['damage']!);
+      expect(e.health).toBe(full - d1);
     }
     expect(far.frostStacks ?? 0).toBe(0);
-    // 2타 — 완전 둔화, 피해 +15
+    // 2타 — 완전 둔화, 피해 +12
     shoot();
     expect(hit.frostStacks).toBe(2);
     expect(hit.freezeTicks ?? 0).toBe(0);
     expect(hit.slowMul).toBe(fx['slowMul']);
-    expect(hit.health).toBe(full - fx['damage']! * 2);
-    // 3타 — 빙결 2초, 피해 +15, 깨질 때 15 예약
+    expect(hit.health).toBe(full - d1 - d);
+    // 3타 — 빙결 2초, 피해 +12, 깨질 때 15 예약
     shoot();
     expect(hit.frostStacks).toBe(3);
     expect(hit.freezeTicks).toBe(fx['freezeTicks']);
     expect(hit.slowTicks).toBe(fx['freezeTicks']! + fx['afterFreezeSlowTicks']!);
-    expect(hit.health).toBe(full - fx['damage']! * 3);
-    expect(hit.frozenDamage).toBe(fx['damage']);
-    // 4타 — 빙결이 1초 늘고, 피해 +15, 깨질 때 피해는 그대로 15
+    expect(hit.health).toBe(full - d1 - d * 2);
+    expect(hit.frozenDamage).toBe(dBreak);
+    // 4타 — 빙결이 1초 늘고, 피해 +12, 깨질 때 피해는 그대로 15
     shoot();
     expect(hit.frostStacks).toBe(4);
     expect(hit.freezeTicks).toBe(fx['freezeTicks']! + fx['freezeExtraTicks']!);
-    expect(hit.health).toBe(full - fx['damage']! * 4);
-    expect(hit.frozenDamage).toBe(fx['damage']);
+    expect(hit.health).toBe(full - d1 - d * 3);
+    expect(hit.frozenDamage).toBe(dBreak);
     // 얼음이 깨지면 15 한 번 — 그 뒤 둔화, 둔화가 끝나면 겹이 0
     const frozenFor = hit.freezeTicks!; // 루프 안에서 줄어드는 값이라 미리 잡아 둔다
     for (let i = 0; i < frozenFor; i++) Enemies.tick(world, DT);
     expect(hit.freezeTicks).toBe(0);
-    expect(hit.health).toBe(full - fx['damage']! * 5);
+    expect(hit.health).toBe(full - d1 - d * 3 - dBreak);
+    expect([d1, d, dBreak]).toEqual([6, 12, 15]); // 2026-08 결정
     expect(hit.frostStacks).toBe(4); // 둔화 중엔 겹이 남는다
     while ((hit.slowTicks ?? 0) > 0) Enemies.tick(world, DT);
     expect(hit.frostStacks).toBe(0);
