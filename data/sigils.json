@@ -17,7 +17,7 @@
 
     { "id": "sig_reflect",     "name": "반사막", "desc": "반사 판정 창이 넓어진다",      "slot": "leftArm",  "tier": "passive", "zone": 4, "slice": false, "color": "#56d6ff", "effects": { "deflectWindowTicks": 12 } },
     { "id": "sig_absorb",      "name": "흡수 방벽", "desc": "피해 80을 흡수해 절반을 마나로",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": false, "color": "#9b5de5", "effects": { "absorbAmount": 80, "toManaRatio": 0.5 } },
-    { "id": "sig_frost",       "name": "서리 폭발", "desc": "얼음 화살을 쏜다 — 닿는 곳 8.5m 안의 적을 2초 얼려 세우고, 깨질 때 다치며, 이어 3초 느리다",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": true, "color": "#a8e6ff", "cast": "icebolt", "effects": { "manaCost": 35, "cooldownTicks": 180, "damage": 15, "freezeTicks": 120, "slowTicks": 300,  "radius": 8.5, "slowMul": 0.4, "speed": 32, "lifeTicks": 90, "boltRadius": 0.22, "burstPullback": 0.35 } },
+    { "id": "sig_frost",       "name": "서리 폭발", "desc": "얼음 화살을 쏜다 — 닿는 곳 8.5m 안의 적을 2초 얼려 세우고, 깨질 때 다치며, 이어 3초 느리다",   "slot": "leftArm",  "tier": "medium",  "zone": 2, "slice": true, "color": "#a8e6ff", "cast": "icebolt", "effects": { "manaCost": 22, "cooldownTicks": 30, "damage": 15, "freezeTicks": 120, "slowTicks": 300,  "radius": 8.5, "slowMul": 0.4, "speed": 32, "lifeTicks": 90, "boltRadius": 0.22, "burstPullback": 0.35 } },
     { "id": "sig_gravity",     "name": "중력장", "desc": "9m 안의 적을 띄운다",      "slot": "leftArm",  "tier": "large",   "zone": 5, "slice": false, "color": "#7a68b8", "effects": { "radius": 9, "liftTicks": 120 } },
     { "id": "sig_curse",       "name": "저주 부여", "desc": "저주받은 적은 피해를 1.4배 받는다",   "slot": "leftArm",  "tier": "small",   "zone": 4, "slice": false, "color": "#b02fa0", "effects": { "damageTakenMul": 1.4 } },
 
