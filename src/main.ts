@@ -368,6 +368,7 @@ for (const name of [
   'frost_nova',
   'frost_impact',
   'enemy_frozen',
+  'enemy_shocked',
   'enemy_thawed',
   'enemy_freeze_ended',
   'blink',
@@ -540,6 +541,14 @@ events.on('lightning_beam', (payload) => {
   // 벽·바닥·천장에 닿아 있으면 그 자리가 탄다. 적을 맞히는 중이면 그 뒤 벽이 탄다
   if (b.surface) stage.scorchSurface(b.ex, b.ey, b.ez, b.surface, b.axis, b.dx, b.dz);
   for (const id of b.hits) stage.electrifyEnemy(id); // 꿴 적의 몸에 전류가 흐른다
+});
+// 감전 — 그 자세 그대로 굳어 좌우로 떤다. 가까우면 몸에 울린다
+events.on('enemy_shocked', (payload) => {
+  const e = payload as { enemyId: number; x: number; z: number };
+  audio.play('shock');
+  stage.electrifyEnemy(e.enemyId);
+  const d = Math.hypot(e.x - world.player.x, e.z - world.player.z);
+  if (d < 8) stage.triggerCameraKick(0.25 * (1 - d / 8), 160);
 });
 // 뇌창이 통을 지지고 있다 — 띠가 전기색으로 물들며 지직거린다
 events.on('barrel_zapped', (payload) => {

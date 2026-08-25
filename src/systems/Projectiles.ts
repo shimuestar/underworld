@@ -322,7 +322,10 @@ function chainLightning(
       bx: nodeX(node), by: nodeY(node), bz: nodeZ(node),
     });
     if (node.kind === 'enemy') {
-      if (!blocked) skillDamage(world, node.enemy, damage, 'lightning_chain');
+      if (!blocked) {
+        skillDamage(world, node.enemy, damage, 'lightning_chain');
+        shockEnemy(world, node.enemy, zapPerLink, effects); // 통과 같은 셈법 — 초당 60틱
+      }
       shocked.push(node.enemy.id); // 막혀도 몸에 전기는 흐른다
     } else {
       zapBarrel(world, node.barrel, zapPerLink);
@@ -332,6 +335,28 @@ function chainLightning(
     from = node;
   }
   if (links.length > 0) world.events.emit('lightning_chain', { links, hits: shocked, barrels: zapped });
+}
+
+/** 적이 지져진 시간을 쌓는다 — 끊기지 않고 shockChargeTicks(2.5초) 이어지면 감전 경직.
+ *  빙결과 같은 규약이라 하던 동작은 그대로 멈췄다가 풀리는 순간 이어진다.
+ *  마법 방어막이 살아 있는 적은 전기를 흘려보낼 뿐 감전되지 않는다 */
+function shockEnemy(
+  world: World,
+  enemy: EnemyState,
+  ticks: number,
+  effects: Record<string, number>,
+): void {
+  const need = effects['shockChargeTicks'] ?? 0;
+  if (need <= 0) return;
+  enemy.shockGrace = Math.max(1, effects['shockGraceTicks'] ?? 12);
+  if ((enemy.shockTicks ?? 0) > 0) return; // 이미 떨고 있다 — 그 위에 겹쳐 쌓지 않는다
+  enemy.shockCharge = (enemy.shockCharge ?? 0) + ticks;
+  if (enemy.shockCharge < need) return;
+  enemy.shockCharge = 0; // 풀리면 처음부터 다시 쌓아야 한다
+  enemy.shockTicks = effects['shockTicks'] ?? 60;
+  world.events.emit('enemy_shocked', {
+    enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, ticks: enemy.shockTicks,
+  });
 }
 
 /** 통을 ticks 만큼 지진다 — 때리는 게 아니라 시간이 쌓이는 방식이라
@@ -456,6 +481,7 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
     if (damaging) skillDamage(world, enemy, effects['damage'] ?? 0, 'lightning');
     hits.push(enemy.id);
     struck.push(enemy);
+    shockEnemy(world, enemy, 1, effects); // 닿아 있는 시간이 기준 — 타(pulse)와 무관하다
   }
   // 연쇄 — 처음 맞은 대상을 기준으로 옮겨붙는다. 적을 못 맞히고 통에서 멈춘 빔이면
   // 그 통이 시작점이다 (통에 쏴서 주변 적을 지지는 쓰임)

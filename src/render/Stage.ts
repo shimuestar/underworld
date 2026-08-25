@@ -615,6 +615,10 @@ const BARREL_ZAP_ACTIVE_MS = 120; // 이 시간 안에 지져졌으면 "지금 �
 const ZAP_BODY_MS = 260; // 타 간격(100ms)보다 길어 붙들고 있으면 끊기지 않는다
 const ZAP_BODY_SEGMENTS = 7;
 const ZAP_BODY_COLOR = 0x9fd8ff;
+// 감전 경직 — 자세는 그대로 두고 몸만 좌우로 떤다
+const SHOCK_SHAKE_AMP = 0.055; // 좌우 흔들림 폭 (m)
+const SHOCK_SHAKE_HZ = 26;
+const SHOCK_ROLL = 0.055; // 몸통이 같이 기우뚱하는 각 (rad)
 const BARRIER_SHARD_COUNT = 26;
 const PROJECTILE_DEBRIS_COUNT = 16; // 공중에서 깨진 투사체 파편 // 방어막 파편 — 사망 파편보다 많게 (막이 통째로 터진다)
 const DEATH_PARTICLE_LIFE_MS = 650;
@@ -2109,12 +2113,17 @@ export class Stage {
 
       // 도약 중이면 지면에서 뜬다 (검은 거미의 몸통 박치기)
       const jumpY = (enemy.prevJumpY ?? 0) + ((enemy.jumpY ?? 0) - (enemy.prevJumpY ?? 0)) * alpha;
+      // 감전 — 제자리에서 좌우로 떤다. 자세(torso 회전)는 AI 가 멈춰 있어 그대로 유지되고,
+      // 여기서는 몸을 옆으로 밀고 살짝 기울이기만 한다 — 풀리면 하던 동작이 그대로 이어진다
+      const shocked = (enemy.shockTicks ?? 0) > 0;
+      const shake = shocked ? Math.sin((now / 1000) * SHOCK_SHAKE_HZ * Math.PI * 2) : 0;
       visual.group.position.set(
-        enemy.prevX + (enemy.x - enemy.prevX) * alpha,
+        enemy.prevX + (enemy.x - enemy.prevX) * alpha - Math.cos(enemy.yaw) * shake * SHOCK_SHAKE_AMP,
         jumpY,
-        enemy.prevZ + (enemy.z - enemy.prevZ) * alpha,
+        enemy.prevZ + (enemy.z - enemy.prevZ) * alpha + Math.sin(enemy.yaw) * shake * SHOCK_SHAKE_AMP,
       );
       visual.group.rotation.y = enemy.yaw;
+      if (shocked) visual.zapUntil = Math.max(visual.zapUntil ?? 0, now + 40); // 떠는 내내 전류가 보인다
 
       // 텔레그래프 — 섬광은 windup 종료 visualLeadTicks 전부터 판정 창 내내.
       // 색은 공격 유형 규약: 청=패링 가능, 적=회피 전용, 보라=마법 투사체.
@@ -2208,6 +2217,9 @@ export class Stage {
         material.emissive.set(emissive);
         material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
       }
+      // 떨림의 기우뚱. z 회전은 이 연출만 쓰므로 매 프레임 절대값으로 넣는다 —
+      // 자세를 만드는 x 회전(기울임·내지름)은 건드리지 않는다
+      visual.torso.rotation.z = shocked ? shake * SHOCK_ROLL : 0;
 
       // 인지 표시 — 뛰어올랐다(팝) 잠깐 머물고 옅어진다
       const alertStart = this.alertAt.get(enemy.id);

@@ -23,6 +23,7 @@ export type SoundName =
   | 'cast_frost'
   | 'blink'
   | 'thaw'
+  | 'shock'
   | 'freeze'
   | 'spell_impact'
   | 'pickup'
@@ -268,6 +269,14 @@ export class GameAudio {
         this.tone(1400, 0.35, 'sine', 0.3, 0, 500);
         this.tone(2100, 0.25, 'triangle', 0.2, 0.05, 900);
         this.noise(0.4, 0.3, 2400);
+        break;
+      case 'shock':
+        // 감전 — 낮게 우는 전류에 지직거리는 노이즈가 겹친다 (얼어붙는 소리와 대비되게 거칠게)
+        this.tone(70, 0.5, 'sawtooth', 0.5, 0, 58);
+        this.tone(148, 0.45, 'square', 0.3, 0, 132);
+        this.noise(0.5, 0.5, 3200);
+        this.noise(0.1, 0.6, 5200, 0.12);
+        this.noise(0.1, 0.5, 4600, 0.3);
         break;
       case 'freeze':
         // 얼려짐 — 묵직한 쿵으로 잡히고, 세 번 쩍쩍 굳는 크랙, 치솟는 유리음, 긴 서리 잔향

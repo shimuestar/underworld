@@ -379,6 +379,14 @@ export interface EnemyState {
   /** 서리 — freezeTicks 동안은 완전히 굳는다(이동·회전·공격·돌진 없음). slowTicks 는 빙결을
    *  포함한 전체 지속이라, 빙결이 풀린 뒤 남은 동안 slowMul 배로 느리다 (Projectiles nova → Enemies) */
   freezeTicks?: number;
+  /** 감전 — 이 동안 AI 를 안 돌린다. 빙결과 같은 규약이라 하던 동작이 풀릴 때 그대로 이어진다.
+   *  얼음과 달리 몸이 좌우로 떨린다 (떠는 건 렌더 쪽 일) */
+  shockTicks?: number;
+  /** 끊기지 않고 지져진 누적 틱 — shockChargeTicks 를 넘기면 감전된다 */
+  shockCharge?: number;
+  /** 전기가 아직 닿아 있다고 볼 유예 틱. 0 이 되면 누적이 0 으로 돌아간다 —
+   *  "연속으로" 지져야 감전된다는 규칙이 이 유예로 표현된다 */
+  shockGrace?: number;
   slowTicks?: number;
   slowMul?: number;
   /** 얼음이 깨질 때 들어갈 피해 — 얼리는 순간이 아니라 풀리는 순간에 다친다 */

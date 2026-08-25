@@ -23,6 +23,10 @@ export function tick(world: World, dt: number): void {
 
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
+    // 감전 누적은 전기가 닿아 있는 동안만 산다 — 유예가 다하면 처음부터 다시 쌓아야 한다.
+    // "끊기지 않고 2.5초" 라는 규칙이 이 유예로 표현된다
+    if ((enemy.shockGrace ?? 0) > 0) enemy.shockGrace = (enemy.shockGrace ?? 0) - 1;
+    else if ((enemy.shockCharge ?? 0) > 0) enemy.shockCharge = 0;
     // 빙결 — AI 를 아예 안 돌린다: 이동·회전·공격 예고·돌진·방패 추적 전부 멈춘다.
     // 하던 동작은 얼음이 풀리면 그 자리에서 이어진다
     if ((enemy.freezeTicks ?? 0) > 0) {
@@ -31,6 +35,18 @@ export function tick(world: World, dt: number): void {
       enemy.prevZ = enemy.z;
       if (enemy.freezeTicks === 0) {
         world.events.emit('enemy_freeze_ended', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      }
+      if ((enemy.slowTicks ?? 0) > 0) enemy.slowTicks = (enemy.slowTicks ?? 0) - 1;
+      continue;
+    }
+    // 감전 — 빙결과 같은 규약. AI 를 안 돌리니 하던 동작이 풀릴 때 그 자리에서 이어진다.
+    // 공격 중이었다면 떨림이 끝나는 순간 그 공격을 이어서 마친다
+    if ((enemy.shockTicks ?? 0) > 0) {
+      enemy.shockTicks = (enemy.shockTicks ?? 0) - 1;
+      enemy.prevX = enemy.x;
+      enemy.prevZ = enemy.z;
+      if (enemy.shockTicks === 0) {
+        world.events.emit('enemy_shock_ended', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
       }
       if ((enemy.slowTicks ?? 0) > 0) enemy.slowTicks = (enemy.slowTicks ?? 0) - 1;
       continue;

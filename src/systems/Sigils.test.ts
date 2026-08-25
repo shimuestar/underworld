@@ -417,6 +417,66 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(Projectiles.skillCooldown(world, 'sig_lightning')).toBe(fx['cooldownTicks']);
   });
 
+  it('관통 뇌창: 끊기지 않고 2.5초를 지지면 감전돼 1초 동안 그 자세로 굳는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 500;
+    const fx = sigilDef('sig_lightning').effects;
+    const need = fx['shockChargeTicks']!;
+    const e = runnerAhead(6);
+    e.health = 100000;
+    const shocks: { enemyId: number }[] = [];
+    world.events.on('enemy_shocked', (p) => shocks.push(p as { enemyId: number }));
+    holdSlot(1, need - 1);
+    expect(shocks).toEqual([]); // 아직
+    expect(e.shockCharge).toBe(need - 1);
+    holdSlot(1, 1);
+    expect(shocks).toEqual([expect.objectContaining({ enemyId: e.id })]);
+    expect(e.shockTicks).toBe(fx['shockTicks']);
+    expect(e.shockCharge).toBe(0); // 풀리면 처음부터 다시 쌓는다
+  });
+
+  it('관통 뇌창: 감전 중에는 AI 가 멎고, 풀리면 하던 자리에서 그대로 이어진다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    const fx = sigilDef('sig_lightning').effects;
+    const e = runnerAhead(6);
+    e.ai = 'chase';
+    e.shockTicks = fx['shockTicks']!;
+    const x = e.x;
+    const z = e.z;
+    const ai = e.ai;
+    for (let i = 0; i < fx['shockTicks']!; i++) Enemies.tick(world, DT);
+    expect(e.x).toBe(x); // 한 발짝도 못 움직인다
+    expect(e.z).toBe(z);
+    expect(e.ai).toBe(ai); // 상태가 초기화되지 않는다 — 하던 걸 이어 간다
+    expect(e.shockTicks).toBe(0);
+    Enemies.tick(world, DT);
+    expect(e.x).not.toBe(x); // 풀린 다음 틱부터 다시 다가온다
+  });
+
+  it('관통 뇌창: 전기가 끊기면 누적이 0 으로 돌아간다 — "연속" 이 조건이다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 500;
+    const fx = sigilDef('sig_lightning').effects;
+    const e = runnerAhead(6);
+    e.health = 100000;
+    holdSlot(1, 40);
+    expect(e.shockCharge).toBe(40);
+    // 손을 떼고 유예(shockGraceTicks)가 지나면 처음으로 돌아간다
+    for (let i = 0; i < fx['shockGraceTicks']! + 1; i++) Enemies.tick(world, DT);
+    expect(e.shockCharge).toBe(0);
+  });
+
+  it('관통 뇌창: 방어막이 살아 있는 주술사는 전기를 흘려보낼 뿐 감전되지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 500;
+    const fx = sigilDef('sig_lightning').effects;
+    const warden = add('warden', 12, 6);
+    warden.ai = 'chase';
+    holdSlot(1, fx['shockChargeTicks']! + 30);
+    expect(warden.shockTicks ?? 0).toBe(0);
+    expect(warden.shockCharge ?? 0).toBe(0);
+  });
+
   it('관통 뇌창: 맞은 적에서 가까운 순으로 옮겨붙고, 한 번마다 피해가 10% 깎인다', () => {
     Sigils.acquire(world, 'sig_lightning');
     world.mana.value = 100;
