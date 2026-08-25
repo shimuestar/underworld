@@ -515,10 +515,15 @@ events.on('frost_nova', (payload) => {
   stage.spawnNova(n.x, n.z, n.radius);
 });
 events.on('blink', () => screenFlash(0.6, 140));
-events.on('enemy_thawed', (payload) => {
+// 얼음이 깨지는 순간 — 파편이 튀고 소리가 나며 (주문 시스템이) 피해를 넣는다
+events.on('enemy_freeze_ended', (payload) => {
   const t = payload as { enemyType: string; x: number; z: number };
   stage.spawnThaw(t.x, t.z, enemyDef(t.enemyType).height);
   audio.play('thaw');
+});
+// 하나라도 얼렸으면 얼려지는 소리 (폭발음과 별개)
+events.on('frost_nova', (payload) => {
+  if (((payload as { slowed: number[] }).slowed?.length ?? 0) > 0) audio.play('freeze');
 });
 events.on('enemy_cast', (payload) => {
   const info = payload as { enemyType: string; enemyId: number };
@@ -1169,6 +1174,7 @@ Mana.init(world);
 Sigils.init(world);
 Pickups.init(world);
 LifeMotes.init(world);
+Projectiles.init(world);
 initInventory(world);
 Progression.init(world);
 Corruption.init(world);

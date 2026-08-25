@@ -354,6 +354,8 @@ export interface EnemyState {
   freezeTicks?: number;
   slowTicks?: number;
   slowMul?: number;
+  /** 얼음이 깨질 때 들어갈 피해 — 얼리는 순간이 아니라 풀리는 순간에 다친다 */
+  frozenDamage?: number;
   /** 보스 전용 — 연속 패링 누적 (parriesToStagger 도달 시 스태거) */
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */

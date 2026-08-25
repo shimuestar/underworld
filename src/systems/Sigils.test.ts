@@ -48,6 +48,7 @@ function makeWorld(): World {
   });
   Sigils.init(world);
   Mana.init(world);
+  Projectiles.init(world);
   return world;
 }
 
@@ -413,19 +414,29 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(behind.health).toBe(enemyDef('goblin_runner').health);
   });
 
-  it('서리 폭발: 반경 안의 적은 느려지고 살짝 다친다, 밖은 그대로', () => {
+  it('서리 폭발: 반경 안의 적은 얼고, 피해는 얼음이 깨질 때 들어간다. 밖은 그대로', () => {
     Sigils.acquire(world, 'sig_frost');
     world.mana.value = 100;
     const fx = sigilDef('sig_frost').effects;
+    const full = enemyDef('goblin_runner').health;
     const near = runnerAhead(3);
     const far = runnerAhead(fx['radius']! + 2);
     castSlot(1);
     expect(near.freezeTicks).toBe(fx['freezeTicks']);
     expect(near.slowTicks).toBe(fx['slowTicks']);
     expect(near.slowMul).toBe(fx['slowMul']);
-    expect(near.health).toBe(enemyDef('goblin_runner').health - fx['damage']!);
+    expect(near.health).toBe(full); // 얼리는 순간엔 안 다친다
+    expect(near.frozenDamage).toBe(fx['damage']);
     expect(far.slowTicks ?? 0).toBe(0);
-    expect(far.health).toBe(enemyDef('goblin_runner').health);
+    expect(far.health).toBe(full);
+    // 얼음이 깨지는 틱에 피해가 들어간다 (Enemies 가 enemy_freeze_ended → 주문 시스템이 넣는다)
+    for (let i = 0; i < fx['freezeTicks']! - 1; i++) Enemies.tick(world, DT);
+    expect(near.health).toBe(full);
+    Enemies.tick(world, DT);
+    expect(near.health).toBe(full - fx['damage']!);
+    expect(near.frozenDamage).toBe(0);
+    expect(near.freezeTicks).toBe(0);
+    expect(near.slowTicks).toBe(fx['slowTicks']! - fx['freezeTicks']!); // 이어서 둔화
   });
 
   it('빙결: freezeTicks 동안 이동도 공격 예고도 멈추고, 풀리면 둔화 상태로 이어진다', () => {

@@ -23,6 +23,7 @@ export type SoundName =
   | 'cast_frost'
   | 'blink'
   | 'thaw'
+  | 'freeze'
   | 'spell_impact'
   | 'pickup'
   | 'gunshot'
@@ -199,6 +200,13 @@ export class GameAudio {
         this.tone(1400, 0.35, 'sine', 0.3, 0, 500);
         this.tone(2100, 0.25, 'triangle', 0.2, 0.05, 900);
         this.noise(0.4, 0.3, 2400);
+        break;
+      case 'freeze':
+        // 얼려짐 — 유리가 굳어 가듯 올라가는 고음 + 잔 크랙
+        this.tone(600, 0.32, 'sine', 0.3, 0, 1900);
+        this.tone(900, 0.26, 'triangle', 0.2, 0.04, 2600);
+        this.noise(0.05, 0.4, 4500, 0.12);
+        this.noise(0.05, 0.3, 5200, 0.24);
         break;
       case 'thaw':
         // 해동 — 얼음이 쩍 갈라지고 잔 조각이 흩어진다

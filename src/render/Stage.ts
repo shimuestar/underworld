@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
 import { currentAttack, enemyDef, healthBarState, shieldLowered } from '../core/Entities';
-import { sigilColor, sigilDef } from '../core/SigilData';
+import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, glyphTexture } from '../level/GridLoader';
 import type {
   BarrelState,
@@ -1672,22 +1672,13 @@ export class Stage {
 
       // 해머 적중 명멸 — 무엇보다 우선한다. 켜짐/꺼짐을 빠르게 교대해 "번쩍번쩍"
       // 얼음 결정 — 얼어 있는 동안 몸에 박혀 있다. 남은 시간이 줄면 살짝 작아져 "곧 풀린다"가 읽힌다
-      const frozen = (enemy.slowTicks ?? 0) > 0;
+      const frozen = (enemy.freezeTicks ?? 0) > 0;
       if (frozen && !visual.ice) {
         visual.ice = makeIceShards(enemyDef(enemy.type));
         visual.torso.add(visual.ice);
       }
-      if (visual.ice) {
-        visual.ice.visible = frozen;
-        if (frozen) {
-          // 완전 빙결 동안은 결정이 꽉 차 있고, 풀린 뒤 둔화가 끝나 갈수록 녹아 작아진다
-          const solid = (enemy.freezeTicks ?? 0) > 0;
-          const slowTotal = Math.max(1, sigilDef('sig_frost').effects['slowTicks'] ?? 1);
-          const left = Math.min(1, (enemy.slowTicks ?? 0) / slowTotal);
-          const sc = solid ? 1 : 0.35 + 0.65 * left;
-          visual.ice.scale.set(sc, sc, sc);
-        }
-      }
+      // 결정은 완전 빙결 동안만 — 깨지는 순간 파편으로 튀고(spawnThaw), 둔화 단계는 틴트만 남는다
+      if (visual.ice) visual.ice.visible = (enemy.freezeTicks ?? 0) > 0;
       const hitLeft = visual.hitFlashUntil - now;
       let hitIntensity = 0;
       if (hitLeft > 0) {
@@ -1865,7 +1856,9 @@ export class Stage {
       // 굳은 동안 힘겹게 버티는 미세 떨림 (완전 정지는 프리즈처럼 보인다)
       if (frozenWhiff) leanTarget += Math.sin(now / 55) * 0.012;
       if (recoiled) leanTarget += 0.5 + Math.sin(now / 40) * 0.03; // 뒤로 크게 젖힘
-      const snap = striking ? 0.55 : 0.3; // 타격은 빠르게, 복귀는 부드럽게
+      // 빙결 — 보간 계수를 0으로 두면 지금 자세(달리던·찌르던 중간)가 그대로 굳는다
+      const solidIce = (enemy.freezeTicks ?? 0) > 0;
+      const snap = solidIce ? 0 : striking ? 0.55 : 0.3; // 타격은 빠르게, 복귀는 부드럽게
       visual.torso.rotation.x += (leanTarget - visual.torso.rotation.x) * snap;
       visual.torso.position.z += (lungeTarget - visual.torso.position.z) * snap;
       visual.torso.position.y += (crouchTarget - visual.torso.position.y) * snap;
@@ -1932,7 +1925,7 @@ export class Stage {
           visual.arm.rotation.y = armYawTarget;
           visual.arm.position.z = armZTarget;
         } else {
-          const armSnap = striking ? 0.6 : 0.25;
+          const armSnap = solidIce ? 0 : striking ? 0.6 : 0.25;
           visual.arm.rotation.x += (armRotTarget - visual.arm.rotation.x) * armSnap;
           visual.arm.rotation.y += (armYawTarget - visual.arm.rotation.y) * armSnap;
           visual.arm.position.z += (armZTarget - visual.arm.position.z) * armSnap;

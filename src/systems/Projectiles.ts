@@ -18,6 +18,18 @@ import { type EnemyState, pushEnemy, alertEnemy,
 
 let nextProjectileId = 1;
 
+/** 구독. 시작 시 1회 — 얼음이 깨지는 순간 예약된 피해를 넣는다 */
+export function init(world: World): void {
+  world.events.on('enemy_freeze_ended', (payload) => {
+    const { enemyId } = payload as { enemyId: number };
+    const enemy = world.enemies.find((e) => e.id === enemyId);
+    if (!enemy || !enemy.alive) return;
+    const damage = enemy.frozenDamage ?? 0;
+    enemy.frozenDamage = 0;
+    if (damage > 0) skillDamage(world, enemy, damage, 'frost');
+  });
+}
+
 export function tick(world: World, dt: number): void {
   if (world.spell.cooldown > 0) world.spell.cooldown--;
   const cds = world.spell.cooldowns;
@@ -175,7 +187,7 @@ function castBeam(world: World, effects: Record<string, number>): void {
 }
 
 /** 서리 폭발 — 내 주위 radius 안의 적을 freezeTicks 동안 완전히 세우고, 이어 slowTicks 까지 느리게 한다.
- *  살짝 다치기도 한다. 벽 너머는 안 닿는다 */
+ *  피해는 얼음이 깨지는 순간(enemy_freeze_ended) 들어간다. 벽 너머는 안 닿는다 */
 function castNova(world: World, effects: Record<string, number>): void {
   const p = world.player;
   const radius = effects['radius'] ?? 5;
@@ -187,9 +199,10 @@ function castNova(world: World, effects: Record<string, number>): void {
     enemy.freezeTicks = Math.max(enemy.freezeTicks ?? 0, effects['freezeTicks'] ?? 0);
     enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, effects['slowTicks'] ?? 0);
     enemy.slowMul = effects['slowMul'] ?? 0.5;
+    // 피해는 얼음이 깨질 때 — 지금은 예약만 (겹쳐 얼리면 쌓인다)
+    enemy.frozenDamage = (enemy.frozenDamage ?? 0) + (effects['damage'] ?? 0);
     slowed.push(enemy.id);
     world.events.emit('enemy_slowed', { enemyId: enemy.id, ticks: enemy.slowTicks });
-    if ((effects['damage'] ?? 0) > 0) skillDamage(world, enemy, effects['damage']!, 'frost');
   }
   world.events.emit('frost_nova', { x: p.x, z: p.z, radius, slowed });
 }
