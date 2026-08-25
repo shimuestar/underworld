@@ -1360,8 +1360,10 @@ export class Stage {
     surface: 'wall' | 'floor' | 'ceiling',
     axis: 'x' | 'z' | null,
     dirX: number, dirY: number, dirZ: number,
+    scale = 1,
   ): void {
     const group = new THREE.Group();
+    group.userData['fxScale'] = scale; // 첫 타는 작게 — 갱신에서 크기에 곱한다
     // 법선 — 날아온 방향의 반대쪽. 면에서 살짝 띄워 z-fighting 을 피한다
     let nx = 0, ny = 0, nz = 0;
     if (surface === 'floor') ny = 1;
@@ -1420,7 +1422,7 @@ export class Stage {
       // 첫 8% 는 퍼지며 나타나고, 마지막 30% 는 녹아 사라진다
       const grow = Math.min(1, age / 0.08);
       const melt = age > 0.7 ? 1 - (age - 0.7) / 0.3 : 1;
-      const s = 0.6 + 0.4 * grow;
+      const s = (0.6 + 0.4 * grow) * ((d.group.userData['fxScale'] as number | undefined) ?? 1);
       d.group.scale.set(s, s, s);
       d.film.opacity = 0.95 * grow * melt;
       const cs = grow * (0.2 + 0.8 * melt);

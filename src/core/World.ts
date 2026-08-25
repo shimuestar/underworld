@@ -356,6 +356,8 @@ export interface EnemyState {
   slowMul?: number;
   /** 얼음이 깨질 때 들어갈 피해 — 얼리는 순간이 아니라 풀리는 순간에 다친다 */
   frozenDamage?: number;
+  /** 서리 중첩 — 1 둔화 / 2 완전 둔화 / 3 빙결 / 4+ 빙결 연장. 둔화가 다 풀리면 0 */
+  frostStacks?: number;
   /** 보스 전용 — 연속 패링 누적 (parriesToStagger 도달 시 스태거) */
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
@@ -573,6 +575,8 @@ export class World {
   godMode = false;
   /** 스킬 테스트(U · ?skills) — 켜 있는 동안 마나가 매 틱 최대치로 돌아온다 */
   skillTestMode = false;
+  /** 서리 연속 시전 — 이펙트 크기용. 창(comboWindowTicks) 안에 이어지면 count 가 는다 */
+  frostCombo = { count: 0, lastTick: -1_000_000 };
 
   /** 출구 개방 여부 — 보스가 죽으면 열린다. 렌더·미니맵이 이 값을 본다 */
   exitOpen = false;

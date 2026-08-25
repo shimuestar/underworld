@@ -40,8 +40,9 @@ export function tick(world: World, dt: number): void {
     if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
     if ((enemy.slowTicks ?? 0) > 0) {
       enemy.slowTicks = (enemy.slowTicks ?? 0) - 1;
-      // 얼음이 풀리는 순간 — 연출·사운드가 붙는다 (죽은 채로는 안 풀린다: 위에서 걸렀다)
+      // 둔화까지 다 풀리는 순간 — 서리 겹도 사라진다 (다시 처음부터 쌓아야 언다)
       if (enemy.slowTicks === 0) {
+        enemy.frostStacks = 0;
         world.events.emit('enemy_thawed', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
       }
     }

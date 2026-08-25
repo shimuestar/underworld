@@ -512,8 +512,8 @@ events.on('lightning_cast', (payload) => {
   stage.spawnLightning(b.sx, b.sy, b.sz, b.ex, b.ey, b.ez);
 });
 events.on('frost_nova', (payload) => {
-  const n = payload as { x: number; z: number; radius: number };
-  stage.spawnNova(n.x, n.z, n.radius);
+  const n = payload as { x: number; z: number; radius: number; scale?: number };
+  stage.spawnNova(n.x, n.z, n.radius * (n.scale ?? 1)); // 첫 타는 작게
 });
 events.on('blink', () => screenFlash(0.6, 140));
 // 얼음이 깨지는 순간 — 파편이 튀고 소리가 나며 (주문 시스템이) 피해를 넣는다
@@ -532,9 +532,9 @@ events.on('frost_impact', (payload) => {
     x: number; y: number; z: number;
     surface: 'wall' | 'floor' | 'ceiling';
     axis: 'x' | 'z' | null;
-    dirX: number; dirY: number; dirZ: number;
+    dirX: number; dirY: number; dirZ: number; scale?: number;
   };
-  stage.spawnFrostDecal(f.x, f.y, f.z, f.surface, f.axis, f.dirX, f.dirY, f.dirZ);
+  stage.spawnFrostDecal(f.x, f.y, f.z, f.surface, f.axis, f.dirX, f.dirY, f.dirZ, f.scale ?? 1);
 });
 // 하나라도 얼렸으면 얼려지는 소리 (폭발음과 별개)
 events.on('frost_nova', (payload) => {

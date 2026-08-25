@@ -214,24 +214,41 @@ function castNova(world: World, effects: Record<string, number>): void {
   frostBurst(world, world.player.x, world.player.z, effects);
 }
 
-/** 서리 폭발의 실체 — (cx,cz) 주위 radius 안, 벽에 가리지 않은 적을 freezeTicks 동안 완전히
- *  세우고 이어 slowTicks 까지 느리게 한다. 피해는 얼음이 깨지는 순간(enemy_freeze_ended) 들어간다 */
-function frostBurst(world: World, cx: number, cz: number, effects: Record<string, number>): void {
+/** 서리 폭발의 실체 — (cx,cz) 주위 radius 안, 벽에 가리지 않은 적에게 서리를 한 겹 쌓는다.
+ *  매 겹 damage 를 즉시 받고, 겹 수에 따라: 1 = 약한 둔화 / 2 = 완전 둔화 / 3 = 빙결(깨질 때 damage 한 번 더)
+ *  / 4+ = 빙결 freezeExtraTicks 씩 연장. 겹은 둔화가 다 풀리면(Enemies) 0 으로 돌아간다.
+ *  이펙트 크기(scale)는 연속 시전 수로 정한다 — 첫 타는 작게, 둘째부터 제 크기 */
+function frostBurst(world: World, cx: number, cz: number, effects: Record<string, number>): number {
   const radius = effects['radius'] ?? 5;
+  const damage = effects['damage'] ?? 0;
   const slowed: number[] = [];
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
     if (Math.hypot(enemy.x - cx, enemy.z - cz) > radius) continue;
     if (!world.level.hasLineOfSight(cx, cz, enemy.x, enemy.z)) continue;
-    enemy.freezeTicks = Math.max(enemy.freezeTicks ?? 0, effects['freezeTicks'] ?? 0);
-    enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, effects['slowTicks'] ?? 0);
-    enemy.slowMul = effects['slowMul'] ?? 0.5;
-    // 피해는 얼음이 깨질 때 — 지금은 예약만 (겹쳐 얼리면 쌓인다)
-    enemy.frozenDamage = (enemy.frozenDamage ?? 0) + (effects['damage'] ?? 0);
+    const stacks = (enemy.frostStacks ?? 0) + 1;
+    enemy.frostStacks = stacks;
+    if (stacks >= 3) {
+      const freeze = (effects['freezeTicks'] ?? 0) + (stacks - 3) * (effects['freezeExtraTicks'] ?? 0);
+      enemy.freezeTicks = Math.max(enemy.freezeTicks ?? 0, freeze);
+      enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, enemy.freezeTicks + (effects['afterFreezeSlowTicks'] ?? 0));
+      enemy.slowMul = effects['slowMul'] ?? 0.5;
+      enemy.frozenDamage = damage; // 깨질 때 한 번 — 겹이 쌓여도 종전과 같다
+    } else {
+      enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, effects['slowTicks'] ?? 0);
+      enemy.slowMul = stacks === 1 ? (effects['slowMulLight'] ?? 0.7) : (effects['slowMul'] ?? 0.5);
+    }
     slowed.push(enemy.id);
-    world.events.emit('enemy_slowed', { enemyId: enemy.id, ticks: enemy.slowTicks });
+    world.events.emit('enemy_slowed', { enemyId: enemy.id, ticks: enemy.slowTicks, stacks });
+    if (damage > 0) skillDamage(world, enemy, damage, 'frost'); // 매 타 같은 피해 (죽으면 겹은 의미 없다)
   }
-  world.events.emit('frost_nova', { x: cx, z: cz, radius, slowed });
+  // 연속 시전 — 창 안에 이어지면 겹, 아니면 처음부터
+  const combo = world.frostCombo;
+  combo.count = world.tick - combo.lastTick <= (effects['comboWindowTicks'] ?? 0) ? combo.count + 1 : 1;
+  combo.lastTick = world.tick;
+  const scale = combo.count === 1 ? (effects['firstHitFxScale'] ?? 1) : 1;
+  world.events.emit('frost_nova', { x: cx, z: cz, radius, slowed, scale, combo: combo.count });
+  return scale;
 }
 
 /** 그림자 이동 — 보는 방향으로 range 까지 순간이동. 벽에 막히면 그 앞에서 멈춘다.
@@ -480,15 +497,26 @@ function moveProjectiles(world: World, dt: number): void {
           // 얼어 선 적들이 그 자리에서 폭발을 맞는 조합이다 (Barrels 는 이 뒤에 돈다)
           if (proj.kind === 'frost' && proj.owner === 'player') {
             const fx = sigilDef('sig_frost').effects;
-            frostBurst(world, bx, bz, fx);
+            const scale = frostBurst(world, bx, bz, fx);
             world.events.emit('frost_impact', {
               x: hitBarrelTarget.x, y: 0, z: hitBarrelTarget.z,
-              surface: 'floor', axis: null, dirX, dirY, dirZ,
+              surface: 'floor', axis: null, dirX, dirY, dirZ, scale,
             });
           }
         }
         world.projectiles.splice(i, 1);
         continue;
+      }
+
+      // 얼음 화살 — 무엇에 닿든 그 자리에서 광역 서리. 직격 피해는 없다 (피해는 광역으로).
+      // 착탄 이벤트보다 먼저 — 이펙트 크기(연속 시전 수)를 자국 이벤트에 실어야 한다
+      let frostFxScale = 1;
+      if (proj.kind === 'frost' && proj.owner === 'player') {
+        // 폭발 중심은 닿은 지점에서 날아온 쪽으로 조금 물린다 — 벽 경계에 딱 놓으면 중심이
+        // 벽 셀 안에 들어가 모든 적에게 시야 판정이 실패한다 (실측: 28.00 에서 아무도 안 얼었다)
+        const fx = sigilDef('sig_frost').effects;
+        const back = fx['burstPullback'] ?? 0.3;
+        frostFxScale = frostBurst(world, proj.x + dirX * (hitT - back), proj.z + dirZ * (hitT - back), fx);
       }
 
       // 착탄 — 화살은 마법 착탄음(spell_impact)이 아니라 제 소리를 낸다.
@@ -506,14 +534,14 @@ function moveProjectiles(world: World, dt: number): void {
         if (hitEnemy) {
           world.events.emit('frost_impact', {
             x: hitEnemy.x, y: 0, z: hitEnemy.z,
-            surface: 'floor', axis: null, dirX, dirY, dirZ,
+            surface: 'floor', axis: null, dirX, dirY, dirZ, scale: frostFxScale,
           });
         } else if (!impact.hitEnemy) {
           world.events.emit('frost_impact', {
             x: impact.x, y: impact.y, z: impact.z,
             surface: hitSurface,
             axis: wall.axis,
-            dirX, dirY, dirZ,
+            dirX, dirY, dirZ, scale: frostFxScale,
           });
         }
       }
@@ -536,14 +564,6 @@ function moveProjectiles(world: World, dt: number): void {
       const shieldedAtImpact =
         hitEnemy !== null && shieldBlocksProjectile(enemyDef(hitEnemy.type), hitEnemy, proj.x, proj.z);
 
-      // 얼음 화살 — 무엇에 닿든 그 자리에서 광역 빙결. 직격 피해는 없다
-      if (proj.kind === 'frost' && proj.owner === 'player') {
-        // 폭발 중심은 닿은 지점에서 날아온 쪽으로 조금 물린다 — 벽 경계에 딱 놓으면 중심이
-        // 벽 셀 안에 들어가 모든 적에게 시야 판정이 실패한다 (실측: 28.00 에서 아무도 안 얼었다)
-        const fx = sigilDef('sig_frost').effects;
-        const back = fx['burstPullback'] ?? 0.3;
-        frostBurst(world, proj.x + dirX * (hitT - back), proj.z + dirZ * (hitT - back), fx);
-      }
       // 화염구는 무엇에 닿든 그 자리에서 터진다 (벽·바닥·적 모두)
       if (proj.kind === 'fireball' && proj.owner === 'player') {
         explodeFireball(

@@ -421,32 +421,74 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     }
   }
 
-  it('서리 폭발: 얼음 화살이 적에 닿으면 그 주변 적이 전부 얼고, 피해는 얼음이 깨질 때', () => {
+  it('서리 중첩: 1타 약한 둔화 → 2타 완전 둔화 → 3타 빙결(깨질 때 한 번 더) → 4타 빙결 +1초. 매 타 같은 피해', () => {
     Sigils.acquire(world, 'sig_frost');
-    world.mana.value = 100;
+    world.mana.value = 500;
     const fx = sigilDef('sig_frost').effects;
-    const full = enemyDef('goblin_runner').health;
-    const hit = runnerAhead(6); // x=12 — 화살에 직격
-    const near = runnerAhead(12); // x=18 — 직격 지점에서 6m, 반경(8.5) 안
-    const far = runnerAhead(20); // x=26 — 14m 밖
-    castSlot(1);
-    expect(world.projectiles.filter((p) => p.kind === 'frost')).toHaveLength(1);
-    expect(hit.freezeTicks ?? 0).toBe(0); // 아직 날아가는 중
-    flyBolt();
-    expect(world.projectiles.filter((p) => p.kind === 'frost')).toHaveLength(0);
+    const full = 1000;
+    const hit = runnerAhead(6); // x=12 — 직격
+    const near = runnerAhead(12); // x=18 — 6m 옆, 반경 안
+    hit.health = full;
+    near.health = full;
+    const far = runnerAhead(20); // 14m 밖
+    const shoot = (): void => {
+      world.spell.cooldowns = {}; // 쿨다운은 여기서 안 본다
+      castSlot(1);
+      flyBolt();
+    };
+    // 1타 — 얼지 않고 약하게 느려진다, 피해 15
+    shoot();
     for (const e of [hit, near]) {
-      expect(e.freezeTicks).toBe(fx['freezeTicks']);
+      expect(e.frostStacks).toBe(1);
+      expect(e.freezeTicks ?? 0).toBe(0);
+      expect(e.slowMul).toBe(fx['slowMulLight']);
       expect(e.slowTicks).toBe(fx['slowTicks']);
-      expect(e.health).toBe(full); // 얼리는 순간엔 안 다친다 (직격도 마찬가지)
-      expect(e.frozenDamage).toBe(fx['damage']);
+      expect(e.health).toBe(full - fx['damage']!);
     }
-    expect(far.freezeTicks ?? 0).toBe(0);
-    expect(far.health).toBe(full);
-    // 얼음이 깨지는 틱에 둘 다 다친다
-    for (let i = 0; i < fx['freezeTicks']!; i++) Enemies.tick(world, DT);
-    expect(hit.health).toBe(full - fx['damage']!);
-    expect(near.health).toBe(full - fx['damage']!);
-    expect(hit.slowTicks).toBe(fx['slowTicks']! - fx['freezeTicks']!); // 이어서 둔화
+    expect(far.frostStacks ?? 0).toBe(0);
+    // 2타 — 완전 둔화, 피해 +15
+    shoot();
+    expect(hit.frostStacks).toBe(2);
+    expect(hit.freezeTicks ?? 0).toBe(0);
+    expect(hit.slowMul).toBe(fx['slowMul']);
+    expect(hit.health).toBe(full - fx['damage']! * 2);
+    // 3타 — 빙결 2초, 피해 +15, 깨질 때 15 예약
+    shoot();
+    expect(hit.frostStacks).toBe(3);
+    expect(hit.freezeTicks).toBe(fx['freezeTicks']);
+    expect(hit.slowTicks).toBe(fx['freezeTicks']! + fx['afterFreezeSlowTicks']!);
+    expect(hit.health).toBe(full - fx['damage']! * 3);
+    expect(hit.frozenDamage).toBe(fx['damage']);
+    // 4타 — 빙결이 1초 늘고, 피해 +15, 깨질 때 피해는 그대로 15
+    shoot();
+    expect(hit.frostStacks).toBe(4);
+    expect(hit.freezeTicks).toBe(fx['freezeTicks']! + fx['freezeExtraTicks']!);
+    expect(hit.health).toBe(full - fx['damage']! * 4);
+    expect(hit.frozenDamage).toBe(fx['damage']);
+    // 얼음이 깨지면 15 한 번 — 그 뒤 둔화, 둔화가 끝나면 겹이 0
+    const frozenFor = hit.freezeTicks!; // 루프 안에서 줄어드는 값이라 미리 잡아 둔다
+    for (let i = 0; i < frozenFor; i++) Enemies.tick(world, DT);
+    expect(hit.freezeTicks).toBe(0);
+    expect(hit.health).toBe(full - fx['damage']! * 5);
+    expect(hit.frostStacks).toBe(4); // 둔화 중엔 겹이 남는다
+    while ((hit.slowTicks ?? 0) > 0) Enemies.tick(world, DT);
+    expect(hit.frostStacks).toBe(0);
+  });
+
+  it('서리 이펙트 크기: 첫 타는 작고, 창 안에 이어지는 둘째부터는 제 크기', () => {
+    Sigils.acquire(world, 'sig_frost');
+    world.mana.value = 500;
+    const fx = sigilDef('sig_frost').effects;
+    const scales: number[] = [];
+    world.events.on('frost_nova', (p) => scales.push((p as { scale: number }).scale));
+    const shoot = (): void => { world.spell.cooldowns = {}; castSlot(1); flyBolt(); };
+    shoot();
+    shoot();
+    shoot();
+    expect(scales).toEqual([fx['firstHitFxScale'], 1, 1]);
+    world.tick += fx['comboWindowTicks']! + 1; // 창이 지나면 다시 처음
+    shoot();
+    expect(scales[3]).toBe(fx['firstHitFxScale']);
   });
 
   it('서리 폭발: 폭발통에 맞으면 통이 점화되고 그 자리에서도 광역 빙결이 터진다 — 통 발밑에 서리 자국', () => {
@@ -461,8 +503,10 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     castSlot(1);
     flyBolt();
     expect(world.barrels[0]!.fuseTicks).toBe(0); // 점화
-    expect(beside.freezeTicks).toBe(fx['freezeTicks']); // 통 주변도 언다
-    expect(impacts).toEqual([{ surface: 'floor', x: 14, z: 6, y: 0, axis: null, dirX: expect.any(Number), dirY: expect.any(Number), dirZ: expect.any(Number) }]);
+    expect(beside.frostStacks).toBe(1); // 통 주변도 서리가 쌓인다
+    expect(beside.slowMul).toBe(fx['slowMulLight']);
+    expect(impacts).toHaveLength(1);
+    expect(impacts[0]).toMatchObject({ surface: 'floor', x: 14, z: 6 });
   });
 
   it('서리 폭발: 적을 직격하면 그 적의 발밑 바닥에 서리 자국이 생긴다', () => {
@@ -488,8 +532,9 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     const farBack = add('goblin_runner', 10, 7.6); // 벽에서 18m
     castSlot(1);
     flyBolt();
-    expect(byWall.freezeTicks).toBe(fx['freezeTicks']);
-    expect(farBack.freezeTicks ?? 0).toBe(0);
+    expect(byWall.frostStacks).toBe(1);
+    expect(byWall.slowTicks).toBe(fx['slowTicks']);
+    expect(farBack.frostStacks ?? 0).toBe(0);
   });
 
   it('빙결: freezeTicks 동안 이동도 공격 예고도 멈추고, 풀리면 둔화 상태로 이어진다', () => {
