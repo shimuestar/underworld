@@ -37,6 +37,33 @@ function swatch(color: string): HTMLElement {
   return dot;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function svgEl<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attrs: Record<string, string | number>,
+): SVGElementTagNameMap[K] {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  return el;
+}
+
+/** 실루엣 위 소켓 자리와 이름표 자리 (정면 — 그림의 오른팔이 보는 사람의 왼쪽).
+ *  이름표는 좌우로 나눠 겹치지 않게 했고, 소켓에서 이름표로 가는 안내선을 긋는다 */
+const BODY_ANCHORS: Record<
+  SigilSlot,
+  { x: number; y: number; side: 'left' | 'right'; labelY: number }
+> = {
+  eye: { x: 180, y: 42, side: 'right', labelY: 42 },
+  heart: { x: 193, y: 104, side: 'right', labelY: 96 },
+  leftArm: { x: 233, y: 122, side: 'right', labelY: 140 },
+  rightArm: { x: 127, y: 122, side: 'left', labelY: 122 },
+  spine: { x: 180, y: 140, side: 'left', labelY: 164 },
+};
+const BODY_W = 360;
+const BODY_H = 250;
+const BODY_LINE = '#3a3f4a';
+const BODY_FILL = '#1c1f27';
+
 const CELL = 'width:64px;height:64px;box-sizing:border-box;position:relative;';
 /** 칸(64px) 안에서 숫자·번호와 부딪히지 않는 크기 */
 const ICON_PX = 28;
@@ -102,7 +129,7 @@ export class InventoryUI {
   private rebuild(): void {
     const panel = document.createElement('div');
     panel.style.cssText =
-      'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;min-width:560px;';
+      'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;min-width:640px;';
 
     panel.appendChild(this.buildQuickslots());
     panel.appendChild(this.buildBag());
@@ -247,71 +274,168 @@ export class InventoryUI {
     title.style.cssText = 'color:#9fe870;margin-bottom:10px;font-size:15px;';
     box.appendChild(title);
 
-    for (const slot of SIGIL_SLOTS) {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;gap:10px;padding:3px 0;align-items:baseline;';
-      const label = document.createElement('span');
-      label.textContent = SLOT_LABELS[slot].padEnd(3, '　');
-      label.style.cssText = 'color:#8a8f9a;width:52px;';
-      row.appendChild(label);
+    // 왼쪽 = 몸 실루엣(부위별 소켓), 오른쪽 = 소지한 각인
+    const columns = document.createElement('div');
+    columns.style.cssText = 'display:flex;gap:22px;align-items:flex-start;';
+    const { svg, sockets } = this.buildBody();
+    columns.appendChild(svg);
 
-      const equipped = world.sigils.equipped[slot];
-      const value = document.createElement('span');
-      if (equipped) {
-        const def = sigilDef(equipped);
-        row.appendChild(swatch(def.color));
-        if (this.altarMode) {
-          value.textContent = `[${def.name}] — 클릭해서 해제`;
-          value.style.cssText = 'color:#e8c76a;cursor:pointer;';
-          value.onclick = () => {
-            Sigils.detach(world, slot);
-            this.rebuild();
-          };
-        } else {
-          value.textContent = `[${def.name}] — 해제는 제단에서만`;
-          value.style.color = '#8a8f9a';
-        }
-      } else {
-        value.textContent = '(비어 있음)';
-        value.style.color = '#555c66';
-      }
-      row.appendChild(value);
-      box.appendChild(row);
-    }
-
+    const list = document.createElement('div');
+    list.style.cssText = 'flex:1;min-width:230px;';
     const invTitle = document.createElement('div');
     invTitle.textContent = '소지한 각인 (부착 전에는 효과 없음)';
-    invTitle.style.cssText = 'color:#9fe870;margin:12px 0 4px;';
-    box.appendChild(invTitle);
+    invTitle.style.cssText = 'color:#9fe870;margin:0 0 6px;';
+    list.appendChild(invTitle);
 
     if (world.sigils.inventory.length === 0) {
       const empty = document.createElement('div');
       empty.textContent = '없음 — 창병을 완벽 패링 후 처형하면 각인을 떨어뜨린다';
       empty.style.color = '#555c66';
-      box.appendChild(empty);
+      list.appendChild(empty);
     }
     for (const id of world.sigils.inventory) {
       const def = sigilDef(id);
       const row = document.createElement('div');
       const occupied = world.sigils.equipped[def.slot] !== null;
       row.style.cssText = occupied
-        ? 'color:#555c66;padding:2px 0;'
-        : 'color:#7fbfff;cursor:pointer;padding:2px 0;';
+        ? 'color:#555c66;padding:3px 0;'
+        : 'color:#7fbfff;cursor:pointer;padding:3px 0;';
       row.appendChild(swatch(def.color));
       row.appendChild(
         document.createTextNode(
-          `${def.name} (${SLOT_LABELS[def.slot]}) — ${occupied ? '슬롯 사용 중' : '클릭해서 부착'}`,
+          `${def.name} → ${SLOT_LABELS[def.slot]} — ${occupied ? '부위 사용 중' : '클릭해서 부착'}`,
         ),
       );
+      // 목록에 마우스를 올리면 들어갈 부위가 몸 위에서 밝아진다 — 어디에 붙는지 읽힌다
+      const socket = sockets[def.slot];
+      row.onmouseenter = () => socket.setAttribute('data-hover', occupied ? 'blocked' : 'target');
+      row.onmouseleave = () => socket.removeAttribute('data-hover');
       if (!occupied) {
         row.onclick = () => {
           Sigils.attach(this.world, id);
           this.rebuild();
         };
       }
-      box.appendChild(row);
+      list.appendChild(row);
     }
+    const note = document.createElement('div');
+    note.textContent = this.altarMode
+      ? '몸 위의 각인을 클릭하면 떼어 낸다'
+      : '떼어 내는 건 제단에서만 된다';
+    note.style.cssText = 'margin-top:10px;color:#6c7280;font-size:11px;';
+    list.appendChild(note);
+    columns.appendChild(list);
+    box.appendChild(columns);
     return box;
+  }
+
+  /** 몸 실루엣 — 부위마다 소켓. 장착된 각인의 색으로 그 부위 윤곽이 물들고 소켓이 빛난다 */
+  private buildBody(): { svg: SVGSVGElement; sockets: Record<SigilSlot, SVGCircleElement> } {
+    const world = this.world;
+    const svg = svgEl('svg', {
+      width: BODY_W,
+      height: BODY_H,
+      viewBox: `0 0 ${BODY_W} ${BODY_H}`,
+    });
+    svg.style.cssText = 'flex:none;display:block;';
+    const style = svgEl('style', {});
+    style.textContent =
+      '.part{fill:' + BODY_FILL + ';stroke:' + BODY_LINE + ';stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
+      '.limb{fill:none;stroke:' + BODY_LINE + ';stroke-width:13;stroke-linecap:round}' +
+      '.socket{fill:#10131a;stroke:#555c66;stroke-width:2;stroke-dasharray:3 3}' +
+      '.socket.on{stroke-dasharray:none}' +
+      '.socket[data-hover=target]{stroke:#fff;stroke-width:3;stroke-dasharray:none;animation:sockpulse .7s ease-in-out infinite alternate}' +
+      '.socket[data-hover=blocked]{stroke:#e04444;stroke-width:3;stroke-dasharray:none}' +
+      '@keyframes sockpulse{from{r:9}to{r:12}}' +
+      '.lead{stroke:#3a3f4a;stroke-width:1}' +
+      '.lbl{font:12px monospace;fill:#8a8f9a}' +
+      '.val{font:12px monospace}';
+    svg.appendChild(style);
+
+    // 부위별 색 — 장착된 각인 색, 없으면 기본 윤곽색
+    const tint = (slot: SigilSlot): string => {
+      const id = world.sigils.equipped[slot];
+      return id ? sigilDef(id).color : BODY_LINE;
+    };
+    const glow = (el: SVGElement, color: string): void => {
+      el.style.filter = `drop-shadow(0 0 5px ${color})`;
+    };
+
+    // 머리·몸통·팔·다리 (정면). 그림의 오른팔 = 보는 사람의 왼쪽
+    const head = svgEl('circle', { class: 'part', cx: 180, cy: 42, r: 21 });
+    const torso = svgEl('path', {
+      class: 'part',
+      d: 'M160,68 L200,68 Q212,68 212,82 L212,164 Q212,172 204,172 L156,172 Q148,172 148,164 L148,82 Q148,68 160,68 Z',
+    });
+    const rightArm = svgEl('line', { class: 'limb', x1: 152, y1: 80, x2: 126, y2: 132 });
+    const leftArm = svgEl('line', { class: 'limb', x1: 208, y1: 80, x2: 234, y2: 132 });
+    const legL = svgEl('line', { class: 'limb', x1: 168, y1: 176, x2: 163, y2: 238 });
+    const legR = svgEl('line', { class: 'limb', x1: 192, y1: 176, x2: 197, y2: 238 });
+    const spine = svgEl('line', {
+      class: 'lead', x1: 180, y1: 74, x2: 180, y2: 166, 'stroke-dasharray': '4 3', 'stroke-width': 2,
+    });
+    for (const el of [legL, legR, rightArm, leftArm, torso, head, spine]) svg.appendChild(el);
+
+    // 장착 부위 물들이기
+    const partOf: Record<SigilSlot, SVGElement> = { eye: head, heart: torso, spine, rightArm, leftArm };
+    for (const slot of SIGIL_SLOTS) {
+      const id = world.sigils.equipped[slot];
+      if (!id) continue;
+      const color = tint(slot);
+      partOf[slot].setAttribute('stroke', color);
+      if (slot === 'heart') torso.setAttribute('fill', '#1f1a24'); // 심장이 뛰면 몸통이 살짝 따뜻해진다
+      glow(partOf[slot], color);
+    }
+
+    // 소켓 + 이름표
+    const sockets = {} as Record<SigilSlot, SVGCircleElement>;
+    for (const slot of SIGIL_SLOTS) {
+      const a = BODY_ANCHORS[slot];
+      const id = world.sigils.equipped[slot];
+      const labelX = a.side === 'left' ? 112 : 248;
+      const lead = svgEl('line', {
+        class: 'lead', x1: a.x, y1: a.y, x2: a.side === 'left' ? labelX + 4 : labelX - 4, y2: a.labelY,
+      });
+      svg.appendChild(lead);
+
+      const socket = svgEl('circle', { class: 'socket' + (id ? ' on' : ''), cx: a.x, cy: a.y, r: 9 });
+      socket.dataset.slot = slot;
+      if (id) {
+        const def = sigilDef(id);
+        socket.setAttribute('fill', def.color);
+        socket.setAttribute('stroke', def.color);
+        glow(socket, def.color);
+        if (this.altarMode) {
+          socket.style.cursor = 'pointer';
+          socket.onclick = () => {
+            Sigils.detach(world, slot);
+            this.rebuild();
+          };
+        }
+      }
+      svg.appendChild(socket);
+      sockets[slot] = socket;
+
+      const anchor = a.side === 'left' ? 'end' : 'start';
+      const lbl = svgEl('text', { class: 'lbl', x: labelX, y: a.labelY - 3, 'text-anchor': anchor });
+      lbl.textContent = SLOT_LABELS[slot];
+      svg.appendChild(lbl);
+      const val = svgEl('text', { class: 'val', x: labelX, y: a.labelY + 11, 'text-anchor': anchor });
+      if (id) {
+        const def = sigilDef(id);
+        val.textContent = def.name;
+        val.setAttribute('fill', def.color);
+        if (this.altarMode) {
+          val.style.cursor = 'pointer';
+          val.onclick = socket.onclick;
+        }
+      } else {
+        val.textContent = '비어 있음';
+        val.setAttribute('fill', '#555c66');
+      }
+      svg.appendChild(val);
+    }
+    return { svg, sockets };
   }
 }
 
