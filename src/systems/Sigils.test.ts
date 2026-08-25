@@ -496,6 +496,56 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(far.health).toBe(1000); // 가까운 쪽으로 휜 빔의 선 밖
   });
 
+  it('관통 뇌창: 빔이 멈춘 면을 벽·바닥·천장으로 알려 준다 (그을림 자리)', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    const beams: { surface: string | null; axis: string | null; ey: number }[] = [];
+    world.events.on('lightning_beam', (p) => beams.push(p as never));
+    const shoot = (pitch: number): (typeof beams)[number] => {
+      world.player.pitch = pitch;
+      world.spell.cooldowns = {};
+      world.mana.value = 100;
+      beams.length = 0;
+      castSlot(1);
+      return beams[0]!;
+    };
+    // 수평 — 복도 끝 벽(x=28). 넘어간 축이 x 라 법선도 ±X
+    const flat = shoot(0);
+    expect(flat.surface).toBe('wall');
+    expect(flat.axis).toBe('x');
+    // 아래로 — 벽보다 바닥이 먼저다. 끝점이 바닥(y=0)에 딱 놓인다
+    const down = shoot(-0.6);
+    expect(down.surface).toBe('floor');
+    expect(down.ey).toBeCloseTo(0, 6);
+    // 위로 — 천장
+    const up = shoot(0.6);
+    expect(up.surface).toBe('ceiling');
+    expect(up.ey).toBeCloseTo(world.level.ceiling, 6);
+    world.player.pitch = 0;
+  });
+
+  it('관통 뇌창: 바닥에 처박힌 빔은 그 너머의 적에게 닿지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const far = runnerAhead(12);
+    far.health = 1000;
+    world.player.pitch = -0.6; // 발밑 2.3m 쯤에서 바닥에 닿는다
+    castSlot(1);
+    world.player.pitch = 0;
+    expect(far.health).toBe(1000);
+  });
+
+  it('관통 뇌창: 방패에서 끊긴 빔은 벽을 그을리지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const spear = add('goblin_spear', 10, 6);
+    spear.yaw = Math.atan2(-(6 - spear.x), -(6 - spear.z)); // 나를 본다 — 방패가 정면
+    spear.ai = 'chase';
+    const beams: { surface: string | null }[] = [];
+    world.events.on('lightning_beam', (p) => beams.push(p as never));
+    castSlot(1);
+    expect(beams[0]!.surface).toBeNull();
+  });
+
   it('관통 뇌창: 방패병이 정면에서 받아 내면 뒤의 적은 무사하다', () => {
     Sigils.acquire(world, 'sig_lightning');
     world.mana.value = 100;

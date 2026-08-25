@@ -293,6 +293,40 @@ let frostTexture: THREE.CanvasTexture | null = null;
 
 /** 서리 자국 텍스처 — 가운데가 짙고 가장자리로 스러지는 얼음막 위에 결정 줄기가 사방으로 뻗는다.
  *  한 장을 만들어 모든 자국이 돌려 쓴다 (회전을 달리해 같은 무늬로 안 보이게) */
+let scorchTexture: THREE.CanvasTexture | null = null;
+/** 그을음 — 가운데가 새까맣고 가장자리로 흩어지는 검댕. 얼룩을 몇 개 얹어 원이 아니게 만든다 */
+function getScorchTexture(): THREE.CanvasTexture {
+  if (scorchTexture) return scorchTexture;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const c = size / 2;
+  const soot = ctx.createRadialGradient(c, c, 0, c, c, c);
+  soot.addColorStop(0, 'rgba(6,5,6,1)');
+  soot.addColorStop(0.4, 'rgba(12,10,12,0.82)');
+  soot.addColorStop(0.75, 'rgba(20,17,20,0.32)');
+  soot.addColorStop(1, 'rgba(24,20,24,0)');
+  ctx.fillStyle = soot;
+  ctx.fillRect(0, 0, size, size);
+  // 검댕 얼룩 — 가장자리를 울퉁불퉁하게
+  for (let i = 0; i < 10; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const r = c * (0.3 + Math.random() * 0.45);
+    const blob = ctx.createRadialGradient(
+      c + Math.cos(ang) * r, c + Math.sin(ang) * r, 0,
+      c + Math.cos(ang) * r, c + Math.sin(ang) * r, c * (0.12 + Math.random() * 0.2),
+    );
+    blob.addColorStop(0, 'rgba(8,6,8,0.55)');
+    blob.addColorStop(1, 'rgba(8,6,8,0)');
+    ctx.fillStyle = blob;
+    ctx.fillRect(0, 0, size, size);
+  }
+  scorchTexture = new THREE.CanvasTexture(canvas);
+  return scorchTexture;
+}
+
 function getFrostTexture(): THREE.CanvasTexture {
   if (frostTexture) return frostTexture;
   const size = 256;
@@ -517,6 +551,15 @@ const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 
 const BEAM_SEGMENTS = 12;
 const BEAM_JITTER = 0.32;
 const BEAM_PULSE_MS = 90;
+// 뇌창 그을림 — 빔이 머무는 자리가 검게 탄다. 한 타마다 새 데칼을 찍으면 초당 10장이
+// 쌓이므로, 가까운 자국은 새로 찍지 않고 더 짙게 태운다
+const SCORCH_RADIUS = 0.5;
+const SCORCH_MS = 16000; // 그을음은 서리보다 오래 남는다
+const SCORCH_FADE_T = 0.25; // 마지막 이 비율에서만 옅어진다
+const SCORCH_LIFT = 0.02;
+const SCORCH_MERGE_DIST = 0.65;
+const SCORCH_HEAT_STEP = 0.24; // 한 타마다 이만큼 짙어진다 — 4~5타면 새까맣다
+const SCORCH_MAX = 56;
 /** 화염구가 지팡이 끝에서 판정 위치로 합쳐지는 시간 */
 const LAUNCH_BLEND_MS = 260;
 const TRACER_WIDTH = 0.022;
@@ -733,6 +776,14 @@ export class Stage {
   } | null = null;
   private beamEnd: THREE.Vector3 | null = null;
   private beamPulseAt = 0;
+  /** 뇌창이 지진 자국 — 위치와 "얼마나 태웠는가"를 들고 있다가 같은 자리면 더 태운다 */
+  private readonly scorches: {
+    mesh: THREE.Mesh;
+    mat: THREE.MeshBasicMaterial;
+    x: number; y: number; z: number;
+    heat: number;
+    bornMs: number;
+  }[] = [];
 
   triggerCast(color: number): void {
     this.hands.triggerCast(color);
@@ -1289,6 +1340,67 @@ export class Stage {
     group.add(light);
     this.scene.add(group);
     this.beam = { group, mat, segs, spark, light };
+  }
+
+  /** 빔이 닿은 면을 그을린다. 같은 자리를 계속 지지면 자국이 늘지 않고 짙어진다 —
+   *  한 타마다 데칼을 새로 찍으면 초당 10장이 쌓여 금방 수백 장이 된다 */
+  scorchSurface(
+    x: number, y: number, z: number,
+    surface: 'wall' | 'floor' | 'ceiling',
+    axis: 'x' | 'z' | null,
+    dirX: number, dirZ: number,
+  ): void {
+    const now = performance.now();
+    for (const s of this.scorches) {
+      if (Math.hypot(s.x - x, s.y - y, s.z - z) < SCORCH_MERGE_DIST) {
+        s.heat = Math.min(1, s.heat + SCORCH_HEAT_STEP);
+        s.bornMs = now; // 계속 지지는 동안은 수명을 다시 센다
+        return;
+      }
+    }
+    // 법선 — 빔이 온 방향의 반대쪽. 면에서 살짝 띄워 z-fighting 을 피한다
+    let nx = 0, ny = 0, nz = 0;
+    if (surface === 'floor') ny = 1;
+    else if (surface === 'ceiling') ny = -1;
+    else if (axis === 'x') nx = dirX > 0 ? -1 : 1;
+    else nz = dirZ > 0 ? -1 : 1;
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: getScorchTexture(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(SCORCH_RADIUS * 2, SCORCH_RADIUS * 2), mat);
+    mesh.position.set(x + nx * SCORCH_LIFT, y + ny * SCORCH_LIFT, z + nz * SCORCH_LIFT);
+    // PlaneGeometry 는 +Z 를 본다 — 그 축을 법선에 맞추고 아무렇게나 돌려 무늬를 흩는다
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(nx, ny, nz));
+    mesh.rotateZ(Math.random() * Math.PI * 2);
+    this.scene.add(mesh);
+    this.scorches.push({ mesh, mat, x, y, z, heat: SCORCH_HEAT_STEP, bornMs: now });
+    if (this.scorches.length > SCORCH_MAX) this.removeScorch(0);
+  }
+
+  private removeScorch(i: number): void {
+    const s = this.scorches[i];
+    if (!s) return;
+    this.scorches.splice(i, 1);
+    this.scene.remove(s.mesh);
+    s.mesh.geometry.dispose();
+    s.mat.dispose();
+  }
+
+  /** 그을음은 오래 남았다가 끝에 가서 옅어진다 — 지져 놓은 만큼 짙고 넓다 */
+  private updateScorches(now: number): void {
+    for (let i = this.scorches.length - 1; i >= 0; i--) {
+      const s = this.scorches[i]!;
+      const age = (now - s.bornMs) / SCORCH_MS;
+      if (age >= 1) {
+        this.removeScorch(i);
+        continue;
+      }
+      const fade = age > 1 - SCORCH_FADE_T ? (1 - age) / SCORCH_FADE_T : 1;
+      s.mat.opacity = 0.92 * s.heat * fade;
+      const scale = 0.5 + 0.5 * s.heat;
+      s.mesh.scale.set(scale, scale, 1);
+    }
   }
 
   /** 채널이 끊겼다 — 빔을 걷는다 */
@@ -3056,6 +3168,7 @@ export class Stage {
     this.updateParticles();
     this.updateExplosions();
     this.updateFrostDecals();
+    this.updateScorches(performance.now());
     this.updateDecals(performance.now());
     this.updateExitLight(performance.now());
     this.renderer.render(this.scene, this.camera);

@@ -528,9 +528,16 @@ events.on('channel_ended', () => {
 });
 // 뇌창 빔 — 채널이 도는 동안 매 틱 온다. 끝점만 넘기고 지직거림은 렌더가 매 프레임 흔든다
 events.on('lightning_beam', (payload) => {
-  const b = payload as { ex: number; ey: number; ez: number; pulse?: boolean };
+  const b = payload as {
+    ex: number; ey: number; ez: number; pulse?: boolean;
+    surface: 'wall' | 'floor' | 'ceiling' | null; axis: 'x' | 'z' | null;
+    dx: number; dz: number;
+  };
   stage.setLightningBeam(b.ex, b.ey, b.ez, b.pulse === true);
-  if (b.pulse) audio.beamPulse(); // 한 타마다 전류음이 한 번 지직 — 박자를 소리로도 준다
+  if (!b.pulse) return;
+  audio.beamPulse(); // 한 타마다 전류음이 한 번 지직 — 박자를 소리로도 준다
+  // 벽·바닥·천장에 닿아 있으면 그 자리가 탄다. 적을 맞히는 중이면 그 뒤 벽이 탄다
+  if (b.surface) stage.scorchSurface(b.ex, b.ey, b.ez, b.surface, b.axis, b.dx, b.dz);
 });
 events.on('frost_nova', (payload) => {
   const n = payload as { x: number; z: number; radius: number; scale?: number };

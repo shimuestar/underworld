@@ -242,9 +242,10 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
 
   let hx0 = -Math.sin(world.player.yaw);
   let hz0 = -Math.cos(world.player.yaw);
-  // 위아래 기울기 — 판정은 평면이고 그림만 기운다. 조준 보정이 붙으면 그 적의 가슴을 향한다
+  // 위아래 기울기는 순전히 겨눈 각도다 — 보정은 좌우로만 휜다.
+  // 세로까지 보정하면 가까운 적 가슴을 향하느라 빔이 그 뒤 바닥에 처박혀 관통이 죽는다
   const cosPitch = Math.max(0.2, Math.cos(world.player.pitch));
-  let slopeY = Math.sin(world.player.pitch) / cosPitch;
+  const slopeY = Math.sin(world.player.pitch) / cosPitch;
 
   const target = assistTarget(world, ox, oz, hx0, hz0, range, effects['aimAssistDeg'] ?? 0);
   if (target) {
@@ -253,11 +254,34 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
     const dist = Math.hypot(rx, rz);
     hx0 = rx / dist;
     hz0 = rz / dist;
-    slopeY = (enemyDef(target.type).height * 0.55 - oy) / dist;
   }
 
-  const wallT = world.level.wallRayT(ox, oz, hx0, hz0);
-  let maxT = Math.min(range, wallT > 0 ? wallT : range);
+  // 빔이 어디서 멈추는가 — 벽·바닥·천장 중 가장 가까운 면. 무엇에도 안 닿으면 사거리 끝.
+  // 바닥·천장을 안 보면 아래를 겨눴을 때 빔이 땅을 뚫고 들어간다
+  const wall = world.level.wallRayHit(ox, oz, hx0, hz0);
+  let maxT = range;
+  let surface: 'wall' | 'floor' | 'ceiling' | null = null;
+  let axis: 'x' | 'z' | null = null;
+  if (wall.t > 0 && wall.t < maxT) {
+    maxT = wall.t;
+    surface = 'wall';
+    axis = wall.axis;
+  }
+  if (slopeY < 0) {
+    const t = oy / -slopeY;
+    if (t < maxT) {
+      maxT = t;
+      surface = 'floor';
+      axis = null;
+    }
+  } else if (slopeY > 0) {
+    const t = (world.level.ceiling - oy) / slopeY;
+    if (t < maxT) {
+      maxT = t;
+      surface = 'ceiling';
+      axis = null;
+    }
+  }
 
   const candidates: { enemy: EnemyState; t: number }[] = [];
   for (const enemy of world.enemies) {
@@ -279,6 +303,8 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
     if (shieldBlocksProjectile(enemyDef(enemy.type), enemy, ox, oz)) {
       if (damaging) world.events.emit('shot_blocked', { enemyId: enemy.id, source: 'lightning' });
       maxT = t; // 방패가 빔을 받아 낸다 — 뒤의 적은 무사
+      surface = null; // 방패에서 끊겼으니 벽은 그을리지 않는다
+      axis = null;
       break;
     }
     if (damaging) skillDamage(world, enemy, effects['damage'] ?? 0, 'lightning');
@@ -289,6 +315,7 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
     sx: ox, sy: oy, sz: oz,
     ex: ox + hx0 * maxT, ey: oy + slopeY * maxT, ez: oz + hz0 * maxT,
     hits, assisted: target !== null, pulse: damaging,
+    surface, axis, dx: hx0, dz: hz0,
   });
 }
 
