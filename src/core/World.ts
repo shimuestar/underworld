@@ -2,7 +2,7 @@
 // 이 객체의 상태와 이벤트 버스를 통해서만 통신한다.
 
 import type { ProjectileSplashDef } from './Entities';
-import type { SigilSlot } from './SigilData';
+import { sigilDef, type SigilSlot } from './SigilData';
 import type { Events } from './Events';
 import type { InputSnapshot } from './Input';
 import type { Level } from '../level/GridLoader';
@@ -139,6 +139,19 @@ export function pushEnemy(
  *  깨우는 곳이 여섯 군데(시야·랜턴·보스 포효·총소리·화염구·폭발통)라 한 군데서만
  *  멈칫을 걸면 나머지는 느낌표가 뜨자마자 달려든다. balance 는 호출부가 읽어 넘긴다
  *  (pushPlayer 와 같은 규약 — World 는 데이터에 의존하지 않는다) */
+/** 얼어 있는 적이 서리가 아닌 공격을 받으면 얼음이 그 자리에서 깨진다 — 피해는 hitShatterMul 배,
+ *  대신 깨질 때 피해(breakDamage)는 없다. 적에게 피해를 주는 모든 지점이 이걸 거친다(화상 DoT 제외 —
+ *  화염구 한 발이면 빙결이 곧바로 풀려 버린다). 돌려주는 값이 실제로 넣을 피해다 */
+export function shatterIfFrozen(events: Events, enemy: EnemyState, damage: number): number {
+  if ((enemy.freezeTicks ?? 0) <= 0) return damage;
+  enemy.freezeTicks = 0;
+  enemy.frozenDamage = 0;
+  events.emit('enemy_freeze_ended', {
+    enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, shattered: true,
+  });
+  return damage * (sigilDef('sig_frost').effects['hitShatterMul'] ?? 1);
+}
+
 export function alertEnemy(enemy: EnemyState, noticeTicks: number): void {
   enemy.ai = 'chase';
   enemy.noticeTicks = noticeTicks;

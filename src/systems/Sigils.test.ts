@@ -483,6 +483,52 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(hit.frostStacks).toBe(0);
   });
 
+  it('빙결 중 다른 공격을 받으면 얼음이 깨지며 피해 1.2배, 깨질 때 피해는 없다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    world.mana.value = 100;
+    const fx = sigilDef('sig_frost').effects;
+    const e = runnerAhead(6);
+    e.health = 1000;
+    e.ai = 'chase';
+    e.freezeTicks = 90;
+    e.slowTicks = 270;
+    e.frozenDamage = fx['breakDamage']!;
+    const ended: { shattered?: boolean }[] = [];
+    world.events.on('enemy_freeze_ended', (p) => ended.push(p as { shattered?: boolean }));
+    castSlot(1); // 뇌창 90 → ×1.2 = 108
+    const bolt = sigilDef('sig_lightning').effects['damage']!;
+    expect(e.health).toBe(1000 - bolt * fx['hitShatterMul']!);
+    expect(e.freezeTicks).toBe(0);
+    expect(ended).toEqual([expect.objectContaining({ shattered: true })]);
+    // 깨질 때 피해는 없다 — 시간이 지나도 더 안 깎인다
+    for (let i = 0; i < 5; i++) Enemies.tick(world, DT);
+    expect(e.health).toBe(1000 - bolt * fx['hitShatterMul']!);
+    expect(e.frozenDamage).toBe(0);
+    // 얼어 있지 않으면 배율이 없다
+    castSlot(1); // 쿨다운 — 안 나간다
+    world.spell.cooldowns = {};
+    world.mana.value = 100;
+    castSlot(1);
+    expect(e.health).toBe(1000 - bolt * fx['hitShatterMul']! - bolt);
+  });
+
+  it('서리 자신의 피해는 얼음을 깨지 않는다 (겹 4 = 연장), 화상 DoT 도 깨지 않는다', () => {
+    Sigils.acquire(world, 'sig_frost');
+    world.mana.value = 500;
+    const e = runnerAhead(6);
+    e.health = 1000;
+    const shoot = (): void => { world.spell.cooldowns = {}; castSlot(1); flyBolt(); };
+    shoot(); shoot(); shoot(); // 3겹 — 빙결
+    expect(e.freezeTicks).toBeGreaterThan(0);
+    const fz = e.freezeTicks!;
+    shoot(); // 4겹 — 깨지지 않고 연장
+    expect(e.freezeTicks).toBeGreaterThan(fz);
+    e.burnTicks = 10;
+    e.burnDamagePerTick = 1;
+    Projectiles.tick(world, DT); // 화상 한 틱
+    expect(e.freezeTicks).toBeGreaterThan(0);
+  });
+
   it('서리 이펙트 크기: 첫 타는 작고, 창 안에 이어지는 둘째부터는 제 크기', () => {
     Sigils.acquire(world, 'sig_frost');
     world.mana.value = 500;

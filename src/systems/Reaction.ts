@@ -16,7 +16,7 @@
 
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef } from '../core/Entities';
-import { pushEnemy, spendStamina } from '../core/World';
+import { pushEnemy, shatterIfFrozen, spendStamina } from '../core/World';
 import type { EnemyState, ProjectileState, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
@@ -209,7 +209,7 @@ export function tick(world: World, _dt: number): void {
     if (executePress) world.input.meleePressed = false;
     if (def.boss && def.executeDamage) {
       // 보스 처형 — 즉사가 아니라 큰 타격. 한 번의 스태거는 처형 한 번으로 소모된다
-      enemy.health -= def.executeDamage;
+      enemy.health -= shatterIfFrozen(world.events, enemy, def.executeDamage);
       world.freezeTicks = reaction.hitstopExecuteTicks;
       world.executeFocusTicks = reaction.executeFocusTicks;
       world.events.emit('boss_execute', { enemyId: enemy.id, damage: def.executeDamage });

@@ -6,13 +6,7 @@
 import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy,
-  hitBarrel,
-  RANGED_WEAPONS,
-  spendStamina,
-  type BarrelState,
-  type World,
-} from '../core/World';
+import { alertEnemy, hitBarrel, RANGED_WEAPONS, shatterIfFrozen, spendStamina, type BarrelState, type World } from '../core/World';
 
 /** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
  *  활을 넣으면서 실제로 방패·경직·무기 교체 세 곳이 bowDraw 를 안 지워
@@ -311,7 +305,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
       continue; // 깨지는 그 타격까지는 피해가 들어가지 않는다
     }
 
-    enemy.health -= damage;
+    enemy.health -= shatterIfFrozen(world.events, enemy, damage);
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     if (heavy) {
       // 경직한 적에게 3타를 모두 꽂았다 — 체급을 무시하고 크게 날린다.
@@ -714,7 +708,7 @@ function fire(world: World): void {
 
   if (zone === 'head') world.events.emit('headshot', { enemyId: hit.enemy.id });
 
-  hit.enemy.health -= damage;
+  hit.enemy.health -= shatterIfFrozen(world.events, hit.enemy, damage);
   // 피탄 경직 — 잠깐 발이 묶인다. 공격 상태 머신은 그대로 진행되므로
   // 총으로 공격을 끊거나 스턴락할 수는 없다 (패링 게임을 지우지 않는다)
   hit.enemy.flinchTicks = pistol.flinchTicks;
