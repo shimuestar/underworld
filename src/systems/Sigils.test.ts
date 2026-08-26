@@ -444,7 +444,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
   it('바닥에서 주운 중복 스킬도 경험치가 된다 — 아이템은 사라진다', () => {
     Sigils.acquire(world, 'sig_darkvision'); // 패시브
     const xp = world.xp;
-    world.groundItems.push({ kind: 'sigil', sigilId: 'sig_darkvision', x: 6, z: 6 });
+    world.groundItems.push({ id: 1, kind: 'sigil', sigilId: 'sig_darkvision', x: 6, z: 6 });
     Sigils.tick(world, DT);
     expect(world.groundItems).toHaveLength(0);
     expect(world.sigils.inventory.filter((id) => id === 'sig_darkvision')).toHaveLength(1);
