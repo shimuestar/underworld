@@ -273,130 +273,132 @@
       }
       /* 퀵슬롯 바 — 무기 슬롯 위. 등록만 되고 개수가 0이면 흐리게 남겨 둔다
          (자리가 사라지면 "몇 번이 물약이었지"를 매번 다시 외워야 한다) */
-      /* 스킬 퀵슬롯 바 — 소모품 바 위. Z·X·C·V. 아이템 바와 모양을 달리해 헷갈리지 않게 */
-      #status-skills {
-        display: flex;
-        gap: 5px;
-        justify-content: center;
-        margin-bottom: 4px;
+      /* 다이아 퀵슬롯 — 마름모 넷을 사선 십자로 놓는다. 왼쪽=소모품, 오른쪽=스킬.
+         화면 아래 양 끝이라 조준선에서 눈을 떼지 않아도 가장자리 시야에 걸린다 */
+      .dpad {
+        position: fixed;
+        bottom: 22px;
+        width: 160px;
+        height: 160px;
+        pointer-events: none;
+        user-select: none;
+        font: 10px/1 monospace;
       }
-      .skill-slot {
-        position: relative;
-        width: 64px;
-        height: 30px;
-        box-sizing: border-box;
+      #quick-diamond {
+        left: 24px;
+      }
+      #skill-diamond {
+        right: 24px;
+      }
+      .dslot {
+        position: absolute;
+        width: 58px;
+        height: 58px;
+        margin: -29px 0 0 -29px;
+      }
+      /* 자리 — 위 · 오른쪽 · 아래 · 왼쪽 (시계 방향으로 1·2·3·4번 칸) */
+      .dslot.p0 { top: 37px; left: 80px; }
+      .dslot.p1 { top: 80px; left: 123px; }
+      .dslot.p2 { top: 123px; left: 80px; }
+      .dslot.p3 { top: 80px; left: 37px; }
+      /* 테두리만 돌린다 — 안의 글자·아이콘은 세워 둔 채로 마름모가 된다 */
+      .dslot .frame {
+        position: absolute;
+        inset: 0;
+        transform: rotate(45deg);
         background: rgba(0, 0, 0, 0.55);
         border: 1px solid #3a3a44;
-        border-radius: 3px;
-        font: 10px/1 monospace;
-        color: #8a8f9a;
         overflow: hidden;
       }
-      .skill-slot .k {
-        position: absolute;
-        top: 3px;
-        left: 4px;
-      }
-      .skill-slot .nm {
-        position: absolute;
-        bottom: 4px;
-        left: 4px;
-        right: 4px;
-        font-size: 11px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        color: #cfd2da;
-      }
-      .skill-slot .cd {
-        position: absolute;
-        left: 0;
-        bottom: 0;
-        height: 2px;
-        background: #7fbfff;
-      }
-      .skill-slot.empty {
-        opacity: 0.35;
-      }
-      .skill-slot.ready {
-        border-color: #4a6a8a;
-      }
-      /* 선택된 칸 — 가운데 클릭(패드 Y)이 쓰는 칸. 금빛 테두리 */
-      .skill-slot.selected {
-        border-color: #e8c76a;
-        box-shadow: 0 0 6px rgba(232, 199, 106, 0.45);
-      }
-      .skill-slot.selected .k {
-        color: #e8c76a;
-      }
-      .skill-slot.nomana .nm,
-      .skill-slot.cool .nm {
-        color: #6c7280;
-      }
-      #status-quick {
-        display: flex;
-        gap: 5px;
-        justify-content: center;
-        margin-bottom: 5px;
-      }
-      .quick-slot {
-        position: relative;
-        width: 46px;
-        height: 34px;
-        box-sizing: border-box;
-        background: rgba(0, 0, 0, 0.55);
-        border: 1px solid #3a3a44;
-        font: 10px/1 monospace;
-        color: #8a8f9a;
-      }
-      .quick-slot .k {
-        position: absolute;
-        top: 2px;
-        left: 4px;
-      }
-      .quick-slot .n {
-        position: absolute;
-        bottom: 3px;
-        right: 4px;
-        font-size: 12px;
-        color: #cfd2da;
-      }
-      .quick-slot .dot {
-        position: absolute;
-        top: 50%;
-        left: 13px;
-        transform: translateY(-50%);
-        width: 11px;
-        height: 11px;
-      }
-      /* 다 썼거나 지금 써도 소용없는 칸 — 눈에 덜 걸리게 */
-      .quick-slot.spent {
-        opacity: 0.35;
-      }
-      .quick-slot.ready {
-        border-color: #6a5f3a;
-      }
-      /* 마시는 중 — 그 칸이 아래에서 위로 차오른다. 다 차야 효과가 난다 */
-      .quick-slot.drinking {
-        border-color: #e8c76a;
-      }
-      .quick-slot.drinking::before {
-        content: '';
+      /* 차오름 — 스킬은 쿨다운, 소모품은 마시는 중. 마름모라 비스듬히 찬다 */
+      .dslot .fill {
         position: absolute;
         left: 0;
         right: 0;
         bottom: 0;
         height: var(--fill, 0%);
         background: rgba(232, 199, 106, 0.28);
-        pointer-events: none;
       }
-      /* 사용 쿨다운 — 아래에서 차오르는 얇은 띠 */
-      .quick-slot .cd {
+      .dslot .key {
         position: absolute;
+        top: 9px;
         left: 0;
-        bottom: 0;
-        height: 2px;
-        background: #e8c76a;
+        right: 0;
+        text-align: center;
+        color: #8a8f9a;
+      }
+      .dslot .body {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        transform: translateY(-50%);
+        text-align: center;
+        line-height: 0;
+      }
+      .dslot .num {
+        position: absolute;
+        bottom: 8px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 11px;
+        color: #cfd2da;
+      }
+      /* 스킬 색 원반 — 24종이 전부 다른 색이라 이것만으로 구분된다 */
+      .dslot .mark {
+        display: inline-block;
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+      }
+      .dslot.empty .frame {
+        opacity: 0.3;
+      }
+      .dslot.empty .key {
+        opacity: 0.4;
+      }
+      .dslot.ready .frame {
+        border-color: #4a6a8a;
+      }
+      /* 다 썼거나 지금 써도 소용없는 칸 — 눈에 덜 걸리게 */
+      .dslot.spent {
+        opacity: 0.4;
+      }
+      .dslot.spent .frame {
+        border-color: #3a3a44;
+      }
+      .dslot.item.ready .frame {
+        border-color: #6a5f3a;
+      }
+      .dslot.cool .mark,
+      .dslot.nomana .mark {
+        filter: grayscale(0.8) brightness(0.55);
+      }
+      /* 선택된 칸 — 가운데 클릭(패드 Y)이 쓰는 칸. 금빛 테두리 */
+      .dslot.selected .frame {
+        border-color: #e8c76a;
+        box-shadow: 0 0 7px rgba(232, 199, 106, 0.45);
+      }
+      .dslot.selected .key {
+        color: #e8c76a;
+      }
+      .dslot.drinking .frame {
+        border-color: #e8c76a;
+      }
+      /* 고른 스킬 이름 — 마름모 안에는 안 들어가므로 뭉치 위에 한 줄로 */
+      .dpad .label {
+        position: absolute;
+        bottom: 100%;
+        left: -20px;
+        right: -20px;
+        text-align: center;
+        font-size: 11px;
+        color: #cfd2da;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .weapon-slot {
         background: rgba(0, 0, 0, 0.55);
@@ -464,13 +466,14 @@
         <span id="status-lantern-text">100% 예비 2</span>
       </div>
       <div id="status-gold">◆ 0</div>
-      <div id="status-skills"></div>
-      <div id="status-quick"></div>
       <div id="status-weapons">
         <span class="weapon-slot active" id="slot-ranged">LMB 권총</span>
         <span class="weapon-slot active" id="slot-melee">RMB 해머</span>
       </div>
     </div>
+    <!-- 사선 십자 퀵슬롯 — 칸은 main.ts 가 만든다 (왼쪽 소모품 · 오른쪽 스킬) -->
+    <div id="quick-diamond" class="dpad"><div class="label"></div></div>
+    <div id="skill-diamond" class="dpad"><div class="label"></div></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

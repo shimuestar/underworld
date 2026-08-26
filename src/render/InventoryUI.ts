@@ -3,7 +3,7 @@
 // 열려 있는 동안 시뮬레이션은 main이 일시정지한다.
 //
 // 조작 규약 하나로 통일한다: 가방 칸을 왼쪽 클릭하면 골라지고, 그 상태에서
-// 퀵슬롯을 누르면 등록된다 (창 안에서는 1~5 키도 같은 뜻). 고른 것 없이 퀵슬롯을
+// 퀵슬롯을 누르면 등록된다 (창 안에서는 숫자 키도 같은 뜻). 고른 것 없이 퀵슬롯을
 // 누르면 등록이 풀리고, 가방 칸을 오른쪽 클릭하면 그 칸을 통째로 바닥에 버린다.
 // 버리기가 없으면 가방이 가득 찼을 때 빠져나갈 길이 없다.
 
@@ -37,7 +37,7 @@ export class InventoryUI {
       'background:rgba(0,0,0,0.72);color:#cfd2da;font:13px/1.6 monospace;user-select:none;z-index:10;';
     document.body.appendChild(this.root);
 
-    // 창 안에서 1~5 — 고른 게 있으면 그 칸에 꽂고, 없으면 그냥 쓴다는 뜻은 아니다
+    // 창 안에서 숫자 키 — 고른 게 있으면 그 칸에 꽂고, 없으면 그냥 쓴다는 뜻은 아니다
     // (전투 키와 헷갈리지 않게, 창이 열려 있을 때는 등록 전용이다)
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
@@ -88,7 +88,7 @@ export class InventoryUI {
 
     const hint = document.createElement('div');
     hint.textContent =
-      '가방 칸 클릭 = 고르기 → 퀵슬롯 클릭(또는 1~5) = 등록   ·   ' +
+      `가방 칸 클릭 = 고르기 → 퀵슬롯 클릭(또는 1~${this.world.quickslots.length}) = 등록   ·   ` +
       '빈손으로 퀵슬롯 클릭 = 등록 해제   ·   가방 칸 우클릭 = 버리기   ·   I 닫기   ·   스킬은 Tab';
     hint.style.cssText = 'margin-top:16px;color:#6c7280;font-size:11px;';
     panel.appendChild(hint);
@@ -102,7 +102,7 @@ export class InventoryUI {
     const box = document.createElement('div');
 
     const title = document.createElement('div');
-    title.textContent = `퀵슬롯 — 전투 중 1~5 로 쓴다`;
+    title.textContent = `퀵슬롯 — 전투 중 1~${world.quickslots.length} 로 쓴다`;
     title.style.cssText = 'color:#e8c76a;margin-bottom:8px;font-size:15px;';
     box.appendChild(title);
 

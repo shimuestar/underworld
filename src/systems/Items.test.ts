@@ -79,11 +79,12 @@ beforeEach(() => {
 });
 
 describe('가방 칸', () => {
-  it('요청대로 5×2 = 10칸, 퀵슬롯 5칸', () => {
+  it('요청대로 5×2 = 10칸, 퀵슬롯 4칸 (HUD 마름모 넷)', () => {
     expect(CFG.cols).toBe(5);
     expect(CFG.rows).toBe(2);
     expect(world.inventory).toHaveLength(10);
-    expect(world.quickslots).toHaveLength(5);
+    expect(world.quickslots).toHaveLength(4);
+    expect(world.quickslots.length).toBeGreaterThanOrEqual(ITEM_KINDS.length); // 종류가 셋이라 남는다
     expect(world.inventory.every((s) => s === null)).toBe(true);
   });
 

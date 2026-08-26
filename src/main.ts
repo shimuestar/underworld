@@ -1430,63 +1430,74 @@ const lanternText = document.getElementById('status-lantern-text')!;
 // 보스 체력 칸 색 — 마지막 칸(×1)은 HUD 기본색과 같은 계열, 그 앞 칸은 보라로 구분한다
 const BOSS_BAR_COLORS = { outer: '#b070e8', last: '#ff7a6b' };
 
-// ---- 퀵슬롯 바 ----
+// ---- 사선 십자 퀵슬롯 ----
+// 마름모 넷을 위·오른쪽·아래·왼쪽에 놓는다 (시계 방향 = 1·2·3·4번 칸).
 // 칸은 한 번만 만들고 이후에는 값만 바꾼다 (매 프레임 DOM 을 다시 그리면 낭비다)
-const QUICK_ICON_PX = 20;
-const quickBar = document.getElementById('status-quick')!;
-const quickCells = Array.from({ length: balance.items.quickslots }, (_, i) => {
+const QUICK_ICON_PX = 22;
+
+/** 마름모 칸 한 개 — 테두리(frame)만 45도 돌리고 안의 글자·아이콘은 세워 둔다 */
+function makeDiamondSlot(
+  parent: HTMLElement,
+  index: number,
+  keyLabel: string,
+): { cell: HTMLElement; frame: HTMLElement; key: HTMLElement; body: HTMLElement; num: HTMLElement } {
   const cell = document.createElement('div');
-  cell.className = 'quick-slot';
-  const key = document.createElement('span');
-  key.className = 'k';
-  key.textContent = String(i + 1);
-  const dot = document.createElement('span');
-  dot.className = 'dot';
-  // 내용(아이콘 SVG)은 종류가 바뀔 때만 갈아 끼운다 — 매 프레임 innerHTML 을 쓰면 낭비다
+  cell.className = `dslot p${index} empty`;
+  const frame = document.createElement('div');
+  frame.className = 'frame';
+  const fill = document.createElement('div');
+  fill.className = 'fill';
+  frame.appendChild(fill);
+  const key = document.createElement('div');
+  key.className = 'key';
+  key.textContent = keyLabel;
+  const body = document.createElement('div');
+  body.className = 'body';
+  const num = document.createElement('div');
+  num.className = 'num';
+  cell.append(frame, key, body, num);
+  parent.appendChild(cell);
+  return { cell, frame, key, body, num };
+}
+
+const quickPad = document.getElementById('quick-diamond')!;
+const quickLabel = quickPad.querySelector('.label') as HTMLElement;
+const quickCells = Array.from({ length: balance.items.quickslots }, (_, i) => {
+  const ui = makeDiamondSlot(quickPad, i, String(i + 1));
+  // 아이콘 SVG 는 종류가 바뀔 때만 갈아 끼운다 — 매 프레임 innerHTML 을 쓰면 낭비다
   let shownKind: ItemKind | null = null;
-  const num = document.createElement('span');
-  num.className = 'n';
-  cell.append(key, dot, num);
-  quickBar.appendChild(cell);
   return {
-    cell,
-    dot,
-    num,
+    ...ui,
     setKind(kind: ItemKind | null): void {
       if (shownKind === kind) return;
       shownKind = kind;
-      dot.innerHTML = kind ? itemIconSvg(kind, QUICK_ICON_PX) : '';
+      ui.body.innerHTML = kind ? itemIconSvg(kind, QUICK_ICON_PX) : '';
     },
   };
 });
 
-const skillBar = document.getElementById('status-skills')!;
+const skillPad = document.getElementById('skill-diamond')!;
+const skillLabel = skillPad.querySelector('.label') as HTMLElement;
 const skillCells = Array.from({ length: balance.skills.quickslots }, (_, i) => {
-  const cell = document.createElement('div');
-  cell.className = 'skill-slot empty';
-  const key = document.createElement('span');
-  key.className = 'k';
-  key.textContent = SKILL_KEYS[i] ?? String(i + 1);
-  const name = document.createElement('span');
-  name.className = 'nm';
-  const cd = document.createElement('span');
-  cd.className = 'cd';
-  cell.append(key, name, cd);
-  skillBar.appendChild(cell);
-  return { cell, key, name, cd };
+  const ui = makeDiamondSlot(skillPad, i, SKILL_KEYS[i] ?? String(i + 1));
+  const mark = document.createElement('span');
+  mark.className = 'mark';
+  ui.body.appendChild(mark);
+  return { ...ui, mark };
 });
 
-/** 스킬 퀵슬롯 바 — 이름은 스킬 색, 마나가 모자라면 흐리게, 쿨다운은 아래 띠가 줄어든다 */
+/** 스킬 퀵슬롯 — 마름모 안은 색 원반과 키 하나뿐이라, 고른 칸의 이름만 뭉치 위에 적는다.
+ *  마나가 모자라거나 쿨다운이면 원반이 바래고, 쿨다운은 마름모가 비스듬히 차오른다 */
 function syncSkillSlots(): void {
   world.skillSlots.forEach((id, i) => {
     const ui = skillCells[i];
     if (!ui) return;
-    ui.key.textContent =
-      (world.selectedSkill === i ? '▸ ' : '') + (SKILL_KEYS[i] ?? String(i + 1));
+    const selected = world.selectedSkill === i;
     if (!id) {
-      ui.cell.className = 'skill-slot empty';
-      ui.name.textContent = '';
-      ui.cd.style.width = '0';
+      ui.cell.className = `dslot p${i} skill empty${selected ? ' selected' : ''}`;
+      ui.mark.style.background = '';
+      ui.frame.style.setProperty('--fill', '0%');
+      ui.num.textContent = '';
       return;
     }
     const def = sigilDef(id);
@@ -1497,12 +1508,22 @@ function syncSkillSlots(): void {
     const cooling = cdLeft > 0;
     const noMana = world.mana.value < cost;
     ui.cell.className =
-      `skill-slot ${!def.cast ? 'empty' : cooling ? 'cool' : noMana ? 'nomana' : 'ready'}` +
-      (world.selectedSkill === i ? ' selected' : '');
-    ui.name.textContent = def.name;
-    ui.name.style.color = def.cast && !noMana && !cooling ? def.color : '';
-    ui.cd.style.width = cooling && cdMax > 0 ? `${(cdLeft / cdMax) * 100}%` : '0';
+      `dslot p${i} skill ${!def.cast ? 'empty' : cooling ? 'cool' : noMana ? 'nomana' : 'ready'}` +
+      (selected ? ' selected' : '');
+    ui.mark.style.background = def.color;
+    ui.mark.style.boxShadow = def.cast && !noMana && !cooling ? `0 0 8px ${def.color}` : 'none';
+    // 쿨다운이 1초를 넘으면 남은 초를 적는다 — 짧은 건 차오름만으로 충분하다
+    ui.num.textContent = cooling && cdLeft > balance.loop.tickRate ? String(Math.ceil(cdLeft / balance.loop.tickRate)) : '';
+    ui.frame.style.setProperty('--fill', cooling && cdMax > 0 ? `${(cdLeft / cdMax) * 100}%` : '0%');
   });
+  const chosen = world.skillSlots[world.selectedSkill];
+  if (chosen) {
+    const def = sigilDef(chosen);
+    skillLabel.textContent = def.name;
+    skillLabel.style.color = def.color;
+  } else {
+    skillLabel.textContent = '';
+  }
 }
 
 function syncQuickslots(): void {
@@ -1510,37 +1531,34 @@ function syncQuickslots(): void {
   const cdFrac = world.itemCooldown / balance.items.useCooldownTicks;
   const channel = world.itemChannel;
   const chFrac = Items.channelFrac(world);
+  let labelText = '';
   view.forEach((slot, i) => {
-    const ui = quickCells[i]!;
+    const ui = quickCells[i];
+    if (!ui) return;
     if (!slot.kind) {
-      ui.cell.className = 'quick-slot spent';
+      ui.cell.className = `dslot p${i} item empty`;
       ui.setKind(null);
       ui.num.textContent = '';
+      ui.frame.style.setProperty('--fill', '0%');
       return;
     }
     // 다 썼거나 지금 마셔 봐야 소용없는 칸은 흐리게 — 급할 때 눈이 안 간다
     const dim = slot.count <= 0 || !slot.useful;
-    ui.cell.className = `quick-slot ${dim ? 'spent' : 'ready'}`;
+    const drinking = channel?.index === i;
+    ui.cell.className = `dslot p${i} item ${dim ? 'spent' : 'ready'}${drinking ? ' drinking' : ''}`;
     ui.setKind(slot.kind);
     ui.num.textContent = String(slot.count);
-    // 마시는 중인 칸 — 아래에서 위로 차오른다. 다 차야 효과가 난다는 걸 그대로 보여 준다
-    ui.cell.style.setProperty('--fill', channel?.index === i ? `${chFrac * 100}%` : '0%');
-    if (channel?.index === i) ui.cell.classList.add('drinking');
+    // 마시는 중인 칸이 차오른다. 아니면 공용 쿨다운이 차오른다 —
+    // 마름모 하나에 띠를 따로 두기엔 좁아서 차오름 하나로 둘을 겸한다
+    ui.frame.style.setProperty(
+      '--fill',
+      drinking ? `${chFrac * 100}%` : cdFrac > 0 && !dim ? `${cdFrac * 100}%` : '0%',
+    );
+    if (drinking) labelText = balance.items.kinds[slot.kind].name;
   });
-  // 쿨다운 띠 — 칸마다 그리지 않고 첫 칸에만 (공용 쿨다운이라 하나면 충분하다)
-  const bar = quickCells[0]!.cell;
-  let cd = bar.querySelector('.cd') as HTMLElement | null;
-  if (cdFrac > 0) {
-    if (!cd) {
-      cd = document.createElement('span');
-      cd.className = 'cd';
-      bar.appendChild(cd);
-    }
-    cd.style.width = `${cdFrac * 100}%`;
-  } else if (cd) {
-    cd.remove();
-  }
+  quickLabel.textContent = labelText;
 }
+
 
 function render(alpha: number): void {
   const now = performance.now();
