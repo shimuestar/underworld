@@ -75,6 +75,14 @@ export function ensureSkillSlots(world: World): (string | null)[] {
  *  액티브의 오염은 여기서 — 익히는 순간이 대가를 치르는 순간이다 */
 export function acquire(world: World, sigilId: string): void {
   const def = sigilDef(sigilId);
+  // 이미 익힌 스킬 — 같은 각인을 두 개 들고 있어 봐야 쓸 데가 없다. 경험치로 바꾼다
+  if (world.sigils.inventory.includes(sigilId)) {
+    const amount = balance.sigil.duplicateXp[def.tier] ?? 0;
+    world.xp += amount;
+    world.events.emit('xp_gained', { amount, total: world.xp, source: 'sigil_duplicate' });
+    world.events.emit('sigil_duplicate', { id: sigilId, xp: amount });
+    return;
+  }
   world.sigils.inventory.push(sigilId);
   if (isActiveSkill(def)) {
     const cost = balance.corruption.slotCost[def.slot];

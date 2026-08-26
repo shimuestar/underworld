@@ -360,6 +360,7 @@ for (const name of [
   'gold_picked',
   'xp_gained',
   'sigil_acquired',
+  'sigil_duplicate',
   'sigil_attached',
   'sigil_detached',
   'skill_slot_changed',
@@ -739,6 +740,7 @@ events.on('player_damaged', (payload) => {
 });
 events.on('spell_impact', () => audio.play('spell_impact'));
 events.on('sigil_acquired', () => audio.play('pickup'));
+events.on('sigil_duplicate', () => audio.play('pickup_gold')); // 각인이 아니라 자원을 먹은 소리
 events.on('reload_started', () => audio.play('reload_start'));
 events.on('reload_finished', () => audio.play('reload_end'));
 let executedThisFrame = false; // 직전 melee_kill 이 처형이었는지 (파편 세기 결정)
@@ -1012,6 +1014,18 @@ events.on('sigil_acquired', (payload) => {
       : typeof info.slot === 'number' && info.slot >= 0
         ? `액티브 — ${input.usingPad ? `${padBtn('cycleSkill')} 로 골라 ${padBtn('cast')}` : SKILL_KEYS[info.slot]} 로 쓴다`
         : '액티브 — Tab 에서 퀵슬롯에 올린다';
+  sigilToast.classList.add('visible');
+  sigilToastUntil = performance.now() + SIGIL_TOAST_MS;
+});
+
+// 이미 익힌 스킬을 또 주웠다 — 각인 대신 경험치. 같은 자리에 같은 모양으로 띄운다
+events.on('sigil_duplicate', (payload) => {
+  const info = payload as { id: string; xp: number };
+  const def = sigilDef(info.id);
+  sigilToastName.textContent = `✦ ${def.name}`;
+  sigilToastName.style.color = def.color;
+  sigilToastName.style.textShadow = `0 0 12px ${def.color}`;
+  sigilToastSub.textContent = `이미 익힌 스킬 — 경험치 +${info.xp}`;
   sigilToast.classList.add('visible');
   sigilToastUntil = performance.now() + SIGIL_TOAST_MS;
 });

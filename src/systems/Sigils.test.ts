@@ -417,6 +417,40 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(Projectiles.skillCooldown(world, 'sig_lightning')).toBe(fx['cooldownTicks']);
   });
 
+  it('이미 익힌 스킬을 또 주우면 각인이 아니라 경험치가 된다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    const before = { inv: [...world.sigils.inventory], slots: [...world.skillSlots], xp: world.xp };
+    const gained: { amount: number; source?: string }[] = [];
+    const dup: { id: string; xp: number }[] = [];
+    world.events.on('xp_gained', (p) => gained.push(p as never));
+    world.events.on('sigil_duplicate', (p) => dup.push(p as never));
+    Sigils.acquire(world, 'sig_lightning');
+    const amount = balance.sigil.duplicateXp[sigilDef('sig_lightning').tier];
+    expect(world.sigils.inventory).toEqual(before.inv); // 목록에 겹쳐 쌓이지 않는다
+    expect(world.skillSlots).toEqual(before.slots);
+    expect(world.xp).toBe(before.xp + amount);
+    expect(gained).toEqual([expect.objectContaining({ amount, source: 'sigil_duplicate' })]);
+    expect(dup).toEqual([{ id: 'sig_lightning', xp: amount }]);
+  });
+
+  it('이미 익힌 스킬의 중복 획득은 오염을 더 쌓지 않는다', () => {
+    Sigils.acquire(world, 'sig_lightning');
+    const pending = world.corruption.pending;
+    expect(pending).toBeGreaterThan(0); // 처음 익힐 때는 대가를 치른다
+    Sigils.acquire(world, 'sig_lightning');
+    expect(world.corruption.pending).toBe(pending);
+  });
+
+  it('바닥에서 주운 중복 스킬도 경험치가 된다 — 아이템은 사라진다', () => {
+    Sigils.acquire(world, 'sig_darkvision'); // 패시브
+    const xp = world.xp;
+    world.groundItems.push({ kind: 'sigil', sigilId: 'sig_darkvision', x: 6, z: 6 });
+    Sigils.tick(world, DT);
+    expect(world.groundItems).toHaveLength(0);
+    expect(world.sigils.inventory.filter((id) => id === 'sig_darkvision')).toHaveLength(1);
+    expect(world.xp).toBe(xp + balance.sigil.duplicateXp[sigilDef('sig_darkvision').tier]);
+  });
+
   it('관통 뇌창: 끊기지 않고 1.5초를 지지면 감전돼 1초 동안 그 자세로 굳는다', () => {
     Sigils.acquire(world, 'sig_lightning');
     world.mana.value = 500;
