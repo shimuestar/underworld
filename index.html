@@ -284,11 +284,15 @@
         user-select: none;
         font: 10px/1 monospace;
       }
+      /* 화면 끝이 아니라 가운데 상태창(340px) 바로 옆에 붙인다 — 소모품·체력마나·스킬이
+         한 줄로 이어져 눈이 한 번에 훑는다. 해상도가 바뀌어도 간격이 유지되게 중앙 기준 */
       #quick-diamond {
-        left: 24px;
+        right: 50%;
+        margin-right: 186px;
       }
       #skill-diamond {
-        right: 24px;
+        left: 50%;
+        margin-left: 186px;
       }
       .dslot {
         position: absolute;
