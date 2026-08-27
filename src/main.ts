@@ -50,6 +50,10 @@ import z01f3 from '../data/levels/z01_f3.json';
 const ZONE = [z01f1, z01f2, z01f3];
 let floorIndex = 0;
 let levelJson: (typeof ZONE)[number] = ZONE[0]!;
+/** 열쇠로 자물쇠를 딴 층 — 오르내리거나 부활해도 다시 잠기지 않는다 */
+const unlockedFloors = new Set<number>();
+/** 층 이동 연출 중 — 겹쳐 누른 E 가 이동을 두 번 걸지 않게 */
+let traveling = false;
 
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
@@ -404,6 +408,10 @@ for (const name of [
   'boss_staggered',
   'boss_execute',
   'exit_locked',
+  'exit_unlocked',
+  'exit_key_dropped',
+  'exit_key_picked',
+  'floor_ascend',
   'exit_opened',
   'zone_cleared',
   'door_channel_started',
@@ -418,7 +426,15 @@ for (const name of [
 
 // ---- 오디오 (합성음, 에셋 없음) ----
 const audio = new GameAudio();
-app.addEventListener('click', () => audio.unlock());
+let introStairsPlayed = false;
+app.addEventListener('click', () => {
+  audio.unlock();
+  // 게임을 시작한 자리도 계단으로 내려온 곳이다 — 오디오가 풀리는 첫 클릭에 들려준다
+  if (!introStairsPlayed) {
+    introStairsPlayed = true;
+    window.setTimeout(() => audio.play('stairs_travel'), 150);
+  }
+});
 events.on('enemy_windup', (payload) => {
   const telegraph = (payload as { telegraph?: string }).telegraph;
   audio.play(
@@ -1087,6 +1103,11 @@ function respawnAtAltar(): void {
   world.mana.outOfCombatTicks = 0;
   world.mana.inCombat = false;
   world.enemies = spawnEnemies(levelJson.entities, level); // 구간 진행도 초기화
+  // 보스도 되살아났다 — 열쇠로 딴 적 없는 층이면 쇠사슬도 다시 잠긴다
+  world.exitNeedsKey =
+    world.enemies.some((e) => enemyDef(e.type).boss) && !unlockedFloors.has(floorIndex);
+  world.hasExitKey = false;
+  world.exitOpen = false;
   // 폭발통도 되살린다 — 남은 차단 블록을 먼저 걷어내야 유령 벽이 쌓이지 않는다
   for (const barrel of world.barrels) if (barrel.blocker) level.removeBlocker(barrel.blocker);
   world.barrels = spawnBarrels(levelJson.entities, level);
@@ -1224,15 +1245,23 @@ events.on('shot_blocked', () => showReaction('방패 — 정면은 막힌다 (�
 events.on('boss_staggered', () =>
   showReaction(`보스 스태거 — 지금 처형! (${input.usingPad ? padBtn('melee') : 'Space·우클릭'})`),
 );
+// 이제 exit_opened 는 "보스 없는(또는 이미 딴) 층" 의 로드 직후 신호다 — 조용히 안내만
 events.on('exit_opened', () => {
-  audio.play('exit_opened');
-  audio.play('door_slide'); // 계단을 덮은 석판이 밀려난다
-  // 보스가 없는 층은 처음부터 열려 있다 — 그 층에서 "족장이 쓰러졌다" 는 거짓말이다
-  const hadBoss = levelJson.entities.some((e) => e.type === 'goblin_chieftain');
-  showReaction(
-    hadBoss ? '족장이 쓰러졌다 — 내려가는 계단이 열렸다' : '내려가는 계단 — E 로 내려간다',
-    hadBoss ? 3500 : 2600,
-  );
+  showReaction('내려가는 계단 — E 로 내려간다', 2200);
+});
+events.on('exit_key_dropped', () => showReaction('족장이 열쇠를 떨어뜨렸다', 2600));
+events.on('exit_key_picked', () => {
+  audio.play('pickup_gold');
+  showReaction('족장의 열쇠 — 출구의 자물쇠를 열 수 있다', 3200);
+});
+events.on('exit_unlocked', () => {
+  unlockedFloors.add(floorIndex); // 오르내려도·부활해도 다시 잠기지 않는다
+  audio.play('unlock_chain');
+  showReaction('자물쇠가 열렸다 — 쇠사슬이 흘러내린다', 2600);
+});
+events.on('exit_locked', (payload) => {
+  // E 로 흔들어 봤을 때만 소리를 낸다 — 밟기만 해도 짤그랑거리면 시끄럽다
+  if ((payload as { tried?: boolean }).tried) audio.play('chain_locked');
 });
 // ---- 잠긴 문 (E 로 직접 연다) ----
 events.on('door_channel_started', () => audio.play('door_touch'));
@@ -1264,11 +1293,15 @@ events.on('door_opened', (payload) => {
 /** 층을 갈아 끼운다 — 지형·미니맵·배치물을 새 층 것으로 바꾸고 플레이어를 그 층 입구에 세운다.
  *  들고 있던 것(체력·마나·탄약·스킬·가방·골드·오염)은 전부 따라간다 — 층 사이는 '이어지는 한 판'이다.
  *  층에 매인 것(문·레버·상자·통·바닥 아이템·부활 지점)만 새로 잡는다 */
-function loadFloor(index: number): void {
+function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): void {
   floorIndex = index;
   levelJson = ZONE[index]!;
   level = new Level(levelJson);
   world.level = level;
+  traveling = false;
+  // 도착 지점 — 내려왔으면 입구 계단 앞, 올라왔으면 출구 계단 앞
+  const at = arrival === 'exit' && level.exitPos ? level.exitPos : level.spawn;
+  const atYaw = arrival === 'exit' && level.exitPos ? level.exitYaw : level.spawnYaw;
 
   // 앞 층의 차단 블록은 그 층 Level 과 함께 사라지므로 걷어낼 필요가 없다 —
   // 새 Level 은 빈 상태로 시작한다
@@ -1287,9 +1320,15 @@ function loadFloor(index: number): void {
   world.leverInView = null;
   world.altarInView = false;
   world.altarEnteredThisApproach = false;
-  // 층 입구가 곧 부활 지점이다 — 3층에서 죽었다고 1층부터 다시 하게 만들지 않는다.
+  // 도착한 계단이 곧 부활 지점이다 — 3층에서 죽었다고 1층부터 다시 하게 만들지 않는다.
   // 제단을 밟으면 그쪽으로 옮겨 가므로 제단은 여전히 "더 가까운 저장점" 값을 한다
-  world.respawn = { x: level.spawn.x, z: level.spawn.z };
+  world.respawn = { x: at.x, z: at.z };
+  // 출구 잠금 — 보스 층은 쇠사슬·자물쇠. 이미 딴 층·보스 없는 층은 첫 틱에 열린다
+  world.exitNeedsKey =
+    world.enemies.some((e) => enemyDef(e.type).boss) && !unlockedFloors.has(index);
+  world.hasExitKey = false;
+  world.canAscend = index > 0;
+  world.onEntrancePad = false;
   world.exitOpen = false;
   world.onExitPad = false;
   world.exitLockedNotified = false;
@@ -1297,11 +1336,11 @@ function loadFloor(index: number): void {
   world.freezeTicks = 0;
 
   const p = world.player;
-  p.x = level.spawn.x;
-  p.z = level.spawn.z;
-  p.prevX = level.spawn.x;
-  p.prevZ = level.spawn.z;
-  p.yaw = level.spawnYaw; // 내려오자마자 등 뒤 계단을 보고 있으면 안 된다
+  p.x = at.x;
+  p.z = at.z;
+  p.prevX = at.x;
+  p.prevZ = at.z;
+  p.yaw = atYaw; // 도착하자마자 등 뒤 계단을 보고 있으면 안 된다
   p.pitch = 0;
   p.stunTicks = 0;
   p.dodgeTicks = 0;
@@ -1332,7 +1371,8 @@ events.on('zone_cleared', () => {
   // 계단을 밟고 내려가는 동안 화면이 잠기고, 다 잠긴 뒤에 층을 갈아 끼운다 —
   // 그래야 지형이 바뀌는 순간이 안 보인다
   if (floorIndex + 1 < ZONE.length) {
-    audio.play('door_slide');
+    traveling = true;
+    audio.play('stairs_travel');
     stage.startDescent(DESCENT_MS);
     screenFade(1, DESCENT_MS);
     afterMs(DESCENT_MS + 40, () => {
@@ -1347,6 +1387,19 @@ events.on('zone_cleared', () => {
   clearOverlay.querySelector('div')!.textContent = '1구역 클리어';
   (clearOverlay as HTMLElement).style.background = 'rgba(10, 40, 20, 0.6)';
   clearOverlay.classList.add('visible');
+});
+
+// 입구 계단으로 위층에 되돌아간다 — 내려갈 때와 같은 연출, 방향만 반대
+events.on('floor_ascend', () => {
+  if (floorIndex === 0 || traveling) return;
+  traveling = true;
+  audio.play('stairs_travel');
+  stage.startDescent(DESCENT_MS, -1);
+  screenFade(1, DESCENT_MS);
+  afterMs(DESCENT_MS + 40, () => {
+    loadFloor(floorIndex - 1, 'exit');
+    screenFade(0, DESCENT_FADE_IN_MS);
+  });
 });
 
 // 새 층에 발을 디뎠다 — 어디인지 알려 준다
@@ -1379,6 +1432,7 @@ initInventory(world);
 Progression.init(world);
 Corruption.init(world);
 Stamina.init(world);
+Exit.init(world); // 보스가 죽으면 열쇠를 떨군다
 const systems = [
   PlayerMove.tick,
   Enemies.tick,
@@ -1415,7 +1469,8 @@ function simulate(dt: number): void {
       world.leverInView !== null ||
       world.chestInView !== null ||
       (world.altarInView && !world.altarEnteredThisApproach) ||
-      (world.onExitPad && world.exitOpen);
+      world.onEntrancePad ||
+      (world.onExitPad && (world.exitOpen || world.exitNeedsKey));
     if (interactable && world.input.meleePressed) {
       world.input = { ...world.input, meleePressed: false, interactPressed: true };
     } else if (!interactable && world.input.interactPressed && !world.input.meleePressed) {
@@ -1860,10 +1915,11 @@ function render(alpha: number): void {
   // 출구 발판 위 — 서 있는 동안 계속 띄운다 (3초 뒤 사라지면 못 보고 지나친다).
   // 봉인 중이면 이유를, 열렸으면 나가는 방법을 알린다
   const onExit = world.onExitPad && !world.dead && !world.uiOpen && !world.cleared;
+  const onEntrance = world.onEntrancePad && !world.dead && !world.uiOpen && !world.cleared;
   const nearChest = world.chestInView !== null && !world.dead && !world.uiOpen;
   altarPrompt!.classList.toggle(
     'visible',
-    showAltarPrompt || nearDoor || nearLever || onExit || nearChest,
+    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest,
   );
   // 상호작용 키 표기 — 한 키 체계라 근접 키를 안내한다 (E 도 여전히 동작한다)
   const IK = keyLabel('우클릭', 'melee');
@@ -1896,11 +1952,15 @@ function render(alpha: number): void {
   } else if (onExit) {
     // 마지막 층에서만 "나간다" 다 — 그 앞은 아래층으로 내려가는 계단이다
     const last = floorIndex + 1 >= ZONE.length;
-    altarPrompt!.textContent = !world.exitOpen
-      ? '계단이 봉인되어 있다 — 족장을 먼저 쓰러뜨려야 한다'
+    altarPrompt!.textContent = world.exitNeedsKey
+      ? world.hasExitKey
+        ? `${IK} — 열쇠로 자물쇠를 연다`
+        : '쇠사슬이 잠겨 있다 — 족장이 열쇠를 갖고 있다'
       : last
         ? `${IK} — 구역을 벗어난다`
         : `${IK} — 아래층으로 내려간다  (${floorIndex + 2}/${ZONE.length})`;
+  } else if (onEntrance) {
+    altarPrompt!.textContent = `${IK} — 위층으로 올라간다  (${floorIndex}/${ZONE.length})`;
   }
 
   const w = world.weapon;

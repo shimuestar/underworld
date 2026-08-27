@@ -1079,32 +1079,57 @@ describe('goblin_chieftain 원거리 공격', () => {
   });
 });
 
-describe('출구 (7.4)', () => {
-  it('보스 생존 시 잠김, 처치 후 발판 위에서 E 를 눌러야 zone_cleared', () => {
-    const boss = spawnEnemyAt('goblin_chieftain', 8, 6, 1);
-    world.enemies.push(boss);
-    const events: string[] = [];
-    world.events.on('exit_locked', () => events.push('locked'));
-    world.events.on('zone_cleared', () => events.push('cleared'));
+describe('출구 (7.4) — 쇠사슬·자물쇠·열쇠', () => {
+  it('열쇠 없인 E 도 소용없고, 열쇠로 풀면 그다음 E 로 내려간다', () => {
+    world.exitNeedsKey = true; // 보스 층 로드 상태 — main 의 loadFloor 가 세팅한다
+    const log: string[] = [];
+    world.events.on('exit_locked', () => log.push('locked'));
+    world.events.on('exit_unlocked', () => log.push('unlocked'));
+    world.events.on('zone_cleared', () => log.push('cleared'));
 
     world.player.x = world.level.exitPos!.x;
     world.player.z = world.level.exitPos!.z;
     Exit.tick(world, DT);
-    expect(events).toEqual(['locked']);
-    expect(world.cleared).toBe(false);
+    expect(log).toEqual(['locked']); // 밟자마자 알림 1회
 
-    // 보스를 잡아도 밟는 것만으로는 끝나지 않는다
-    boss.alive = false;
-    Exit.tick(world, DT);
-    expect(world.cleared).toBe(false);
-    expect(events).toEqual(['locked']);
-
-    // E 를 눌러야 나간다
+    // 열쇠 없이 E — 사슬만 짤그랑
     world.input = { ...Input.emptySnapshot(), interactPressed: true };
     Exit.tick(world, DT);
     world.input = Input.emptySnapshot();
-    expect(events).toEqual(['locked', 'cleared']);
+    expect(log).toEqual(['locked', 'locked']);
+    expect(world.cleared).toBe(false);
+    expect(world.exitOpen).toBe(false);
+
+    // 열쇠를 쥐고 E — 자물쇠가 풀린다. 아직 내려가지는 않는다
+    world.hasExitKey = true;
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    Exit.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(log).toEqual(['locked', 'locked', 'unlocked']);
+    expect(world.exitOpen).toBe(true);
+    expect(world.hasExitKey).toBe(false); // 열쇠는 1회 소모
+    expect(world.cleared).toBe(false);
+
+    // 그다음 E 로 내려간다
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    Exit.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(log).toEqual(['locked', 'locked', 'unlocked', 'cleared']);
     expect(world.cleared).toBe(true);
+  });
+
+  it('보스는 잠긴 층에서만 열쇠를 떨군다 — 잡몹·이미 딴 층은 아니다', () => {
+    Exit.init(world);
+    const keys = (): number => world.groundItems.filter((g) => g.kind === 'key').length;
+    world.exitNeedsKey = true;
+    world.events.emit('enemy_died', { enemyType: 'goblin_chieftain', x: 8, z: 6 });
+    expect(keys()).toBe(1);
+    world.exitNeedsKey = false; // 이미 딴 층 (부활 재전투)
+    world.events.emit('enemy_died', { enemyType: 'goblin_chieftain', x: 8, z: 6 });
+    expect(keys()).toBe(1);
+    world.exitNeedsKey = true;
+    world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 8, z: 6 });
+    expect(keys()).toBe(1);
   });
 
   it('발판 밖에서 E 를 눌러도 클리어되지 않는다', () => {
@@ -1116,37 +1141,30 @@ describe('출구 (7.4)', () => {
     expect(world.onExitPad).toBe(false);
   });
 
-  it('exitOpen 은 출구에서 멀리 있어도 갱신된다 — 보스가 죽는 순간 exit_opened 1회', () => {
-    const boss = spawnEnemyAt('goblin_chieftain', 8, 6, 1);
-    world.enemies.push(boss);
+  it('보스 없는(잠기지 않은) 층은 첫 틱에 열린다 — exit_opened 1회', () => {
     const opened: unknown[] = [];
     world.events.on('exit_opened', (payload) => opened.push(payload));
-
-    world.player.x = 6; // 출구에서 멀리
+    world.player.x = 6;
     world.player.z = 6;
-    Exit.tick(world, DT);
-    expect(world.exitOpen).toBe(false); // 봉인 — 밟지 않아도 상태가 잡힌다
-    expect(opened).toHaveLength(0);
-
-    boss.alive = false;
     Exit.tick(world, DT);
     expect(world.exitOpen).toBe(true);
     expect(opened).toHaveLength(1);
-
     Exit.tick(world, DT); // 계속 돌아도 한 번만
     expect(opened).toHaveLength(1);
   });
 
-  it('보스가 되살아나면 다시 봉인된다 (부활로 적이 재스폰될 때)', () => {
-    const boss = spawnEnemyAt('goblin_chieftain', 8, 6, 1);
-    boss.alive = false;
-    world.enemies.push(boss);
+  it('입구 발판에서 E — 위층 신호. 첫 층은 canAscend 가 꺼져 있어 침묵한다', () => {
+    const up: unknown[] = [];
+    world.events.on('floor_ascend', (payload) => up.push(payload));
+    world.player.x = world.level.spawn.x;
+    world.player.z = world.level.spawn.z;
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
     Exit.tick(world, DT);
-    expect(world.exitOpen).toBe(true);
-
-    boss.alive = true;
+    expect(up).toHaveLength(0); // 첫 층 — 올라갈 곳이 없다
+    world.canAscend = true;
     Exit.tick(world, DT);
-    expect(world.exitOpen).toBe(false);
+    world.input = Input.emptySnapshot();
+    expect(up).toHaveLength(1);
   });
 });
 

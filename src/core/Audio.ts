@@ -23,6 +23,9 @@ export type SoundName =
   | 'cast_frost'
   | 'blink'
   | 'thaw'
+  | 'stairs_travel'
+  | 'chain_locked'
+  | 'unlock_chain'
   | 'shock'
   | 'freeze'
   | 'spell_impact'
@@ -269,6 +272,32 @@ export class GameAudio {
         this.tone(1400, 0.35, 'sine', 0.3, 0, 500);
         this.tone(2100, 0.25, 'triangle', 0.2, 0.05, 900);
         this.noise(0.4, 0.3, 2400);
+        break;
+      case 'stairs_travel': {
+        // 계단을 밟는 발걸음 — 낮은 쿵이 조금씩 낮아지며 이어진다.
+        // 내려갈 때·올라갈 때·게임 시작(내려온 직후) 모두 이 소리다
+        for (let i = 0; i < 7; i++) {
+          const at = i * 0.16 + (i % 2) * 0.02;
+          this.tone(150 - i * 9, 0.09, 'sine', 0.5, at, 55 - i * 3);
+          this.noise(0.05, 0.28, 500 - i * 30, at);
+        }
+        break;
+      }
+      case 'chain_locked':
+        // 잠긴 쇠사슬을 흔든 소리 — 짧은 금속 짤그랑 두 번
+        this.tone(2200, 0.05, 'square', 0.22, 0, 1600);
+        this.noise(0.05, 0.5, 5200);
+        this.tone(1900, 0.06, 'square', 0.2, 0.09, 1400);
+        this.noise(0.06, 0.45, 4800, 0.09);
+        break;
+      case 'unlock_chain':
+        // 자물쇠 딸깍 + 사슬이 흘러내려 바닥에 쏟아진다
+        this.tone(1300, 0.05, 'square', 0.4, 0, 900);
+        this.noise(0.05, 0.4, 5600, 0.12);
+        this.noise(0.05, 0.36, 5100, 0.19);
+        this.noise(0.05, 0.32, 4600, 0.26);
+        this.noise(0.05, 0.28, 4100, 0.33);
+        this.tone(90, 0.18, 'sine', 0.45, 0.45, 50);
         break;
       case 'shock':
         // 감전 — 낮게 우는 전류에 지직거리는 노이즈가 겹친다 (얼어붙는 소리와 대비되게 거칠게)

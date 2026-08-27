@@ -581,10 +581,10 @@ const BEAM_JITTER = 0.32;
 const BEAM_PULSE_MS = 90;
 /** 문이 열리는 각도 — 100도. 90도면 문틀에 딱 붙어 벽에 묻혀 보인다 */
 const DOOR_SWING_RAD = (100 * Math.PI) / 180;
-// 출구 계단 — 덮개 석판이 밀려나는 거리·속도와, 내려가는 연출의 하강 폭
-const SLAB_SLIDE_DIST = 3.4;
-const SLAB_SLIDE_EASE = 0.06;
+// 층 이동 연출 — 내려갈 때 카메라가 가라앉는 폭 (올라갈 때는 반대로 떠오른다)
 const STAIR_STEPS_DROP = 2.6;
+/** 족장의 열쇠 표시색 — 금빛 */
+const KEY_COLOR = 0xf0c34a;
 /** 처음엔 천천히, 끝에서 훅 — 계단을 딛다 마지막에 어둠으로 잠기는 느낌 */
 const easeInCubic = (t: number): number => t * t * t;
 // 뇌창 그을림 — 빔이 머무는 자리가 검게 탄다. 한 타마다 새 데칼을 찍으면 초당 10장이
@@ -689,13 +689,13 @@ export class Stage {
   >();
   /** 지금 씬에 올라가 있는 층 지오메트리 — 다음 층으로 갈 때 걷어낸다 */
   private levelGroup: THREE.Group | null = null;
-  /** 출구 계단을 덮은 석판 — 보스를 잡으면 옆으로 밀려 계단이 드러난다 */
-  private exitSlab: THREE.Mesh | undefined;
-  private exitSlabBase: THREE.Vector3 | null = null;
-  private slabSlide = 0;
+  /** 출구 계단을 막은 쇠사슬·자물쇠 — 자물쇠를 따면 사라진다 */
+  private exitChain: THREE.Object3D | undefined;
   /** 내려가는 연출 — 시작 시각(0 이면 안 도는 중) */
   private descentStart = 0;
   private descentMs = 1;
+  /** +1 = 내려간다, −1 = 올라간다 */
+  private descentDir = 1;
   private readonly tracers: Tracer[] = [];
   private readonly particles: Particle[] = [];
   private readonly hands = new HandModel();
@@ -927,8 +927,7 @@ export class Stage {
     this.scene.add(this.ambientLight);
     this.exitPad = group.getObjectByName('exitPad') as THREE.Mesh | undefined;
     this.exitLight = group.getObjectByName('exitLight') as THREE.PointLight | undefined;
-    this.exitSlab = group.getObjectByName('exitSlab') as THREE.Mesh | undefined;
-    this.exitSlabBase = this.exitSlab ? this.exitSlab.position.clone() : null;
+    this.exitChain = group.getObjectByName('exitChain') ?? undefined;
     this.descentStart = 0;
     this.exitOpen = true; // 아래 호출이 실제로 반영되도록 반대값에서 시작
     this.setExitOpen(false);
@@ -990,6 +989,7 @@ export class Stage {
       mat.emissiveIntensity = open ? 0.5 : 0.06;
       mat.opacity = open ? 0.85 : 0.55;
     }
+    if (this.exitChain) this.exitChain.visible = !open; // 자물쇠가 풀리면 사슬이 사라진다
     if (this.exitLight) this.exitLight.intensity = open ? 0.9 : 0;
     // 열리는 순간 한 번 크게 번쩍인다 — 멀리서도 보이도록
     if (open) this.exitFlashUntil = performance.now() + EXIT_FLASH_MS;
@@ -997,29 +997,21 @@ export class Stage {
 
   /** 매 프레임 — 석판이 옆으로 밀려 계단을 드러내고, 내려가는 중이면 카메라가 가라앉는다 */
   private updateExitStairs(now: number): void {
-    if (this.exitSlab && this.exitSlabBase) {
-      const target = this.exitOpen ? 1 : 0;
-      this.slabSlide += (target - this.slabSlide) * SLAB_SLIDE_EASE;
-      this.exitSlab.position.set(
-        this.exitSlabBase.x + this.slabSlide * SLAB_SLIDE_DIST,
-        this.exitSlabBase.y - this.slabSlide * 0.06,
-        this.exitSlabBase.z,
-      );
-    }
     if (this.descentStart === 0) return;
     const t = Math.min(1, (now - this.descentStart) / this.descentMs);
-    // 앞으로 걸어 들어가며 가라앉는다 — 계단을 밟고 내려가는 몸짓
-    this.camera.position.y -= easeInCubic(t) * STAIR_STEPS_DROP;
+    // 내려갈 땐(+1) 가라앉고 올라갈 땐(−1) 떠오른다 — 계단을 밟는 몸짓
+    this.camera.position.y -= this.descentDir * easeInCubic(t) * STAIR_STEPS_DROP;
     this.camera.translateZ(-easeInCubic(t) * 1.4);
-    this.camera.rotation.x -= t * 0.35; // 발밑을 본다
+    this.camera.rotation.x -= this.descentDir * t * 0.35; // 발밑(위)을 본다
     if (t >= 1) this.descentStart = 0;
   }
 
   /** 계단을 내려간다 — durationMs 동안 카메라가 앞으로 밀리며 가라앉는다.
    *  층을 갈아 끼우는 건 부르는 쪽 몫이다 (연출이 끝날 즈음에 부른다) */
-  startDescent(durationMs: number): void {
+  startDescent(durationMs: number, dir = 1): void {
     this.descentStart = performance.now();
     this.descentMs = Math.max(1, durationMs);
+    this.descentDir = dir;
   }
 
   private updateExitLight(now: number): void {
@@ -3035,7 +3027,32 @@ export class Stage {
   /** 바닥 아이템 비주얼 — 각인(팔면체 보석) / 포션(붉은 약병) / 골드(낮은 더미) */
   private makeGroundItem(kind: GroundItemState['kind'], sigilId?: string): THREE.Group {
     const group = new THREE.Group();
-    if (kind === 'potion' || kind === 'mana') {
+    if (kind === 'key') {
+      // 족장의 열쇠 — 금빛 고리 + 대 + 이빨 둘. 부유·회전은 syncGroundItems 가 준다
+      const gold = new THREE.MeshLambertMaterial({
+        color: KEY_COLOR,
+        emissive: KEY_COLOR,
+        emissiveIntensity: 0.55,
+      });
+      const key = new THREE.Group();
+      key.name = 'gem';
+      const bow = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.03, 8, 14), gold);
+      bow.position.y = 0.14;
+      key.add(bow);
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.3, 6), gold);
+      shaft.position.y = -0.06;
+      key.add(shaft);
+      for (const [ty, tw] of [
+        [-0.18, 0.1],
+        [-0.11, 0.075],
+      ] as const) {
+        const tooth = new THREE.Mesh(new THREE.BoxGeometry(tw, 0.045, 0.045), gold);
+        tooth.position.set(tw / 2 + 0.028, ty, 0);
+        key.add(tooth);
+      }
+      group.add(key);
+      group.add(new THREE.PointLight(KEY_COLOR, 0.9, 5, 0));
+    } else if (kind === 'potion' || kind === 'mana') {
       const color = kind === 'mana' ? MANA_POTION_COLOR : POTION_COLOR;
       const body = new THREE.Mesh(
         new THREE.CylinderGeometry(0.11, 0.13, 0.24, 8),

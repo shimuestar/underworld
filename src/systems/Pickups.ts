@@ -101,6 +101,7 @@ function restHeight(kind: string): number {
  *  당장 필요 없어도 챙겨 뒀다 쓰는 게 가방의 값이고, 대신 가득 차면 바닥에 남는다 */
 function wants(world: World, kind: string): boolean {
   if (kind === 'gold') return true;
+  if (kind === 'key') return true; // 열쇠는 가방을 거치지 않는다 — 바로 손에 쥔다
   // 화살은 가방이 아니라 무기 탄약이다 — 상한이 차면 권총탄처럼 바닥에 남는다
   if (kind === 'arrow') {
     return (world.weapon.arrows ?? 0) < balance.weapons.bow.ammoMax;
@@ -131,7 +132,7 @@ export function tick(world: World, dt: number): void {
     }
     if (!item.magnet) {
       const radius =
-        item.kind === 'gold'
+        item.kind === 'gold' || item.kind === 'key'
           ? cfg.gold.magnetRadius
           : item.kind === 'arrow'
             ? cfg.arrow.magnetRadius
@@ -182,6 +183,12 @@ export function tick(world: World, dt: number): void {
       } else {
         world.events.emit('arrow_broken', { arrows: world.weapon.arrows ?? 0 });
       }
+      continue;
+    }
+    if (item.kind === 'key') {
+      world.groundItems.splice(i, 1);
+      world.hasExitKey = true;
+      world.events.emit('exit_key_picked', {});
       continue;
     }
     if (item.kind === 'gold') {

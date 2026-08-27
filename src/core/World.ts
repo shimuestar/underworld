@@ -251,7 +251,7 @@ export interface LifeMoteState {
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
-  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow';
+  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow' | 'key';
   x: number;
   z: number;
   /** kind==='sigil' 일 때만 */
@@ -617,6 +617,18 @@ export class World {
 
   /** 출구 개방 여부 — 보스가 죽으면 열린다. 렌더·미니맵이 이 값을 본다 */
   exitOpen = false;
+
+  /** 출구 쇠사슬이 열쇠를 요구하는가 — 보스 층에서만 참. 열쇠로 풀면 거짓 */
+  exitNeedsKey = false;
+
+  /** 족장이 떨군 열쇠를 주웠는가 */
+  hasExitKey = false;
+
+  /** 입구 계단으로 위층에 올라갈 수 있는가 — 첫 층은 거짓 (층 번호는 main 이 안다) */
+  canAscend = false;
+
+  /** 입구 발판 위인가 — 위층 안내와 E 입력을 렌더·시스템이 읽는다 */
+  onEntrancePad = false;
   /** 출구 발판 위에 서 있는가 — 봉인 안내를 계속 띄우기 위한 플래그 */
   onExitPad = false;
 

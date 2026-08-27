@@ -66,6 +66,10 @@ export class Level {
   readonly spawnWall: { dc: number; dr: number };
   /** 시작 시선 — 등 뒤 계단이 아니라 방을 본다 */
   readonly spawnYaw: number;
+  /** 출구가 등진 벽의 방향 — 내려가는 계단 벽감이 이 칸에 파인다 */
+  readonly exitWall: { dc: number; dr: number };
+  /** 위층에서 내려와 올라온 자리의 시선 — 등 뒤 계단이 아니라 방을 본다 */
+  readonly exitYaw: number;
   readonly altarPos: { x: number; z: number } | null;
 
   /** 그리드 셀이 아닌 막힌 구조물 (제단 기둥). slideMove가 함께 검사한다 */
@@ -122,6 +126,15 @@ export class Level {
       : null;
 
     const exit = this.findChar('X');
+    // 출구가 등진 벽 — 내려가는 계단 벽감이 그 칸에 파이고,
+    // 올라와 도착하면 그 반대(방 쪽)를 본다 (스폰과 같은 규약)
+    const exitWall = exit
+      ? (([[0, -1], [0, 1], [-1, 0], [1, 0]] as const).find(
+          ([dc, dr]) => this.charAt(exit.col + dc, exit.row + dr) === '#',
+        ) ?? ([0, -1] as const))
+      : ([0, -1] as const);
+    this.exitWall = { dc: exitWall[0], dr: exitWall[1] };
+    this.exitYaw = Math.atan2(exitWall[0], exitWall[1]);
     this.exitPos = exit
       ? { x: (exit.col + 0.5) * this.cellSize, z: (exit.row + 0.5) * this.cellSize }
       : null;
@@ -304,6 +317,11 @@ export class Level {
     return this.findChar('S') ?? { col: 0, row: 0 };
   }
 
+  /** 출구 칸의 격자 좌표 — 내려가는 계단 벽감이 그 옆 칸에 파인다 */
+  findExitCell(): { col: number; row: number } | null {
+    return this.findChar('X');
+  }
+
   private findChar(ch: string): { col: number; row: number } | null {
     for (let row = 0; row < this.rows; row++) {
       const col = this.grid[row]?.indexOf(ch) ?? -1;
@@ -365,7 +383,6 @@ const ALCOVE_CORR_D = 1.28;
 const ALCOVE_STEP_RUN = 0.44;
 const STAIR_RISE = 0.34;
 const STAIR_STONE = 0x4a443b;
-const STAIR_SLAB = 0x565045;
 /** 봉인된 출구 — 꺼진 돌바닥. 열린 초록과 한눈에 구분돼야 한다 */
 export const COLOR_EXIT_LOCKED = 0x3a3f44;
 export const COLOR_EXIT_OPEN = 0x3fae5a;
@@ -505,23 +522,35 @@ export function addDoorFrameBlockers(level: Level, col: number, row: number): vo
   }
 }
 
-/** 계단이 등질 벽 방향 → 회전각. 두 칸까지 훑어 가장 가까운 벽 쪽을 고른다.
- *  입구는 계단 꼭대기(아치)가 벽에 붙고, 출구는 계단 바닥이 벽을 파고든다 —
- *  그래서 둘의 방향이 180도 다르다 */
-function stairYaw(level: Level, col: number, row: number, entrance: boolean): number {
-  const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
-  let wx = 0;
-  let wz = -1; // 못 찾으면 북쪽
-  // 바로 붙은 진짜 벽만 본다. 두 칸 건너 벽을 잡으면 계단이 방 한가운데 서고 아치가 허공에 뜬다 —
-  // 스폰·출구를 벽에 붙여 두는 것이 데이터 쪽 규약이고, Zone.test 가 그걸 지킨다
-  for (const [dc, dr] of dirs) {
-    if (level.charAt(col + dc, row + dr) !== '#') continue;
-    wx = dc;
-    wz = dr;
-    break;
+
+/** 출구 벽감 테두리 — 좌우 대칭 문틀(기둥·상인방·등판). 속은 계단이 아래로 파인다.
+ *  조각들은 벽 병합 목록에 들어가 벽과 한 몸이다 */
+function exitAlcoveFrameGeoms(
+  cs: number,
+  ceiling: number,
+  x: number,
+  z: number,
+  yaw: number,
+): THREE.BufferGeometry[] {
+  const out: THREE.BufferGeometry[] = [];
+  const place = (g: THREE.BufferGeometry, lx: number, ly: number, lz: number): void => {
+    g.translate(lx, ly, lz);
+    g.rotateY(yaw);
+    g.translate(x, 0, z);
+    out.push(g);
+  };
+  const jamb = (cs - ALCOVE_OPEN_W) / 2; // 출구는 가운데로 내려간다 — 좌우 대칭
+  for (const side of [-1, 1]) {
+    place(new THREE.BoxGeometry(jamb, ceiling, cs), side * (cs / 2 - jamb / 2), ceiling / 2, 0);
   }
-  // 로컬 -Z 가 계단 꼭대기, +Z 가 바닥이다
-  return entrance ? Math.atan2(-wx, -wz) : Math.atan2(wx, wz);
+  place(
+    new THREE.BoxGeometry(ALCOVE_OPEN_W, ceiling - ALCOVE_OPEN_H, ALCOVE_LINTEL_D),
+    0,
+    ALCOVE_OPEN_H + (ceiling - ALCOVE_OPEN_H) / 2,
+    cs / 2 - ALCOVE_LINTEL_D / 2,
+  );
+  place(new THREE.BoxGeometry(cs, ceiling, ALCOVE_BACK_D), 0, ceiling / 2, -cs / 2 + ALCOVE_BACK_D / 2);
+  return out;
 }
 
 /** 벽감 테두리 — 벽 한 칸을 ㄱ자로 파낸 모양. 조각들을 벽 병합 목록에 그대로 넣으므로
@@ -644,39 +673,67 @@ function buildStairwell(
     return g;
   }
 
-  // ── 출구 — 바닥을 뚫고 아래로 내려간다
-  const w = cs * 0.62;
+  // ── 출구 — 벽감 속으로 내려가는 계단. 입구와 짝이 맞되 방향이 반대다.
+  // 벽감 칸은 격자상 '#' 이라 몸은 못 들어간다 — 내려가는 것은 발판에서 E (연출로 처리)
+  const innerW = ALCOVE_OPEN_W - 0.04;
   const steps = STAIR_STEPS;
-  const run = (cs * 0.78) / steps;
-  const shaft = new THREE.Mesh(
-    new THREE.BoxGeometry(w + 0.5, steps * rise + 0.3, cs * 0.9),
-    new THREE.MeshLambertMaterial({ color: 0x0a0908 }),
-  );
-  shaft.position.y = -(steps * rise) / 2 - 0.15;
-  g.add(shaft);
+  const run = (cs * 0.82) / steps;
+  const front = cs / 2;
+
+  // 디딤돌 — 개구부에서 안쪽으로 갈수록 한 단씩 내려간다. 아래로 길게 뽑은 통짜라
+  // 단 사이·밑이 뚫려 보이지 않는다
   for (let i = 0; i < steps; i++) {
-    const step = new THREE.Mesh(new THREE.BoxGeometry(w, rise, run), stone);
-    step.position.set(0, -rise * (i + 0.5), -cs * 0.39 + run * (i + 0.5));
+    const top = -rise * (i + 1);
+    const depth = rise * steps + 1.2; // 가장 낮은 단보다 더 아래까지
+    const step = new THREE.Mesh(new THREE.BoxGeometry(innerW, depth, run), stone);
+    step.position.set(0, top - depth / 2, front - run * (i + 0.5));
     g.add(step);
   }
-  for (const side of [-1, 1]) {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.22, steps * rise, cs * 0.8), stone);
-    rail.position.set(side * (w / 2 + 0.11), -(steps * rise) / 2, 0);
-    g.add(rail);
-  }
-  // 덮개 석판 — 잠겨 있는 동안 계단을 덮는다. Stage 가 열릴 때 옆으로 민다
-  const slab = new THREE.Mesh(
-    new THREE.BoxGeometry(cs * 0.86, 0.22, cs * 0.86),
-    new THREE.MeshLambertMaterial({
-      color: STAIR_SLAB,
-      map: dungeonFloorTexture(),
-      bumpMap: dungeonFloorTexture(),
-      bumpScale: 0.3,
-    }),
+  // 계단이 잠기는 어둠 — 안쪽 끝의 "아래쪽"만 덮는다. 문 전체를 덮으면 문이
+  // 검은 판이 돼 계단이 하나도 안 보인다 — 위쪽은 등판(돌벽)이 보여야 한다
+  const darkTop = 0.85; // 사슬 아랫줄보다 낮게 — 사슬 뒤가 뚫려 보이지 않게
+  const darkH = darkTop + rise * steps + 1.4;
+  const dark = new THREE.Mesh(
+    new THREE.BoxGeometry(innerW + 0.08, darkH, 0.06),
+    new THREE.MeshBasicMaterial({ color: 0x020202 }),
   );
-  slab.position.y = -0.09;
-  slab.name = 'exitSlab';
-  g.add(slab);
+  dark.position.set(0, darkTop - darkH / 2, front - run * steps - 0.05);
+  g.add(dark);
+  // 벽감 안 불빛 — 내려가는 첫 단들과 안벽을 은은히 밝힌다.
+  // 이게 없으면 게임 조명(환경광 0.04)에서 문 안이 통째로 검다
+  const glow = new THREE.PointLight(0xffb066, 0.9, 5, 0);
+  glow.position.set(0, 1.7, front - 1.1);
+  g.add(glow);
+
+  // 쇠사슬 두 줄 + 자물쇠 — 벽감 입에 걸려 있다. 자물쇠를 따면 Stage 가 감춘다
+  const chain = new THREE.Group();
+  chain.name = 'exitChain';
+  const iron = new THREE.MeshLambertMaterial({ color: 0x3c3c44 });
+  for (const y0 of [1.2, 0.82]) {
+    const links = 9;
+    for (let i = 0; i < links; i++) {
+      const t = (i + 0.5) / links;
+      const sag = Math.sin(Math.PI * t) * 0.15; // 가운데가 처진다
+      const link = new THREE.Mesh(
+        new THREE.BoxGeometry(innerW / links + 0.03, 0.055, 0.055),
+        iron,
+      );
+      link.position.set(-innerW / 2 + innerW * t, y0 - sag, front - 0.08);
+      link.rotation.z = Math.cos(Math.PI * t) * 0.3; // 처진 결을 따라 기운다
+      chain.add(link);
+    }
+  }
+  // 자물쇠 — 아랫줄 가운데에 매달린 몸통 + 고리
+  const lockBody = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.3, 0.1), iron);
+  lockBody.position.set(0, 0.46, front - 0.08);
+  chain.add(lockBody);
+  const shackle = new THREE.Mesh(
+    new THREE.TorusGeometry(0.09, 0.03, 6, 10, Math.PI),
+    iron,
+  );
+  shackle.position.set(0, 0.62, front - 0.08);
+  chain.add(shackle);
+  g.add(chain);
   return g;
 }
 
@@ -696,6 +753,18 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
     z: (spawnCell.row + level.spawnWall.dr + 0.5) * cs,
     yaw: Math.atan2(-level.spawnWall.dc, -level.spawnWall.dr),
   };
+
+  // 출구 계단이 파고 들어갈 벽 칸 — 출구가 등진 쪽 한 칸 (출구 없는 레벨이면 그리드 밖)
+  const exitCell = level.findExitCell();
+  const exitAlcove = exitCell
+    ? {
+        row: exitCell.row + level.exitWall.dr,
+        col: exitCell.col + level.exitWall.dc,
+        x: (exitCell.col + level.exitWall.dc + 0.5) * cs,
+        z: (exitCell.row + level.exitWall.dr + 0.5) * cs,
+        yaw: Math.atan2(-level.exitWall.dc, -level.exitWall.dr),
+      }
+    : { row: -1, col: -1, x: 0, z: 0, yaw: 0 };
 
   // 셀 단위 박스 생성 후 카테고리별로 병합. 문(D)은 열릴 때 제거해야 하므로 개별 메시
   const byColor = new Map<number, THREE.BufferGeometry[]>();
@@ -747,6 +816,13 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
         list.push(...alcoveFrameGeoms(cs, level.ceiling, alcove.x, alcove.z, alcove.yaw));
         continue;
       }
+      // 출구 벽감 — 내려가는 계단이 이 벽 칸을 파고 내려간다 (입구 문틀과 한 벌)
+      if (row === exitAlcove.row && col === exitAlcove.col) {
+        let list = byColor.get(color);
+        if (!list) byColor.set(color, (list = []));
+        list.push(...exitAlcoveFrameGeoms(cs, level.ceiling, exitAlcove.x, exitAlcove.z, exitAlcove.yaw));
+        continue;
+      }
       const box = new THREE.BoxGeometry(cs, level.ceiling, cs);
       box.translate((col + 0.5) * cs, level.ceiling / 2, (row + 0.5) * cs);
       let list = byColor.get(color);
@@ -775,8 +851,8 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   const floorTiles: THREE.BufferGeometry[] = [];
   for (let row = 0; row < level.rows; row++) {
     for (let col = 0; col < level.cols; col++) {
-      const ch = level.charAt(col, row);
-      if (ch === 'X') continue; // 내려가는 계단 구멍. 입구(S)는 계단이 올라가므로 바닥이 있다
+      // 구멍은 출구 벽감(벽 칸) 안에만 있다 — 입구(S)·출구(X) 발판 칸은 바닥이 있다
+      if (row === exitAlcove.row && col === exitAlcove.col) continue;
       const tile = new THREE.PlaneGeometry(cs, cs);
       tile.rotateX(-Math.PI / 2);
       tile.translate((col + 0.5) * cs, 0, (row + 0.5) * cs);
@@ -869,12 +945,10 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       }
 
       if (ch === 'X') {
-        // 출구 — 아래층으로 내려가는 계단. 잠겨 있으면 석판이 덮고 있고,
-        // 열리면 석판이 옆으로 밀려 계단이 드러난다
-        // 계단은 벽 쪽으로 파고 내려간다 — 방 한가운데로 뚫린 것처럼 보이지 않게
-        group.add(buildStairwell(x, z, cs, false, stairYaw(level, col, row, false)));
+        // 출구 — 등진 벽 칸의 벽감으로 내려가는 계단 + 그 입을 막은 쇠사슬·자물쇠.
+        // 발판(초록/회색)이 잠김 상태를 멀리서도 알린다
+        group.add(buildStairwell(exitAlcove.x, exitAlcove.z, cs, false, exitAlcove.yaw));
 
-        // 발판 — 잠김/열림을 색으로 알린다. 멀리서 보이는 신호라 유지한다
         const pad = new THREE.Mesh(
           new THREE.PlaneGeometry(cs * 0.8, cs * 0.8),
           new THREE.MeshLambertMaterial({
