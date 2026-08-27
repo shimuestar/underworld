@@ -2,6 +2,11 @@
 // grid 인덱스는 [row][col] = [z][x]. 월드 좌표: x = col * cellSize, z = row * cellSize.
 
 import * as THREE from 'three';
+import {
+  dungeonCeilingTexture,
+  dungeonFloorTexture,
+  dungeonWallTexture,
+} from '../render/DungeonTextures';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export interface GlyphDef {
@@ -293,6 +298,11 @@ export class Level {
 
 // ---- 렌더 지오메트리 ----
 // 시각 팔레트 (튜닝값 아님 — 슬라이스 검증 후 비주얼 단계에서 교체)
+// 요철 세기 — 랜턴이 스칠 때 줄눈·판석 틈이 파여 보이는 정도.
+// 크게 주면 평면인 게 들통난다 (그림자가 안 지는데 음영만 진해진다)
+const WALL_BUMP = 0.42;
+const FLOOR_BUMP = 0.3;
+const CEILING_BUMP = 0.25;
 const COLOR_WALL = 0x55555f;
 const COLOR_DOOR = 0x6b4a2f;
 const COLOR_CRACK = 0x4a5a68;
@@ -336,6 +346,10 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
           new THREE.BoxGeometry(cs, level.ceiling, cs),
           new THREE.MeshLambertMaterial({
             color,
+            // 텍스처는 회색조라 color 가 곱해져 문(갈색)·관문(청록)의 색 구분이 그대로 남는다
+            map: dungeonWallTexture(),
+            bumpMap: dungeonWallTexture(),
+            bumpScale: WALL_BUMP,
             // 관문은 은은하게 자체 발광 — 어두운 복도 끝에서도 "저기 뭔가 있다"가 보인다
             emissive: ch === 'G' ? COLOR_GATE : 0x000000,
             emissiveIntensity: ch === 'G' ? 0.22 : 0,
@@ -357,20 +371,48 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   }
   for (const [color, geoms] of byColor) {
     const merged = mergeGeometries(geoms);
-    group.add(new THREE.Mesh(merged, new THREE.MeshLambertMaterial({ color })));
+    group.add(
+      new THREE.Mesh(
+        merged,
+        new THREE.MeshLambertMaterial({
+          color,
+          map: dungeonWallTexture(),
+          bumpMap: dungeonWallTexture(),
+          bumpScale: WALL_BUMP,
+        }),
+      ),
+    );
   }
 
+  // 바닥·천장은 큰 평면 하나라 셀 수만큼 반복시킨다 — 타일 한 장이 셀 하나(4m)다.
+  // 텍스처 객체를 공유하면 repeat 도 공유돼 버리므로 각자 복제해서 쓴다
+  const floorTex = dungeonFloorTexture().clone();
+  floorTex.needsUpdate = true;
+  floorTex.repeat.set(level.cols, level.rows);
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(width, depth),
-    new THREE.MeshLambertMaterial({ color: COLOR_FLOOR }),
+    new THREE.MeshLambertMaterial({
+      color: COLOR_FLOOR,
+      map: floorTex,
+      bumpMap: floorTex,
+      bumpScale: FLOOR_BUMP,
+    }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(width / 2, 0, depth / 2);
   group.add(floor);
 
+  const ceilingTex = dungeonCeilingTexture().clone();
+  ceilingTex.needsUpdate = true;
+  ceilingTex.repeat.set(level.cols, level.rows);
   const ceiling = new THREE.Mesh(
     new THREE.PlaneGeometry(width, depth),
-    new THREE.MeshLambertMaterial({ color: COLOR_CEILING }),
+    new THREE.MeshLambertMaterial({
+      color: COLOR_CEILING,
+      map: ceilingTex,
+      bumpMap: ceilingTex,
+      bumpScale: CEILING_BUMP,
+    }),
   );
   ceiling.rotation.x = Math.PI / 2;
   ceiling.position.set(width / 2, level.ceiling, depth / 2);
