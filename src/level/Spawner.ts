@@ -13,6 +13,8 @@ export interface EntityPlacement {
 }
 
 /** 현재 구현된 적 타입만 스폰한다. 새 적을 구현하면 여기에 추가. */
+/** 실제로 스폰되는 적 — entities.json 에는 있지만 behavior·attack 이 없는 스텁(오크 계열 등)은
+ *  여기 없으면 조용히 건너뛴다. 레벨을 짤 때 이 목록 밖의 적을 쓰면 그 자리는 빈다 */
 const IMPLEMENTED = new Set([
   'goblin_runner',
   'goblin_spear',
@@ -22,6 +24,11 @@ const IMPLEMENTED = new Set([
   'spider_small',
   'spider_large',
 ]);
+
+/** 이 적 타입이 실제로 스폰되는가 — 레벨 검증이 이걸로 스텁 배치를 잡는다 */
+export function isSpawnable(type: string): boolean {
+  return IMPLEMENTED.has(type);
+}
 
 /** 임의 위치에 적 하나 생성 (연습 소환 등) */
 export function spawnEnemyAt(type: string, x: number, z: number, id: number): EnemyState {

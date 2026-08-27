@@ -41,7 +41,15 @@ import { InventoryUI, quickslotView } from './render/InventoryUI';
 import { SKILL_KEYS, SkillUI } from './render/SkillUI';
 import { itemIconSvg } from './render/ItemIcons';
 import { allSigilIds, isImplemented, sigilColor, sigilDef } from './core/SigilData';
-import levelJson from '../data/levels/z01_f1.json';
+import z01f1 from '../data/levels/z01_f1.json';
+import z01f2 from '../data/levels/z01_f2.json';
+import z01f3 from '../data/levels/z01_f3.json';
+
+// 1구역 층 순서 — 출구에서 E 를 누르면 다음 층으로 내려간다. 마지막 층을 나가면 구역 클리어.
+// 층마다 스폰(S)이 곧 그 층의 입구이고, 출구(X)가 다음 층의 입구로 이어진다
+const ZONE = [z01f1, z01f2, z01f3];
+let floorIndex = 0;
+let levelJson: (typeof ZONE)[number] = ZONE[0]!;
 
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
@@ -55,7 +63,7 @@ if (!app || !hud || !deathOverlay || !deathHint || !flashOverlay || !hurtOverlay
 
 const events = new Events();
 const metrics = new Metrics(events); // 다른 구독보다 먼저 — 이벤트만 구독한다
-const level = new Level(levelJson);
+let level = new Level(levelJson);
 const input = new Input(app);
 
 /** 현재 매핑 기준 패드 버튼 이름 — 안내 문구용 */
@@ -1034,7 +1042,11 @@ events.on('player_died', () => {
   Projectiles.endChannel(world);
   if (world.godMode) return; // 무적 중에는 사망 화면도 뜨지 않는다 (자원은 틱 끝에 되돌아간다)
   const dk = keyLabel('Enter', 'interact');
-  deathHint!.textContent = world.respawn ? `${dk} — 제단에서 부활` : `${dk} 키로 재시작`;
+  deathHint!.textContent = !world.respawn
+    ? `${dk} 키로 재시작`
+    : Math.hypot(world.respawn.x - level.spawn.x, world.respawn.z - level.spawn.z) < 0.01
+      ? `${dk} — 이 층 처음부터` // 제단을 아직 안 밟았다 — 층 입구로 돌아간다
+      : `${dk} — 제단에서 부활`;
   deathOverlay.classList.add('visible');
 });
 
@@ -1234,13 +1246,88 @@ events.on('door_opened', (payload) => {
   stage.openDoor(at.row, at.col);
   minimap.rebuildBase();
 });
+/** 층을 갈아 끼운다 — 지형·미니맵·배치물을 새 층 것으로 바꾸고 플레이어를 그 층 입구에 세운다.
+ *  들고 있던 것(체력·마나·탄약·스킬·가방·골드·오염)은 전부 따라간다 — 층 사이는 '이어지는 한 판'이다.
+ *  층에 매인 것(문·레버·상자·통·바닥 아이템·부활 지점)만 새로 잡는다 */
+function loadFloor(index: number): void {
+  floorIndex = index;
+  levelJson = ZONE[index]!;
+  level = new Level(levelJson);
+  world.level = level;
+
+  // 앞 층의 차단 블록은 그 층 Level 과 함께 사라지므로 걷어낼 필요가 없다 —
+  // 새 Level 은 빈 상태로 시작한다
+  world.enemies = spawnEnemies(levelJson.entities, level);
+  world.barrels = spawnBarrels(levelJson.entities, level);
+  world.chests = spawnChests(levelJson.entities, level);
+  world.doors = level.doors.map((d) => ({
+    row: d.row, col: d.col, x: d.x, z: d.z, dirX: d.dirX, dirZ: d.dirZ,
+    byLever: d.byLever, progress: 0, slide: 0, prevSlide: 0, opened: false,
+  }));
+  world.projectiles.length = 0;
+  world.groundItems.length = 0;
+  world.lifeMotes.length = 0;
+  world.chestInView = null;
+  world.doorInView = null;
+  world.leverInView = null;
+  world.altarInView = false;
+  world.altarEnteredThisApproach = false;
+  // 층 입구가 곧 부활 지점이다 — 3층에서 죽었다고 1층부터 다시 하게 만들지 않는다.
+  // 제단을 밟으면 그쪽으로 옮겨 가므로 제단은 여전히 "더 가까운 저장점" 값을 한다
+  world.respawn = { x: level.spawn.x, z: level.spawn.z };
+  world.exitOpen = false;
+  world.onExitPad = false;
+  world.exitLockedNotified = false;
+  world.cleared = false;
+  world.freezeTicks = 0;
+
+  const p = world.player;
+  p.x = level.spawn.x;
+  p.z = level.spawn.z;
+  p.prevX = level.spawn.x;
+  p.prevZ = level.spawn.z;
+  p.stunTicks = 0;
+  p.dodgeTicks = 0;
+  p.iframeTicks = 0;
+  Projectiles.endChannel(world);
+  // 출구에서 누른 그 E 가 새 층에서 한 번 더 먹히지 않게 한다
+  world.input = { ...world.input, interactPressed: false, meleePressed: false };
+
+  stage.setLevel(
+    buildLevelGroup(level, {
+      color: balance.lighting.torchColor,
+      intensity: balance.lighting.torchIntensity,
+      distance: balance.lighting.torchDistance,
+      height: balance.lighting.torchHeight,
+    }),
+    level.ambient,
+  );
+  minimap.setLevel(level);
+  // 해독은 오염 단계에 딸린 상태다 — 새 층 벽에도 그대로 적용해 준다.
+  // (setGlyphsReadable 은 씬을 훑으므로 층을 갈아 끼운 뒤 한 번 더 불러야 한다)
+  stage.setGlyphsReadable(world.corruption.applied >= (balance.corruption.thresholds[0] ?? 25));
+  events.emit('floor_entered', { index, id: levelJson.id, name: levelJson.name, total: ZONE.length });
+}
+
 events.on('zone_cleared', () => {
+  // 마지막 층이 아니면 나가는 게 아니라 내려가는 것이다
+  if (floorIndex + 1 < ZONE.length) {
+    loadFloor(floorIndex + 1);
+    return;
+  }
   audio.play('zone_clear');
   deathHint!.textContent = '';
   const clearOverlay = deathOverlay!;
   clearOverlay.querySelector('div')!.textContent = '1구역 클리어';
   (clearOverlay as HTMLElement).style.background = 'rgba(10, 40, 20, 0.6)';
   clearOverlay.classList.add('visible');
+});
+
+// 새 층에 발을 디뎠다 — 어디인지 알려 준다
+events.on('floor_entered', (payload) => {
+  const f = payload as { index: number; name: string; total: number };
+  audio.play('door_slide');
+  showReaction(`${f.name}  (${f.index + 1}/${f.total})`, 2600);
 });
 
 events.on('corruption_threshold', (payload) => {
@@ -1751,7 +1838,11 @@ function render(alpha: number): void {
   // 사망 화면 힌트 — 죽은 뒤에 패드를 집거나 내려놔도 표기가 따라온다
   if (world.dead) {
     const dk = keyLabel('Enter', 'interact');
-    deathHint!.textContent = world.respawn ? `${dk} — 제단에서 부활` : `${dk} 키로 재시작`;
+    deathHint!.textContent = !world.respawn
+    ? `${dk} 키로 재시작`
+    : Math.hypot(world.respawn.x - level.spawn.x, world.respawn.z - level.spawn.z) < 0.01
+      ? `${dk} — 이 층 처음부터` // 제단을 아직 안 밟았다 — 층 입구로 돌아간다
+      : `${dk} — 제단에서 부활`;
   }
   if (showAltarPrompt) {
     altarPrompt!.textContent =

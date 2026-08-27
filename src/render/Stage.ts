@@ -679,6 +679,8 @@ export class Stage {
     number,
     { group: THREE.Group; band: THREE.MeshLambertMaterial; light: THREE.PointLight }
   >();
+  /** 지금 씬에 올라가 있는 층 지오메트리 — 다음 층으로 갈 때 걷어낸다 */
+  private levelGroup: THREE.Group | null = null;
   private readonly tracers: Tracer[] = [];
   private readonly particles: Particle[] = [];
   private readonly hands = new HandModel();
@@ -899,6 +901,11 @@ export class Stage {
   }
 
   setLevel(group: THREE.Group, ambientIntensity: number): void {
+    // 층을 갈아 끼울 때 앞 층이 남아 있으면 지오메트리와 환경광이 겹쳐 쌓인다
+    if (this.levelGroup) this.disposeGroup(this.levelGroup);
+    if (this.ambientLight) this.scene.remove(this.ambientLight);
+    this.clearLevelFx();
+    this.levelGroup = group;
     this.scene.add(group);
     this.levelAmbient = ambientIntensity;
     this.ambientLight = new THREE.AmbientLight(0xffffff, ambientIntensity);
@@ -916,6 +923,45 @@ export class Stage {
 
   /** 출구 개방 — 봉인 중엔 꺼진 돌바닥, 열리면 초록으로 켜진다.
    *  "늘 열려 있는 초록 바닥"으로 보이던 문제를 여기서 잡는다 */
+  /** 층에 남은 흔적을 걷는다 — 자국·파편·빔은 그 층의 것이라 다음 층으로 따라가면 안 된다.
+   *  적·통·상자·바닥 아이템의 모형은 배열이 비면 다음 동기화에서 저절로 사라진다 */
+  private clearLevelFx(): void {
+    this.clearLightningBeam();
+    for (let i = this.scorches.length - 1; i >= 0; i--) this.removeScorch(i);
+    for (let i = this.decals.length - 1; i >= 0; i--) this.removeDecal(this.decals[i]!);
+    for (const pool of [this.frostDecals, this.tracers]) {
+      for (const item of pool) this.disposeGroup(item.group);
+      pool.length = 0;
+    }
+    for (const e of this.explosions) {
+      this.scene.remove(e.light);
+      this.scene.remove(e.shell);
+      e.shell.geometry.dispose();
+      const mat = e.shell.material;
+      if (Array.isArray(mat)) for (const m of mat) m.dispose();
+      else mat.dispose();
+    }
+    this.explosions.length = 0;
+    for (const p of this.particles) {
+      this.scene.remove(p.mesh);
+      p.mesh.geometry.dispose();
+      (p.mesh.material as THREE.Material).dispose();
+    }
+    this.particles.length = 0;
+  }
+
+  /** 씬에서 떼고 그 아래 지오메트리·머티리얼을 전부 반납한다 */
+  private disposeGroup(group: THREE.Object3D): void {
+    this.scene.remove(group);
+    group.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      obj.geometry.dispose();
+      const mat = obj.material as THREE.Material | THREE.Material[];
+      if (Array.isArray(mat)) for (const m of mat) m.dispose();
+      else mat.dispose();
+    });
+  }
+
   setExitOpen(open: boolean): void {
     if (open === this.exitOpen) return;
     this.exitOpen = open;

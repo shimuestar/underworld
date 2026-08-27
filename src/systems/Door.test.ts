@@ -322,8 +322,8 @@ describe('관문(G)과 레버', () => {
 });
 
 describe('레벨 데이터', () => {
-  it('z01_f1 의 문 두 짝 모두 밀려 들어갈 벽을 찾는다', async () => {
-    const levelJson = (await import('../../data/levels/z01_f1.json')).default;
+  it('z01_f2 의 문 두 짝 모두 밀려 들어갈 벽을 찾는다', async () => {
+    const levelJson = (await import('../../data/levels/z01_f2.json')).default;
     const level = new Level(levelJson as never);
     expect(level.doors).toHaveLength(2);
     for (const door of level.doors) {
@@ -334,7 +334,7 @@ describe('레벨 데이터', () => {
   });
 
   it('보스 아레나 북쪽만 관문(G)이고, 그걸 여는 레버가 실제로 있다', async () => {
-    const levelJson = (await import('../../data/levels/z01_f1.json')).default;
+    const levelJson = (await import('../../data/levels/z01_f2.json')).default;
     const level = new Level(levelJson as never);
     const gates = level.doors.filter((d) => d.byLever);
     expect(gates).toHaveLength(1);

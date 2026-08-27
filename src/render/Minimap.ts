@@ -28,10 +28,10 @@ export class Minimap {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly base: HTMLCanvasElement;
-  private readonly cellPx: number;
+  private cellPx: number;
   visible = true;
 
-  constructor(private readonly level: Level) {
+  constructor(private level: Level) {
     this.cellPx = level.cellSize * PX_PER_UNIT;
     const w = level.cols * this.cellPx;
     const h = level.rows * this.cellPx;
@@ -72,6 +72,19 @@ export class Minimap {
   private readonly legend: HTMLDivElement;
 
   /** 정적 레이어 재생성 — 문 개방 등 그리드가 바뀌었을 때 호출 */
+  /** 층이 바뀌었다 — 새 그리드로 갈아 끼우고 밑그림을 다시 그린다 */
+  setLevel(level: Level): void {
+    this.level = level;
+    this.cellPx = level.cellSize * PX_PER_UNIT;
+    const w = level.cols * this.cellPx;
+    const h = level.rows * this.cellPx;
+    this.base.width = w;
+    this.base.height = h;
+    this.canvas.width = w;
+    this.canvas.height = h;
+    this.rebuildBase();
+  }
+
   rebuildBase(): void {
     const level = this.level;
     const bctx = this.base.getContext('2d')!;

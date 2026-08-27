@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "levels": "node scripts/checklevel.mjs data/levels/z01_f1.json data/levels/z01_f2.json data/levels/z01_f3.json"
   },
   "dependencies": {
     "three": "^0.185.1"
