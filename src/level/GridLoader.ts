@@ -343,8 +343,9 @@ const COLOR_ALTAR_LIGHT = 0xe0d0a0;
 const COLOR_EXIT = 0x3fae5a;
 /** 층 사이 계단 — 단 수와 한 단 높이, 돌 색 */
 const STAIR_STEPS = 7;
-/** 입구 계단은 올라간다 — 천장(4m) 안에 아치까지 들어가야 하므로 단 수가 적다 */
-const STAIR_UP_STEPS = 4;
+/** 입구 아래 단 수 — 적을수록 계단참이 낮아져 방에서 평지 윗면이 보인다.
+ *  아래+윗단 합(7)이 문 높이를 정하므로 여길 줄이면 ALCOVE_UPPER_STEPS 를 늘릴 것 */
+const STAIR_UP_STEPS = 3;
 /** 벽감 개구부 — 문과 같은 크기라야 "벽에 낸 통로" 로 읽힌다 */
 const ALCOVE_OPEN_W = 2.1;
 const ALCOVE_OPEN_H = 2.9;
@@ -356,12 +357,12 @@ const ALCOVE_BACK_D = 0.35;
 /** 꺾인 윗단 줄의 깊이와, 그 꼭대기 옆 어두운 문의 높이 */
 const ALCOVE_UPPER_D = 0.95;
 const ALCOVE_DOOR_H = 1.4;
-const ALCOVE_UPPER_STEPS = 3;
+const ALCOVE_UPPER_STEPS = 4;
 /** 왼쪽 기둥에 파인 문의 깊이 — 검은 판 하나가 아니라 진짜 파인 구멍이라야
  *  옆에서 봐도 문설주·문지방의 깊이가 보인다 */
 const ALCOVE_NOTCH_D = 0.55;
-/** 계단 한 단의 깊이 — 4단 × 이 값이 개구부에서 계단참까지의 길이다 */
-const ALCOVE_STEP_RUN = 0.42;
+/** 계단 한 단의 깊이 — 단 수 × 이 값이 개구부에서 계단참까지의 길이다 */
+const ALCOVE_STEP_RUN = 0.44;
 const STAIR_RISE = 0.34;
 const STAIR_STONE = 0x4a443b;
 const STAIR_SLAB = 0x565045;
@@ -624,7 +625,9 @@ function buildStairwell(
       g.add(step);
     }
 
-    // 계단참 — 꺾이는 자리. 아래 단 끝에서 윗단 줄 앞까지
+    // 계단참 — 한 번 올라선 뒤의 사각 평지. 여기서 길이 꺾인다.
+    // 아래 단을 3개로 눌러 평지를 깊고 낮게(1.02m) 잡았다 — 얕고 높으면
+    // 방에서 평지 윗면이 안 보여 아래 단과 윗단이 한 계단으로 붙어 보인다
     const upperFront = -cs / 2 + ALCOVE_BACK_D + ALCOVE_UPPER_D;
     const landingFront = front - run * lowerSteps;
     const landing = new THREE.Mesh(
