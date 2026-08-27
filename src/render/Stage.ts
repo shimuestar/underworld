@@ -965,6 +965,16 @@ export class Stage {
       (p.mesh.material as THREE.Material).dispose();
     }
     this.particles.length = 0;
+    // id 로 캐시된 모형들 — 층이 바뀌면 전부 걷는다. 남겨 두면 새 층에서 같은 id 를
+    // 받은 다른 적·통·상자가 앞 층의 외형/자리를 뒤집어쓴다. 빈 배열 동기화가
+    // 각 sync 의 제거·해제 경로를 그대로 태운다
+    this.heldVictims.clear();
+    this.syncEnemies([], 1);
+    this.syncBarrels([]);
+    this.syncChests([]);
+    this.syncGroundItems([]);
+    this.syncLifeMotes([]);
+    this.syncProjectiles([], 1);
   }
 
   /** 씬에서 떼고 그 아래 지오메트리·머티리얼을 전부 반납한다 */

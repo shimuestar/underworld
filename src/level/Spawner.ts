@@ -13,6 +13,13 @@ export interface EntityPlacement {
 }
 
 /** 현재 구현된 적 타입만 스폰한다. 새 적을 구현하면 여기에 추가. */
+// 스폰 id — 층을 오가도 1부터 다시 세지 않는 모듈 연번.
+// Stage 가 모형을 id 로 캐시하므로, 층마다 id 가 겹치면 새 층의 적이
+// 앞 층에서 같은 id 였던 다른 종의 외형을 뒤집어쓴다 (1-3 에서 실측)
+let nextChestId = 1;
+let nextBarrelId = 1;
+let nextEnemySpawnId = 1;
+
 /** 실제로 스폰되는 적 — entities.json 에는 있지만 behavior·attack 이 없는 스텁(오크 계열 등)은
  *  여기 없으면 조용히 건너뛴다. 레벨을 짤 때 이 목록 밖의 적을 쓰면 그 자리는 빈다 */
 const IMPLEMENTED = new Set([
@@ -56,7 +63,6 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
 /** 레벨의 chest 배치 → 보물상자. 통과 마찬가지로 몸으로 막는다 */
 export function spawnChests(placements: EntityPlacement[], level: Level): ChestState[] {
   const chests: ChestState[] = [];
-  let nextId = 1;
   for (const placement of placements) {
     if (placement.type !== 'chest') continue;
     const [row, col] = placement.cell;
@@ -67,7 +73,7 @@ export function spawnChests(placements: EntityPlacement[], level: Level): ChestS
     }
     const x = (col + 0.5) * level.cellSize;
     const z = (row + 0.5) * level.cellSize;
-    const chest: ChestState = { id: nextId++, x, z, opened: false };
+    const chest: ChestState = { id: nextChestId++, x, z, opened: false };
     chest.blocker = level.addBlocker(x, z, balance.chest.collisionRadius);
     chests.push(chest);
   }
@@ -77,7 +83,6 @@ export function spawnChests(placements: EntityPlacement[], level: Level): ChestS
 /** 레벨의 barrel 배치 → 폭발통 상태. 몸으로 막게 차단 블록도 함께 등록한다 */
 export function spawnBarrels(placements: EntityPlacement[], level: Level): BarrelState[] {
   const barrels: BarrelState[] = [];
-  let nextId = 1;
   for (const placement of placements) {
     if (placement.type !== 'barrel') continue;
     const [row, col] = placement.cell;
@@ -88,7 +93,7 @@ export function spawnBarrels(placements: EntityPlacement[], level: Level): Barre
     }
     const x = (col + 0.5) * level.cellSize;
     const z = (row + 0.5) * level.cellSize;
-    const barrel: BarrelState = { id: nextId++, x, z, alive: true, hits: 0, fuseTicks: -1 };
+    const barrel: BarrelState = { id: nextBarrelId++, x, z, alive: true, hits: 0, fuseTicks: -1 };
     barrel.blocker = level.addBlocker(x, z, balance.barrel.collisionRadius);
     barrels.push(barrel);
   }
@@ -97,7 +102,6 @@ export function spawnBarrels(placements: EntityPlacement[], level: Level): Barre
 
 export function spawnEnemies(placements: EntityPlacement[], level: Level): EnemyState[] {
   const enemies: EnemyState[] = [];
-  let nextId = 1;
   let skippedNearAltar = 0;
 
   for (const placement of placements) {
@@ -123,7 +127,7 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
         placement.type,
         x,
         z,
-        nextId++,
+        nextEnemySpawnId++,
       ),
     );
   }
