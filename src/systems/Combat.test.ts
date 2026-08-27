@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
+import { enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
@@ -1075,5 +1075,40 @@ describe('던진 바위 — 방패로 막아도 밀린다', () => {
     for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
     const push = Math.abs(world.player.kbX!) * world.player.kbTicks!;
     expect(push).toBeCloseTo(kb.arrow * kb.blockedMul, 4);
+  });
+});
+
+describe('창병 방패 — 공격 꼬리는 무방비다', () => {
+  const def = enemyDef('goblin_spear');
+  /** 플레이어(6,6) 를 정면으로 본 방패병 */
+  const facing = (ai: string): { x: number; z: number; yaw: number; ai: string; kbTicks: number } => ({
+    x: 10,
+    z: 6,
+    yaw: Math.atan2(-(6 - 10), -(6 - 6)),
+    ai,
+    kbTicks: 0,
+  });
+
+  it('창을 내지르는 동안과 그 뒤 후딜에는 총·화살이 그대로 들어간다', () => {
+    for (const ai of ['active_perfect', 'active_normal', 'impact', 'recover', 'staggered']) {
+      expect(shieldBlocksProjectile(def, facing(ai), 6, 6), `${ai} 는 뚫려야 한다`).toBe(false);
+    }
+  });
+
+  it('다가오거나 예비 동작 중일 때는 방패가 막는다 — 창을 뽑기 전엔 몸을 가린다', () => {
+    for (const ai of ['idle', 'chase', 'windup']) {
+      expect(shieldBlocksProjectile(def, facing(ai), 6, 6), `${ai} 는 막혀야 한다`).toBe(true);
+    }
+  });
+
+  it('명중 후 후딜이 반응해서 쏠 만큼은 된다 — 0.12초로는 노릴 수 없었다', () => {
+    // 방패가 내려가 있는 총 길이 = 판정 창(완벽+일반) + 타격 + 후딜
+    const openTicks =
+      balance.reaction.windowPerfectTicks +
+      balance.reaction.windowNormalTicks +
+      1 +
+      def.attack.recoverTicks;
+    expect(def.attack.recoverTicks).toBeGreaterThanOrEqual(18);
+    expect(openTicks / balance.loop.tickRate).toBeGreaterThan(0.5); // 초 단위로 반 초는 넘는다
   });
 });
