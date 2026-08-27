@@ -579,6 +579,8 @@ const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 
 const BEAM_SEGMENTS = 12;
 const BEAM_JITTER = 0.32;
 const BEAM_PULSE_MS = 90;
+/** 문이 열리는 각도 — 100도. 90도면 문틀에 딱 붙어 벽에 묻혀 보인다 */
+const DOOR_SWING_RAD = (100 * Math.PI) / 180;
 // 출구 계단 — 덮개 석판이 밀려나는 거리·속도와, 내려가는 연출의 하강 폭
 const SLAB_SLIDE_DIST = 3.4;
 const SLAB_SLIDE_EASE = 0.06;
@@ -1069,14 +1071,13 @@ export class Stage {
   /** 미닫이 — 문 판을 원래 자리에서 offset 만큼 옆으로 밀어 놓는다.
    *  셀 하나만큼 밀면 이웃 벽 셀에 정확히 가려져 사라진 것처럼 보인다.
    *  얼마나 밀지(진행률 × 셀 크기)는 부르는 쪽이 계산한다 — 여기는 그리기만 한다 */
-  setDoorSlide(row: number, col: number, offsetX: number, offsetZ: number): void {
-    const name = `door-${row}-${col}`;
-    // 문은 이제 판문·문틀·철물이 묶인 Group 이다 — Mesh 로 좁히면 안 움직인다
-    const mesh = this.scene.getObjectByName(name);
-    if (!mesh) return;
-    let base = this.doorBase.get(name);
-    if (!base) this.doorBase.set(name, (base = mesh.position.clone()));
-    mesh.position.set(base.x + offsetX, base.y, base.z + offsetZ);
+  /** 문을 경첩에서 연다 — frac 0(닫힘) ~ 1(활짝). 문틀은 벽의 일부라 그대로 서 있고
+   *  문짝만 돌아간다. 열린 뒤에도 사라지지 않고 열린 채로 남는다 */
+  setDoorSwing(row: number, col: number, frac: number): void {
+    const hinge = this.scene.getObjectByName(`door-${row}-${col}`);
+    if (!hinge) return;
+    const base = (hinge.userData['baseYaw'] as number | undefined) ?? 0;
+    hinge.rotation.y = base + Math.min(1, Math.max(0, frac)) * DOOR_SWING_RAD;
   }
 
   /** 레버 당김 — 손잡이를 반대쪽으로 넘긴다 */
@@ -1086,13 +1087,11 @@ export class Stage {
   }
 
   /** 문 개방 — 다 밀린 판을 씬에서 걷어낸다 (이미 벽 속이라 화면은 그대로) */
+  /** 다 열렸다 — 문짝은 활짝 열린 채로 남는다 (사라지면 문을 연 느낌이 안 난다) */
   openDoor(row: number, col: number): void {
-    this.doorBase.delete(`door-${row}-${col}`);
-    this.removeNamedCell(`door-${row}-${col}`);
+    this.setDoorSwing(row, col, 1);
   }
 
-  /** 문 판의 원래 자리 — 슬라이드는 여기서부터의 오프셋으로 계산한다 */
-  private readonly doorBase = new Map<string, THREE.Vector3>();
 
   /** 균열 벽 파괴 */
   breakCrack(row: number, col: number): void {

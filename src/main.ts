@@ -1687,13 +1687,15 @@ function render(alpha: number): void {
     tpsWindowTicks = 0;
   }
 
-  // 미닫이 — 진행률을 셀 크기만큼의 오프셋으로 바꿔 판을 밀어 놓는다.
-  // 틱 사이는 alpha 로 보간한다 (0.75초 동안 4m 를 가로지르므로 계단이 눈에 띈다)
+  // 문 여닫힘 — 진행률을 경첩 회전각으로 바꾼다. 틱 사이는 alpha 로 보간한다
+  // (0.75초에 걸쳐 도니 보간이 없으면 계단처럼 끊긴다)
   for (const door of world.doors) {
     if (door.opened || door.slide <= 0) continue;
-    const frac = door.prevSlide + (door.slide - door.prevSlide) * alpha;
-    const off = frac * world.level.cellSize;
-    stage.setDoorSlide(door.row, door.col, door.dirX * off, door.dirZ * off);
+    stage.setDoorSwing(
+      door.row,
+      door.col,
+      door.prevSlide + (door.slide - door.prevSlide) * alpha,
+    );
   }
 
   const p = world.player;

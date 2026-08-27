@@ -12,6 +12,7 @@
 // 아직 반쯤 닫힌 문을 몸으로 통과할 수 있다. 보이는 것과 지나갈 수 있는 것을 맞춘다.
 
 import { balance } from '../core/Balance';
+import { addDoorFrameBlockers } from '../level/GridLoader';
 import type { DoorState, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
@@ -46,6 +47,8 @@ export function tick(world: World, _dt: number): void {
       if (door.slide >= 1) {
         door.opened = true;
         world.level.openCell(door.col, door.row);
+        // 셀은 열렸지만 석조 문틀은 그대로 서 있다 — 몸이 그걸 뚫고 지나가면 안 된다
+        addDoorFrameBlockers(world.level, door.col, door.row);
         world.events.emit('door_opened', { row: door.row, col: door.col });
       }
       continue;

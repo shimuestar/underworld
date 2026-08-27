@@ -146,13 +146,13 @@ export class Level {
   /** 몸으로 막는 물체를 추가한다 (폭발통 등). 반환값을 removeBlocker 로 되돌린다.
    *  셀을 solid 로 만들지 않고 발자국만 막는다 — 레이캐스트(총알)는 그대로 통과하고
    *  맞히는 판정은 그 물체를 가진 시스템이 따로 한다 */
-  addBlocker(x: number, z: number, half: number): {
+  addBlocker(x: number, z: number, half: number, halfZ = half): {
     minX: number;
     maxX: number;
     minZ: number;
     maxZ: number;
   } {
-    const blocker = { minX: x - half, maxX: x + half, minZ: z - half, maxZ: z + half };
+    const blocker = { minX: x - half, maxX: x + half, minZ: z - halfZ, maxZ: z + halfZ };
     this.props.push(blocker);
     return blocker;
   }
@@ -361,16 +361,19 @@ function plainCell(cs: number, ceiling: number, color: number): THREE.Object3D {
 }
 
 /** 중세 판문 — 아치형 석조 문틀 안에 세로 널을 댄 두꺼운 나무 문. 철 띠와 리벳, 고리 손잡이.
- *  통째로 옆으로 밀려 벽 속으로 들어간다 (Door 시스템의 미닫이 규약).
- *  alongX 면 X 축으로 밀리므로 문의 앞뒤(두께 축)는 Z 다 */
+ *  문틀(frame)은 벽의 일부라 그대로 서 있고, 문짝은 경첩(hinge)에 매달려 돌아 열린다.
+ *  둘 다 "문 기준 좌표"(폭 = X, 두께 = Z)로 짓고 바깥에서 통째로 돌린다 —
+ *  alongX 가 아니면 문틀·경첩을 90도 돌려 세운다 */
 function buildMedievalDoor(
   cs: number,
   ceiling: number,
   alongX: boolean,
   color: number,
   gate: boolean,
-): THREE.Object3D {
-  const g = new THREE.Group();
+): { frame: THREE.Group; hinge: THREE.Group } {
+  void alongX; // 축 회전은 부르는 쪽이 건다
+  const frame = new THREE.Group();
+  const hinge = new THREE.Group();
   const stone = new THREE.MeshLambertMaterial({
     color,
     map: dungeonWallTexture(),
@@ -382,66 +385,86 @@ function buildMedievalDoor(
   const wood = new THREE.MeshLambertMaterial({ color: DOOR_WOOD });
   const iron = new THREE.MeshLambertMaterial({ color: DOOR_IRON });
 
-  /** 문 기준 좌표 → 월드. w 는 미는 축(문의 폭), d 는 두께 축 */
-  const put = (obj: THREE.Object3D, w: number, y: number, d: number): void => {
-    obj.position.set(alongX ? w : d, y, alongX ? d : w);
-    if (!alongX) obj.rotation.y = Math.PI / 2;
-    g.add(obj);
-  };
-
   const half = cs / 2;
   const openW = DOOR_OPEN_WIDTH; // 실제로 뚫린 문 폭 — 4m 를 통째로 문으로 만들면 성문이 된다
   const openH = DOOR_OPEN_HEIGHT;
   const jamb = half - openW / 2; // 양옆 석조 기둥 너비
 
-  // 양옆 문설주 + 상인방 — 셀을 막는 석조. 문틀 노릇을 한다
+  // ── 문틀 — 양옆 문설주 + 상인방 + 계단식 아치. 열려도 그대로 서 있다
   for (const side of [-1, 1]) {
     const post = new THREE.Mesh(new THREE.BoxGeometry(jamb, ceiling, cs), stone);
-    put(post, side * (half - jamb / 2), ceiling / 2, 0);
+    post.position.set(side * (half - jamb / 2), ceiling / 2, 0);
+    frame.add(post);
   }
   const lintel = new THREE.Mesh(new THREE.BoxGeometry(openW, ceiling - openH, cs), stone);
-  put(lintel, 0, openH + (ceiling - openH) / 2, 0);
-  // 아치 — 상인방 아래에 계단식으로 물려 들어간 돌 세 단
+  lintel.position.set(0, openH + (ceiling - openH) / 2, 0);
+  frame.add(lintel);
   for (let i = 0; i < 3; i++) {
     const w = openW - (i + 1) * (openW * 0.14);
     const arch = new THREE.Mesh(new THREE.BoxGeometry(w, 0.16, cs * 0.9), stone);
-    put(arch, 0, openH - 0.08 - i * 0.16, 0);
+    arch.position.set(0, openH - 0.08 - i * 0.16, 0);
+    frame.add(arch);
+  }
+  // 경첩 쇠 — 문설주에 박힌 돌쩌귀. 문이 어디에 매달렸는지 보여 준다
+  for (const y of [openH * 0.22, openH * 0.78]) {
+    const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.34, 6), iron);
+    pin.position.set(-openW / 2, y, 0);
+    frame.add(pin);
   }
 
-  // 문짝 — 세로 널 여섯 장. 널 사이 틈이 보이도록 살짝 벌려 둔다
-  const panelW = openW * 0.97;
+  // ── 문짝 — 경첩이 원점이라 널을 개구부 폭만큼 옆으로 밀어 매단다
+  const panel = new THREE.Group();
+  panel.position.x = openW / 2;
+  hinge.add(panel);
+
+  const panelW = openW * 0.94;
   const planks = 6;
   const plankW = panelW / planks;
   for (let i = 0; i < planks; i++) {
     const plank = new THREE.Mesh(
-      new THREE.BoxGeometry(plankW * 0.9, openH - 0.1, DOOR_THICK),
+      new THREE.BoxGeometry(plankW * 0.9, openH - 0.12, DOOR_THICK),
       wood,
     );
-    put(plank, -panelW / 2 + plankW * (i + 0.5), (openH - 0.1) / 2, 0);
+    plank.position.set(-panelW / 2 + plankW * (i + 0.5), (openH - 0.12) / 2, 0);
+    panel.add(plank);
   }
   // 철 띠 두 줄 — 널을 가로질러 묶는다. 앞뒤 양면
   for (const y of [openH * 0.24, openH * 0.76]) {
     for (const face of [-1, 1]) {
-      const band = new THREE.Mesh(
-        new THREE.BoxGeometry(panelW, 0.16, 0.06),
-        iron,
-      );
-      put(band, 0, y, face * (DOOR_THICK / 2 + 0.03));
-      // 리벳 — 띠 위에 박힌 못 머리
+      const band = new THREE.Mesh(new THREE.BoxGeometry(panelW, 0.16, 0.06), iron);
+      band.position.set(0, y, face * (DOOR_THICK / 2 + 0.03));
+      panel.add(band);
       for (let i = 0; i < 5; i++) {
         const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.055, 5, 4), iron);
-        put(rivet, -panelW / 2 + panelW * ((i + 0.5) / 5), y, face * (DOOR_THICK / 2 + 0.07));
+        rivet.position.set(-panelW / 2 + panelW * ((i + 0.5) / 5), y, face * (DOOR_THICK / 2 + 0.07));
+        panel.add(rivet);
       }
     }
   }
-  // 고리 손잡이 — 어느 쪽에서 와도 잡히도록 앞뒤 양면
+  // 고리 손잡이 — 경첩 반대쪽 끝. 어느 쪽에서 와도 잡히도록 앞뒤 양면
   for (const face of [-1, 1]) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.035, 6, 12), iron);
-    put(ring, panelW * 0.32, openH * 0.5, face * (DOOR_THICK / 2 + 0.06));
+    ring.position.set(panelW * 0.34, openH * 0.5, face * (DOOR_THICK / 2 + 0.06));
     ring.rotation.x = Math.PI / 2;
+    panel.add(ring);
   }
 
-  return g;
+  return { frame, hinge };
+}
+
+/** 문이 열려도 문틀은 몸을 막는다 — 셀을 통째로 열어 두면 석조 문설주를 뚫고 지나간다.
+ *  총알은 그대로 통과한다 (props 는 발자국만 막는 규약) */
+export function addDoorFrameBlockers(level: Level, col: number, row: number): void {
+  const cs = level.cellSize;
+  const x = (col + 0.5) * cs;
+  const z = (row + 0.5) * cs;
+  const alongX = level.charAt(col - 1, row) === '#' || level.charAt(col + 1, row) === '#';
+  const jamb = (cs - DOOR_OPEN_WIDTH) / 2;
+  for (const side of [-1, 1]) {
+    const off = side * (cs / 2 - jamb / 2);
+    if (alongX) level.addBlocker(x + off, z, jamb / 2, cs / 2);
+    else level.addBlocker(x, z + off, cs / 2, jamb / 2);
+  }
 }
 
 /** 계단이 등질 벽 방향 → 회전각. 두 칸까지 훑어 가장 가까운 벽 쪽을 고른다.
@@ -564,14 +587,32 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
         // 판정은 Level 이 dirX/dirZ 를 잡을 때와 똑같이 '#' 만 벽으로 본다 —
         // 어긋나면 문이 제 얼굴 쪽으로 밀려 들어간다
         const alongX = level.charAt(col - 1, row) === '#' || level.charAt(col + 1, row) === '#';
-        const node =
-          ch === 'C'
-            ? plainCell(cs, level.ceiling, color) // 균열 벽은 부술 벽이지 문이 아니다
-            : buildMedievalDoor(cs, level.ceiling, alongX, color, ch === 'G');
-        node.position.set((col + 0.5) * cs, 0, (row + 0.5) * cs);
-        // 이름은 문·관문 모두 door- 로 둔다 — 미닫이·제거를 같은 경로로 쓴다
-        node.name = `${ch === 'C' ? 'crack' : 'door'}-${row}-${col}`;
-        group.add(node);
+        if (ch === 'C') {
+          // 균열 벽은 부술 벽이지 문이 아니다 — 통째로 사라진다
+          const wall = plainCell(cs, level.ceiling, color);
+          wall.position.set((col + 0.5) * cs, 0, (row + 0.5) * cs);
+          wall.name = `crack-${row}-${col}`;
+          group.add(wall);
+          continue;
+        }
+        // 문틀(석조)은 벽의 일부라 그대로 서 있고, 문짝만 경첩에서 돌아 열린다
+        const built = buildMedievalDoor(cs, level.ceiling, alongX, color, ch === 'G');
+        built.frame.position.set((col + 0.5) * cs, 0, (row + 0.5) * cs);
+        built.frame.rotation.y = alongX ? 0 : Math.PI / 2;
+        built.frame.name = `doorframe-${row}-${col}`;
+        group.add(built.frame);
+        // 경첩 — 문틀 개구부 한쪽 끝. 이름은 door- 로 둔다 (Stage 가 이걸 돌린다)
+        const baseYaw = alongX ? 0 : Math.PI / 2;
+        const hingeLocal = -DOOR_OPEN_WIDTH / 2;
+        built.hinge.position.set(
+          (col + 0.5) * cs + (alongX ? hingeLocal : 0),
+          0,
+          (row + 0.5) * cs + (alongX ? 0 : hingeLocal),
+        );
+        built.hinge.rotation.y = baseYaw;
+        built.hinge.userData['baseYaw'] = baseYaw;
+        built.hinge.name = `door-${row}-${col}`;
+        group.add(built.hinge);
         continue;
       }
       const color = COLOR_WALL;

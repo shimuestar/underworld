@@ -5,7 +5,7 @@ import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World } from '../core/World';
-import { Level } from '../level/GridLoader';
+import { addDoorFrameBlockers, Level } from '../level/GridLoader';
 import * as Door from './Door';
 import * as Lever from './Lever';
 import * as Sigils from './Sigils';
@@ -347,5 +347,46 @@ describe('레벨 데이터', () => {
     const lever = level.levers[0]!;
     expect(lever.opens).toEqual([14, 13]);
     expect(level.solidAt(lever.cell[1]!, lever.cell[0]!)).toBe(false);
+  });
+});
+
+describe('열린 문 — 문틀은 그대로 서 있다', () => {
+  /** 좌우로 뚫린 복도 한가운데 문 하나 (위아래가 벽이라 문은 X 축을 향한다) */
+  function doorLevel(): Level {
+    return new Level({
+      id: 'doortest',
+      name: 'doortest',
+      cellSize: 4,
+      ceiling: 4,
+      grid: ['#####', '#S.D.', '#####'],
+      lighting: { ambient: 0.04, torches: [] },
+    });
+  }
+
+  it('문을 연 뒤 가운데로는 지나가고, 석조 문설주는 여전히 몸을 막는다', () => {
+    const level = doorLevel();
+    const doorCol = level.doors[0]!.col;
+    const doorRow = level.doors[0]!.row;
+    const cs = level.cellSize;
+    const gapZ = (doorRow + 0.5) * cs; // 개구부 한가운데
+    const start = (doorCol - 1 + 0.5) * cs;
+
+    // 열기 전 — 셀이 solid 라 가운데도 막힌다
+    const before = { x: start, z: gapZ };
+    level.slideMove(before, 0.4, cs * 1.5, 0);
+    expect(before.x).toBeLessThan((doorCol + 0.5) * cs);
+
+    level.openCell(doorCol, doorRow);
+    addDoorFrameBlockers(level, doorCol, doorRow);
+
+    // 가운데 — 문이 열렸으니 지나간다
+    const through = { x: start, z: gapZ };
+    level.slideMove(through, 0.4, cs * 1.5, 0);
+    expect(through.x).toBeGreaterThan((doorCol + 0.5) * cs);
+
+    // 문설주 자리 — 셀은 열렸어도 돌기둥은 그대로다
+    const intoJamb = { x: start, z: gapZ - cs * 0.4 };
+    level.slideMove(intoJamb, 0.4, cs * 1.5, 0);
+    expect(intoJamb.x).toBeLessThan((doorCol + 0.5) * cs);
   });
 });
