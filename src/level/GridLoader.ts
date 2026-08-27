@@ -345,7 +345,13 @@ const COLOR_EXIT = 0x3fae5a;
 const STAIR_STEPS = 7;
 /** 입구 계단은 올라간다 — 천장(4m) 안에 아치까지 들어가야 하므로 단 수가 적다 */
 const STAIR_UP_STEPS = 4;
-const STAIR_ARCH_H = 2.2;
+/** 벽감 개구부 — 문과 같은 크기라야 "벽에 낸 통로" 로 읽힌다 */
+const ALCOVE_OPEN_W = 2.1;
+const ALCOVE_OPEN_H = 2.9;
+/** 꼭대기 코너의 깊이 — 이만큼이 한쪽은 벽, 한쪽은 어둠이다 */
+const ALCOVE_CORNER_D = 1.1;
+/** 계단 한 단의 깊이 — 4단 × 이 값이 개구부에서 계단참까지의 길이다 */
+const ALCOVE_STEP_RUN = 0.42;
 const STAIR_RISE = 0.34;
 const STAIR_STONE = 0x4a443b;
 const STAIR_SLAB = 0x565045;
@@ -507,9 +513,38 @@ function stairYaw(level: Level, col: number, row: number, entrance: boolean): nu
   return entrance ? Math.atan2(-wx, -wz) : Math.atan2(wx, wz);
 }
 
-/** 벽감 껍데기 높이 — 층 높이는 셀 크기와 같은 4m 규약이다 (level.ceiling) */
-function ceilingOf(cs: number): number {
-  return cs;
+/** 벽감 테두리 — 벽 한 칸에 문 크기 구멍을 낸 모양. 통짜 상자 대신 이 조각들을
+ *  벽 병합 목록에 그대로 넣으므로 벽과 한 몸이 된다 (재질도 이음매도 갈리지 않는다).
+ *  개구부는 로컬 +Z 를 향하고, yaw 로 방 쪽을 보게 돌린다 */
+function alcoveFrameGeoms(
+  cs: number,
+  ceiling: number,
+  x: number,
+  z: number,
+  yaw: number,
+): THREE.BufferGeometry[] {
+  const openW = ALCOVE_OPEN_W;
+  const openH = ALCOVE_OPEN_H;
+  const jamb = (cs - openW) / 2;
+  const out: THREE.BufferGeometry[] = [];
+  const place = (g: THREE.BufferGeometry, lx: number, ly: number, lz: number): void => {
+    g.translate(lx, ly, lz);
+    g.rotateY(yaw);
+    g.translate(x, 0, z);
+    out.push(g);
+  };
+  // 양옆 기둥 — 칸 깊이만큼 두껍다. 이 안쪽 면이 곧 계단 통로의 벽이 된다
+  for (const side of [-1, 1]) {
+    place(
+      new THREE.BoxGeometry(jamb, ceiling, cs),
+      side * (cs / 2 - jamb / 2),
+      ceiling / 2,
+      0,
+    );
+  }
+  // 개구부 위 — 통로 천장 노릇을 한다
+  place(new THREE.BoxGeometry(openW, ceiling - openH, cs), 0, openH + (ceiling - openH) / 2, 0);
+  return out;
 }
 
 /** 층과 층을 잇는 돌계단. entrance 면 "내려온 자리"(위가 막힌 아치),
@@ -531,70 +566,77 @@ function buildStairwell(
     bumpMap: dungeonFloorTexture(),
     bumpScale: 0.3,
   });
-  const w = cs * 0.62;
-  // 입구는 "내려온 뒤 바닥에 선 자리" 라 계단이 위로 올라가고, 출구는 아래로 내려간다.
-  // 입구를 아래로 파면 시작하자마자 발밑이 구멍이라 허공에 선 꼴이 된다
-  const steps = entrance ? STAIR_UP_STEPS : STAIR_STEPS;
   const rise = STAIR_RISE;
-  const run = (cs * 0.78) / steps;
-  const dir = entrance ? 1 : -1;
-
-  if (!entrance) {
-    // 구멍 — 계단을 감싸는 어두운 통. 바닥 아래로 뚫려 있는 것처럼 보이게
-    const shaft = new THREE.Mesh(
-      new THREE.BoxGeometry(w + 0.5, steps * rise + 0.3, cs * 0.9),
-      new THREE.MeshLambertMaterial({ color: 0x0a0908 }),
-    );
-    shaft.position.y = -(steps * rise) / 2 - 0.15;
-    g.add(shaft);
-  }
-
-  // 디딤돌 — 벽 쪽(-Z)으로 갈수록 한 단씩 오르내린다
-  for (let i = 0; i < steps; i++) {
-    const step = new THREE.Mesh(new THREE.BoxGeometry(w, rise, run), stone);
-    const along = entrance ? steps - 1 - i : i;
-    step.position.set(0, dir * rise * (i + 0.5), -cs * 0.39 + run * (along + 0.5));
-    g.add(step);
-  }
-  // 양옆 난간 턱 — 계단이 벽에 파묻힌 것으로 보이게
-  for (const side of [-1, 1]) {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.22, steps * rise, cs * 0.8), stone);
-    rail.position.set(side * (w / 2 + 0.11), (dir * steps * rise) / 2, 0);
-    g.add(rail);
-  }
 
   if (entrance) {
-    // 벽감 — 이 칸은 원래 벽이라 상자를 안 그렸다. 파 낸 속을 직접 세운다:
-    // 안쪽 벽 · 양옆 벽 · 천장. 안 세우면 벽 속이 뻥 뚫려 바깥이 보인다
-    const shell = new THREE.MeshLambertMaterial({
+    // 벽 한 칸(±cs/2) 을 파고 들어간 통로. 개구부가 +Z, 벽 안쪽이 -Z.
+    // 앞에서 뒤로: 계단 → 계단참 → 코너. 코너에서 한쪽은 벽, 한쪽은 어둠이라
+    // 길이 꺾여 사라진다 — 꼭대기를 벽으로 막으면 막다른 계단이 돼 이상하다
+    const openW = ALCOVE_OPEN_W;
+    const steps = STAIR_UP_STEPS;
+    const run = ALCOVE_STEP_RUN;
+    const front = cs / 2; // 개구부
+    const backWall = -cs / 2; // 벽감 끝
+
+    // 계단 — 개구부에서 안쪽으로 한 단씩 오른다
+    for (let i = 0; i < steps; i++) {
+      const step = new THREE.Mesh(new THREE.BoxGeometry(openW, rise * (i + 1), run), stone);
+      step.position.set(0, (rise * (i + 1)) / 2, front - run * (i + 0.5));
+      g.add(step);
+    }
+    // 계단참 — 계단 끝에서 코너 앞까지 평평하다
+    const top = rise * steps;
+    const landingFront = front - run * steps;
+    const landingBack = backWall + ALCOVE_CORNER_D;
+    const landingDepth = landingFront - landingBack;
+    if (landingDepth > 0) {
+      const landing = new THREE.Mesh(new THREE.BoxGeometry(openW, top, landingDepth), stone);
+      landing.position.set(0, top / 2, landingBack + landingDepth / 2);
+      g.add(landing);
+    }
+    // 코너 — 안쪽 끝의 오른쪽 절반만 돌로 막는다
+    const wallMat = new THREE.MeshLambertMaterial({
       color: COLOR_WALL,
       map: dungeonWallTexture(),
       bumpMap: dungeonWallTexture(),
       bumpScale: WALL_BUMP,
     });
-    const back = new THREE.Mesh(new THREE.BoxGeometry(cs, ceilingOf(cs), 0.4), shell);
-    back.position.set(0, ceilingOf(cs) / 2, -cs / 2 + 0.2);
-    g.add(back);
-    for (const side of [-1, 1]) {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.4, ceilingOf(cs), cs), shell);
-      wall.position.set(side * (cs / 2 - 0.2), ceilingOf(cs) / 2, 0);
-      g.add(wall);
-    }
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(cs, 0.4, cs), shell);
-    roof.position.set(0, ceilingOf(cs) - 0.2, 0);
-    g.add(roof);
-    // 벽감 바닥 — 계단 아래를 메운다
-    const base = new THREE.Mesh(new THREE.BoxGeometry(cs, 0.3, cs), stone);
-    base.position.set(0, -0.15, 0);
-    g.add(base);
-    // 계단 꼭대기를 막은 석조 — 내려온 길이라 되짚어 갈 수 없다
-    const top = steps * rise;
-    const seal = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, STAIR_ARCH_H, 0.35), stone);
-    seal.position.set(0, top + STAIR_ARCH_H / 2, -cs * 0.36);
-    g.add(seal);
+    const corner = new THREE.Mesh(
+      new THREE.BoxGeometry(openW / 2, cs, ALCOVE_CORNER_D),
+      wallMat,
+    );
+    corner.position.set(openW / 4, cs / 2, backWall + ALCOVE_CORNER_D / 2);
+    g.add(corner);
+    // 왼쪽 절반 — 빛을 안 받는 검은 속. 여기서 길이 꺾여 위층으로 이어진다
+    const beyond = new THREE.Mesh(
+      new THREE.BoxGeometry(openW / 2, cs, ALCOVE_CORNER_D),
+      new THREE.MeshBasicMaterial({ color: 0x050505 }),
+    );
+    beyond.position.set(-openW / 4, cs / 2, backWall + ALCOVE_CORNER_D / 2);
+    g.add(beyond);
     return g;
   }
 
+  // ── 출구 — 바닥을 뚫고 아래로 내려간다
+  const w = cs * 0.62;
+  const steps = STAIR_STEPS;
+  const run = (cs * 0.78) / steps;
+  const shaft = new THREE.Mesh(
+    new THREE.BoxGeometry(w + 0.5, steps * rise + 0.3, cs * 0.9),
+    new THREE.MeshLambertMaterial({ color: 0x0a0908 }),
+  );
+  shaft.position.y = -(steps * rise) / 2 - 0.15;
+  g.add(shaft);
+  for (let i = 0; i < steps; i++) {
+    const step = new THREE.Mesh(new THREE.BoxGeometry(w, rise, run), stone);
+    step.position.set(0, -rise * (i + 0.5), -cs * 0.39 + run * (i + 0.5));
+    g.add(step);
+  }
+  for (const side of [-1, 1]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.22, steps * rise, cs * 0.8), stone);
+    rail.position.set(side * (w / 2 + 0.11), -(steps * rise) / 2, 0);
+    g.add(rail);
+  }
   // 덮개 석판 — 잠겨 있는 동안 계단을 덮는다. Stage 가 열릴 때 옆으로 민다
   const slab = new THREE.Mesh(
     new THREE.BoxGeometry(cs * 0.86, 0.22, cs * 0.86),
@@ -617,11 +659,15 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   const width = level.cols * cs;
   const depth = level.rows * cs;
 
-  // 시작 계단이 들어갈 벽 칸 — 스폰이 등진 쪽 한 칸
+  // 시작 계단이 들어갈 벽 칸 — 스폰이 등진 쪽 한 칸.
+  // 개구부는 방을 향해(= 등진 벽의 반대로) 입을 벌린다
   const spawnCell = level.findSpawnCell();
   const alcove = {
     row: spawnCell.row + level.spawnWall.dr,
     col: spawnCell.col + level.spawnWall.dc,
+    x: (spawnCell.col + level.spawnWall.dc + 0.5) * cs,
+    z: (spawnCell.row + level.spawnWall.dr + 0.5) * cs,
+    yaw: Math.atan2(-level.spawnWall.dc, -level.spawnWall.dr),
   };
 
   // 셀 단위 박스 생성 후 카테고리별로 병합. 문(D)은 열릴 때 제거해야 하므로 개별 메시
@@ -663,10 +709,17 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
         group.add(built.mount);
         continue;
       }
-      // 시작 계단이 파고 들어갈 벽 칸은 상자를 그리지 않는다 — 그 자리에 벽감을 짓는다.
-      // 격자는 그대로 '#' 이라 몸은 여전히 막힌다 (보이는 것만 판다)
-      if (row === alcove.row && col === alcove.col) continue;
       const color = COLOR_WALL;
+      // 시작 계단이 파고 들어갈 벽 칸 — 통짜 상자 대신 개구부를 낸 테두리를 넣는다.
+      // 별도 메시로 세우면 벽과 재질·이음매가 갈려 "벽에 상자를 끼운" 것처럼 보인다.
+      // 같은 병합 목록에 넣으므로 벽과 문자 그대로 한 몸이다.
+      // 격자는 그대로 '#' 이라 몸은 여전히 막힌다 (보이는 것만 판다)
+      if (row === alcove.row && col === alcove.col) {
+        let list = byColor.get(color);
+        if (!list) byColor.set(color, (list = []));
+        list.push(...alcoveFrameGeoms(cs, level.ceiling, alcove.x, alcove.z, alcove.yaw));
+        continue;
+      }
       const box = new THREE.BoxGeometry(cs, level.ceiling, cs);
       box.translate((col + 0.5) * cs, level.ceiling / 2, (row + 0.5) * cs);
       let list = byColor.get(color);
@@ -818,11 +871,7 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       if (ch === 'S') {
         // 입구 — 이 층으로 내려온 계단. 스폰 칸이 아니라 등진 벽 칸을 파고 들어간다.
         // 격자는 여전히 '#' 이라 몸은 못 들어가고, 눈에만 벽감으로 보인다
-        const ax = (alcove.col + 0.5) * cs;
-        const az = (alcove.row + 0.5) * cs;
-        // 벽감은 방을 향해 입을 벌린다 — 계단은 그 반대(벽 안쪽)로 올라간다
-        const inward = Math.atan2(-level.spawnWall.dc, -level.spawnWall.dr);
-        group.add(buildStairwell(ax, az, cs, true, inward));
+        group.add(buildStairwell(alcove.x, alcove.z, cs, true, alcove.yaw));
       }
     }
   }
