@@ -437,6 +437,8 @@
     "torchIntensity": 2.2,
     "torchDistance": 9.0,
     "torchHeight": 2.6,
+  "_torchMountNote": "횃불은 벽걸이다 — 셀에 붙은 벽을 찾아 그 면에 건다. torchWallOffset 은 불꽃이 벽에서 떨어져 나온 거리(브래킷 길이)이고, 광원도 그 자리에 선다. 붙은 벽이 없는 셀은 셀 가운데에 그대로 걸린다",
+  "torchWallOffset": 0.42,
     "_flashNote": "폭발·처형·문 개방 섬광의 기준 밝기/사거리. 예전엔 lantern.intensity·radius 를 그대로 빌려 썼는데, 랜턴을 밝히면 게임의 모든 섬광이 같이 두 배가 된다 — 떼어내 고정했다 (예전 값 2.2 / 30×0.9)",
     "flashIntensity": 2.2,
     "flashDistance": 27.0,

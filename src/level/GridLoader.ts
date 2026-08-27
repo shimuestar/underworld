@@ -328,6 +328,8 @@ export interface TorchParams {
   intensity: number;
   distance: number;
   height: number;
+  /** 불꽃이 벽에서 떨어져 나온 거리 — 브래킷 길이이자 광원이 서는 자리 */
+  wallOffset: number;
 }
 
 export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
@@ -511,33 +513,60 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
     if (mesh) group.add(mesh);
   }
 
-  // 횃불 — 위치는 레벨 데이터([row, col]), 광원 파라미터는 balance
+  // 횃불 — 위치는 레벨 데이터([row, col]), 광원 파라미터는 balance.
+  // 셀 가운데에 띄우면 천장에 매단 것처럼 보인다. 붙은 벽을 찾아 그 면에 건다
+  const flameColor = new THREE.Color(torch.color);
+  const bracketMat = new THREE.MeshLambertMaterial({ color: 0x2b2118 });
+  const flameMat = new THREE.MeshLambertMaterial({ color: 0x000000, emissive: flameColor });
   for (const cell of level.torches) {
     const [row, col] = cell;
     if (row === undefined || col === undefined) continue;
     const x = (col + 0.5) * cs;
     const z = (row + 0.5) * cs;
 
+    // 어느 쪽에 벽이 붙어 있는가 — 법선은 그 벽에서 방 안쪽을 향한다.
+    // 북·남·서·동 순으로 본다 (여러 면이 벽이면 앞선 쪽에 건다)
+    let nx = 0;
+    let nz = 0;
+    if (level.solidAt(col, row - 1)) nz = 1;
+    else if (level.solidAt(col, row + 1)) nz = -1;
+    else if (level.solidAt(col - 1, row)) nx = 1;
+    else if (level.solidAt(col + 1, row)) nx = -1;
+
+    // 벽 면에서 wallOffset 만큼 나온 자리 — 붙은 벽이 없으면 셀 가운데 그대로
+    const out = cs / 2 - torch.wallOffset;
+    const fx = x - nx * out;
+    const fz = z - nz * out;
+    const mounted = nx !== 0 || nz !== 0;
+
+    if (mounted) {
+      // 브래킷 — 벽에서 불꽃까지 뻗은 쇠막대. 길이 축(z)을 법선에 맞춘다
+      const bracket = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, 0.07, torch.wallOffset),
+        bracketMat,
+      );
+      bracket.position.set(
+        x - nx * (cs / 2 - torch.wallOffset / 2),
+        torch.height - 0.16,
+        z - nz * (cs / 2 - torch.wallOffset / 2),
+      );
+      bracket.lookAt(bracket.position.x + nx, bracket.position.y, bracket.position.z + nz);
+      group.add(bracket);
+      // 받침 — 불꽃을 얹는 컵
+      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.06, 0.16, 6), bracketMat);
+      cup.position.set(fx, torch.height - 0.04, fz);
+      group.add(cup);
+    }
+
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.44, 6), flameMat);
+    flame.position.set(fx, torch.height + 0.2, fz);
+    group.add(flame);
+
     // decay 0 — distance 컷오프 감쇠만 사용. 물리 감쇠(decay 2)는 balance의
     // intensity 스케일과 맞지 않아 광원이 죽는다.
-    const light = new THREE.PointLight(
-      new THREE.Color(torch.color),
-      torch.intensity,
-      torch.distance,
-      0,
-    );
-    light.position.set(x, torch.height, z);
+    const light = new THREE.PointLight(flameColor, torch.intensity, torch.distance, 0);
+    light.position.set(fx, torch.height + 0.15, fz);
     group.add(light);
-
-    const marker = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.5, 0.2),
-      new THREE.MeshLambertMaterial({
-        color: 0x000000,
-        emissive: new THREE.Color(torch.color),
-      }),
-    );
-    marker.position.set(x, torch.height, z);
-    group.add(marker);
   }
 
   return group;

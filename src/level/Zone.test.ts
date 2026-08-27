@@ -185,6 +185,16 @@ describe('1구역 층 구성', () => {
         );
       });
 
+      it('횃불이 전부 벽에 붙어 있다 — 안 붙으면 셀 가운데에 떠 천장에 매단 꼴이 된다', () => {
+        const NEIGHBOURS = [[0, -1], [0, 1], [-1, 0], [1, 0]] as const;
+        const floating = json.lighting.torches
+          .filter(([row, col]) =>
+            !NEIGHBOURS.some(([dc, dr]) => SOLID.has(at(grid, col! + dc, row! + dr))),
+          )
+          .map((t) => `[${t}]`);
+        expect(floating).toEqual([]);
+      });
+
       it('레버가 여는 대상이 실제 관문이다', () => {
         for (const t of json.triggers ?? []) {
           if (t.type !== 'lever') continue;

@@ -285,6 +285,7 @@ stage.setLevel(
     intensity: balance.lighting.torchIntensity,
     distance: balance.lighting.torchDistance,
     height: balance.lighting.torchHeight,
+    wallOffset: balance.lighting.torchWallOffset,
   }),
   level.ambient,
 );
@@ -1299,6 +1300,7 @@ function loadFloor(index: number): void {
       intensity: balance.lighting.torchIntensity,
       distance: balance.lighting.torchDistance,
       height: balance.lighting.torchHeight,
+      wallOffset: balance.lighting.torchWallOffset,
     }),
     level.ambient,
   );
