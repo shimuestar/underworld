@@ -16,10 +16,18 @@ const WALL_SIZE = 512;
 const FLOOR_SIZE = 512;
 const CEILING_SIZE = 256;
 
-/** 벽돌 한 장 — 4장이 한 줄, 8줄이 한 면 (4m 벽 기준 1m × 0.5m) */
-const BRICK_W = 128;
-const BRICK_H = 64;
-const MORTAR = 5;
+// 손으로 깎아 쌓은 난석조 — 돌 크기가 제각각이라야 중세로 읽힌다.
+// 똑같은 벽돌이 반 칸씩 정확히 엇갈리면 기계로 찍은 현대 벽돌이 된다.
+// 512px = 4m 기준이므로 아래 값은 0.8m ~ 1.7m 짜리 돌덩이다
+const BLOCK_W_MIN = 100;
+const BLOCK_W_MAX = 220;
+const COURSE_H_MIN = 62;
+const COURSE_H_MAX = 108;
+/** 줄눈 — 두께가 일정하지 않아야 손으로 바른 것으로 보인다 */
+const MORTAR_MIN = 4;
+const MORTAR_MAX = 9;
+/** 모서리가 흔들리는 정도 — 직각이면 잘라 낸 타일처럼 보인다 */
+const EDGE_JITTER = 3.5;
 
 function canvas(size: number): { cv: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const cv = document.createElement('canvas');
@@ -43,6 +51,48 @@ function wrapped(
 ): void {
   const ys = wrapY ? [-size, 0, size] : [0];
   for (const ox of [-size, 0, size]) for (const oy of ys) draw(ox, oy);
+}
+
+/** total 을 min~max 짜리 조각으로 쪼갠다 — 합은 정확히 total 이라 이음매가 맞는다.
+ *  돌 너비·켜 높이를 여기서 뽑는다 (같은 크기가 반복되지 않게) */
+function partition(total: number, min: number, max: number): number[] {
+  const out: number[] = [];
+  let left = total;
+  while (left > 0) {
+    let w = min + Math.random() * (max - min);
+    if (left - w < min || w > left) w = left; // 남는 조각이 너무 작으면 마지막에 합친다
+    out.push(w);
+    left -= w;
+  }
+  return out;
+}
+
+/** 손으로 깎은 돌 하나의 윤곽 — 네 모서리와 네 변 가운데를 흔든다.
+ *  값을 미리 뽑아 두는 이유: 이음매용 복사본들이 같은 모양이어야 한다 */
+function roughOutline(w: number, h: number): [number, number][] {
+  const j = (): number => (Math.random() - 0.5) * 2 * EDGE_JITTER;
+  return [
+    [j(), j()],
+    [w / 2 + j(), j()],
+    [w + j(), j()],
+    [w + j(), h / 2 + j()],
+    [w + j(), h + j()],
+    [w / 2 + j(), h + j()],
+    [j(), h + j()],
+    [j(), h / 2 + j()],
+  ];
+}
+
+function outlinePath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  pts: [number, number][],
+): void {
+  ctx.beginPath();
+  ctx.moveTo(x + pts[0]![0], y + pts[0]![1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(x + pts[i]![0], y + pts[i]![1]);
+  ctx.closePath();
 }
 
 /** 잡티 — 표면이 균일하지 않게 점을 흩뿌린다 */
@@ -69,65 +119,140 @@ function speckle(
 }
 
 let wallTex: THREE.CanvasTexture | null = null;
-/** 벽 — 습한 지하 감옥. 벽돌 위로 물때가 세로로 흘러내리고 바닥 쪽이 짙게 젖어 있다 */
+/** 벽 — 중세 지하 감옥. 손으로 깎아 쌓은 난석조 위로 물때가 흘러내리고 아래가 젖어 있다.
+ *  켜(가로줄)마다 높이가 다르고 돌 너비도 제각각이며, 켜마다 시작점을 어긋나게 잡아
+ *  세로 줄눈이 한 줄로 서지 않는다 — 이 불규칙이 "기계 벽돌"과 "손으로 쌓은 벽"을 가른다 */
 export function dungeonWallTexture(): THREE.CanvasTexture {
   if (wallTex) return wallTex;
   const size = WALL_SIZE;
   const { cv, ctx } = canvas(size);
 
-  // 줄눈 색으로 바탕을 깔고 그 위에 벽돌을 얹는다 — 벽돌 사이 틈이 저절로 줄눈이 된다
-  ctx.fillStyle = gray(150);
+  // 줄눈 색으로 바탕을 깔고 그 위에 돌을 얹는다 — 돌 사이 틈이 저절로 줄눈이 된다
+  ctx.fillStyle = gray(148);
   ctx.fillRect(0, 0, size, size);
 
-  const rows = size / BRICK_H;
-  for (let row = 0; row < rows; row++) {
-    const y = row * BRICK_H;
-    const offset = row % 2 === 0 ? 0 : BRICK_W / 2; // 한 줄씩 엇갈려 쌓는다
-    for (let i = 0; i < size / BRICK_W; i++) {
-      const x = i * BRICK_W + offset;
-      // 벽돌마다 밝기를 미세하게 달리한다 — 같은 돌이 반복돼 보이지 않게
-      const tone = 226 + Math.random() * 28;
+  let y = 0;
+  for (const courseH of partition(size, COURSE_H_MIN, COURSE_H_MAX)) {
+    // 켜마다 시작점을 아무 데나 — 세로 줄눈이 위아래로 이어지면 격자로 보인다
+    let x = -Math.random() * BLOCK_W_MAX;
+    for (const blockW of partition(size + BLOCK_W_MAX, BLOCK_W_MIN, BLOCK_W_MAX)) {
+      const mx = MORTAR_MIN + Math.random() * (MORTAR_MAX - MORTAR_MIN);
+      const my = MORTAR_MIN + Math.random() * (MORTAR_MAX - MORTAR_MIN);
+      const bw = blockW - mx;
+      const bh = courseH - my;
+      const bx = x + mx / 2;
+      const by = y + my / 2;
+      const pts = roughOutline(bw, bh);
+      // 돌마다 밝기가 다르다. 가끔 눈에 띄게 어두운 돌 하나 — 다른 데서 가져다 끼운 돌
+      const tone = Math.random() < 0.12 ? 190 + Math.random() * 22 : 224 + Math.random() * 30;
+
       ctx.fillStyle = gray(tone);
-      wrapped(
-        size,
-        (ox) => {
-          ctx.fillRect(
-            x + MORTAR / 2 + ox,
-            y + MORTAR / 2,
-            BRICK_W - MORTAR,
-            BRICK_H - MORTAR,
-          );
-        },
-        false,
-      );
-      // 위쪽 모서리에 옅은 빛, 아래쪽에 그늘 — 벽돌이 튀어나와 보인다
-      ctx.fillStyle = gray(255, 0.35);
-      wrapped(size, (ox) => ctx.fillRect(x + MORTAR / 2 + ox, y + MORTAR / 2, BRICK_W - MORTAR, 2), false);
-      ctx.fillStyle = gray(120, 0.3);
-      wrapped(size, (ox) => ctx.fillRect(x + MORTAR / 2 + ox, y + BRICK_H - MORTAR / 2 - 2, BRICK_W - MORTAR, 2), false);
-      // 이 빠진 모서리 — 가끔 한 귀퉁이가 떨어져 나갔다
-      if (Math.random() < 0.22) {
-        const cw = 6 + Math.random() * 14;
-        const cx = Math.random() < 0.5 ? x + MORTAR / 2 : x + BRICK_W - MORTAR / 2 - cw;
-        const cy = Math.random() < 0.5 ? y + MORTAR / 2 : y + BRICK_H - MORTAR / 2 - cw * 0.6;
-        ctx.fillStyle = gray(160, 0.85);
-        wrapped(size, (ox) => ctx.fillRect(cx + ox, cy, cw, cw * 0.6), false);
+      wrapped(size, (ox) => {
+        outlinePath(ctx, bx + ox, by, pts);
+        ctx.fill();
+      }, false);
+
+      // 위 모서리에 빛, 아래에 그늘 — 쌓인 돌이 튀어나와 보인다
+      ctx.strokeStyle = gray(255, 0.3);
+      ctx.lineWidth = 2;
+      wrapped(size, (ox) => {
+        ctx.beginPath();
+        ctx.moveTo(bx + ox + pts[0]![0], by + pts[0]![1]);
+        ctx.lineTo(bx + ox + pts[1]![0], by + pts[1]![1]);
+        ctx.lineTo(bx + ox + pts[2]![0], by + pts[2]![1]);
+        ctx.stroke();
+      }, false);
+      ctx.strokeStyle = gray(112, 0.32);
+      wrapped(size, (ox) => {
+        ctx.beginPath();
+        ctx.moveTo(bx + ox + pts[4]![0], by + pts[4]![1]);
+        ctx.lineTo(bx + ox + pts[5]![0], by + pts[5]![1]);
+        ctx.lineTo(bx + ox + pts[6]![0], by + pts[6]![1]);
+        ctx.stroke();
+      }, false);
+
+      // 정끌 자국 — 손으로 깎은 면에는 나란한 사선 흠이 남는다
+      const chisels = 3 + Math.floor(Math.random() * 5);
+      const ang = -0.5 - Math.random() * 0.5;
+      ctx.strokeStyle = gray(178, 0.22);
+      ctx.lineWidth = 1;
+      for (let i = 0; i < chisels; i++) {
+        const cx0 = bx + 6 + Math.random() * (bw - 12);
+        const cy0 = by + 6 + Math.random() * (bh - 12);
+        const len = 6 + Math.random() * 16;
+        wrapped(size, (ox) => {
+          ctx.beginPath();
+          ctx.moveTo(cx0 + ox, cy0);
+          ctx.lineTo(cx0 + ox + Math.cos(ang) * len, cy0 + Math.sin(ang) * len);
+          ctx.stroke();
+        }, false);
       }
+
+      // 닳아 떨어져 나간 귀퉁이 — 오래된 벽일수록 모서리가 성하지 않다
+      if (Math.random() < 0.35) {
+        const cw = 8 + Math.random() * 18;
+        const cx = Math.random() < 0.5 ? bx : bx + bw - cw;
+        const cy = Math.random() < 0.5 ? by : by + bh - cw * 0.7;
+        ctx.fillStyle = gray(158, 0.8);
+        wrapped(size, (ox) => {
+          ctx.beginPath();
+          ctx.moveTo(cx + ox, cy);
+          ctx.lineTo(cx + ox + cw, cy + cw * 0.25);
+          ctx.lineTo(cx + ox + cw * 0.4, cy + cw * 0.7);
+          ctx.closePath();
+          ctx.fill();
+        }, false);
+      }
+
+      // 곰보 — 표면이 패인 자국 몇 점
+      if (Math.random() < 0.5) {
+        const pits = 3 + Math.floor(Math.random() * 6);
+        for (let i = 0; i < pits; i++) {
+          const px = bx + 5 + Math.random() * (bw - 10);
+          const py = by + 5 + Math.random() * (bh - 10);
+          const pr = 1 + Math.random() * 2.6;
+          ctx.fillStyle = gray(160, 0.3 + Math.random() * 0.3);
+          wrapped(size, (ox) => {
+            ctx.beginPath();
+            ctx.arc(px + ox, py, pr, 0, Math.PI * 2);
+            ctx.fill();
+          }, false);
+        }
+      }
+
+      x += blockW;
+      if (x > size) break;
     }
+    y += courseH;
+  }
+
+  // 이끼·검댕 — 줄눈을 타고 번진 얼룩. 돌 경계를 무시하고 덮여야 세월이 얹힌다
+  for (let i = 0; i < 12; i++) {
+    const bx = Math.random() * size;
+    const by = Math.random() * size;
+    const br = 20 + Math.random() * 60;
+    const v = 120 + Math.random() * 50;
+    const ry = br * (0.5 + Math.random() * 0.6); // 복사본이 같은 모양이어야 이음매가 맞는다
+    ctx.fillStyle = gray(v, 0.1 + Math.random() * 0.14);
+    wrapped(size, (ox, oy) => {
+      ctx.beginPath();
+      ctx.ellipse(bx + ox, by + oy, br, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
 
   // 물때 — 위에서 아래로 흘러내린 자국. 길이가 제각각이라 벽이 균일해 보이지 않는다
   for (let i = 0; i < 9; i++) {
-    const x = Math.random() * size;
+    const x0 = Math.random() * size;
     const w = 6 + Math.random() * 26;
     const top = Math.random() * size * 0.35;
     const bottom = top + size * (0.3 + Math.random() * 0.6);
     const streak = ctx.createLinearGradient(0, top, 0, bottom);
     streak.addColorStop(0, gray(110, 0));
-    streak.addColorStop(0.25, gray(110, 0.22 + Math.random() * 0.16));
+    streak.addColorStop(0.25, gray(110, 0.2 + Math.random() * 0.14));
     streak.addColorStop(1, gray(95, 0));
     ctx.fillStyle = streak;
-    wrapped(size, (ox) => ctx.fillRect(x + ox, top, w, bottom - top), false);
+    wrapped(size, (ox) => ctx.fillRect(x0 + ox, top, w, bottom - top), false);
   }
 
   // 바닥 쪽 습기 띠 — 아래로 갈수록 짙게 젖는다. 세로로 반복하지 않으므로 여기만 어둡다
@@ -144,53 +269,80 @@ export function dungeonWallTexture(): THREE.CanvasTexture {
 }
 
 let floorTex: THREE.CanvasTexture | null = null;
-/** 바닥 — 판석. 큼직한 사각 넷씩 열여섯 장에 틈새 모래가 낀다 */
+/** 바닥 — 밟아 닳은 판석. 벽과 같은 이유로 격자를 버렸다: 줄마다 높이가 다르고
+ *  판석 너비도 제각각이며, 줄마다 시작점을 어긋나게 잡는다.
+ *  양방향으로 반복되므로 가로·세로 모두 감아 그린다 */
 export function dungeonFloorTexture(): THREE.CanvasTexture {
   if (floorTex) return floorTex;
   const size = FLOOR_SIZE;
   const { cv, ctx } = canvas(size);
-  const stone = size / 4; // 4m 셀 안에 1m 판석 열여섯 장
-  const gap = 7;
 
-  ctx.fillStyle = gray(140); // 틈새
+  ctx.fillStyle = gray(138); // 틈새 — 흙과 모래가 낀 자리
   ctx.fillRect(0, 0, size, size);
 
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 4; c++) {
-      const x = c * stone;
-      const y = r * stone;
-      ctx.fillStyle = gray(214 + Math.random() * 34);
-      ctx.fillRect(x + gap / 2, y + gap / 2, stone - gap, stone - gap);
-      // 판석마다 결 — 옅은 줄 몇 개
-      const lines = 2 + Math.floor(Math.random() * 3);
-      for (let i = 0; i < lines; i++) {
-        ctx.strokeStyle = gray(180, 0.25);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        const gy = y + gap + Math.random() * (stone - gap * 2);
-        ctx.moveTo(x + gap, gy);
-        ctx.lineTo(x + stone - gap, gy + (Math.random() - 0.5) * 10);
-        ctx.stroke();
+  let y = 0;
+  for (const rowH of partition(size, 84, 148)) {
+    let x = -Math.random() * 170;
+    for (const stoneW of partition(size + 170, 88, 170)) {
+      const mx = 5 + Math.random() * 6;
+      const my = 5 + Math.random() * 6;
+      const sw = stoneW - mx;
+      const sh = rowH - my;
+      const sx = x + mx / 2;
+      const sy = y + my / 2;
+      const pts = roughOutline(sw, sh);
+      ctx.fillStyle = gray(210 + Math.random() * 38);
+      wrapped(size, (ox, oy) => {
+        outlinePath(ctx, sx + ox, sy + oy, pts);
+        ctx.fill();
+      });
+
+      // 가운데가 옴폭 — 오래 밟힌 판석은 가운데가 닳아 어둡다
+      if (Math.random() < 0.55) {
+        const wx = sx + sw / 2 + (Math.random() - 0.5) * sw * 0.3;
+        const wy = sy + sh / 2 + (Math.random() - 0.5) * sh * 0.3;
+        const wr = Math.min(sw, sh) * (0.3 + Math.random() * 0.25);
+        wrapped(size, (ox, oy) => {
+          const hollow = ctx.createRadialGradient(wx + ox, wy + oy, 0, wx + ox, wy + oy, wr);
+          hollow.addColorStop(0, gray(175, 0.35));
+          hollow.addColorStop(1, gray(175, 0));
+          ctx.fillStyle = hollow;
+          ctx.beginPath();
+          ctx.arc(wx + ox, wy + oy, wr, 0, Math.PI * 2);
+          ctx.fill();
+        });
       }
-      // 가끔 금이 간 판석
-      if (Math.random() < 0.3) {
-        ctx.strokeStyle = gray(150, 0.7);
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        let px = x + gap + Math.random() * (stone - gap * 2);
-        let py = y + gap;
-        ctx.moveTo(px, py);
-        for (let s = 0; s < 4; s++) {
-          px += (Math.random() - 0.5) * 26;
-          py += (stone - gap * 2) / 4;
-          ctx.lineTo(px, py);
+
+      // 금 — 한쪽 끝에서 다른 끝까지 꺾이며 간다.
+      // 경로를 미리 뽑아 둔다: 이음매용 복사본이 같은 길을 가야 한다
+      if (Math.random() < 0.32) {
+        const steps = 4;
+        const crack: [number, number][] = [];
+        let cx = sx + 6 + Math.random() * (sw - 12);
+        let cy = sy + 4;
+        crack.push([cx, cy]);
+        for (let k = 0; k < steps; k++) {
+          cx += (Math.random() - 0.5) * 26;
+          cy += (sh - 8) / steps;
+          crack.push([cx, cy]);
         }
-        ctx.stroke();
+        ctx.strokeStyle = gray(146, 0.7);
+        ctx.lineWidth = 1.4 + Math.random();
+        wrapped(size, (ox, oy) => {
+          ctx.beginPath();
+          ctx.moveTo(crack[0]![0] + ox, crack[0]![1] + oy);
+          for (let k = 1; k < crack.length; k++) ctx.lineTo(crack[k]![0] + ox, crack[k]![1] + oy);
+          ctx.stroke();
+        });
       }
+
+      x += stoneW;
+      if (x > size) break;
     }
+    y += rowH;
   }
 
-  speckle(ctx, size, 1400, 130, 220, 0.35, 1.6);
+  speckle(ctx, size, 1500, 125, 220, 0.35, 1.8);
 
   floorTex = finish(cv, 'dungeon-floor');
   return floorTex;
@@ -220,6 +372,27 @@ export function dungeonCeilingTexture(): THREE.CanvasTexture {
       ctx.arc(x + ox, y + oy, r, 0, Math.PI * 2);
       ctx.fill();
     });
+  }
+  // 깎아 낸 자국 — 천장도 사람이 파 내려간 곳이다. 짧은 사선이 무리 지어 남는다
+  for (let g = 0; g < 10; g++) {
+    const gx = Math.random() * size;
+    const gy = Math.random() * size;
+    const ang = Math.random() * Math.PI * 2;
+    const n = 3 + Math.floor(Math.random() * 4);
+    ctx.strokeStyle = gray(165, 0.28);
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < n; i++) {
+      const off = i * (4 + Math.random() * 3);
+      const len = 10 + Math.random() * 18;
+      const px = gx + Math.cos(ang + Math.PI / 2) * off;
+      const py = gy + Math.sin(ang + Math.PI / 2) * off;
+      wrapped(size, (ox, oy) => {
+        ctx.beginPath();
+        ctx.moveTo(px + ox, py + oy);
+        ctx.lineTo(px + ox + Math.cos(ang) * len, py + oy + Math.sin(ang) * len);
+        ctx.stroke();
+      });
+    }
   }
   // 갈라진 결 몇 줄 — 방향이 제각각이라 격자로 안 보인다
   for (let i = 0; i < 14; i++) {
