@@ -23,6 +23,7 @@ const ZONE = [z01f1, z01f2, z01f3];
 const SOLID = new Set(['#', 'D', 'G', 'C']);
 /** 열 수 있는 벽 — 열렸다고 치면 지나간다 */
 const OPENABLE = new Set(['D', 'G', 'C']);
+const NEIGHBOURS = [[0, -1], [0, 1], [-1, 0], [1, 0]] as const;
 
 type Grid = string[];
 const at = (grid: Grid, col: number, row: number): string =>
@@ -185,14 +186,24 @@ describe('1구역 층 구성', () => {
         );
       });
 
-      it('횃불이 전부 벽에 붙어 있다 — 안 붙으면 셀 가운데에 떠 천장에 매단 꼴이 된다', () => {
-        const NEIGHBOURS = [[0, -1], [0, 1], [-1, 0], [1, 0]] as const;
+      it('횃불이 전부 진짜 벽(#)에 붙어 있다 — 문에 걸면 열릴 때 허공에 남는다', () => {
         const floating = json.lighting.torches
-          .filter(([row, col]) =>
-            !NEIGHBOURS.some(([dc, dr]) => SOLID.has(at(grid, col! + dc, row! + dr))),
-          )
+          .filter(([row, col]) => !NEIGHBOURS.some(([dc, dr]) => at(grid, col! + dc, row! + dr) === '#'))
           .map((t) => `[${t}]`);
         expect(floating).toEqual([]);
+      });
+
+      it('스폰(S)이 진짜 벽에 붙어 있다 — 계단 입구가 그 벽을 등지고 선다', () => {
+        const [sr2, sc2] = find(grid, 'S')[0]!;
+        expect(
+          NEIGHBOURS.some(([dc, dr]) => at(grid, sc2 + dc, sr2 + dr) === '#'),
+          `스폰 [${sr2},${sc2}] 이 벽에서 떨어져 있다 — 아치가 허공에 뜬다`,
+        ).toBe(true);
+      });
+
+      it('출구(X)도 진짜 벽에 붙어 있다 — 계단이 그 벽을 파고든다', () => {
+        const [xr2, xc2] = find(grid, 'X')[0]!;
+        expect(NEIGHBOURS.some(([dc, dr]) => at(grid, xc2 + dc, xr2 + dr) === '#')).toBe(true);
       });
 
       it('레버가 여는 대상이 실제 관문이다', () => {

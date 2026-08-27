@@ -326,6 +326,9 @@ const COLOR_ALTAR_LIGHT = 0xe0d0a0;
 const COLOR_EXIT = 0x3fae5a;
 /** 층 사이 계단 — 단 수와 한 단 높이, 돌 색 */
 const STAIR_STEPS = 7;
+/** 입구 계단은 올라간다 — 천장(4m) 안에 아치까지 들어가야 하므로 단 수가 적다 */
+const STAIR_UP_STEPS = 4;
+const STAIR_ARCH_H = 2.2;
 const STAIR_RISE = 0.34;
 const STAIR_STONE = 0x4a443b;
 const STAIR_SLAB = 0x565045;
@@ -475,13 +478,13 @@ function stairYaw(level: Level, col: number, row: number, entrance: boolean): nu
   const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
   let wx = 0;
   let wz = -1; // 못 찾으면 북쪽
-  outer: for (let dist = 1; dist <= 2; dist++) {
-    for (const [dc, dr] of dirs) {
-      if (!level.solidAt(col + dc * dist, row + dr * dist)) continue;
-      wx = dc;
-      wz = dr;
-      break outer;
-    }
+  // 바로 붙은 진짜 벽만 본다. 두 칸 건너 벽을 잡으면 계단이 방 한가운데 서고 아치가 허공에 뜬다 —
+  // 스폰·출구를 벽에 붙여 두는 것이 데이터 쪽 규약이고, Zone.test 가 그걸 지킨다
+  for (const [dc, dr] of dirs) {
+    if (level.charAt(col + dc, row + dr) !== '#') continue;
+    wx = dc;
+    wz = dr;
+    break;
   }
   // 로컬 -Z 가 계단 꼭대기, +Z 가 바닥이다
   return entrance ? Math.atan2(-wx, -wz) : Math.atan2(wx, wz);
@@ -507,46 +510,47 @@ function buildStairwell(
     bumpScale: 0.3,
   });
   const w = cs * 0.62;
-  const steps = STAIR_STEPS;
+  // 입구는 "내려온 뒤 바닥에 선 자리" 라 계단이 위로 올라가고, 출구는 아래로 내려간다.
+  // 입구를 아래로 파면 시작하자마자 발밑이 구멍이라 허공에 선 꼴이 된다
+  const steps = entrance ? STAIR_UP_STEPS : STAIR_STEPS;
   const rise = STAIR_RISE;
   const run = (cs * 0.78) / steps;
+  const dir = entrance ? 1 : -1;
 
-  // 구멍 — 계단을 감싸는 어두운 통. 바닥 아래로 뚫려 있는 것처럼 보이게 벽을 세운다
-  const shaft = new THREE.Mesh(
-    new THREE.BoxGeometry(w + 0.5, steps * rise + 0.3, cs * 0.9),
-    new THREE.MeshLambertMaterial({ color: 0x0a0908 }),
-  );
-  shaft.position.y = -(steps * rise) / 2 - 0.15;
-  g.add(shaft);
+  if (!entrance) {
+    // 구멍 — 계단을 감싸는 어두운 통. 바닥 아래로 뚫려 있는 것처럼 보이게
+    const shaft = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 0.5, steps * rise + 0.3, cs * 0.9),
+      new THREE.MeshLambertMaterial({ color: 0x0a0908 }),
+    );
+    shaft.position.y = -(steps * rise) / 2 - 0.15;
+    g.add(shaft);
+  }
 
-  // 디딤돌 — 앞에서 뒤로 가며 한 단씩 내려간다
+  // 디딤돌 — 벽 쪽(-Z)으로 갈수록 한 단씩 오르내린다
   for (let i = 0; i < steps; i++) {
     const step = new THREE.Mesh(new THREE.BoxGeometry(w, rise, run), stone);
-    step.position.set(0, -rise * (i + 0.5), -cs * 0.39 + run * (i + 0.5));
+    const along = entrance ? steps - 1 - i : i;
+    step.position.set(0, dir * rise * (i + 0.5), -cs * 0.39 + run * (along + 0.5));
     g.add(step);
   }
   // 양옆 난간 턱 — 계단이 벽에 파묻힌 것으로 보이게
   for (const side of [-1, 1]) {
-    const rail = new THREE.Mesh(
-      new THREE.BoxGeometry(0.22, steps * rise, cs * 0.8),
-      stone,
-    );
-    rail.position.set(side * (w / 2 + 0.11), -(steps * rise) / 2, 0);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.22, steps * rise, cs * 0.8), stone);
+    rail.position.set(side * (w / 2 + 0.11), (dir * steps * rise) / 2, 0);
     g.add(rail);
   }
 
   if (entrance) {
-    // 내려온 아치 — 계단 위쪽 끝을 막은 석조. 되돌아 올라갈 수는 없다
-    const back = new THREE.Mesh(new THREE.BoxGeometry(w + 0.44, 2.6, 0.35), stone);
-    back.position.set(0, 1.3, -cs * 0.42);
+    // 계단 꼭대기를 막은 석조 — 내려온 길이라 되짚어 갈 수 없다
+    const top = steps * rise;
+    const back = new THREE.Mesh(new THREE.BoxGeometry(w + 0.44, STAIR_ARCH_H, 0.35), stone);
+    back.position.set(0, top + STAIR_ARCH_H / 2, -cs * 0.42);
     g.add(back);
-    for (let i = 0; i < 3; i++) {
-      const arch = new THREE.Mesh(
-        new THREE.BoxGeometry(w + 0.44 - (i + 1) * 0.3, 0.18, 0.4),
-        stone,
-      );
-      arch.position.set(0, 2.6 - 0.09 - i * 0.18, -cs * 0.42);
-      g.add(arch);
+    for (const side of [-1, 1]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.3, STAIR_ARCH_H, cs * 0.4), stone);
+      wall.position.set(side * (w / 2 + 0.15), top + STAIR_ARCH_H / 2, -cs * 0.29);
+      g.add(wall);
     }
     return g;
   }
@@ -642,7 +646,7 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   for (let row = 0; row < level.rows; row++) {
     for (let col = 0; col < level.cols; col++) {
       const ch = level.charAt(col, row);
-      if (ch === 'S' || ch === 'X') continue; // 계단 구멍
+      if (ch === 'X') continue; // 내려가는 계단 구멍. 입구(S)는 계단이 올라가므로 바닥이 있다
       const tile = new THREE.PlaneGeometry(cs, cs);
       tile.rotateX(-Math.PI / 2);
       tile.translate((col + 0.5) * cs, 0, (row + 0.5) * cs);
@@ -788,12 +792,13 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
 
     // 어느 쪽에 벽이 붙어 있는가 — 법선은 그 벽에서 방 안쪽을 향한다.
     // 북·남·서·동 순으로 본다 (여러 면이 벽이면 앞선 쪽에 건다)
+    // 문·관문·균열 벽('D'·'G'·'C')에는 걸지 않는다 — 열리거나 부서지면 횃불만 허공에 남는다
     let nx = 0;
     let nz = 0;
-    if (level.solidAt(col, row - 1)) nz = 1;
-    else if (level.solidAt(col, row + 1)) nz = -1;
-    else if (level.solidAt(col - 1, row)) nx = 1;
-    else if (level.solidAt(col + 1, row)) nx = -1;
+    if (level.charAt(col, row - 1) === '#') nz = 1;
+    else if (level.charAt(col, row + 1) === '#') nz = -1;
+    else if (level.charAt(col - 1, row) === '#') nx = 1;
+    else if (level.charAt(col + 1, row) === '#') nx = -1;
 
     // 벽 면에서 wallOffset 만큼 나온 자리 — 붙은 벽이 없으면 셀 가운데 그대로
     const out = cs / 2 - torch.wallOffset;
