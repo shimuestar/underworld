@@ -356,6 +356,10 @@ const ALCOVE_BACK_D = 0.35;
 /** 꺾인 윗단 줄의 깊이와, 그 꼭대기 옆 어두운 문의 높이 */
 const ALCOVE_UPPER_D = 0.95;
 const ALCOVE_DOOR_H = 1.4;
+const ALCOVE_UPPER_STEPS = 3;
+/** 왼쪽 기둥에 파인 문의 깊이 — 검은 판 하나가 아니라 진짜 파인 구멍이라야
+ *  옆에서 봐도 문설주·문지방의 깊이가 보인다 */
+const ALCOVE_NOTCH_D = 0.55;
 /** 계단 한 단의 깊이 — 4단 × 이 값이 개구부에서 계단참까지의 길이다 */
 const ALCOVE_STEP_RUN = 0.42;
 const STAIR_RISE = 0.34;
@@ -539,15 +543,36 @@ function alcoveFrameGeoms(
     g.translate(x, 0, z);
     out.push(g);
   };
-  // 양옆 기둥 — 칸 깊이만큼 두껍다. 이 안쪽 면이 곧 계단 통로의 벽이 된다
-  for (const side of [-1, 1]) {
-    place(
-      new THREE.BoxGeometry(jamb, ceiling, cs),
-      side * (cs / 2 - jamb / 2),
-      ceiling / 2,
-      0,
-    );
-  }
+  // 오른쪽 기둥 — 칸 깊이만큼 두껍다. 이 안쪽 면이 곧 계단 통로의 벽이 된다
+  place(new THREE.BoxGeometry(jamb, ceiling, cs), cs / 2 - jamb / 2, ceiling / 2, 0);
+
+  // 왼쪽 기둥 — 윗단 꼭대기 높이에 위층으로 이어지는 문을 판다.
+  // 검은 판 하나를 붙이는 게 아니라 기둥을 다섯 조각으로 갈라 진짜 구멍을 낸다 —
+  // 문지방·문설주·문틀 윗면이 전부 실물이라 어느 각도에서 봐도 깊이가 보인다
+  const doorBottom = STAIR_RISE * (STAIR_UP_STEPS + ALCOVE_UPPER_STEPS);
+  const doorTop = doorBottom + ALCOVE_DOOR_H;
+  const notchB = -cs / 2 + ALCOVE_BACK_D; // 문의 z 구간 = 윗단 줄과 같다
+  const notchF = notchB + ALCOVE_UPPER_D;
+  const notchD = notchF - notchB;
+  const lx = -(cs / 2 - jamb / 2); // 왼쪽 기둥 중심
+  // 앞쪽·뒤쪽 통짜
+  place(new THREE.BoxGeometry(jamb, ceiling, cs / 2 - notchF), lx, ceiling / 2, (notchF + cs / 2) / 2);
+  place(new THREE.BoxGeometry(jamb, ceiling, notchB + cs / 2), lx, ceiling / 2, (-cs / 2 + notchB) / 2);
+  // 문 아래(문지방까지)와 문 위
+  place(new THREE.BoxGeometry(jamb, doorBottom, notchD), lx, doorBottom / 2, (notchF + notchB) / 2);
+  place(
+    new THREE.BoxGeometry(jamb, ceiling - doorTop, notchD),
+    lx,
+    doorTop + (ceiling - doorTop) / 2,
+    (notchF + notchB) / 2,
+  );
+  // 구멍 안쪽에 남는 벽 두께
+  place(
+    new THREE.BoxGeometry(jamb - ALCOVE_NOTCH_D, ALCOVE_DOOR_H, notchD),
+    -cs / 2 + (jamb - ALCOVE_NOTCH_D) / 2,
+    doorBottom + ALCOVE_DOOR_H / 2,
+    (notchF + notchB) / 2,
+  );
   // 상인방 — 입구 쪽만. 안쪽은 천장까지 트여 있어야 꺾여 올라가는 통로의 키가 나온다
   place(
     new THREE.BoxGeometry(openW, ceiling - openH, ALCOVE_LINTEL_D),
@@ -610,7 +635,7 @@ function buildStairwell(
     g.add(landing);
 
     // 윗단 — 등판 바로 앞 한 줄. 왼쪽으로 갈수록 한 단씩 높다 (왼쪽 끝이 꼭대기)
-    const upperSteps = 3;
+    const upperSteps = ALCOVE_UPPER_STEPS;
     const stepW = innerW / upperSteps;
     const upperZ = -cs / 2 + ALCOVE_BACK_D + ALCOVE_UPPER_D / 2;
     for (let k = 0; k < upperSteps; k++) {
@@ -620,15 +645,20 @@ function buildStairwell(
       g.add(step);
     }
 
-    // 어두운 문 — 윗단 꼭대기 옆의 왼쪽 벽면. 빛을 안 받는 검정이라 구멍으로 읽힌다.
-    // 길은 여기서 왼쪽으로 꺾여 위층으로 이어진다 (들어갈 수는 없다 — 격자는 벽이다)
+    // 파인 문의 속 — 조명이 그림자를 못 만들므로(섀도 맵 없음) 끝은 검은 판으로 눌러 둔다.
+    // 문 자체는 왼쪽 기둥에 실제로 파여 있다 (alcoveFrameGeoms 가 다섯 조각으로 가른다)
     const doorBottom = landingTop + rise * upperSteps;
     const dark = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06, ALCOVE_DOOR_H, ALCOVE_UPPER_D),
-      new THREE.MeshBasicMaterial({ color: 0x030303 }),
+      new THREE.BoxGeometry(0.05, ALCOVE_DOOR_H - 0.04, ALCOVE_UPPER_D - 0.06),
+      new THREE.MeshBasicMaterial({ color: 0x020202 }),
     );
-    dark.position.set(-innerW / 2 - 0.01, doorBottom + ALCOVE_DOOR_H / 2, upperZ);
+    dark.position.set(-innerW / 2 - ALCOVE_NOTCH_D + 0.05, doorBottom + ALCOVE_DOOR_H / 2, upperZ);
     g.add(dark);
+    // 위층에서 새어 내려오는 불빛 — 문가에 낮게 걸어 윗단과 문설주만 데운다.
+    // '길이 저 위로 이어진다' 는 신호는 어둠보다 이 빛이 낸다
+    const spill = new THREE.PointLight(0xff9a4a, 1.15, 5, 0);
+    spill.position.set(-innerW / 2 + 0.4, doorBottom + 0.55, upperZ);
+    g.add(spill);
     return g;
   }
 

@@ -1077,7 +1077,8 @@ export class Stage {
     // 경첩은 방향(mount)의 자식이라 제 회전은 순수한 여닫힘이다 — 0 이 닫힘
     const hinge = this.scene.getObjectByName(`door-${row}-${col}`);
     if (!hinge) return;
-    hinge.rotation.y = Math.min(1, Math.max(0, frac)) * DOOR_SWING_RAD;
+    // 음수 frac = 반대쪽으로 젖힘 (여는 사람 반대편으로 민다)
+    hinge.rotation.y = Math.min(1, Math.max(-1, frac)) * DOOR_SWING_RAD;
   }
 
   /** 레버 당김 — 손잡이를 반대쪽으로 넘긴다 */
@@ -1088,8 +1089,8 @@ export class Stage {
 
   /** 문 개방 — 다 밀린 판을 씬에서 걷어낸다 (이미 벽 속이라 화면은 그대로) */
   /** 다 열렸다 — 문짝은 활짝 열린 채로 남는다 (사라지면 문을 연 느낌이 안 난다) */
-  openDoor(row: number, col: number): void {
-    this.setDoorSwing(row, col, 1);
+  openDoor(row: number, col: number, dir = 1): void {
+    this.setDoorSwing(row, col, dir);
   }
 
 

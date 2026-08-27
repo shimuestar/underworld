@@ -390,3 +390,19 @@ describe('열린 문 — 문틀은 그대로 서 있다', () => {
     expect(intoJamb.x).toBeLessThan((doorCol + 0.5) * cs);
   });
 });
+
+describe('문은 당기지 않고 민다', () => {
+  it('여는 사람 반대쪽으로 젖혀진다 — 서쪽에서 열면 동쪽으로', () => {
+    press(world);
+    idle(world, CFG.openTicks); // 잠금 해제 + 첫 여닫이 틱
+    expect(world.doors[0]!.swingDir).toBe(-1);
+  });
+
+  it('반대쪽에서 열면 반대로 젖혀진다', () => {
+    world.player.x = 24;
+    world.player.yaw = Math.PI / 2; // -X 를 본다
+    press(world);
+    idle(world, CFG.openTicks);
+    expect(world.doors[0]!.swingDir).toBe(1);
+  });
+});

@@ -192,6 +192,8 @@ export interface DoorState {
   progress: number;
   /** 미닫이 진행 0~1. 1 이 되는 틱에 통행이 열린다 */
   slide: number;
+  /** 열리는 방향 +1/-1 — 첫 여닫이 틱에 '여는 사람 반대쪽' 으로 정해진다 (당기지 않고 민다) */
+  swingDir?: number;
   /** 렌더 보간용 직전 값 */
   prevSlide: number;
   opened: boolean;

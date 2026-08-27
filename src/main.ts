@@ -1257,7 +1257,8 @@ events.on('door_needs_lever', () => {
 });
 events.on('door_opened', (payload) => {
   const at = payload as { row: number; col: number };
-  stage.openDoor(at.row, at.col);
+  const opened = world.doors.find((d) => d.row === at.row && d.col === at.col);
+  stage.openDoor(at.row, at.col, opened?.swingDir ?? 1);
   minimap.rebuildBase();
 });
 /** 층을 갈아 끼운다 — 지형·미니맵·배치물을 새 층 것으로 바꾸고 플레이어를 그 층 입구에 세운다.
@@ -1696,7 +1697,7 @@ function render(alpha: number): void {
     stage.setDoorSwing(
       door.row,
       door.col,
-      door.prevSlide + (door.slide - door.prevSlide) * alpha,
+      (door.prevSlide + (door.slide - door.prevSlide) * alpha) * (door.swingDir ?? 1),
     );
   }
 

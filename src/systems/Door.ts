@@ -42,6 +42,12 @@ export function tick(world: World, _dt: number): void {
 
     // 2·3단계 — 잠금이 풀린 문은 손과 무관하게 계속 밀린다
     if (door.progress >= cfg.openTicks) {
+      // 문은 여는 사람에게서 먼 쪽으로 젖혀진다 — 당기지 않고 민다.
+      // dirX 문(좌우가 벽)은 앞뒤가 Z 축이고, dirZ 문은 앞뒤가 X 축이다
+      if (door.swingDir === undefined) {
+        const side = door.dirX !== 0 ? p.z - door.z : p.x - door.x;
+        door.swingDir = side >= 0 ? 1 : -1;
+      }
       door.prevSlide = door.slide;
       door.slide = Math.min(1, door.slide + 1 / Math.max(1, cfg.slideTicks));
       if (door.slide >= 1) {
