@@ -451,6 +451,38 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.xp).toBe(xp + balance.sigil.duplicateXp[sigilDef('sig_darkvision').tier]);
   });
 
+  it('시전 소음 — 빗나가도 등 뒤 코앞(2m)의 대기 적은 깬다', () => {
+    Enemies.init(world);
+    Sigils.acquire(world, 'sig_fireball');
+    world.mana.value = 100;
+    // 플레이어 등 뒤 1.3m — 눈으로는 절대 못 보는 자리 (플레이어를 등지고 있기까지 하다)
+    const eaves = add('goblin_runner', 6 - 1.3, 6);
+    eaves.homeYaw = Math.atan2(-(6 - eaves.x), -(6 - eaves.z)) + Math.PI;
+    expect(eaves.ai).toBe('idle');
+    castSlot(1); // 화염구는 +X 로 날아간다 — 이 적과는 무관
+    expect(eaves.ai).toBe('chase');
+  });
+
+  it('피격음 — 화살에 맞은 적 코앞(2m)의 동료도 깬다', () => {
+    const victim = add('goblin_runner', 14, 6); // 플레이어에게서 8m — 활 소음(4m) 밖
+    const buddy = add('goblin_runner', 14, 7.5); // 피해자 옆 1.5m
+    for (const e of [victim, buddy]) {
+      e.ai = 'idle';
+      e.homeYaw = Math.atan2(-(6 - e.x), -(6 - e.z)) + Math.PI; // 플레이어를 등진다
+    }
+    victim.health = 1000;
+    // 화살을 직접 날린다 — Weapons 를 거치면 발사 소음이 겹쳐 피격음을 못 갈라낸다
+    world.projectiles.push({
+      id: 424242, owner: 'player', kind: 'arrow',
+      x: 6, y: 1.0, z: 6, prevX: 6, prevY: 1.0, prevZ: 6,
+      vx: 40, vy: 0, vz: 0, lifeTicks: 60,
+      damage: 5, burnTicks: 0, burnDamagePerTick: 0, radius: 0.15,
+    });
+    for (let i = 0; i < 30 && victim.health === 1000; i++) Projectiles.tick(world, DT);
+    expect(victim.health).toBeLessThan(1000); // 명중 확인
+    expect(buddy.ai).toBe('chase'); // 옆 놈이 피격음을 들었다
+  });
+
   it('관통 뇌창: 끊기지 않고 1.5초를 지지면 감전돼 1초 동안 그 자세로 굳는다', () => {
     Sigils.acquire(world, 'sig_lightning');
     world.mana.value = 500;

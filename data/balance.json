@@ -550,6 +550,10 @@
   "bossAlertRadius": 45,
     "_noticeNote": "알아챈 뒤 실제로 움직이기까지의 멈칫. 머리 위 느낌표가 뜨자마자 달려들면 표시를 읽을 틈이 없다 — 이 틱 동안은 플레이어 쪽으로 몸만 돌리고 이동·공격을 하지 않는다. 들킨 직후 한 박자를 돌려주는 값이기도 하다",
     "noticeDelayTicks": 15,
+    "_attackNoiseNote": "공격 행동(마법 시전·해머 휘두름)의 소음 — 빗나가도 이 반경의 대기 적은 깬다. 총성(pistol.noiseRadius 12)·활시위(bow.noiseRadius 4)는 제 값이 따로 있다",
+    "attackNoiseRadius": 2,
+    "_hitNoiseNote": "피격음 — 맞은 적 기준 이 반경의 동료도 깬다. 몰래 쏴도 바로 옆 놈은 듣는다",
+    "hitNoiseRadius": 2,
     "_chargeNote": "크게 밀려난 뒤 확률적으로 달려들며 찌른다 — 멀리서 그냥 걸어오면 위협이 없다",
     "chargeChanceAfterKnockback": 1.0
   },

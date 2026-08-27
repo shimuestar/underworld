@@ -6,7 +6,7 @@
 import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, hitBarrel, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, hitBarrel, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type World } from '../core/World';
 
 /** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
  *  활을 넣으면서 실제로 방패·경직·무기 교체 세 곳이 bowDraw 를 안 지워
@@ -307,6 +307,8 @@ function resolveHammerHit(world: World, heavy: boolean): void {
 
     enemy.health -= applyFrostOnHit(world.events, enemy, damage);
     if (enemy.ai === 'idle') enemy.ai = 'chase';
+    // 피격음 — 맞은 적 코앞의 동료도 깬다 (권총은 착탄 소음 12m 가 이미 대신한다)
+    alertNearbyAt(world, enemy.x, enemy.z, balance.enemyAi.hitNoiseRadius, balance.enemyAi.noticeDelayTicks);
     if (heavy) {
       // 경직한 적에게 3타를 모두 꽂았다 — 체급을 무시하고 크게 날린다.
       // 경직은 유지된다(밀리는 동안 타이머가 멈춘다) — 쫓아가 처형할 수 있다

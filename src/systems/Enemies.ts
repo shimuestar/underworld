@@ -10,9 +10,24 @@
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, playerBlocks, pushPlayer, type EnemyState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, playerBlocks, pushPlayer, type EnemyState, type World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
+
+/** 구독. 시작 시 1회 — 공격 행동의 소음. 마법 시전과 해머 휘두름은 빗나가도
+ *  코앞(attackNoiseRadius)의 대기 적을 깨운다. 총성·활시위는 Weapons 가 제 값으로 낸다 */
+export function init(world: World): void {
+  const wake = (): void =>
+    alertNearbyAt(
+      world,
+      world.player.x,
+      world.player.z,
+      balance.enemyAi.attackNoiseRadius,
+      balance.enemyAi.noticeDelayTicks,
+    );
+  world.events.on('cast_spell', wake);
+  world.events.on('hammer_swing', wake);
+}
 
 export function tick(world: World, dt: number): void {
   // 처형 연출 중 — 모든 적이 멈춘다. 플레이어의 마무리 동작이 온전히 보이도록

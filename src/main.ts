@@ -1481,6 +1481,7 @@ Progression.init(world);
 Corruption.init(world);
 Stamina.init(world);
 Exit.init(world); // 보스가 죽으면 열쇠를 떨군다
+Enemies.init(world); // 공격 행동 소음 — 시전·휘두름이 코앞의 적을 깨운다
 const systems = [
   PlayerMove.tick,
   Enemies.tick,

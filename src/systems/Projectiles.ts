@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type World } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -141,6 +141,8 @@ function skillDamage(world: World, enemy: EnemyState, damage: number, source: st
   const dealt = source === 'frost' ? damage : applyFrostOnHit(world.events, enemy, damage);
   enemy.health -= dealt;
   world.events.emit('enemy_damaged', { enemyId: enemy.id, amount: dealt, source });
+  // 피격음 — 맞은 적 코앞의 동료도 깬다. 등 뒤에서 쏴도 바로 옆 놈은 듣는다
+  alertNearbyAt(world, enemy.x, enemy.z, balance.enemyAi.hitNoiseRadius, balance.enemyAi.noticeDelayTicks);
   if (enemy.health <= 0 && enemy.alive) {
     enemy.alive = false;
     world.events.emit('spell_kill', { enemyType: enemy.type, source });
@@ -1039,10 +1041,14 @@ function applyProjectileHit(
     // 처치 드랍도 같은 점에 쏟아지므로 조금 흩어 놓는다
     dropArrow(world, enemy.x, enemy.z, true);
   }
-  // 맞았으면 깬다 — 활은 소리가 작을 뿐(noiseRadius 4) 맞은 놈까지 자면 곤란하다
-  if (proj.owner === 'player' && enemy.health > 0 && enemy.ai === 'idle') {
-    alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
-    world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type });
+  // 맞았으면 깬다 — 활은 소리가 작을 뿐(noiseRadius 4) 맞은 놈까지 자면 곤란하다.
+  // 피격음은 맞은 적 코앞(hitNoiseRadius)의 동료도 깨운다
+  if (proj.owner === 'player') {
+    if (enemy.health > 0 && enemy.ai === 'idle') {
+      alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
+      world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type });
+    }
+    alertNearbyAt(world, enemy.x, enemy.z, balance.enemyAi.hitNoiseRadius, balance.enemyAi.noticeDelayTicks);
   }
   if (enemy.health <= 0) {
     enemy.alive = false;

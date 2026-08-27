@@ -168,6 +168,23 @@ export function alertEnemy(enemy: EnemyState, noticeTicks: number): void {
   enemy.noticeTicks = noticeTicks;
 }
 
+/** (x,z)에서 난 소음 — 반경 안의 대기(idle) 적을 깨운다. 각도·시야선 무관 (소리다).
+ *  noticeTicks 는 부르는 쪽이 준다 (World 는 데이터에 의존하지 않는다 — pushPlayer 규약) */
+export function alertNearbyAt(
+  world: World,
+  x: number,
+  z: number,
+  radius: number,
+  noticeTicks: number,
+): void {
+  for (const enemy of world.enemies) {
+    if (!enemy.alive || enemy.ai !== 'idle') continue;
+    if (Math.hypot(enemy.x - x, enemy.z - z) > radius) continue;
+    alertEnemy(enemy, noticeTicks);
+    world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, noise: true });
+  }
+}
+
 /** 문 잠금을 통째로 푼다 — 레버가 부른다. 미닫이와 개방은 Door 가 이어서 돌리므로
  *  레버는 이 한 줄만 건드리면 된다. balance 는 호출부가 읽어 넘긴다
  *  (pushPlayer·spendStamina 와 같은 규약 — World 는 데이터에 의존하지 않는다) */
