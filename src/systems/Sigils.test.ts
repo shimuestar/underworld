@@ -452,6 +452,24 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.xp).toBe(xp + balance.sigil.duplicateXp[sigilDef('sig_darkvision').tier]);
   });
 
+  it('수류탄은 금 간 벽에 튕기지 않고 부딪히는 즉시 터져 벽을 부순다', () => {
+    world.level.grid[1] = '#######C'; // 동쪽 벽 한 칸을 균열 벽으로
+    const log: string[] = [];
+    world.events.on('grenade_bounce', () => log.push('bounce'));
+    world.events.on('explosion', () => log.push('boom'));
+    world.events.on('crack_wall_broken', () => log.push('broken'));
+    world.projectiles.push({
+      id: 434343, owner: 'player', kind: 'grenade',
+      x: 24, y: 1.2, z: 6, prevX: 24, prevY: 1.2, prevZ: 6,
+      vx: 12, vy: 0, vz: 0, lifeTicks: 600,
+      damage: 0, burnTicks: 0, burnDamagePerTick: 0, radius: 0.12,
+    });
+    for (let i = 0; i < 40 && !log.includes('boom'); i++) Projectiles.tick(world, DT);
+    expect(log).toContain('boom');
+    expect(log).toContain('broken');
+    expect(log).not.toContain('bounce');
+  });
+
   it('화염구 폭발이 균열 벽을 1방에 부순다 — 셀이 열리고 붕괴 이벤트가 난다', () => {
     // 아레나 동쪽 벽 한 칸을 균열 벽으로 (col 7, row 1)
     world.level.grid[1] = '#######C';

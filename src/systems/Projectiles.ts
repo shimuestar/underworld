@@ -809,6 +809,21 @@ function moveProjectiles(world: World, dt: number): void {
         proj.z += dirZ * hitT;
         const bodyHit =
           hitEnemy !== null || hitPlayer || hitBarrelTarget !== null || hitProjectile !== null;
+        // 금 간 벽(C)에는 튕기지 않고 부딪히는 즉시 터진다 — 튕기는 수류탄으로
+        // 균열 벽을 맞히기가 고역이라, 벽 쪽이 받아 준다
+        if (!bodyHit && hitSurface === 'wall') {
+          const wallCol = Math.floor((proj.x + dirX * hitT + dirX * 0.05) / level.cellSize);
+          const wallRow = Math.floor((proj.z + dirZ * hitT + dirZ * 0.05) / level.cellSize);
+          if (level.charAt(wallCol, wallRow) === 'C') {
+            proj.x += dirX * hitT;
+            proj.y += dirY * hitT;
+            proj.z += dirZ * hitT;
+            explodeGrenade(world, proj);
+            world.projectiles.splice(i, 1);
+            i = removeBroken(world, hitProjectile, i);
+            continue;
+          }
+        }
         if (!bodyHit && (hitSurface === 'wall' || hitSurface === 'ceiling')) {
           if (bounceGrenade(world, proj, hitSurface, wall.axis, dirX, dirY, dirZ)) continue;
         }

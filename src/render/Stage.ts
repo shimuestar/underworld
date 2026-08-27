@@ -990,7 +990,9 @@ export class Stage {
 
   /** 씬에서 떼고 그 아래 지오메트리·머티리얼을 전부 반납한다 */
   private disposeGroup(group: THREE.Object3D): void {
-    this.scene.remove(group);
+    // scene.remove 는 "직계 자식"만 뗀다 — 균열 벽처럼 레벨 그룹 안에 든 노드는
+    // 부모에게서 떼야 한다. (부순 균열 벽이 그대로 서 있던 원인)
+    group.removeFromParent();
     group.traverse((obj) => {
       if (!(obj instanceof THREE.Mesh)) return;
       obj.geometry.dispose();
