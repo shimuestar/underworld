@@ -540,8 +540,8 @@ describe('시야 — 등 뒤에서는 못 알아챈다', () => {
     expect(watch(8, half + scanHalf + 0.15, vision.scanTicks + 5)).toBe(false); // 확실히 바깥
   });
 
-  it('코앞이면 각과 무관하게 안다 — 등에 붙어 서 있는데 모르는 건 이상하다', () => {
-    expect(watch(vision.noticeRadius - 0.5, Math.PI)).toBe(true);
+  it('등 뒤라면 코앞(인기척 반경 안)이어도 못 알아챈다 — 백스탭을 위한 거리다', () => {
+    expect(watch(vision.noticeRadius - 0.5, Math.PI)).toBe(false);
   });
 
   it('대기 중에는 천천히 좌우를 살핀다 — 사각이 고정되지 않는다', () => {
@@ -582,8 +582,10 @@ describe('시야 — 등 뒤에서는 못 알아챈다', () => {
 describe('랜턴 — 비추면 즉시 들킨다', () => {
   const lp = balance.lantern;
 
-  /** 적을 (거리, 플레이어 시선 기준 각도)에 놓고 몇 틱 돌린다 */
-  function shine(dist: number, beamOffset: number, ticks = 3): EnemyState {
+  /** 적을 (거리, 플레이어 시선 기준 각도)에 놓고 몇 틱 돌린다.
+   *  기본은 플레이어를 마주 본다 — 시야각 밖 거리(aggroRange 밖)에 놓아 눈이 아니라
+   *  빛 때문에 깨는 것을 갈라낸다. facingAway 면 등을 돌린다 (등진 적은 빛도 못 깨운다) */
+  function shine(dist: number, beamOffset: number, ticks = 3, facingAway = false): EnemyState {
     const p = world.player;
     p.yaw = -Math.PI / 2; // +X 를 본다
     const angle = p.yaw + beamOffset;
@@ -594,44 +596,53 @@ describe('랜턴 — 비추면 즉시 들킨다', () => {
       1,
     );
     enemy.ai = 'idle';
-    // 적은 플레이어를 등지고 있다 — 눈으로는 절대 못 본다
-    enemy.homeYaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z)) + Math.PI;
+    enemy.homeYaw =
+      Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z)) + (facingAway ? Math.PI : 0);
     world.enemies.push(enemy);
     for (let i = 0; i < ticks; i++) Enemies.tick(world, DT);
     return enemy;
   }
 
-  it('등을 돌린 적도 빔에 잡히면 즉시 깬다', () => {
+  /** 눈(aggroRange 16)으로는 못 보고 빔(noticeRange 20)에는 잡히는 거리 */
+  const beamOnly = 18;
+
+  it('마주 본 적은 시야 밖 거리라도 빔에 잡히면 즉시 깬다', () => {
     world.lantern.on = true;
-    const enemy = shine(10, 0);
+    expect(beamOnly).toBeGreaterThan(enemyDef('goblin_runner').aggroRange);
+    const enemy = shine(beamOnly, 0);
     expect(enemy.ai).toBe('chase');
+  });
+
+  it('등진 적은 빔이 등을 비춰도 못 알아챈다 — 몰래 다가가는 길 (2026-08-27)', () => {
+    world.lantern.on = true;
+    expect(shine(10, 0, 3, true).ai).toBe('idle');
   });
 
   it('알림에 랜턴 때문이라고 실어 보낸다', () => {
     world.lantern.on = true;
     const alerts: { lantern?: boolean }[] = [];
     world.events.on('enemy_alerted', (p) => alerts.push(p as { lantern?: boolean }));
-    shine(10, 0);
+    shine(beamOnly, 0);
     expect(alerts[0]!.lantern).toBe(true);
   });
 
   it('랜턴을 끄면 안 들킨다 — 어둠이 유일한 은폐다', () => {
     world.lantern.on = false;
-    expect(shine(10, 0).ai).toBe('idle');
+    expect(shine(beamOnly, 0).ai).toBe('idle');
   });
 
   it('배터리가 나가도 안 들킨다', () => {
     world.lantern.on = true;
     world.lantern.battery = 0;
-    expect(shine(10, 0).ai).toBe('idle');
+    expect(shine(beamOnly, 0).ai).toBe('idle');
   });
 
   it('빔 밖(각도)이면 안 들킨다', () => {
     world.lantern.on = true;
     const half = (lp.angleDeg * Math.PI) / 180;
-    expect(shine(10, half * 0.5).ai).toBe('chase'); // 빔 안
+    expect(shine(beamOnly, half * 0.5).ai).toBe('chase'); // 빔 안
     world.enemies.length = 0;
-    expect(shine(10, half * 2.5).ai).toBe('idle'); // 빔 밖
+    expect(shine(beamOnly, half * 2.5).ai).toBe('idle'); // 빔 밖
   });
 
   it('빔 밖(거리)이면 안 들킨다', () => {
@@ -646,7 +657,9 @@ describe('랜턴 — 비추면 즉시 들킨다', () => {
     const p = world.player;
     const enemy = spawnEnemyAt('goblin_runner', p.x + 10, p.z, 1);
     enemy.ai = 'idle';
-    enemy.homeYaw = 0;
+    // 플레이어를 마주 본다 — 등진 적은 빛으로도 못 깨우므로 (위 테스트) 여기선 마주 봐야
+    // "벽 때문에" 못 알아채는 것이 갈라진다
+    enemy.homeYaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));
     world.enemies.push(enemy);
     // 사이를 벽으로 막는다 (아레나 격자를 직접 손대는 대신 시야선을 확인)
     expect(world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)).toBe(true);

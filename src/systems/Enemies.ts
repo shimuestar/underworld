@@ -194,8 +194,12 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           ((scan.scanArcDeg * Math.PI) / 360);
 
       // 랜턴 빔에 잡히면 시야각과 무관하게 즉시 알아챈다 — 어둠 속에서 빛을
-      // 든 쪽이 먼저 들킨다. 벽 너머는 안 보이므로 시야선은 그대로 요구한다
-      const lit = litByLantern(world, dist, distX, distZ);
+      // 든 쪽이 먼저 들킨다. 단 등진 적은 빛이 등을 비춰도 못 알아챈다 (은신).
+      // 벽 너머는 안 보이므로 시야선은 그대로 요구한다
+      const facingX = -Math.sin(enemy.yaw);
+      const facingZ = -Math.cos(enemy.yaw);
+      const behind = dist > 0.001 && (facingX * distX + facingZ * distZ) / dist <= 0;
+      const lit = !behind && litByLantern(world, dist, distX, distZ);
       if (
         (lit || (dist <= def.aggroRange && seesPlayer(enemy, dist, distX, distZ))) &&
         world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
@@ -546,11 +550,14 @@ function seesPlayer(
   distZ: number,
 ): boolean {
   const vision = balance.enemyAi.vision;
-  if (dist <= vision.noticeRadius) return true; // 등에 붙어 있으면 인기척으로 안다
   if (dist <= 0.001) return true;
   const facingX = -Math.sin(enemy.yaw);
   const facingZ = -Math.cos(enemy.yaw);
   const dot = (facingX * distX + facingZ * distZ) / dist;
+  // 등 뒤 반구(180도)는 완전한 사각이다 — 인기척(noticeRadius)도 앞에서만 친다.
+  // 등에 붙어 백스탭할 길을 연다 (2026-08-27). 맞는 순간에는 어디서든 즉시 깬다
+  if (dot <= 0) return false;
+  if (dist <= vision.noticeRadius) return true; // 앞쪽 코앞 — 시야각 밖이라도 인기척
   return dot >= Math.cos((vision.arcDeg * Math.PI) / 360);
 }
 
