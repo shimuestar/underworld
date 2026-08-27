@@ -201,6 +201,14 @@ describe('1구역 층 구성', () => {
         ).toBe(true);
       });
 
+      it('시작 시선이 계단 반대쪽을 본다 — 내려오자마자 등 뒤 벽을 보면 안 된다', () => {
+        const level = new Level(json);
+        const fx = -Math.sin(level.spawnYaw);
+        const fz = -Math.cos(level.spawnYaw);
+        // 등진 벽 방향과 시선의 내적이 음수여야 "벽을 등졌다"
+        expect(fx * level.spawnWall.dc + fz * level.spawnWall.dr).toBeLessThan(-0.9);
+      });
+
       it('출구(X)도 진짜 벽에 붙어 있다 — 계단이 그 벽을 파고든다', () => {
         const [xr2, xc2] = find(grid, 'X')[0]!;
         expect(NEIGHBOURS.some(([dc, dr]) => at(grid, xc2 + dc, xr2 + dr) === '#')).toBe(true);

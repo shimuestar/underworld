@@ -84,7 +84,7 @@ const world = new World(events, {
     prevX: level.spawn.x,
     prevY: 0,
     prevZ: level.spawn.z,
-    yaw: 0,
+    yaw: level.spawnYaw, // 등 뒤 계단이 아니라 방을 본다
     pitch: 0,
     health: balance.player.healthMax,
     stunTicks: 0,
@@ -1300,6 +1300,8 @@ function loadFloor(index: number): void {
   p.z = level.spawn.z;
   p.prevX = level.spawn.x;
   p.prevZ = level.spawn.z;
+  p.yaw = level.spawnYaw; // 내려오자마자 등 뒤 계단을 보고 있으면 안 된다
+  p.pitch = 0;
   p.stunTicks = 0;
   p.dodgeTicks = 0;
   p.iframeTicks = 0;

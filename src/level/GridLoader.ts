@@ -62,6 +62,10 @@ export class Level {
   readonly ambient: number;
   readonly torches: number[][];
   readonly spawn: { x: number; z: number };
+  /** 스폰이 등진 벽의 방향 (col,row 증분) — 계단 벽감이 이 칸에 파인다 */
+  readonly spawnWall: { dc: number; dr: number };
+  /** 시작 시선 — 등 뒤 계단이 아니라 방을 본다 */
+  readonly spawnYaw: number;
   readonly altarPos: { x: number; z: number } | null;
 
   /** 그리드 셀이 아닌 막힌 구조물 (제단 기둥). slideMove가 함께 검사한다 */
@@ -87,6 +91,14 @@ export class Level {
 
     const spawn = this.findChar('S');
     if (!spawn) throw new Error(`레벨 ${def.id}에 스폰(S)이 없다`);
+    // 스폰이 등진 벽 — 계단이 이쪽 벽을 파고 들어가고, 시선은 그 반대를 본다.
+    // 붙은 벽이 없으면 북쪽으로 친다 (Zone.test 가 벽에 붙이도록 강제한다)
+    const wall = ([[0, -1], [0, 1], [-1, 0], [1, 0]] as const).find(
+      ([dc, dr]) => this.charAt(spawn.col + dc, spawn.row + dr) === '#',
+    ) ?? [0, -1];
+    this.spawnWall = { dc: wall[0], dr: wall[1] };
+    // facing = (-sin yaw, -cos yaw). 벽 반대(-dc, -dr) 를 보려면 yaw = atan2(dc, dr)
+    this.spawnYaw = Math.atan2(wall[0], wall[1]);
     this.spawn = {
       x: (spawn.col + 0.5) * this.cellSize,
       z: (spawn.row + 0.5) * this.cellSize,
@@ -285,6 +297,11 @@ export class Level {
 
     body.x = nx;
     body.z = nz;
+  }
+
+  /** 스폰 칸의 격자 좌표 — 계단 벽감이 그 옆 칸에 파인다 */
+  findSpawnCell(): { col: number; row: number } {
+    return this.findChar('S') ?? { col: 0, row: 0 };
   }
 
   private findChar(ch: string): { col: number; row: number } | null {
@@ -490,6 +507,11 @@ function stairYaw(level: Level, col: number, row: number, entrance: boolean): nu
   return entrance ? Math.atan2(-wx, -wz) : Math.atan2(wx, wz);
 }
 
+/** 벽감 껍데기 높이 — 층 높이는 셀 크기와 같은 4m 규약이다 (level.ceiling) */
+function ceilingOf(cs: number): number {
+  return cs;
+}
+
 /** 층과 층을 잇는 돌계단. entrance 면 "내려온 자리"(위가 막힌 아치),
  *  아니면 "내려갈 자리"(석판이 덮인 구멍 — 열리면 석판이 밀려난다).
  *  바닥 아래로 파 내려가는 것이라 충돌에는 관여하지 않는다 — 순수 연출 */
@@ -542,16 +564,34 @@ function buildStairwell(
   }
 
   if (entrance) {
-    // 계단 꼭대기를 막은 석조 — 내려온 길이라 되짚어 갈 수 없다
-    const top = steps * rise;
-    const back = new THREE.Mesh(new THREE.BoxGeometry(w + 0.44, STAIR_ARCH_H, 0.35), stone);
-    back.position.set(0, top + STAIR_ARCH_H / 2, -cs * 0.42);
+    // 벽감 — 이 칸은 원래 벽이라 상자를 안 그렸다. 파 낸 속을 직접 세운다:
+    // 안쪽 벽 · 양옆 벽 · 천장. 안 세우면 벽 속이 뻥 뚫려 바깥이 보인다
+    const shell = new THREE.MeshLambertMaterial({
+      color: COLOR_WALL,
+      map: dungeonWallTexture(),
+      bumpMap: dungeonWallTexture(),
+      bumpScale: WALL_BUMP,
+    });
+    const back = new THREE.Mesh(new THREE.BoxGeometry(cs, ceilingOf(cs), 0.4), shell);
+    back.position.set(0, ceilingOf(cs) / 2, -cs / 2 + 0.2);
     g.add(back);
     for (const side of [-1, 1]) {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.3, STAIR_ARCH_H, cs * 0.4), stone);
-      wall.position.set(side * (w / 2 + 0.15), top + STAIR_ARCH_H / 2, -cs * 0.29);
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.4, ceilingOf(cs), cs), shell);
+      wall.position.set(side * (cs / 2 - 0.2), ceilingOf(cs) / 2, 0);
       g.add(wall);
     }
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(cs, 0.4, cs), shell);
+    roof.position.set(0, ceilingOf(cs) - 0.2, 0);
+    g.add(roof);
+    // 벽감 바닥 — 계단 아래를 메운다
+    const base = new THREE.Mesh(new THREE.BoxGeometry(cs, 0.3, cs), stone);
+    base.position.set(0, -0.15, 0);
+    g.add(base);
+    // 계단 꼭대기를 막은 석조 — 내려온 길이라 되짚어 갈 수 없다
+    const top = steps * rise;
+    const seal = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, STAIR_ARCH_H, 0.35), stone);
+    seal.position.set(0, top + STAIR_ARCH_H / 2, -cs * 0.36);
+    g.add(seal);
     return g;
   }
 
@@ -576,6 +616,13 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   const cs = level.cellSize;
   const width = level.cols * cs;
   const depth = level.rows * cs;
+
+  // 시작 계단이 들어갈 벽 칸 — 스폰이 등진 쪽 한 칸
+  const spawnCell = level.findSpawnCell();
+  const alcove = {
+    row: spawnCell.row + level.spawnWall.dr,
+    col: spawnCell.col + level.spawnWall.dc,
+  };
 
   // 셀 단위 박스 생성 후 카테고리별로 병합. 문(D)은 열릴 때 제거해야 하므로 개별 메시
   const byColor = new Map<number, THREE.BufferGeometry[]>();
@@ -616,6 +663,9 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
         group.add(built.mount);
         continue;
       }
+      // 시작 계단이 파고 들어갈 벽 칸은 상자를 그리지 않는다 — 그 자리에 벽감을 짓는다.
+      // 격자는 그대로 '#' 이라 몸은 여전히 막힌다 (보이는 것만 판다)
+      if (row === alcove.row && col === alcove.col) continue;
       const color = COLOR_WALL;
       const box = new THREE.BoxGeometry(cs, level.ceiling, cs);
       box.translate((col + 0.5) * cs, level.ceiling / 2, (row + 0.5) * cs);
@@ -766,9 +816,13 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       }
 
       if (ch === 'S') {
-        // 입구 — 이 층으로 내려온 계단. 위층에서 걸어 내려온 자리라 뒤가 막혀 있다.
-        // 순수 장식이다 (충돌·판정 없음)
-        group.add(buildStairwell(x, z, cs, true, stairYaw(level, col, row, true)));
+        // 입구 — 이 층으로 내려온 계단. 스폰 칸이 아니라 등진 벽 칸을 파고 들어간다.
+        // 격자는 여전히 '#' 이라 몸은 못 들어가고, 눈에만 벽감으로 보인다
+        const ax = (alcove.col + 0.5) * cs;
+        const az = (alcove.row + 0.5) * cs;
+        // 벽감은 방을 향해 입을 벌린다 — 계단은 그 반대(벽 안쪽)로 올라간다
+        const inward = Math.atan2(-level.spawnWall.dc, -level.spawnWall.dr);
+        group.add(buildStairwell(ax, az, cs, true, inward));
       }
     }
   }
