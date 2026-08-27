@@ -63,13 +63,6 @@
       ]
     },
     {
-      "type": "goblin_runner",
-      "cell": [
-        6,
-        11
-      ]
-    },
-    {
       "type": "goblin_spear",
       "cell": [
         4,
@@ -106,14 +99,6 @@
         13,
         13
       ]
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        11,
-        25
-      ],
-      "note": "동쪽 세로 복도 저격수"
     },
     {
       "type": "goblin_archer",
@@ -157,26 +142,10 @@
     {
       "type": "goblin_runner",
       "cell": [
-        18,
-        14
-      ],
-      "note": "보스 부하"
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
         19,
         20
       ],
       "note": "보스 부하"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        15,
-        23
-      ],
-      "note": "보스 아레나 후방 궁수"
     },
     {
       "type": "goblin_archer",
@@ -188,24 +157,8 @@
     {
       "type": "goblin_archer",
       "cell": [
-        6,
-        12
-      ],
-      "note": "아레나 A 남측 (스폰 방에서 이동)"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
         7,
         5
-      ],
-      "note": "주술사 방"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        11,
-        4
       ],
       "note": "주술사 방"
     },
@@ -220,26 +173,10 @@
     {
       "type": "goblin_archer",
       "cell": [
-        10,
-        8
-      ],
-      "note": "서쪽 세로 복도"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
         13,
         9
       ],
       "note": "남부 복도 서단"
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        5,
-        25
-      ],
-      "note": "동쪽 세로 복도 북단"
     },
     {
       "type": "goblin_archer",
@@ -284,24 +221,8 @@
     {
       "type": "spider_small",
       "cell": [
-        1,
-        21
-      ],
-      "note": "거미 둥지"
-    },
-    {
-      "type": "spider_small",
-      "cell": [
         3,
         19
-      ],
-      "note": "거미 둥지"
-    },
-    {
-      "type": "spider_small",
-      "cell": [
-        4,
-        21
       ],
       "note": "거미 둥지"
     },
@@ -312,14 +233,6 @@
         23
       ],
       "note": "거미 둥지"
-    },
-    {
-      "type": "spider_small",
-      "cell": [
-        13,
-        15
-      ],
-      "note": "본길 복도 — 거미를 먼저 한 번 만나 본다"
     },
     {
       "type": "spider_small",
@@ -340,24 +253,8 @@
     {
       "type": "spider_small",
       "cell": [
-        8,
-        13
-      ],
-      "note": "중앙 방 둥지"
-    },
-    {
-      "type": "spider_small",
-      "cell": [
         9,
         12
-      ],
-      "note": "중앙 방 둥지"
-    },
-    {
-      "type": "spider_small",
-      "cell": [
-        10,
-        15
       ],
       "note": "중앙 방 둥지"
     },
@@ -372,26 +269,10 @@
     {
       "type": "spider_small",
       "cell": [
-        2,
-        20
-      ],
-      "note": "거미 둥지"
-    },
-    {
-      "type": "spider_small",
-      "cell": [
         4,
         19
       ],
       "note": "거미 둥지"
-    },
-    {
-      "type": "spider_small",
-      "cell": [
-        13,
-        12
-      ],
-      "note": "본길 복도 서단 — 제단 안전실 입구에서 떨어뜨려 둔다"
     },
     {
       "type": "barrel",
@@ -494,14 +375,6 @@
         18,
         21
       ]
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        15,
-        23
-      ],
-      "note": "아레나 후방"
     },
     {
       "type": "spider_large",
@@ -699,5 +572,6 @@
       "text": "족장은 더 아래에 있다"
     }
   ],
-  "_floorNote": "2026-08-27: 1-1·1-3 이 생기며 이 맵이 가운데 층이 됐다. 족장은 최종 층(z01_f3)으로 내려갔고 남동 아레나는 방어막 주술사가 지킨다 — 보스가 없으므로 출구는 상시 열려 있다"
+  "_floorNote": "2026-08-27: 1-1·1-3 이 생기며 이 맵이 가운데 층이 됐다. 족장은 최종 층(z01_f3)으로 내려갔고 남동 아레나는 방어막 주술사가 지킨다 — 보스가 없으므로 출구는 상시 열려 있다",
+  "_difficultyNote": "난이도 «보통» (2026-08-27). 1-1 쉬움 / 1-2 보통 / 1-3 어려움 곡선을 맞추며 잡몹(궁수·작은거미·러너)을 솎았다. 이 맵은 원래 단독 맵이라 밀도가 17/100칸으로 세 층 중 가장 빡빡했다 — 정예 배치는 그대로 두고 수만 줄였다"
 }

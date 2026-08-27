@@ -9,6 +9,7 @@ import z01f3 from '../../data/levels/z01_f3.json';
 import { Level } from './GridLoader';
 import { isSpawnable, spawnBarrels, spawnChests, spawnEnemies } from './Spawner';
 import { balance } from '../core/Balance';
+import { enemyDef } from '../core/Entities';
 
 const ALTAR_SAFE_RADIUS = balance.altar.safeRadius;
 
@@ -60,6 +61,44 @@ describe('1구역 층 구성', () => {
       expect(find(json.grid, 'S')).toHaveLength(1);
       expect(find(json.grid, 'X')).toHaveLength(1);
     }
+  });
+
+  it('난이도가 층마다 올라간다 — 쉬움 / 보통 / 어려움', () => {
+    // 정예 = 패링·관통탄·기동을 요구하는 적. 잡몹 수가 아니라 이 비율이 체감 난이도를 만든다
+    const ELITE = new Set(['goblin_spear', 'warden', 'spider_large', 'goblin_chieftain']);
+    const stat = ZONE.map((json) => {
+      const ents = json.entities.filter(
+        (e) => e.type !== 'barrel' && e.type !== 'chest' && !('group' in e),
+      );
+      const elites = ents.filter((e) => ELITE.has(e.type)).length;
+      const hp = ents.reduce((sum, e) => sum + enemyDef(e.type).health, 0);
+      return { id: json.id, count: ents.length, hp, eliteRatio: elites / ents.length };
+    });
+    for (let i = 1; i < stat.length; i++) {
+      const prev = stat[i - 1]!;
+      const cur = stat[i]!;
+      expect(cur.hp, `${cur.id} 총 HP 가 ${prev.id} 보다 많아야 한다`).toBeGreaterThan(prev.hp);
+      expect(
+        cur.eliteRatio,
+        `${cur.id} 정예 비율이 ${prev.id} 보다 높아야 한다`,
+      ).toBeGreaterThan(prev.eliteRatio);
+    }
+    // 마지막 층은 절반 넘게 정예여야 "어려움" 이라 부를 만하다
+    expect(stat.at(-1)!.eliteRatio).toBeGreaterThan(0.5);
+    // 첫 층은 잡몹 위주여야 배우는 자리가 된다
+    expect(stat[0]!.eliteRatio).toBeLessThan(0.35);
+  });
+
+  it('한 층이 유독 빽빽하지 않다 — 밀도가 층마다 두 배 넘게 뛰지 않는다', () => {
+    const density = ZONE.map((json) => {
+      const ents = json.entities.filter(
+        (e) => e.type !== 'barrel' && e.type !== 'chest' && !('group' in e),
+      );
+      const floors = json.grid.join('').split('').filter((ch) => !SOLID.has(ch)).length;
+      return ents.length / floors;
+    });
+    for (const d of density) expect(d).toBeLessThan(0.15); // 100칸당 15마리를 넘으면 계속 몰린다
+    expect(Math.max(...density) / Math.min(...density)).toBeLessThan(2.5);
   });
 
   it('구역 보스(족장)는 마지막 층에만 있다 — 출구를 잠그는 것이 보스다', () => {
