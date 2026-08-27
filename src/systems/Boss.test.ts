@@ -587,6 +587,7 @@ describe('랜턴 — 비추면 즉시 들킨다', () => {
    *  빛 때문에 깨는 것을 갈라낸다. facingAway 면 등을 돌린다 (등진 적은 빛도 못 깨운다) */
   function shine(dist: number, beamOffset: number, ticks = 3, facingAway = false): EnemyState {
     const p = world.player;
+    p.z = 10; // 아레나 세로 한가운데 — 빔을 비스듬히 틀어도 적이 벽 안에 안 떨어진다
     p.yaw = -Math.PI / 2; // +X 를 본다
     const angle = p.yaw + beamOffset;
     const enemy = spawnEnemyAt(
@@ -640,9 +641,11 @@ describe('랜턴 — 비추면 즉시 들킨다', () => {
   it('빔 밖(각도)이면 안 들킨다', () => {
     world.lantern.on = true;
     const half = (lp.angleDeg * Math.PI) / 180;
-    expect(shine(beamOnly, half * 0.5).ai).toBe('chase'); // 빔 안
+    expect(shine(beamOnly, half * 0.5).ai).toBe('chase'); // 빔 안 (7.5도)
     world.enemies.length = 0;
-    expect(shine(beamOnly, half * 2.5).ai).toBe('idle'); // 빔 밖
+    // 빔 밖은 살짝만(18도) — 크게 틀면 적이 아레나 벽 밖에 떨어져
+    // "빔 밖이라서" 가 아니라 "벽이라서" 못 알아채는 테스트가 된다
+    expect(shine(beamOnly, half * 1.2).ai).toBe('idle');
   });
 
   it('빔 밖(거리)이면 안 들킨다', () => {
