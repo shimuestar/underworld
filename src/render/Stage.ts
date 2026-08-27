@@ -583,6 +583,8 @@ const BEAM_PULSE_MS = 90;
 const DOOR_SWING_RAD = (100 * Math.PI) / 180;
 // 층 이동 연출 — 내려갈 때 카메라가 가라앉는 폭 (올라갈 때는 반대로 떠오른다)
 const STAIR_STEPS_DROP = 2.6;
+/** 전진 거리 — 계단을 향해 걸어 들어간다. 등속이라 누른 순간부터 발이 나간다 */
+const DESCENT_FORWARD = 3.0;
 /** 족장의 열쇠 표시색 — 금빛 */
 const KEY_COLOR = 0xf0c34a;
 /** 처음엔 천천히, 끝에서 훅 — 계단을 딛다 마지막에 어둠으로 잠기는 느낌 */
@@ -992,15 +994,17 @@ export class Stage {
   setExitOpen(open: boolean): void {
     if (open === this.exitOpen) return;
     this.exitOpen = open;
+    // 녹색 = "열쇠가 필요한 특별한 계단" 표시다. 잠겨 있을 때만 녹색으로 빛나고,
+    // 열려 있으면(보스 없는 층·자물쇠 딴 뒤) 수수한 돌판이다
     const mat = this.exitPad?.material as THREE.MeshLambertMaterial | undefined;
     if (mat) {
-      mat.color.setHex(open ? COLOR_EXIT_OPEN : COLOR_EXIT_LOCKED);
-      mat.emissive.setHex(open ? COLOR_EXIT_OPEN : COLOR_EXIT_LOCKED);
-      mat.emissiveIntensity = open ? 0.5 : 0.06;
-      mat.opacity = open ? 0.85 : 0.55;
+      mat.color.setHex(open ? COLOR_EXIT_LOCKED : COLOR_EXIT_OPEN);
+      mat.emissive.setHex(open ? COLOR_EXIT_LOCKED : COLOR_EXIT_OPEN);
+      mat.emissiveIntensity = open ? 0.06 : 0.5;
+      mat.opacity = open ? 0.55 : 0.85;
     }
     if (this.exitChain) this.exitChain.visible = !open; // 자물쇠가 풀리면 사슬이 사라진다
-    if (this.exitLight) this.exitLight.intensity = open ? 0.9 : 0;
+    if (this.exitLight) this.exitLight.intensity = open ? 0 : 0.9;
     // 열리는 순간 한 번 크게 번쩍인다 — 멀리서도 보이도록
     if (open) this.exitFlashUntil = performance.now() + EXIT_FLASH_MS;
   }
@@ -1009,9 +1013,12 @@ export class Stage {
   private updateExitStairs(now: number): void {
     if (this.descentStart === 0) return;
     const t = Math.min(1, (now - this.descentStart) / this.descentMs);
-    // 내려갈 땐(+1) 가라앉고 올라갈 땐(−1) 떠오른다 — 계단을 밟는 몸짓
+    // 전진은 등속 — 누른 순간부터 계단을 향해 걸어 들어간다.
+    // (전에는 가속 이징이라 전진이 후반에 몰려 "제자리에서 가라앉는" 느낌이었다)
+    this.camera.translateZ(-t * DESCENT_FORWARD);
+    // 하강은 뒤로 갈수록 훅 — 계단을 밟다 마지막에 어둠으로 잠긴다.
+    // 내려갈 땐(+1) 가라앉고 올라갈 땐(−1) 떠오른다
     this.camera.position.y -= this.descentDir * easeInCubic(t) * STAIR_STEPS_DROP;
-    this.camera.translateZ(-easeInCubic(t) * 1.4);
     this.camera.rotation.x -= this.descentDir * t * 0.35; // 발밑(위)을 본다
     if (t >= 1) this.descentStart = 0;
   }

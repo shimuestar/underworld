@@ -9,7 +9,9 @@
 import { enemyDef } from '../core/Entities';
 import type { World } from '../core/World';
 
-const EXIT_RADIUS = 1.6; // 발판 중심 기준 진입 판정 (셀 절반보다 약간 작게)
+// 발판 '중심' 기준 판정이라, 계단 입(쇠사슬)에 바짝 붙으면 중심에서 ~2m 라
+// 1.6 으로는 빠져나갔다 — E 가 안 먹던 이유. 이웃 칸 중심(4m)과는 여전히 멀다
+const EXIT_RADIUS = 2.3;
 let nextKeyId = 950000; // 바닥 아이템 id 대역 — 픽업(500000)·상자 골드(900000)·상자 각인(800000)과 겹치지 않게
 
 /** 구독. 시작 시 1회 — 보스가 죽으면 그 자리에 열쇠를 떨군다 */
