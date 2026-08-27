@@ -47,6 +47,7 @@ export function tick(world: World, dt: number): void {
   let wz = fz * input.moveForward + rz * input.moveX;
   const len = Math.hypot(wx, wz);
   if (len === 0) {
+    strideTicks = 0; // 멈추면 보폭도 처음부터
     resolveEnemyOverlap(world); // 가만히 서 있어도 적이 파고들면 밀려난다
     return;
   }
@@ -66,15 +67,14 @@ export function tick(world: World, dt: number): void {
       world.events.emit('stamina_empty', {});
     }
   }
-  // 질주 발소리 — 보폭마다 한 번. 걷기는 무음이다 (몰래 갈 땐 걸어야 한다)
-  if (sprinting) {
-    strideTicks++;
-    if (strideTicks >= balance.player.sprintFootstepTicks) {
-      strideTicks = 0;
-      world.events.emit('footstep', { sprint: true });
-    }
-  } else {
+  // 발소리 — 보폭마다 한 번. 걷기는 작게(플레이어에게만), 질주는 크게(적도 듣는다)
+  strideTicks++;
+  const strideInterval = sprinting
+    ? balance.player.sprintFootstepTicks
+    : balance.player.walkFootstepTicks;
+  if (strideTicks >= strideInterval) {
     strideTicks = 0;
+    world.events.emit('footstep', { sprint: sprinting });
   }
   let speed = sprinting ? balance.player.sprintSpeed : balance.player.moveSpeed;
   if (st.exhausted) speed *= stam.exhaustedSpeedMul; // 숨이 차 제대로 못 걷는다

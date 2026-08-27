@@ -547,7 +547,9 @@ events.on('shot_blocked', () => {
   audio.play('shot_blocked');
 });
 events.on('dodge_step', () => audio.play('dodge'));
-events.on('footstep', () => audio.play('footstep_run')); // 질주 발소리 — 걷기는 무음
+events.on('footstep', (payload) => {
+  audio.play((payload as { sprint?: boolean }).sprint ? 'footstep_run' : 'footstep_walk');
+});
 events.on('cast_spell', (payload) => {
   const { cast, sigil, channel } = payload as { cast?: string; sigil?: string; channel?: boolean };
   // 해머가 지팡이가 된다 — 머리에서 스킬 색 마력.

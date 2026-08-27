@@ -36,7 +36,10 @@ export function init(world: World): void {
       balance.enemyAi.moveNoiseRadius,
       balance.enemyAi.noticeDelayTicks,
     );
-  world.events.on('footstep', moveWake);
+  // 걷기 발소리는 작아서 못 듣는다 — 질주 발걸음만 반경 안에 울린다
+  world.events.on('footstep', (payload) => {
+    if ((payload as { sprint?: boolean }).sprint) moveWake();
+  });
   world.events.on('dodge_step', moveWake);
 }
 

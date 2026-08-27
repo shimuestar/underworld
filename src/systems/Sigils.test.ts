@@ -481,24 +481,24 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.level.solidAt(7, 1)).toBe(false); // 이제 지나갈 수 있다
   });
 
-  it('질주하면 보폭마다 발소리가 난다 — 걷기로 바꾸면 멎는다', () => {
+  it('발소리 — 질주는 sprint 플래그가 참, 걷기는 거짓 (걷기 소리는 적이 못 듣는다)', () => {
     world.stamina.value = 100;
     world.stamina.exhausted = false;
-    const steps: unknown[] = [];
-    world.events.on('footstep', (p) => steps.push(p));
-    const interval = balance.player.sprintFootstepTicks;
+    const steps: { sprint?: boolean }[] = [];
+    world.events.on('footstep', (p) => steps.push(p as { sprint?: boolean }));
     world.input = { ...Input.emptySnapshot(), moveForward: 1, sprint: true };
-    for (let i = 0; i < interval * 2 + 2; i++) PlayerMove.tick(world, DT);
-    expect(steps.length).toBeGreaterThanOrEqual(2); // 보폭마다 한 번
-    const heard = steps.length;
+    for (let i = 0; i < balance.player.sprintFootstepTicks * 2 + 2; i++) PlayerMove.tick(world, DT);
+    expect(steps.length).toBeGreaterThanOrEqual(2);
+    expect(steps.every((f) => f.sprint === true)).toBe(true);
+    steps.length = 0;
     world.input = { ...Input.emptySnapshot(), moveForward: 1 }; // 걷기
-    for (let i = 0; i < interval * 2; i++) PlayerMove.tick(world, DT);
+    for (let i = 0; i < balance.player.walkFootstepTicks * 2 + 2; i++) PlayerMove.tick(world, DT);
     world.input = Input.emptySnapshot();
-    expect(steps.length).toBe(heard); // 걷기는 무음
-    // 발소리 → 각성 경로는 아래 대시 테스트와 같은 핸들러(moveWake)를 쓴다
+    expect(steps.length).toBeGreaterThanOrEqual(2); // 걷기도 소리는 난다
+    expect(steps.every((f) => f.sprint === false)).toBe(true); // 다만 작아서 적이 못 듣는다
   });
 
-  it('회피 대시 소리도 1.5m 안의 적이 듣는다 — 걷기는 무음이라 안 깬다', () => {
+  it('회피 대시 소리는 1.5m 안의 적이 듣지만, 걷기 발소리는 못 듣는다', () => {
     Enemies.init(world);
     const eaves = add('goblin_runner', 6 - 1.2, 6);
     eaves.homeYaw = Math.atan2(-(6 - eaves.x), -(6 - eaves.z)) + Math.PI;

@@ -705,6 +705,11 @@ export class Stage {
   private descentMs = 1;
   /** +1 = 내려간다, −1 = 올라간다 */
   private descentDir = 1;
+  /** 걷기 흔들림 — 위상은 이동 거리로 돌고, blend 로 멈출 때 부드럽게 빠진다 */
+  private bobPhase = 0;
+  private bobBlend = 0;
+  private lastCamX = 0;
+  private lastCamZ = 0;
   /** 이동 중 몸을 돌릴 방향 — 계단 입을 향한다. null 이면 보던 쪽 그대로 */
   private descentYaw: number | null = null;
   private readonly tracers: Tracer[] = [];
@@ -1470,6 +1475,19 @@ export class Stage {
     this.camera.position.set(x, y + this.eyeHeight, z);
     this.camera.rotation.y = yaw;
     this.camera.rotation.x = pitch;
+
+    // 걷기 흔들림 — 이동한 거리만큼 위상이 돌아 발걸음과 박자가 맞고,
+    // 빨리 뛸수록 저절로 빨라진다. 순간이동(층 이동·부활)은 위상에 안 얹는다
+    const bob = balance.player.bob;
+    const stepDist = Math.hypot(x - this.lastCamX, z - this.lastCamZ);
+    this.lastCamX = x;
+    this.lastCamZ = z;
+    const moving = stepDist > 0.001 && stepDist < 1;
+    if (moving) this.bobPhase += (stepDist / bob.strideMeters) * Math.PI * 2;
+    this.bobBlend += ((moving ? 1 : 0) - this.bobBlend) * 0.12;
+    if (this.bobBlend > 0.01) {
+      this.camera.position.y += Math.sin(this.bobPhase) * bob.amp * this.bobBlend;
+    }
 
     const now = performance.now();
     if (now < this.camKickUntil) {

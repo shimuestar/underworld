@@ -26,6 +26,7 @@ export type SoundName =
   | 'stairs_travel'
   | 'wall_crumble'
   | 'footstep_run'
+  | 'footstep_walk'
   | 'chain_locked'
   | 'unlock_chain'
   | 'shock'
@@ -278,6 +279,11 @@ export class GameAudio {
         this.tone(1400, 0.35, 'sine', 0.3, 0, 500);
         this.tone(2100, 0.25, 'triangle', 0.2, 0.05, 900);
         this.noise(0.4, 0.3, 2400);
+        break;
+      case 'footstep_walk':
+        // 걷기 발소리 — 질주보다 낮고 부드럽다. 이건 나만 듣는다 (적 감지는 질주만)
+        this.tone(78, 0.06, 'sine', 0.3, 0, 44);
+        this.noise(0.04, 0.18, 360);
         break;
       case 'footstep_run':
         // 질주 발소리 — 낮고 짧은 쿵. 처음 값(0.4/0.22)이 작다는 피드백에 키웠다
