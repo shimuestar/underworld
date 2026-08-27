@@ -389,6 +389,22 @@ describe('열린 문 — 문틀은 그대로 서 있다', () => {
     level.slideMove(intoJamb, 0.4, cs * 1.5, 0);
     expect(intoJamb.x).toBeLessThan((doorCol + 0.5) * cs);
   });
+
+  it('열린 문의 문설주는 화살·마법도 받아 낸다 — 가운데 개구부만 지나간다', () => {
+    const level = doorLevel();
+    const door = level.doors[0]!;
+    level.openCell(door.col, door.row);
+    addDoorFrameBlockers(level, door.col, door.row);
+    const cs = level.cellSize;
+    const gapZ = (door.row + 0.5) * cs;
+    const startX = (door.col - 1 + 0.5) * cs;
+    // 가운데 — 문 셀 너머까지 지나간다
+    expect(level.wallRayT(startX, gapZ, 1, 0)).toBeGreaterThan(cs * 1.2);
+    // 문설주 선상 — 돌기둥이 받아 낸다 (문 셀 앞면에서 끊긴다)
+    expect(level.wallRayT(startX, gapZ - cs * 0.4, 1, 0)).toBeLessThan(cs * 1.2);
+    // 시야선도 같은 규칙 — 문설주 뒤의 적은 안 보인다
+    expect(level.hasLineOfSight(startX, gapZ - cs * 0.4, (door.col + 1.5) * cs, gapZ - cs * 0.4)).toBe(false);
+  });
 });
 
 describe('문은 당기지 않고 민다', () => {

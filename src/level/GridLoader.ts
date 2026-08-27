@@ -74,6 +74,9 @@ export class Level {
 
   /** 그리드 셀이 아닌 막힌 구조물 (제단 기둥). slideMove가 함께 검사한다 */
   readonly props: { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
+  /** 격자 밖에서 레이(화살·마법·총알·시야선)까지 막는 상자 — 열린 문의 석조 문설주.
+   *  props(이동)와 별도다: 통·상자는 총알이 지나가야 하지만 돌기둥은 아니다 */
+  readonly rayBlockers: { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
   readonly exitPos: { x: number; z: number } | null;
   readonly glyphs: GlyphDef[];
   /** 잠긴 문(D·G) — 미닫이가 밀려 들어갈 축도 여기서 정한다 */
@@ -218,6 +221,29 @@ export class Level {
    * 반사 방향이 필요한 쪽이 쓴다. 출발점이 이미 벽 안이면 t=0 / axis=null.
    */
   wallRayHit(
+    ox: number,
+    oz: number,
+    dx: number,
+    dz: number,
+  ): { t: number; axis: 'x' | 'z' | null } {
+    const grid = this.gridRayHit(ox, oz, dx, dz);
+    let t = grid.t;
+    let axis = grid.axis;
+    // 열린 문의 문설주 — 격자는 '.' 이 됐지만 돌기둥은 레이를 받아 낸다
+    for (const rect of this.rayBlockers) {
+      const hit = rayVsRect(ox, oz, dx, dz, rect);
+      if (hit && hit.t < t) {
+        t = hit.t;
+        axis = hit.axis;
+      }
+    }
+    return { t, axis };
+  }
+
+  /** 격자만 보는 DDA — 벽을 만나면 그 자리에서 끝난다.
+   *  문설주 같은 레이 차단 상자는 wallRayHit 가 위에서 합친다 (여기 넣으면
+   *  격자 벽에 먼저 닿는 레이가 조기 반환으로 상자 검사를 건너뛴다 — 실측) */
+  private gridRayHit(
     ox: number,
     oz: number,
     dx: number,
@@ -389,6 +415,46 @@ export const COLOR_EXIT_LOCKED = 0x3a3f44;
 export const COLOR_EXIT_OPEN = 0x3fae5a;
 const GLYPH_RUNES = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
 
+/** XZ 평면 레이 vs 직사각형 — 최소 t(≥0)와 부딪힌 축. 안 만나면 null.
+ *  원점이 상자 안이면 t=0 (격자의 "출발점이 벽 안" 규약과 같다) */
+function rayVsRect(
+  ox: number,
+  oz: number,
+  dx: number,
+  dz: number,
+  r: { minX: number; maxX: number; minZ: number; maxZ: number },
+): { t: number; axis: 'x' | 'z' } | null {
+  let tMin = 0;
+  let tMax = Infinity;
+  let axis: 'x' | 'z' = 'x';
+  if (dx === 0) {
+    if (ox < r.minX || ox > r.maxX) return null;
+  } else {
+    let t1 = (r.minX - ox) / dx;
+    let t2 = (r.maxX - ox) / dx;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    if (t1 > tMin) {
+      tMin = t1;
+      axis = 'x';
+    }
+    tMax = Math.min(tMax, t2);
+  }
+  if (dz === 0) {
+    if (oz < r.minZ || oz > r.maxZ) return null;
+  } else {
+    let t1 = (r.minZ - oz) / dz;
+    let t2 = (r.maxZ - oz) / dz;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    if (t1 > tMin) {
+      tMin = t1;
+      axis = 'z';
+    }
+    tMax = Math.min(tMax, t2);
+  }
+  if (tMin > tMax) return null;
+  return { t: tMin, axis };
+}
+
 export interface TorchParams {
   color: string;
   intensity: number;
@@ -508,8 +574,8 @@ function buildMedievalDoor(
   return { frame, mount, pivot };
 }
 
-/** 문이 열려도 문틀은 몸을 막는다 — 셀을 통째로 열어 두면 석조 문설주를 뚫고 지나간다.
- *  총알은 그대로 통과한다 (props 는 발자국만 막는 규약) */
+/** 문이 열려도 문틀은 몸도 레이도 막는다 — 셀을 통째로 열어 두면 석조 문설주를
+ *  몸이 뚫고 지나가고, 화살·마법도 돌기둥을 통과해 날아온다 (2026-08-27 실측) */
 export function addDoorFrameBlockers(level: Level, col: number, row: number): void {
   const cs = level.cellSize;
   const x = (col + 0.5) * cs;
@@ -518,8 +584,10 @@ export function addDoorFrameBlockers(level: Level, col: number, row: number): vo
   const jamb = (cs - DOOR_OPEN_WIDTH) / 2;
   for (const side of [-1, 1]) {
     const off = side * (cs / 2 - jamb / 2);
-    if (alongX) level.addBlocker(x + off, z, jamb / 2, cs / 2);
-    else level.addBlocker(x, z + off, cs / 2, jamb / 2);
+    const rect = alongX
+      ? level.addBlocker(x + off, z, jamb / 2, cs / 2)
+      : level.addBlocker(x, z + off, cs / 2, jamb / 2);
+    level.rayBlockers.push(rect);
   }
 }
 
