@@ -55,6 +55,21 @@ const unlockedFloors = new Set<number>();
 /** 층 이동 연출 중 — 겹쳐 누른 E 가 이동을 두 번 걸지 않게 */
 let traveling = false;
 
+/** 층에 매인 상태 — 층을 떠날 때 통째로 얼려 두고, 되돌아오면 그대로 되살린다.
+ *  죽인 적은 죽은 채, 연 문·부순 통·떨어진 아이템도 그대로다 (재소환 없음).
+ *  Level 자체를 함께 얼린다 — 열린 문 칸('.')과 차단 블록이 그 안에 살아 있다 */
+interface FloorState {
+  level: Level;
+  enemies: World['enemies'];
+  barrels: World['barrels'];
+  chests: World['chests'];
+  doors: World['doors'];
+  groundItems: World['groundItems'];
+  lifeMotes: World['lifeMotes'];
+  pulledLevers: World['pulledLevers'];
+}
+const floorStates = new Map<number, FloorState>();
+
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
 const deathOverlay = document.getElementById('death');
@@ -426,15 +441,7 @@ for (const name of [
 
 // ---- 오디오 (합성음, 에셋 없음) ----
 const audio = new GameAudio();
-let introStairsPlayed = false;
-app.addEventListener('click', () => {
-  audio.unlock();
-  // 게임을 시작한 자리도 계단으로 내려온 곳이다 — 오디오가 풀리는 첫 클릭에 들려준다
-  if (!introStairsPlayed) {
-    introStairsPlayed = true;
-    window.setTimeout(() => audio.play('stairs_travel'), 150);
-  }
-});
+app.addEventListener('click', () => audio.unlock());
 events.on('enemy_windup', (payload) => {
   const telegraph = (payload as { telegraph?: string }).telegraph;
   audio.play(
@@ -1290,31 +1297,59 @@ events.on('door_opened', (payload) => {
   stage.openDoor(at.row, at.col, opened?.swingDir ?? 1);
   minimap.rebuildBase();
 });
-/** 층을 갈아 끼운다 — 지형·미니맵·배치물을 새 층 것으로 바꾸고 플레이어를 그 층 입구에 세운다.
- *  들고 있던 것(체력·마나·탄약·스킬·가방·골드·오염)은 전부 따라간다 — 층 사이는 '이어지는 한 판'이다.
- *  층에 매인 것(문·레버·상자·통·바닥 아이템·부활 지점)만 새로 잡는다 */
+/** 층을 갈아 끼운다 — 처음 밟는 층은 새로 짓고, 와 본 층은 얼려 둔 그대로 되살린다.
+ *  들고 있던 것(체력·마나·탄약·스킬·가방·골드·오염·열쇠)은 전부 따라간다 */
 function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): void {
+  // 떠나는 층을 얼려 둔다
+  floorStates.set(floorIndex, {
+    level,
+    enemies: world.enemies,
+    barrels: world.barrels,
+    chests: world.chests,
+    doors: world.doors,
+    groundItems: world.groundItems,
+    lifeMotes: world.lifeMotes,
+    pulledLevers: world.pulledLevers,
+  });
+
   floorIndex = index;
   levelJson = ZONE[index]!;
-  level = new Level(levelJson);
-  world.level = level;
   traveling = false;
+
+  const saved = floorStates.get(index);
+  if (saved) {
+    // 와 본 층 — 재소환하지 않는다. 죽인 적은 죽은 채로다
+    level = saved.level;
+    world.level = level;
+    world.enemies = saved.enemies;
+    world.barrels = saved.barrels;
+    world.chests = saved.chests;
+    world.doors = saved.doors;
+    world.groundItems = saved.groundItems;
+    world.lifeMotes = saved.lifeMotes;
+    world.pulledLevers = saved.pulledLevers;
+  } else {
+    // 처음 밟는 층 — 새로 짓는다. 앞 층의 차단 블록은 그 층 Level 과 함께 얼었다
+    level = new Level(levelJson);
+    world.level = level;
+    world.enemies = spawnEnemies(levelJson.entities, level);
+    world.barrels = spawnBarrels(levelJson.entities, level);
+    world.chests = spawnChests(levelJson.entities, level);
+    world.doors = level.doors.map((d) => ({
+      row: d.row, col: d.col, x: d.x, z: d.z, dirX: d.dirX, dirZ: d.dirZ,
+      byLever: d.byLever, progress: 0, slide: 0, prevSlide: 0, opened: false,
+    }));
+    // 새 배열로 갈아 끼운다 — .length = 0 으로 비우면 얼려 둔 앞 층 것까지 지워진다
+    world.groundItems = [];
+    world.lifeMotes = [];
+    world.pulledLevers = new Set();
+  }
+  world.projectiles.length = 0;
+
   // 도착 지점 — 내려왔으면 입구 계단 앞, 올라왔으면 출구 계단 앞
   const at = arrival === 'exit' && level.exitPos ? level.exitPos : level.spawn;
   const atYaw = arrival === 'exit' && level.exitPos ? level.exitYaw : level.spawnYaw;
 
-  // 앞 층의 차단 블록은 그 층 Level 과 함께 사라지므로 걷어낼 필요가 없다 —
-  // 새 Level 은 빈 상태로 시작한다
-  world.enemies = spawnEnemies(levelJson.entities, level);
-  world.barrels = spawnBarrels(levelJson.entities, level);
-  world.chests = spawnChests(levelJson.entities, level);
-  world.doors = level.doors.map((d) => ({
-    row: d.row, col: d.col, x: d.x, z: d.z, dirX: d.dirX, dirZ: d.dirZ,
-    byLever: d.byLever, progress: 0, slide: 0, prevSlide: 0, opened: false,
-  }));
-  world.projectiles.length = 0;
-  world.groundItems.length = 0;
-  world.lifeMotes.length = 0;
   world.chestInView = null;
   world.doorInView = null;
   world.leverInView = null;
@@ -1323,13 +1358,16 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   // 도착한 계단이 곧 부활 지점이다 — 3층에서 죽었다고 1층부터 다시 하게 만들지 않는다.
   // 제단을 밟으면 그쪽으로 옮겨 가므로 제단은 여전히 "더 가까운 저장점" 값을 한다
   world.respawn = { x: at.x, z: at.z };
-  // 출구 잠금 — 보스 층은 쇠사슬·자물쇠. 이미 딴 층·보스 없는 층은 첫 틱에 열린다
+  // 출구 잠금 — 보스가 배치된 층에서 아직 열쇠로 딴 적이 없으면 잠긴다.
+  // 살아 있는지가 아니라 "딴 적 있는지" 가 기준이다: 보스를 죽이고 열쇠를 안 쓴 채
+  // 오가도 사슬은 그대로 걸려 있어야 한다 (열쇠도 손에/바닥에 그대로 있다)
   world.exitNeedsKey =
-    world.enemies.some((e) => enemyDef(e.type).boss) && !unlockedFloors.has(index);
-  world.hasExitKey = false;
+    levelJson.entities.some(
+      (e) => e.type !== 'barrel' && e.type !== 'chest' && enemyDef(e.type).boss,
+    ) && !unlockedFloors.has(index);
   world.canAscend = index > 0;
   world.onEntrancePad = false;
-  world.exitOpen = false;
+  world.exitOpen = false; // 잠기지 않은 층은 Exit 의 첫 틱이 열어 준다
   world.onExitPad = false;
   world.exitLockedNotified = false;
   world.cleared = false;
@@ -1359,6 +1397,14 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     }),
     level.ambient,
   );
+  // 얼려 둔 층 — 열린 문은 열린 자세로, 당긴 레버는 당긴 자세로 되돌린다
+  for (const door of world.doors) {
+    if (door.opened) stage.openDoor(door.row, door.col, door.swingDir ?? 1);
+  }
+  for (const pulled of world.pulledLevers) {
+    const [row, col] = pulled.split('-').map(Number);
+    if (row !== undefined && col !== undefined) stage.pullLever(row, col);
+  }
   minimap.setLevel(level);
   // 해독은 오염 단계에 딸린 상태다 — 새 층 벽에도 그대로 적용해 준다.
   // (setGlyphsReadable 은 씬을 훑으므로 층을 갈아 끼운 뒤 한 번 더 불러야 한다)

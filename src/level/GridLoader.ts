@@ -848,6 +848,29 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
     );
   }
 
+  // 이미 열린 문 — 격자에서는 '.' 이 됐지만 문틀과 문짝은 서 있어야 한다.
+  // 층을 오가면 변이된 Level 을 다시 그리므로 여기서 복원한다 (열린 자세는 main 이 되돌린다)
+  for (const d of level.doors) {
+    const ch = level.charAt(d.col, d.row);
+    if (ch === 'D' || ch === 'G') continue; // 아직 닫혀 있다 — 셀 루프가 지었다
+    const alongX = d.dirX !== 0;
+    const built = buildMedievalDoor(
+      cs,
+      level.ceiling,
+      alongX,
+      d.byLever ? COLOR_GATE : COLOR_DOOR,
+      d.byLever,
+    );
+    for (const node of [built.frame, built.mount]) {
+      node.position.set((d.col + 0.5) * cs, 0, (d.row + 0.5) * cs);
+      node.rotation.y = alongX ? 0 : Math.PI / 2;
+    }
+    built.frame.name = `doorframe-${d.row}-${d.col}`;
+    built.pivot.name = `door-${d.row}-${d.col}`;
+    group.add(built.frame);
+    group.add(built.mount);
+  }
+
   // 바닥은 셀 한 장씩 깔아 병합한다 — 계단이 놓인 칸(S·X)만 비워 구멍을 낸다.
   // 큰 평면 하나로 깔면 바닥 아래로 판 계단이 그 평면에 가려 안 보인다.
   // 셀마다 UV 가 0~1 이라 텍스처 한 장이 셀 하나에 정확히 들어맞는다 (벽과 같은 규약)
@@ -991,14 +1014,40 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   const flameColor = new THREE.Color(torch.color);
   const bracketMat = new THREE.MeshLambertMaterial({ color: 0x2b2118 });
   const flameMat = new THREE.MeshLambertMaterial({ color: 0x000000, emissive: flameColor });
+  /** 벽걸이 횃불 한 자루 — (wx,wz)=벽 면 위의 점, (nx,nz)=벽 법선(방 쪽) */
+  const mountTorch = (wx: number, wz: number, nx: number, nz: number): void => {
+    const fx = wx + nx * torch.wallOffset;
+    const fz = wz + nz * torch.wallOffset;
+    // 브래킷 — 벽에서 불꽃까지 뻗은 쇠막대. 길이 축(z)을 법선에 맞춘다
+    const bracket = new THREE.Mesh(
+      new THREE.BoxGeometry(0.07, 0.07, torch.wallOffset),
+      bracketMat,
+    );
+    bracket.position.set(
+      wx + nx * (torch.wallOffset / 2),
+      torch.height - 0.16,
+      wz + nz * (torch.wallOffset / 2),
+    );
+    bracket.lookAt(bracket.position.x + nx, bracket.position.y, bracket.position.z + nz);
+    group.add(bracket);
+    // 받침 — 불꽃을 얹는 컵
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.06, 0.16, 6), bracketMat);
+    cup.position.set(fx, torch.height - 0.04, fz);
+    group.add(cup);
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.44, 6), flameMat);
+    flame.position.set(fx, torch.height + 0.2, fz);
+    group.add(flame);
+    // decay 0 — distance 컷오프 감쇠만 사용. 물리 감쇠(decay 2)는 balance의
+    // intensity 스케일과 맞지 않아 광원이 죽는다.
+    const light = new THREE.PointLight(flameColor, torch.intensity, torch.distance, 0);
+    light.position.set(fx, torch.height + 0.15, fz);
+    group.add(light);
+  };
+
   for (const cell of level.torches) {
     const [row, col] = cell;
     if (row === undefined || col === undefined) continue;
-    const x = (col + 0.5) * cs;
-    const z = (row + 0.5) * cs;
-
     // 어느 쪽에 벽이 붙어 있는가 — 법선은 그 벽에서 방 안쪽을 향한다.
-    // 북·남·서·동 순으로 본다 (여러 면이 벽이면 앞선 쪽에 건다)
     // 문·관문·균열 벽('D'·'G'·'C')에는 걸지 않는다 — 열리거나 부서지면 횃불만 허공에 남는다
     let nx = 0;
     let nz = 0;
@@ -1006,41 +1055,43 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
     else if (level.charAt(col, row + 1) === '#') nz = -1;
     else if (level.charAt(col - 1, row) === '#') nx = 1;
     else if (level.charAt(col + 1, row) === '#') nx = -1;
+    if (nx === 0 && nz === 0) continue; // 벽에 안 붙은 셀 — Zone.test 가 막지만 혹시 몰라 건너뛴다
+    const x = (col + 0.5) * cs;
+    const z = (row + 0.5) * cs;
+    mountTorch(x - nx * (cs / 2), z - nz * (cs / 2), nx, nz);
+  }
 
-    // 벽 면에서 wallOffset 만큼 나온 자리 — 붙은 벽이 없으면 셀 가운데 그대로
-    const out = cs / 2 - torch.wallOffset;
-    const fx = x - nx * out;
-    const fz = z - nz * out;
-    const mounted = nx !== 0 || nz !== 0;
-
-    if (mounted) {
-      // 브래킷 — 벽에서 불꽃까지 뻗은 쇠막대. 길이 축(z)을 법선에 맞춘다
-      const bracket = new THREE.Mesh(
-        new THREE.BoxGeometry(0.07, 0.07, torch.wallOffset),
-        bracketMat,
+  // 계단 문(입구·출구 벽감) 양옆 — 문틀 기둥에 하나씩, 데이터와 무관하게 자동으로.
+  // 관문은 멀리서도 눈에 걸려야 한다 (내려온 자리·내려갈 자리 둘 다)
+  const doorFlanks: { ax: number; az: number; yaw: number; offs: [number, number] }[] = [
+    {
+      ax: alcove.x,
+      az: alcove.z,
+      yaw: alcove.yaw,
+      // 입구 문은 동쪽으로 치우쳐 있다 — 동쪽 기둥 가운데 / 문 서쪽 30cm
+      offs: [cs / 2 - EAST_JAMB / 2, cs / 2 - EAST_JAMB - ALCOVE_OPEN_W - 0.3],
+    },
+  ];
+  if (exitCell) {
+    doorFlanks.push({
+      ax: exitAlcove.x,
+      az: exitAlcove.z,
+      yaw: exitAlcove.yaw,
+      offs: [-(EXIT_OPEN_W / 2 + 0.4), EXIT_OPEN_W / 2 + 0.4],
+    });
+  }
+  for (const f of doorFlanks) {
+    // 벽감 로컬 (off, +cs/2) → 월드. 법선은 개구부가 향한 방(로컬 +Z)
+    const nxw = Math.sin(f.yaw);
+    const nzw = Math.cos(f.yaw);
+    for (const off of f.offs) {
+      mountTorch(
+        f.ax + off * Math.cos(f.yaw) + (cs / 2) * Math.sin(f.yaw),
+        f.az - off * Math.sin(f.yaw) + (cs / 2) * Math.cos(f.yaw),
+        nxw,
+        nzw,
       );
-      bracket.position.set(
-        x - nx * (cs / 2 - torch.wallOffset / 2),
-        torch.height - 0.16,
-        z - nz * (cs / 2 - torch.wallOffset / 2),
-      );
-      bracket.lookAt(bracket.position.x + nx, bracket.position.y, bracket.position.z + nz);
-      group.add(bracket);
-      // 받침 — 불꽃을 얹는 컵
-      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.06, 0.16, 6), bracketMat);
-      cup.position.set(fx, torch.height - 0.04, fz);
-      group.add(cup);
     }
-
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.44, 6), flameMat);
-    flame.position.set(fx, torch.height + 0.2, fz);
-    group.add(flame);
-
-    // decay 0 — distance 컷오프 감쇠만 사용. 물리 감쇠(decay 2)는 balance의
-    // intensity 스케일과 맞지 않아 광원이 죽는다.
-    const light = new THREE.PointLight(flameColor, torch.intensity, torch.distance, 0);
-    light.position.set(fx, torch.height + 0.15, fz);
-    group.add(light);
   }
 
   return group;
