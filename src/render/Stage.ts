@@ -3301,6 +3301,15 @@ export class Stage {
       const glow = visual.group.getObjectByName('glow') as THREE.PointLight | undefined;
       if (glow) glow.intensity = chest.opened ? 0.35 : 1.1;
     }
+    // 배열에서 사라진 상자 — 모형을 걷는다. 한 층 안에서는 상자가 사라질 일이 없어
+    // 이 경로가 없었는데, 층 교체(clearLevelFx 의 빈 배열 동기화)가 이걸 기대한다.
+    // 없으면 앞 층 상자의 겉모습이 새 층에 유령으로 남는다 — 열린 뚜껑째로 (1-2 실측)
+    const seen = new Set(chests.map((chest) => chest.id));
+    for (const [id, visual] of this.chestVisuals) {
+      if (seen.has(id)) continue;
+      this.disposeGroup(visual.group);
+      this.chestVisuals.delete(id);
+    }
   }
 
   private makeChest(): { group: THREE.Group; lid: THREE.Object3D } {
