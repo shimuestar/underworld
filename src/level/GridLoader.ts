@@ -360,7 +360,6 @@ const COLOR_ALTAR = 0xd8c9a0;
 const COLOR_ALTAR_LIGHT = 0xe0d0a0;
 const COLOR_EXIT = 0x3fae5a;
 /** 층 사이 계단 — 단 수와 한 단 높이, 돌 색 */
-const STAIR_STEPS = 7;
 /** 입구 아래 단 수 — 적을수록 계단참이 낮아져 방에서 평지 윗면이 보인다.
  *  문틈 바닥 = 아래 단 높이 + 꺾인 단 높이 (alcoveFrameGeoms 와 같은 산식) */
 const STAIR_UP_STEPS = 3;
@@ -368,6 +367,8 @@ const STAIR_UP_STEPS = 3;
 const ALCOVE_OPEN_W = 1.8;
 /** 입구 동쪽 기둥 폭 */
 const EAST_JAMB = 0.6;
+/** 출구 벽감 폭 — 입구보다 넓다. 쇠사슬이 걸린 관문이라 커야 하고, 계단도 넓어진다 */
+const EXIT_OPEN_W = 2.4;
 const ALCOVE_OPEN_H = 2.9;
 /** 상인방 깊이 — 입구 쪽만 문 높이로 누르고, 안쪽은 천장(4m)까지 트인다 */
 const ALCOVE_LINTEL_D = 0.7;
@@ -539,12 +540,12 @@ function exitAlcoveFrameGeoms(
     g.translate(x, 0, z);
     out.push(g);
   };
-  const jamb = (cs - ALCOVE_OPEN_W) / 2; // 출구는 가운데로 내려간다 — 좌우 대칭
+  const jamb = (cs - EXIT_OPEN_W) / 2; // 출구는 가운데로 내려간다 — 좌우 대칭
   for (const side of [-1, 1]) {
     place(new THREE.BoxGeometry(jamb, ceiling, cs), side * (cs / 2 - jamb / 2), ceiling / 2, 0);
   }
   place(
-    new THREE.BoxGeometry(ALCOVE_OPEN_W, ceiling - ALCOVE_OPEN_H, ALCOVE_LINTEL_D),
+    new THREE.BoxGeometry(EXIT_OPEN_W, ceiling - ALCOVE_OPEN_H, ALCOVE_LINTEL_D),
     0,
     ALCOVE_OPEN_H + (ceiling - ALCOVE_OPEN_H) / 2,
     cs / 2 - ALCOVE_LINTEL_D / 2,
@@ -675,9 +676,11 @@ function buildStairwell(
 
   // ── 출구 — 벽감 속으로 내려가는 계단. 입구와 짝이 맞되 방향이 반대다.
   // 벽감 칸은 격자상 '#' 이라 몸은 못 들어간다 — 내려가는 것은 발판에서 E (연출로 처리)
-  const innerW = ALCOVE_OPEN_W - 0.04;
-  const steps = STAIR_STEPS;
-  const run = (cs * 0.82) / steps;
+  const innerW = EXIT_OPEN_W - 0.04;
+  // 6단 × 깊은 디딤판 — 단이 얕고 촘촘하면 문틈으로 검은 톱니처럼 보인다.
+  // 디딤판이 깊어야 위에서 내려다볼 때 "계단" 으로 읽힌다
+  const steps = 6;
+  const run = (cs * 0.93) / steps;
   const front = cs / 2;
 
   // 디딤돌 — 개구부에서 안쪽으로 갈수록 한 단씩 내려간다. 아래로 길게 뽑은 통짜라
@@ -701,8 +704,8 @@ function buildStairwell(
   g.add(dark);
   // 벽감 안 불빛 — 내려가는 첫 단들과 안벽을 은은히 밝힌다.
   // 이게 없으면 게임 조명(환경광 0.04)에서 문 안이 통째로 검다
-  const glow = new THREE.PointLight(0xffb066, 0.9, 5, 0);
-  glow.position.set(0, 1.7, front - 1.1);
+  const glow = new THREE.PointLight(0xffb066, 1.0, 5.5, 0);
+  glow.position.set(0, 1.3, front - 1.5); // 낮고 깊게 — 디딤판을 비스듬히 훑는다
   g.add(glow);
 
   // 쇠사슬 두 줄 + 자물쇠 — 벽감 입에 걸려 있다. 자물쇠를 따면 Stage 가 감춘다
