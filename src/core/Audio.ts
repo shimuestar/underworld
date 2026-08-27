@@ -256,7 +256,11 @@ export class GameAudio {
         this.noise(0.05, 0.6, 6000);
         break;
       case 'dodge':
-        this.noise(0.12, 0.35, 800);
+        // 회피 대시 — 몸이 공기를 가르는 휙. 노이즈 하나로는 전투 소음에 묻혀
+        // 안 들린다는 피드백이 있어 스윕 톤을 겹치고 키웠다 (2026-08-27)
+        this.tone(900, 0.14, 'sawtooth', 0.32, 0, 180);
+        this.noise(0.16, 0.7, 1600);
+        this.noise(0.08, 0.45, 700, 0.05);
         break;
       case 'cast_fire':
         // 화염 방출 — 저음 스윕 + 노이즈
@@ -276,9 +280,9 @@ export class GameAudio {
         this.noise(0.4, 0.3, 2400);
         break;
       case 'footstep_run':
-        // 질주 발소리 — 낮고 짧은 쿵. 두 걸음마다 조금 다르게 들리라고 노이즈를 섞는다
-        this.tone(95, 0.07, 'sine', 0.4, 0, 50);
-        this.noise(0.045, 0.22, 380);
+        // 질주 발소리 — 낮고 짧은 쿵. 처음 값(0.4/0.22)이 작다는 피드백에 키웠다
+        this.tone(95, 0.08, 'sine', 0.62, 0, 48);
+        this.noise(0.055, 0.42, 500);
         break;
       case 'wall_crumble':
         // 벽 붕괴 — 묵직한 파열, 돌덩이가 잇달아 떨어지고 잔해가 구른다
