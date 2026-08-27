@@ -10,7 +10,7 @@ import { enemyDef } from '../core/Entities';
 import type { World } from '../core/World';
 
 const EXIT_RADIUS = 1.6; // 발판 중심 기준 진입 판정 (셀 절반보다 약간 작게)
-let nextKeyId = 900000; // 바닥 아이템 id 대역 — 픽업(500000)·각인과 겹치지 않게
+let nextKeyId = 950000; // 바닥 아이템 id 대역 — 픽업(500000)·상자 골드(900000)·상자 각인(800000)과 겹치지 않게
 
 /** 구독. 시작 시 1회 — 보스가 죽으면 그 자리에 열쇠를 떨군다 */
 export function init(world: World): void {
