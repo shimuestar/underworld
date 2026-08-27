@@ -292,13 +292,15 @@ export class GameAudio {
         this.noise(0.06, 0.65, 560);
         break;
       case 'wall_crumble':
-        // 벽 붕괴 — 묵직한 파열, 돌덩이가 잇달아 떨어지고 잔해가 구른다
-        this.tone(55, 0.5, 'square', 0.7, 0, 28);
-        this.noise(0.4, 0.9, 420);
-        this.noise(0.12, 0.6, 900, 0.18);
-        this.noise(0.1, 0.5, 700, 0.34);
-        this.noise(0.09, 0.4, 600, 0.5);
-        this.tone(80, 0.2, 'sine', 0.4, 0.3, 45);
+        // 벽 붕괴 — 첫 쩍(고음 크랙) + 묵직한 파열, 돌덩이가 잇달아 떨어지고 구른다.
+        // 작다는 피드백에 전체를 크게 키웠다 (2026-08-27)
+        this.noise(0.06, 1.0, 4200);
+        this.tone(55, 0.55, 'square', 1.1, 0, 26);
+        this.noise(0.45, 1.4, 460);
+        this.noise(0.14, 0.9, 950, 0.18);
+        this.noise(0.12, 0.75, 720, 0.36);
+        this.noise(0.1, 0.6, 600, 0.54);
+        this.tone(80, 0.24, 'sine', 0.6, 0.3, 42);
         break;
       case 'stairs_travel': {
         // 계단을 밟는 발걸음 — 낮은 쿵이 조금씩 낮아지며 이어진다.

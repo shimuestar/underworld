@@ -1137,28 +1137,30 @@ export class Stage {
   /** 균열 벽 붕괴 — 돌 파편이 사방으로 튀고 흙먼지가 인다 */
   spawnWallCrumble(x: number, z: number): void {
     const now = performance.now();
-    for (let i = 0; i < 26; i++) {
-      const w = 0.1 + Math.random() * 0.24;
+    // 48개 — 큰 덩이 소수 + 잔부스러기 다수. 적다는 피드백에 늘렸다 (2026-08-27)
+    for (let i = 0; i < 48; i++) {
+      const big = i < 10; // 앞 몇 개는 눈에 띄는 큰 덩이
+      const w = big ? 0.24 + Math.random() * 0.3 : 0.08 + Math.random() * 0.2;
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(w, w * (0.6 + Math.random() * 0.6), w),
         new THREE.MeshLambertMaterial({ color: i % 3 === 0 ? 0x3c3630 : 0x55555f }),
       );
       const ang = Math.random() * Math.PI * 2;
-      const ox = x + Math.cos(ang) * (Math.random() * 1.6);
-      const oy = 0.3 + Math.random() * 3.2; // 벽 전체 높이에서 떨어져 나온다
-      const oz = z + Math.sin(ang) * (Math.random() * 1.6);
+      const ox = x + Math.cos(ang) * (Math.random() * 2.0);
+      const oy = 0.3 + Math.random() * 3.4; // 벽 전체 높이에서 떨어져 나온다
+      const oz = z + Math.sin(ang) * (Math.random() * 2.0);
       mesh.position.set(ox, oy, oz);
       this.particles.push({
         mesh,
         ox, oy, oz,
-        vx: Math.cos(ang) * (1.5 + Math.random() * 2.5),
-        vy: 0.5 + Math.random() * 2,
-        vz: Math.sin(ang) * (1.5 + Math.random() * 2.5),
+        vx: Math.cos(ang) * (1.8 + Math.random() * 3.2),
+        vy: 0.5 + Math.random() * 2.4,
+        vz: Math.sin(ang) * (1.8 + Math.random() * 3.2),
         gravity: 9,
-        lifeMs: 900 + Math.random() * 500,
+        lifeMs: 1000 + Math.random() * 700,
         bornMs: now,
-        spinX: 4 + Math.random() * 5,
-        spinZ: 4 + Math.random() * 5,
+        spinX: 4 + Math.random() * 6,
+        spinZ: 4 + Math.random() * 6,
       });
       this.scene.add(mesh);
     }
