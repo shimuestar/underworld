@@ -347,9 +347,9 @@ const STAIR_STEPS = 7;
  *  문틈 바닥 = 아래 단 높이 + 꺾인 단 높이 (alcoveFrameGeoms 와 같은 산식) */
 const STAIR_UP_STEPS = 3;
 /** 벽감 입구 폭 — 계단 열(동쪽)에 맞춘다. 셀 폭 전체로 열면 계단 옆이 빈 구덩이가 된다 */
-const ALCOVE_OPEN_W = 1.3;
+const ALCOVE_OPEN_W = 1.8;
 /** 입구 동쪽 기둥 폭 */
-const EAST_JAMB = 0.95;
+const EAST_JAMB = 0.6;
 const ALCOVE_OPEN_H = 2.9;
 /** 상인방 깊이 — 입구 쪽만 문 높이로 누르고, 안쪽은 천장(4m)까지 트인다 */
 const ALCOVE_LINTEL_D = 0.7;
