@@ -348,8 +348,14 @@ const STAIR_UP_STEPS = 4;
 /** 벽감 개구부 — 문과 같은 크기라야 "벽에 낸 통로" 로 읽힌다 */
 const ALCOVE_OPEN_W = 2.1;
 const ALCOVE_OPEN_H = 2.9;
-/** 꼭대기 코너의 깊이 — 이만큼이 한쪽은 벽, 한쪽은 어둠이다 */
-const ALCOVE_CORNER_D = 1.1;
+/** 상인방 깊이 — 입구 쪽만 문 높이로 누르고, 안쪽은 천장(4m)까지 트인다.
+ *  안쪽까지 2.9 로 누르면 꺾인 통로의 키가 1.5m 밖에 안 남아 기어가는 굴이 된다 */
+const ALCOVE_LINTEL_D = 0.7;
+/** 벽감 등판 두께 — 이게 없으면 벽 속이 뚫려 레벨 바깥이 보인다 */
+const ALCOVE_BACK_D = 0.35;
+/** 꺾인 윗단 줄의 깊이와, 그 꼭대기 옆 어두운 문의 높이 */
+const ALCOVE_UPPER_D = 0.95;
+const ALCOVE_DOOR_H = 1.4;
 /** 계단 한 단의 깊이 — 4단 × 이 값이 개구부에서 계단참까지의 길이다 */
 const ALCOVE_STEP_RUN = 0.42;
 const STAIR_RISE = 0.34;
@@ -542,8 +548,15 @@ function alcoveFrameGeoms(
       0,
     );
   }
-  // 개구부 위 — 통로 천장 노릇을 한다
-  place(new THREE.BoxGeometry(openW, ceiling - openH, cs), 0, openH + (ceiling - openH) / 2, 0);
+  // 상인방 — 입구 쪽만. 안쪽은 천장까지 트여 있어야 꺾여 올라가는 통로의 키가 나온다
+  place(
+    new THREE.BoxGeometry(openW, ceiling - openH, ALCOVE_LINTEL_D),
+    0,
+    openH + (ceiling - openH) / 2,
+    cs / 2 - ALCOVE_LINTEL_D / 2,
+  );
+  // 등판 — 벽감의 끝. 이게 없으면 벽 속이 뚫려 바깥이 보인다
+  place(new THREE.BoxGeometry(openW, ceiling, ALCOVE_BACK_D), 0, ceiling / 2, -cs / 2 + ALCOVE_BACK_D / 2);
   return out;
 }
 
@@ -569,51 +582,53 @@ function buildStairwell(
   const rise = STAIR_RISE;
 
   if (entrance) {
-    // 벽 한 칸(±cs/2) 을 파고 들어간 통로. 개구부가 +Z, 벽 안쪽이 -Z.
-    // 앞에서 뒤로: 계단 → 계단참 → 코너. 코너에서 한쪽은 벽, 한쪽은 어둠이라
-    // 길이 꺾여 사라진다 — 꼭대기를 벽으로 막으면 막다른 계단이 돼 이상하다
-    const openW = ALCOVE_OPEN_W;
-    const steps = STAIR_UP_STEPS;
+    // ㄱ자 계단 — 아래 단이 방을 향해 내려오고, 계단참에서 꺾여 윗단이 왼쪽으로
+    // 올라가 어두운 문으로 사라진다. "위층에서 코너를 돌아 내려온 길" 이 통째로 보인다.
+    // 단은 전부 바닥부터 통짜 상자다 — 밑이 비면 옆에서 뜬 판자로 보인다
+    const innerW = ALCOVE_OPEN_W - 0.04; // 기둥 면과 겹쳐 지글거리지 않게 살짝 안으로
+    const front = cs / 2;
+    const lowerSteps = STAIR_UP_STEPS;
     const run = ALCOVE_STEP_RUN;
-    const front = cs / 2; // 개구부
-    const backWall = -cs / 2; // 벽감 끝
+    const landingTop = rise * lowerSteps;
 
-    // 계단 — 개구부에서 안쪽으로 한 단씩 오른다
-    for (let i = 0; i < steps; i++) {
-      const step = new THREE.Mesh(new THREE.BoxGeometry(openW, rise * (i + 1), run), stone);
-      step.position.set(0, (rise * (i + 1)) / 2, front - run * (i + 0.5));
+    // 아래 단 — 개구부에서 안쪽으로 오른다
+    for (let i = 0; i < lowerSteps; i++) {
+      const h = rise * (i + 1);
+      const step = new THREE.Mesh(new THREE.BoxGeometry(innerW, h, run), stone);
+      step.position.set(0, h / 2, front - run * (i + 0.5));
       g.add(step);
     }
-    // 계단참 — 계단 끝에서 코너 앞까지 평평하다
-    const top = rise * steps;
-    const landingFront = front - run * steps;
-    const landingBack = backWall + ALCOVE_CORNER_D;
-    const landingDepth = landingFront - landingBack;
-    if (landingDepth > 0) {
-      const landing = new THREE.Mesh(new THREE.BoxGeometry(openW, top, landingDepth), stone);
-      landing.position.set(0, top / 2, landingBack + landingDepth / 2);
-      g.add(landing);
+
+    // 계단참 — 꺾이는 자리. 아래 단 끝에서 윗단 줄 앞까지
+    const upperFront = -cs / 2 + ALCOVE_BACK_D + ALCOVE_UPPER_D;
+    const landingFront = front - run * lowerSteps;
+    const landing = new THREE.Mesh(
+      new THREE.BoxGeometry(innerW, landingTop, landingFront - upperFront),
+      stone,
+    );
+    landing.position.set(0, landingTop / 2, (landingFront + upperFront) / 2);
+    g.add(landing);
+
+    // 윗단 — 등판 바로 앞 한 줄. 왼쪽으로 갈수록 한 단씩 높다 (왼쪽 끝이 꼭대기)
+    const upperSteps = 3;
+    const stepW = innerW / upperSteps;
+    const upperZ = -cs / 2 + ALCOVE_BACK_D + ALCOVE_UPPER_D / 2;
+    for (let k = 0; k < upperSteps; k++) {
+      const h = landingTop + rise * (upperSteps - k);
+      const step = new THREE.Mesh(new THREE.BoxGeometry(stepW - 0.02, h, ALCOVE_UPPER_D), stone);
+      step.position.set(-innerW / 2 + stepW * (k + 0.5), h / 2, upperZ);
+      g.add(step);
     }
-    // 코너 — 안쪽 끝의 오른쪽 절반만 돌로 막는다
-    const wallMat = new THREE.MeshLambertMaterial({
-      color: COLOR_WALL,
-      map: dungeonWallTexture(),
-      bumpMap: dungeonWallTexture(),
-      bumpScale: WALL_BUMP,
-    });
-    const corner = new THREE.Mesh(
-      new THREE.BoxGeometry(openW / 2, cs, ALCOVE_CORNER_D),
-      wallMat,
+
+    // 어두운 문 — 윗단 꼭대기 옆의 왼쪽 벽면. 빛을 안 받는 검정이라 구멍으로 읽힌다.
+    // 길은 여기서 왼쪽으로 꺾여 위층으로 이어진다 (들어갈 수는 없다 — 격자는 벽이다)
+    const doorBottom = landingTop + rise * upperSteps;
+    const dark = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, ALCOVE_DOOR_H, ALCOVE_UPPER_D),
+      new THREE.MeshBasicMaterial({ color: 0x030303 }),
     );
-    corner.position.set(openW / 4, cs / 2, backWall + ALCOVE_CORNER_D / 2);
-    g.add(corner);
-    // 왼쪽 절반 — 빛을 안 받는 검은 속. 여기서 길이 꺾여 위층으로 이어진다
-    const beyond = new THREE.Mesh(
-      new THREE.BoxGeometry(openW / 2, cs, ALCOVE_CORNER_D),
-      new THREE.MeshBasicMaterial({ color: 0x050505 }),
-    );
-    beyond.position.set(-openW / 4, cs / 2, backWall + ALCOVE_CORNER_D / 2);
-    g.add(beyond);
+    dark.position.set(-innerW / 2 - 0.01, doorBottom + ALCOVE_DOOR_H / 2, upperZ);
+    g.add(dark);
     return g;
   }
 
