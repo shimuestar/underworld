@@ -579,6 +579,12 @@ const TRACER_START_PUSH = 0.5; // 총구에서 이만큼 전진한 지점부터 
 const BEAM_SEGMENTS = 12;
 const BEAM_JITTER = 0.32;
 const BEAM_PULSE_MS = 90;
+// 출구 계단 — 덮개 석판이 밀려나는 거리·속도와, 내려가는 연출의 하강 폭
+const SLAB_SLIDE_DIST = 3.4;
+const SLAB_SLIDE_EASE = 0.06;
+const STAIR_STEPS_DROP = 2.6;
+/** 처음엔 천천히, 끝에서 훅 — 계단을 딛다 마지막에 어둠으로 잠기는 느낌 */
+const easeInCubic = (t: number): number => t * t * t;
 // 뇌창 그을림 — 빔이 머무는 자리가 검게 탄다. 한 타마다 새 데칼을 찍으면 초당 10장이
 // 쌓이므로, 가까운 자국은 새로 찍지 않고 더 짙게 태운다
 const SCORCH_RADIUS = 0.5;
@@ -681,6 +687,13 @@ export class Stage {
   >();
   /** 지금 씬에 올라가 있는 층 지오메트리 — 다음 층으로 갈 때 걷어낸다 */
   private levelGroup: THREE.Group | null = null;
+  /** 출구 계단을 덮은 석판 — 보스를 잡으면 옆으로 밀려 계단이 드러난다 */
+  private exitSlab: THREE.Mesh | undefined;
+  private exitSlabBase: THREE.Vector3 | null = null;
+  private slabSlide = 0;
+  /** 내려가는 연출 — 시작 시각(0 이면 안 도는 중) */
+  private descentStart = 0;
+  private descentMs = 1;
   private readonly tracers: Tracer[] = [];
   private readonly particles: Particle[] = [];
   private readonly hands = new HandModel();
@@ -912,6 +925,9 @@ export class Stage {
     this.scene.add(this.ambientLight);
     this.exitPad = group.getObjectByName('exitPad') as THREE.Mesh | undefined;
     this.exitLight = group.getObjectByName('exitLight') as THREE.PointLight | undefined;
+    this.exitSlab = group.getObjectByName('exitSlab') as THREE.Mesh | undefined;
+    this.exitSlabBase = this.exitSlab ? this.exitSlab.position.clone() : null;
+    this.descentStart = 0;
     this.exitOpen = true; // 아래 호출이 실제로 반영되도록 반대값에서 시작
     this.setExitOpen(false);
   }
@@ -977,6 +993,33 @@ export class Stage {
     if (open) this.exitFlashUntil = performance.now() + EXIT_FLASH_MS;
   }
 
+  /** 매 프레임 — 석판이 옆으로 밀려 계단을 드러내고, 내려가는 중이면 카메라가 가라앉는다 */
+  private updateExitStairs(now: number): void {
+    if (this.exitSlab && this.exitSlabBase) {
+      const target = this.exitOpen ? 1 : 0;
+      this.slabSlide += (target - this.slabSlide) * SLAB_SLIDE_EASE;
+      this.exitSlab.position.set(
+        this.exitSlabBase.x + this.slabSlide * SLAB_SLIDE_DIST,
+        this.exitSlabBase.y - this.slabSlide * 0.06,
+        this.exitSlabBase.z,
+      );
+    }
+    if (this.descentStart === 0) return;
+    const t = Math.min(1, (now - this.descentStart) / this.descentMs);
+    // 앞으로 걸어 들어가며 가라앉는다 — 계단을 밟고 내려가는 몸짓
+    this.camera.position.y -= easeInCubic(t) * STAIR_STEPS_DROP;
+    this.camera.translateZ(-easeInCubic(t) * 1.4);
+    this.camera.rotation.x -= t * 0.35; // 발밑을 본다
+    if (t >= 1) this.descentStart = 0;
+  }
+
+  /** 계단을 내려간다 — durationMs 동안 카메라가 앞으로 밀리며 가라앉는다.
+   *  층을 갈아 끼우는 건 부르는 쪽 몫이다 (연출이 끝날 즈음에 부른다) */
+  startDescent(durationMs: number): void {
+    this.descentStart = performance.now();
+    this.descentMs = Math.max(1, durationMs);
+  }
+
   private updateExitLight(now: number): void {
     if (!this.exitLight || !this.exitOpen) return;
     const left = this.exitFlashUntil - now;
@@ -1028,8 +1071,9 @@ export class Stage {
    *  얼마나 밀지(진행률 × 셀 크기)는 부르는 쪽이 계산한다 — 여기는 그리기만 한다 */
   setDoorSlide(row: number, col: number, offsetX: number, offsetZ: number): void {
     const name = `door-${row}-${col}`;
+    // 문은 이제 판문·문틀·철물이 묶인 Group 이다 — Mesh 로 좁히면 안 움직인다
     const mesh = this.scene.getObjectByName(name);
-    if (!(mesh instanceof THREE.Mesh)) return;
+    if (!mesh) return;
     let base = this.doorBase.get(name);
     if (!base) this.doorBase.set(name, (base = mesh.position.clone()));
     mesh.position.set(base.x + offsetX, base.y, base.z + offsetZ);
@@ -1383,6 +1427,8 @@ export class Stage {
     } else if (this.camera.rotation.z !== 0) {
       this.camera.rotation.z = 0;
     }
+
+    this.updateExitStairs(now);
 
     const flashLeft = this.executeFlashUntil - now;
     this.executeFlash.visible = flashLeft > 0;

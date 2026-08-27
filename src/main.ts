@@ -795,6 +795,13 @@ events.on('cast_failed', (payload) => {
 });
 
 // ---- 패링 화면 탈색 (mix-blend-mode 오버레이) ----
+/** 층 이동 암전 — 계단을 내려가는 동안 검게 잠겼다가, 새 층에서 다시 밝아진다 */
+const fadeOverlay = document.getElementById('fade')!;
+function screenFade(to: number, durationMs: number): void {
+  fadeOverlay.style.transition = `opacity ${durationMs}ms ease-in-out`;
+  fadeOverlay.style.opacity = String(to);
+}
+
 function screenFlash(strength: number, durationMs: number): void {
   flashOverlay!.style.transition = 'none';
   flashOverlay!.style.opacity = String(strength);
@@ -1219,7 +1226,13 @@ events.on('boss_staggered', () =>
 );
 events.on('exit_opened', () => {
   audio.play('exit_opened');
-  showReaction('족장이 쓰러졌다 — 출구의 봉인이 풀렸다', 3500);
+  audio.play('door_slide'); // 계단을 덮은 석판이 밀려난다
+  // 보스가 없는 층은 처음부터 열려 있다 — 그 층에서 "족장이 쓰러졌다" 는 거짓말이다
+  const hadBoss = levelJson.entities.some((e) => e.type === 'goblin_chieftain');
+  showReaction(
+    hadBoss ? '족장이 쓰러졌다 — 내려가는 계단이 열렸다' : '내려가는 계단 — E 로 내려간다',
+    hadBoss ? 3500 : 2600,
+  );
 });
 // ---- 잠긴 문 (E 로 직접 연다) ----
 events.on('door_channel_started', () => audio.play('door_touch'));
@@ -1312,9 +1325,17 @@ function loadFloor(index: number): void {
 }
 
 events.on('zone_cleared', () => {
-  // 마지막 층이 아니면 나가는 게 아니라 내려가는 것이다
+  // 마지막 층이 아니면 나가는 게 아니라 내려가는 것이다.
+  // 계단을 밟고 내려가는 동안 화면이 잠기고, 다 잠긴 뒤에 층을 갈아 끼운다 —
+  // 그래야 지형이 바뀌는 순간이 안 보인다
   if (floorIndex + 1 < ZONE.length) {
-    loadFloor(floorIndex + 1);
+    audio.play('door_slide');
+    stage.startDescent(DESCENT_MS);
+    screenFade(1, DESCENT_MS);
+    afterMs(DESCENT_MS + 40, () => {
+      loadFloor(floorIndex + 1);
+      screenFade(0, DESCENT_FADE_IN_MS);
+    });
     return;
   }
   audio.play('zone_clear');
@@ -1518,6 +1539,10 @@ const lanternText = document.getElementById('status-lantern-text')!;
 
 // 보스 체력 칸 색 — 마지막 칸(×1)은 HUD 기본색과 같은 계열, 그 앞 칸은 보라로 구분한다
 const BOSS_BAR_COLORS = { outer: '#b070e8', last: '#ff7a6b' };
+
+// 층 이동 — 계단을 내려가는 시간과, 새 층에서 화면이 밝아지는 시간
+const DESCENT_MS = 1500;
+const DESCENT_FADE_IN_MS = 650;
 
 // ---- 사선 십자 퀵슬롯 ----
 // 마름모 넷을 위·오른쪽·아래·왼쪽에 놓는다 (시계 방향 = 1·2·3·4번 칸).
@@ -1864,7 +1889,13 @@ function render(alpha: number): void {
         ? `잠금을 푸는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%\n문에서 떨어지면 처음부터`
         : `${IK} — 문을 연다 (누른 채 기다릴 필요 없이 문 앞에 서 있으면 된다)`;
   } else if (onExit) {
-    altarPrompt!.textContent = world.exitOpen ? `${IK} — 구역을 벗어난다` : '출구가 봉인되어 있다';
+    // 마지막 층에서만 "나간다" 다 — 그 앞은 아래층으로 내려가는 계단이다
+    const last = floorIndex + 1 >= ZONE.length;
+    altarPrompt!.textContent = !world.exitOpen
+      ? '계단이 봉인되어 있다 — 족장을 먼저 쓰러뜨려야 한다'
+      : last
+        ? `${IK} — 구역을 벗어난다`
+        : `${IK} — 아래층으로 내려간다  (${floorIndex + 2}/${ZONE.length})`;
   }
 
   const w = world.weapon;

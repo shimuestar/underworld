@@ -433,6 +433,15 @@
           rgba(190, 10, 10, 0.65) 100%
         );
       }
+      /* 층 이동 암전 — 계단을 내려가는 동안 검게 잠긴다. 패링 탈색(#flash)과 달리
+         일반 혼합이라 화면을 그냥 덮는다 */
+      #fade {
+        position: fixed;
+        inset: 0;
+        background: #000;
+        opacity: 0;
+        pointer-events: none;
+      }
       /* 패링 탈색 — mix-blend-mode 오버레이 (docs/architecture.md §6) */
       #flash {
         position: fixed;
@@ -447,6 +456,7 @@
   <body>
     <div id="app"></div>
     <div id="flash"></div>
+    <div id="fade"></div>
     <div id="hurt"></div>
     <div id="hud"></div>
     <div id="crosshair"></div>
