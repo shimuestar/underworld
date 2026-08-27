@@ -303,13 +303,16 @@ export class Level {
 const WALL_BUMP = 0.42;
 const FLOOR_BUMP = 0.3;
 const CEILING_BUMP = 0.25;
-const COLOR_WALL = 0x55555f;
+// 돌 색 — 텍스처가 회색조라 이 값이 그대로 돌빛이 된다. 푸른 회색(0x55555f)에서
+// 따뜻한 갈색 돌로 옮겼다 (2026-08-27). 명도는 거의 그대로 두고 색조만 돌린 것이라
+// 어둡기는 변하지 않는다 — R>G>B 순서가 곧 '갈색'이다
+const COLOR_WALL = 0x60564a;
 const COLOR_DOOR = 0x6b4a2f;
 const COLOR_CRACK = 0x4a5a68;
 /** 레버로만 열리는 관문 — 손으로 여는 문(갈색)과 확실히 다른 청록 금속색 */
 export const COLOR_GATE = 0x2f6f74;
-const COLOR_FLOOR = 0x3a3a44;
-const COLOR_CEILING = 0x2e2e36;
+const COLOR_FLOOR = 0x413c33;
+const COLOR_CEILING = 0x342f28;
 const COLOR_ALTAR = 0xd8c9a0;
 const COLOR_ALTAR_LIGHT = 0xe0d0a0;
 const COLOR_EXIT = 0x3fae5a;
