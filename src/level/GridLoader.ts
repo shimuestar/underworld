@@ -311,7 +311,9 @@ const COLOR_DOOR = 0x6b4a2f;
 const COLOR_CRACK = 0x4a5a68;
 /** 레버로만 열리는 관문 — 손으로 여는 문(갈색)과 확실히 다른 청록 금속색 */
 export const COLOR_GATE = 0x2f6f74;
-const COLOR_FLOOR = 0x413c33;
+// 바닥은 벽보다 한참 어둡다 — 때가 앉고 랜턴 빔이 정면으로 안 닿는 자리다.
+// 갈색 비율(R>G>B)은 유지한 채 명도만 내렸다 (2026-08-27: 60.5 → 43.4)
+const COLOR_FLOOR = 0x2f2b24;
 const COLOR_CEILING = 0x342f28;
 const COLOR_ALTAR = 0xd8c9a0;
 const COLOR_ALTAR_LIGHT = 0xe0d0a0;
