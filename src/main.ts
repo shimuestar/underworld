@@ -1421,7 +1421,8 @@ events.on('zone_cleared', () => {
   if (floorIndex + 1 < ZONE.length) {
     traveling = true;
     audio.play('stairs_travel');
-    stage.startDescent(DESCENT_MS);
+    // 어디를 보고 있었든 출구 계단 입 쪽으로 몸을 돌리며 내려간다
+    stage.startDescent(DESCENT_MS, 1, level.exitYaw + Math.PI);
     screenFade(1, DESCENT_MS);
     afterMs(DESCENT_MS + 40, () => {
       loadFloor(floorIndex + 1);
@@ -1442,7 +1443,8 @@ events.on('floor_ascend', () => {
   if (floorIndex === 0 || traveling) return;
   traveling = true;
   audio.play('stairs_travel');
-  stage.startDescent(DESCENT_MS, -1);
+  // 입구 계단 입 쪽으로 몸을 돌리며 올라간다
+  stage.startDescent(DESCENT_MS, -1, level.spawnYaw + Math.PI);
   screenFade(1, DESCENT_MS);
   afterMs(DESCENT_MS + 40, () => {
     loadFloor(floorIndex - 1, 'exit');

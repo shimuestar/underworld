@@ -589,6 +589,13 @@ const DESCENT_FORWARD = 3.0;
 const KEY_COLOR = 0xf0c34a;
 /** 처음엔 천천히, 끝에서 훅 — 계단을 딛다 마지막에 어둠으로 잠기는 느낌 */
 const easeInCubic = (t: number): number => t * t * t;
+/** 각도 보간 — 최단 호를 따라 돈다 (2π 경계를 넘어 한 바퀴 돌지 않게) */
+const lerpAngle = (a: number, b: number, k: number): number => {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * k;
+};
 // 뇌창 그을림 — 빔이 머무는 자리가 검게 탄다. 한 타마다 새 데칼을 찍으면 초당 10장이
 // 쌓이므로, 가까운 자국은 새로 찍지 않고 더 짙게 태운다
 const SCORCH_RADIUS = 0.5;
@@ -698,6 +705,8 @@ export class Stage {
   private descentMs = 1;
   /** +1 = 내려간다, −1 = 올라간다 */
   private descentDir = 1;
+  /** 이동 중 몸을 돌릴 방향 — 계단 입을 향한다. null 이면 보던 쪽 그대로 */
+  private descentYaw: number | null = null;
   private readonly tracers: Tracer[] = [];
   private readonly particles: Particle[] = [];
   private readonly hands = new HandModel();
@@ -1013,6 +1022,15 @@ export class Stage {
   private updateExitStairs(now: number): void {
     if (this.descentStart === 0) return;
     const t = Math.min(1, (now - this.descentStart) / this.descentMs);
+    // 계단 입 쪽으로 몸을 돌린다 — 앞 30% 동안 다 돌고, 그 방향으로 걸어 들어간다.
+    // 어디를 보고 E 를 눌렀든 계단으로 들어가는 그림이 된다
+    if (this.descentYaw !== null) {
+      this.camera.rotation.y = lerpAngle(
+        this.camera.rotation.y,
+        this.descentYaw,
+        Math.min(1, t / 0.3),
+      );
+    }
     // 전진은 등속 — 누른 순간부터 계단을 향해 걸어 들어간다.
     // (전에는 가속 이징이라 전진이 후반에 몰려 "제자리에서 가라앉는" 느낌이었다)
     this.camera.translateZ(-t * DESCENT_FORWARD);
@@ -1025,10 +1043,11 @@ export class Stage {
 
   /** 계단을 내려간다 — durationMs 동안 카메라가 앞으로 밀리며 가라앉는다.
    *  층을 갈아 끼우는 건 부르는 쪽 몫이다 (연출이 끝날 즈음에 부른다) */
-  startDescent(durationMs: number, dir = 1): void {
+  startDescent(durationMs: number, dir = 1, faceYaw: number | null = null): void {
     this.descentStart = performance.now();
     this.descentMs = Math.max(1, durationMs);
     this.descentDir = dir;
+    this.descentYaw = faceYaw;
   }
 
   private updateExitLight(now: number): void {
