@@ -755,8 +755,14 @@ events.on('barrel_hit', (payload) => {
 // 벽 튕김 — 소리만. 세게 부딪힐수록 크게 들린다
 events.on('grenade_bounce', () => audio.play('grenade_bounce'));
 events.on('crack_wall_broken', (payload) => {
-  const cell = payload as { row: number; col: number };
+  const cell = payload as { row: number; col: number; x?: number; z?: number };
   stage.breakCrack(cell.row, cell.col);
+  const wx = cell.x ?? (cell.col + 0.5) * world.level.cellSize;
+  const wz = cell.z ?? (cell.row + 0.5) * world.level.cellSize;
+  stage.spawnWallCrumble(wx, wz);
+  audio.play('wall_crumble');
+  const d = Math.hypot(wx - world.player.x, wz - world.player.z);
+  if (d < 10) stage.triggerCameraKick(0.5 * (1 - d / 10), 260);
   minimap.rebuildBase();
   showReaction('균열 벽이 무너져 내렸다!', 3000);
 });

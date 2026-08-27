@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import {
+  crackedWallTexture,
   dungeonCeilingTexture,
   dungeonFloorTexture,
   dungeonWallTexture,
@@ -464,22 +465,6 @@ export interface TorchParams {
   wallOffset: number;
 }
 
-/** 셀 하나를 그대로 채우는 벽 덩어리 (균열 벽처럼 "문이 아닌 것" 용) */
-function plainCell(cs: number, ceiling: number, color: number): THREE.Object3D {
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(cs, ceiling, cs),
-    new THREE.MeshLambertMaterial({
-      color,
-      map: dungeonWallTexture(),
-      bumpMap: dungeonWallTexture(),
-      bumpScale: WALL_BUMP,
-    }),
-  );
-  mesh.position.y = ceiling / 2;
-  const holder = new THREE.Group();
-  holder.add(mesh);
-  return holder;
-}
 
 /** 중세 판문 — 아치형 석조 문틀 안에 세로 널을 댄 두꺼운 나무 문. 철 띠와 리벳, 고리 손잡이.
  *  문틀(frame)은 벽의 일부라 그대로 서 있고, 문짝은 경첩(hinge)에 매달려 돌아 열린다.
@@ -853,8 +838,36 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
         // 어긋나면 문이 제 얼굴 쪽으로 밀려 들어간다
         const alongX = level.charAt(col - 1, row) === '#' || level.charAt(col + 1, row) === '#';
         if (ch === 'C') {
-          // 균열 벽은 부술 벽이지 문이 아니다 — 통째로 사라진다
-          const wall = plainCell(cs, level.ceiling, color);
+          // 균열 벽 — 굵은 금이 간 벽면 + 발치 잔해. "부술 수 있다" 가 보여야 한다.
+          // 화염구·수류탄 폭발 1방에 통째로 사라진다 (화살·총·해머로는 안 부서진다)
+          const wall = new THREE.Group();
+          const body = new THREE.Mesh(
+            new THREE.BoxGeometry(cs, level.ceiling, cs),
+            new THREE.MeshLambertMaterial({
+              color,
+              map: crackedWallTexture(),
+              bumpMap: crackedWallTexture(),
+              bumpScale: WALL_BUMP * 1.6, // 금이 더 깊이 파여 보이게
+            }),
+          );
+          body.position.y = level.ceiling / 2;
+          wall.add(body);
+          // 발치 잔해 — 이미 부스러기가 떨어져 있는 벽. 멀리서도 눈에 걸린다
+          const rubbleMat = new THREE.MeshLambertMaterial({ color: STAIR_STONE });
+          for (let i = 0; i < 7; i++) {
+            const side = i % 4;
+            const t = (Math.random() - 0.5) * (cs - 1);
+            const w = 0.16 + Math.random() * 0.3;
+            const rubble = new THREE.Mesh(new THREE.BoxGeometry(w, w * 0.7, w), rubbleMat);
+            const off = cs / 2 + 0.12 + Math.random() * 0.24;
+            rubble.position.set(
+              side < 2 ? t : (side === 2 ? -off : off),
+              w * 0.3,
+              side < 2 ? (side === 0 ? -off : off) : t,
+            );
+            rubble.rotation.y = Math.random() * Math.PI;
+            wall.add(rubble);
+          }
           wall.position.set((col + 0.5) * cs, 0, (row + 0.5) * cs);
           wall.name = `crack-${row}-${col}`;
           group.add(wall);

@@ -451,6 +451,17 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.xp).toBe(xp + balance.sigil.duplicateXp[sigilDef('sig_darkvision').tier]);
   });
 
+  it('화염구 폭발이 균열 벽을 1방에 부순다 — 셀이 열리고 붕괴 이벤트가 난다', () => {
+    // 아레나 동쪽 벽 한 칸을 균열 벽으로 (col 7, row 1)
+    world.level.grid[1] = '#######C';
+    const broken: { row: number; col: number }[] = [];
+    world.events.on('crack_wall_broken', (p) => broken.push(p as never));
+    const fx = sigilDef('sig_fireball').effects;
+    Projectiles.breakCrackWalls(world, (7 + 0.5) * 4 - 1, 6, fx['explodeRadius']!);
+    expect(broken).toEqual([expect.objectContaining({ row: 1, col: 7 })]);
+    expect(world.level.solidAt(7, 1)).toBe(false); // 이제 지나갈 수 있다
+  });
+
   it('시전 소음 — 빗나가도 등 뒤 코앞(2m)의 대기 적은 깬다', () => {
     Enemies.init(world);
     Sigils.acquire(world, 'sig_fireball');

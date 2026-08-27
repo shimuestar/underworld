@@ -118,6 +118,57 @@ function speckle(
   }
 }
 
+let crackedTex: THREE.CanvasTexture | null = null;
+/** 깨진 벽 — 벽 텍스처 위에 굵은 금이 사방으로 뻗고 조각이 떨어져 나갔다.
+ *  "여긴 부술 수 있다" 가 한눈에 읽혀야 한다 */
+export function crackedWallTexture(): THREE.CanvasTexture {
+  if (crackedTex) return crackedTex;
+  const size = WALL_SIZE;
+  const { cv, ctx } = canvas(size);
+  ctx.drawImage(dungeonWallTexture().image as HTMLCanvasElement, 0, 0);
+
+  // 굵은 금 — 가운데 즈음에서 사방으로 가지 치며 뻗는다
+  const cx = size * (0.42 + Math.random() * 0.16);
+  const cy = size * (0.38 + Math.random() * 0.2);
+  const vein = (x: number, y: number, ang: number, len: number, w: number): void => {
+    ctx.strokeStyle = gray(26, 0.92);
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    let px = x;
+    let py = y;
+    const steps = 6;
+    for (let i = 0; i < steps; i++) {
+      ang += (Math.random() - 0.5) * 0.9;
+      px += Math.cos(ang) * (len / steps);
+      py += Math.sin(ang) * (len / steps);
+      ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    // 가지 — 절반쯤에서 한 갈래
+    if (w > 3) vein(px, py, ang + (Math.random() < 0.5 ? 1 : -1) * 0.9, len * 0.45, w * 0.55);
+  };
+  for (let i = 0; i < 6; i++) {
+    vein(cx, cy, (i / 6) * Math.PI * 2 + Math.random() * 0.5, size * (0.3 + Math.random() * 0.25), 7);
+  }
+  // 폭심 — 조각이 떨어져 나가 어둡게 파인 자리
+  const hole = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.13);
+  hole.addColorStop(0, gray(30, 0.9));
+  hole.addColorStop(1, gray(60, 0));
+  ctx.fillStyle = hole;
+  ctx.fillRect(0, 0, size, size);
+  // 금 가장자리 하이라이트 조각 — 균열이 도드라져 보인다
+  for (let i = 0; i < 26; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = size * (0.06 + Math.random() * 0.34);
+    ctx.fillStyle = gray(240, 0.25 + Math.random() * 0.2);
+    ctx.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 3 + Math.random() * 5, 2 + Math.random() * 3);
+  }
+  crackedTex = finish(cv, 'dungeon-cracked-wall');
+  return crackedTex;
+}
+
 let wallTex: THREE.CanvasTexture | null = null;
 /** 벽 — 중세 지하 감옥. 손으로 깎아 쌓은 난석조 위로 물때가 흘러내리고 아래가 젖어 있다.
  *  켜(가로줄)마다 높이가 다르고 돌 너비도 제각각이며, 켜마다 시작점을 어긋나게 잡아

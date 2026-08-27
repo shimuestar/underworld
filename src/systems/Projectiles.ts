@@ -115,6 +115,26 @@ function tryCast(world: World, slotIndex: number): void {
   world.events.emit('cast_spell', { sigil: sigilId, cost, cast: def.cast });
 }
 
+/** 폭발이 닿은 균열 벽(C)을 부순다 — 반경 안의 C 셀을 열고 붕괴 이벤트를 낸다.
+ *  수류탄·화염구가 같이 쓴다. 폭발 1방이면 충분하다 (누적 없음) */
+export function breakCrackWalls(world: World, x: number, z: number, radius: number): void {
+  const level = world.level;
+  const cs = level.cellSize;
+  const cellRadius = Math.ceil(radius / cs);
+  const centerCol = Math.floor(x / cs);
+  const centerRow = Math.floor(z / cs);
+  for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
+    for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
+      if (level.charAt(col, row) !== 'C') continue;
+      const cx = (col + 0.5) * cs;
+      const cz = (row + 0.5) * cs;
+      if (Math.hypot(cx - x, cz - z) > radius + cs * 0.5) continue;
+      level.openCell(col, row);
+      world.events.emit('crack_wall_broken', { row, col, x: cx, z: cz });
+    }
+  }
+}
+
 /** 화염구 — 직선 투사체. 맞으면 터지고 화상을 남긴다 (explodeFireball) */
 function castProjectile(world: World, effects: Record<string, number>): void {
   const { ox, oy, oz, dx, dy, dz } = aim(world);
@@ -1085,6 +1105,9 @@ function explodeFireball(
   if (radius <= 0) return;
   const blastRadius = fx['blastRadius'] ?? 0;
   world.events.emit('explosion', { x, y, z, radius, kind: 'fireball' });
+  // 화염구도 균열 벽을 1방에 부순다 — 수류탄과 같은 "폭발" 계열만 부순다.
+  // 화살·총·해머 같은 물리 타격은 못 부순다 (그쪽엔 이 호출이 없다)
+  breakCrackWalls(world, x, z, radius);
 
   // 폭심에서 멀어질수록 약해진다 (반경 끝에서 explodeFalloffMin 배)
   const damageAt = (dist: number): number =>
@@ -1323,23 +1346,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
   }
 
   // 균열 벽(C) 파괴
-  if (grenade.breaksCrackWall) {
-    const level = world.level;
-    const cs = level.cellSize;
-    const cellRadius = Math.ceil(grenade.radius / cs);
-    const centerCol = Math.floor(proj.x / cs);
-    const centerRow = Math.floor(proj.z / cs);
-    for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
-      for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
-        if (level.charAt(col, row) !== 'C') continue;
-        const cx = (col + 0.5) * cs;
-        const cz = (row + 0.5) * cs;
-        if (Math.hypot(cx - proj.x, cz - proj.z) > grenade.radius + cs * 0.5) continue;
-        level.openCell(col, row);
-        world.events.emit('crack_wall_broken', { row, col });
-      }
-    }
-  }
+  if (grenade.breaksCrackWall) breakCrackWalls(world, proj.x, proj.z, grenade.radius);
 
   // 소음 — 폭발음은 멀리 퍼진다
   for (const enemy of world.enemies) {

@@ -10,7 +10,7 @@ const def = {
   cellSize: 4,
   ceiling: 4,
   // 스폰은 북쪽 벽을, 출구는 남쪽 벽을 등진다 — 벽감이 [0,2]·[4,2] 칸에 파인다
-  grid: ['#####', '#.S.#', '#...#', '#.X.#', '#####'],
+  grid: ['#####', '#.S.#', '#..C#', '#.X.#', '#####'],
   lighting: { ambient: 0.04, torches: [] as number[][] },
 };
 
@@ -49,6 +49,10 @@ if (view === 'front') {
   // 출구 발판 뒤에서 쇠사슬 걸린 내려가는 계단을 본 그림
   camera.position.set(ex, 1.6, ez - 3.4);
   camera.lookAt(ex, 0.9, ez + 4);
+} else if (view === 'crack') {
+  // 균열 벽 — 동쪽 벽 [2,3] 을 정면에서 본다
+  camera.position.set(9, 1.6, 10);
+  camera.lookAt(15, 1.6, 10);
 } else if (view === 'exitcorner') {
   camera.position.set(ex - 3.2, 2.2, ez - 3.0);
   camera.lookAt(ex + 0.5, 0.6, ez + 3);
