@@ -4,6 +4,9 @@ import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
 import { spendStamina, type World } from '../core/World';
 
+/** 질주 보폭 카운터 — 뛰는 동안만 차고, 멈추면 리셋된다 */
+let strideTicks = 0;
+
 export function tick(world: World, dt: number): void {
   const p = world.player;
   const input = world.input;
@@ -62,6 +65,16 @@ export function tick(world: World, dt: number): void {
     if (spendStamina(st, stam.sprintDrainPerTick, stam.regenDelayTicks)) {
       world.events.emit('stamina_empty', {});
     }
+  }
+  // 질주 발소리 — 보폭마다 한 번. 걷기는 무음이다 (몰래 갈 땐 걸어야 한다)
+  if (sprinting) {
+    strideTicks++;
+    if (strideTicks >= balance.player.sprintFootstepTicks) {
+      strideTicks = 0;
+      world.events.emit('footstep', { sprint: true });
+    }
+  } else {
+    strideTicks = 0;
   }
   let speed = sprinting ? balance.player.sprintSpeed : balance.player.moveSpeed;
   if (st.exhausted) speed *= stam.exhaustedSpeedMul; // 숨이 차 제대로 못 걷는다

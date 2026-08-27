@@ -26,6 +26,8 @@
     "healthMax": 100,
     "moveSpeed": 6.0,
     "sprintSpeed": 9.0,
+  "_footstepNote": "질주 중 발소리 간격(틱). 9m/s 로 한 걸음 ~2.8m 꼴 — 쿵쿵 뛰는 보폭",
+  "sprintFootstepTicks": 19,
     "eyeHeight": 1.6,
     "_staminaNote": "질주는 움직이는 동안만 닳는다. 0이 되면 exhaustRecoverTo 까지 차야 다시 질주할 수 있다 — 안 그러면 쉬프트를 톡톡 눌러 무한 질주가 된다. 탈진 구간(0~exhaustRecoverTo)은 회복이 훨씬 느리고 걸음도 절반이라 실수의 대가가 확실하다",
     "stamina": {
@@ -552,6 +554,8 @@
     "noticeDelayTicks": 15,
     "_attackNoiseNote": "공격 행동(마법 시전·해머 휘두름)의 소음 — 빗나가도 이 반경의 대기 적은 깬다. 총성(pistol.noiseRadius 12)·활시위(bow.noiseRadius 4)는 제 값이 따로 있다",
     "attackNoiseRadius": 2,
+    "_moveNoiseNote": "질주 발소리·회피 대시의 소음 — 이 반경의 대기 적이 듣는다. 걷기는 무음이라 몰래 갈 땐 걸어야 한다",
+    "moveNoiseRadius": 1.5,
     "_hitNoiseNote": "피격음 — 맞은 적 기준 이 반경의 동료도 깬다. 몰래 쏴도 바로 옆 놈은 듣는다",
     "hitNoiseRadius": 2,
     "_chargeNote": "크게 밀려난 뒤 확률적으로 달려들며 찌른다 — 멀리서 그냥 걸어오면 위협이 없다",

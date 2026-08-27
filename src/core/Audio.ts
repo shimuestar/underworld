@@ -25,6 +25,7 @@ export type SoundName =
   | 'thaw'
   | 'stairs_travel'
   | 'wall_crumble'
+  | 'footstep_run'
   | 'chain_locked'
   | 'unlock_chain'
   | 'shock'
@@ -273,6 +274,11 @@ export class GameAudio {
         this.tone(1400, 0.35, 'sine', 0.3, 0, 500);
         this.tone(2100, 0.25, 'triangle', 0.2, 0.05, 900);
         this.noise(0.4, 0.3, 2400);
+        break;
+      case 'footstep_run':
+        // 질주 발소리 — 낮고 짧은 쿵. 두 걸음마다 조금 다르게 들리라고 노이즈를 섞는다
+        this.tone(95, 0.07, 'sine', 0.4, 0, 50);
+        this.noise(0.045, 0.22, 380);
         break;
       case 'wall_crumble':
         // 벽 붕괴 — 묵직한 파열, 돌덩이가 잇달아 떨어지고 잔해가 구른다

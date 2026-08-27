@@ -27,6 +27,17 @@ export function init(world: World): void {
     );
   world.events.on('cast_spell', wake);
   world.events.on('hammer_swing', wake);
+  // 질주 발소리·회피 대시 — 몸이 내는 소리는 조금 조용하다 (moveNoiseRadius)
+  const moveWake = (): void =>
+    alertNearbyAt(
+      world,
+      world.player.x,
+      world.player.z,
+      balance.enemyAi.moveNoiseRadius,
+      balance.enemyAi.noticeDelayTicks,
+    );
+  world.events.on('footstep', moveWake);
+  world.events.on('dodge_step', moveWake);
 }
 
 export function tick(world: World, dt: number): void {

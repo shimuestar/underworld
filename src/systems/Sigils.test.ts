@@ -11,6 +11,7 @@ import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
 import * as Mana from './Mana';
+import * as PlayerMove from './PlayerMove';
 import * as Projectiles from './Projectiles';
 import * as Sigils from './Sigils';
 
@@ -460,6 +461,40 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     Projectiles.breakCrackWalls(world, (7 + 0.5) * 4 - 1, 6, fx['explodeRadius']!);
     expect(broken).toEqual([expect.objectContaining({ row: 1, col: 7 })]);
     expect(world.level.solidAt(7, 1)).toBe(false); // 이제 지나갈 수 있다
+  });
+
+  it('질주하면 보폭마다 발소리가 난다 — 걷기로 바꾸면 멎는다', () => {
+    world.stamina.value = 100;
+    world.stamina.exhausted = false;
+    const steps: unknown[] = [];
+    world.events.on('footstep', (p) => steps.push(p));
+    const interval = balance.player.sprintFootstepTicks;
+    world.input = { ...Input.emptySnapshot(), moveForward: 1, sprint: true };
+    for (let i = 0; i < interval * 2 + 2; i++) PlayerMove.tick(world, DT);
+    expect(steps.length).toBeGreaterThanOrEqual(2); // 보폭마다 한 번
+    const heard = steps.length;
+    world.input = { ...Input.emptySnapshot(), moveForward: 1 }; // 걷기
+    for (let i = 0; i < interval * 2; i++) PlayerMove.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(steps.length).toBe(heard); // 걷기는 무음
+    // 발소리 → 각성 경로는 아래 대시 테스트와 같은 핸들러(moveWake)를 쓴다
+  });
+
+  it('회피 대시 소리도 1.5m 안의 적이 듣는다 — 걷기는 무음이라 안 깬다', () => {
+    Enemies.init(world);
+    const eaves = add('goblin_runner', 6 - 1.2, 6);
+    eaves.homeYaw = Math.atan2(-(6 - eaves.x), -(6 - eaves.z)) + Math.PI;
+    // 걷기 — 아무리 걸어도 소리가 없다
+    world.stamina.value = 100;
+    world.input = { ...Input.emptySnapshot(), moveForward: 1 };
+    for (let i = 0; i < 40; i++) PlayerMove.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    world.player.x = 6; // 제자리로 되돌린다 (걷다 멀어졌다)
+    world.player.z = 6;
+    expect(eaves.ai).toBe('idle');
+    // 대시 — 그 자리에서 듣는다
+    world.events.emit('dodge_step', {});
+    expect(eaves.ai).toBe('chase');
   });
 
   it('시전 소음 — 빗나가도 등 뒤 코앞(2m)의 대기 적은 깬다', () => {
