@@ -238,9 +238,11 @@ window.addEventListener('keydown', (e) => {
     showReaction(world.godMode ? '(테스트) 무적 ON' : '(테스트) 무적 OFF', 1400);
     console.log('[debug] 무적', world.godMode);
   }
-  // 테스트용 시야 내 몰살 — 진행 속도를 위한 편의 (슬라이스 검증 시 제거).
-  // 화면에 들어와 있고 벽에 가리지 않은 적만 죽인다
-  if (e.code === 'KeyK' && !world.dead && !world.uiOpen) {
+  // 테스트용 시야 내 몰살 (Alt) — 진행 속도를 위한 편의 (슬라이스 검증 시 제거).
+  // 화면에 들어와 있고 벽에 가리지 않은 적만 죽인다.
+  // K 에서 옮겼다 — 브라우저 기본 동작(메뉴 포커스)은 막는다
+  if ((e.code === 'AltLeft' || e.code === 'AltRight') && !world.dead && !world.uiOpen) {
+    e.preventDefault();
     const p = world.player;
     let killed = 0;
     for (const enemy of world.enemies) {
