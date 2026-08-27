@@ -258,9 +258,9 @@ export class GameAudio {
       case 'dodge':
         // 회피 대시 — 몸이 공기를 가르는 휙. 노이즈 하나로는 전투 소음에 묻혀
         // 안 들린다는 피드백이 있어 스윕 톤을 겹치고 키웠다 (2026-08-27)
-        this.tone(900, 0.14, 'sawtooth', 0.32, 0, 180);
-        this.noise(0.16, 0.7, 1600);
-        this.noise(0.08, 0.45, 700, 0.05);
+        this.tone(900, 0.16, 'sawtooth', 0.5, 0, 160);
+        this.noise(0.18, 1.0, 1900);
+        this.noise(0.1, 0.7, 800, 0.05);
         break;
       case 'cast_fire':
         // 화염 방출 — 저음 스윕 + 노이즈
