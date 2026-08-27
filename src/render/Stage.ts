@@ -1074,10 +1074,10 @@ export class Stage {
   /** 문을 경첩에서 연다 — frac 0(닫힘) ~ 1(활짝). 문틀은 벽의 일부라 그대로 서 있고
    *  문짝만 돌아간다. 열린 뒤에도 사라지지 않고 열린 채로 남는다 */
   setDoorSwing(row: number, col: number, frac: number): void {
+    // 경첩은 방향(mount)의 자식이라 제 회전은 순수한 여닫힘이다 — 0 이 닫힘
     const hinge = this.scene.getObjectByName(`door-${row}-${col}`);
     if (!hinge) return;
-    const base = (hinge.userData['baseYaw'] as number | undefined) ?? 0;
-    hinge.rotation.y = base + Math.min(1, Math.max(0, frac)) * DOOR_SWING_RAD;
+    hinge.rotation.y = Math.min(1, Math.max(0, frac)) * DOOR_SWING_RAD;
   }
 
   /** 레버 당김 — 손잡이를 반대쪽으로 넘긴다 */

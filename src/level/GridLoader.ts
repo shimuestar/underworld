@@ -370,10 +370,14 @@ function buildMedievalDoor(
   alongX: boolean,
   color: number,
   gate: boolean,
-): { frame: THREE.Group; hinge: THREE.Group } {
+): { frame: THREE.Group; mount: THREE.Group; pivot: THREE.Group } {
   void alongX; // 축 회전은 부르는 쪽이 건다
   const frame = new THREE.Group();
-  const hinge = new THREE.Group();
+  // mount 는 문의 방향만 든다(셀 중심에 놓고 돌린다). pivot 이 경첩이고 이것만 여닫이로 돈다 —
+  // 방향과 여닫힘을 한 그룹에 겹쳐 두면 회전 뒤 좌표에서 경첩 위치를 잡게 돼 문짝이 개구부 밖으로 나간다
+  const mount = new THREE.Group();
+  const pivot = new THREE.Group();
+  mount.add(pivot);
   const stone = new THREE.MeshLambertMaterial({
     color,
     map: dungeonWallTexture(),
@@ -396,15 +400,11 @@ function buildMedievalDoor(
     post.position.set(side * (half - jamb / 2), ceiling / 2, 0);
     frame.add(post);
   }
+  // 상인방 — 개구부 위를 가로지르는 돌 한 장. 계단식으로 물려 놓으면 문 위에
+  // 판자 세 장이 얹힌 것처럼 보여서 한 장으로 둔다
   const lintel = new THREE.Mesh(new THREE.BoxGeometry(openW, ceiling - openH, cs), stone);
   lintel.position.set(0, openH + (ceiling - openH) / 2, 0);
   frame.add(lintel);
-  for (let i = 0; i < 3; i++) {
-    const w = openW - (i + 1) * (openW * 0.14);
-    const arch = new THREE.Mesh(new THREE.BoxGeometry(w, 0.16, cs * 0.9), stone);
-    arch.position.set(0, openH - 0.08 - i * 0.16, 0);
-    frame.add(arch);
-  }
   // 경첩 쇠 — 문설주에 박힌 돌쩌귀. 문이 어디에 매달렸는지 보여 준다
   for (const y of [openH * 0.22, openH * 0.78]) {
     const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.34, 6), iron);
@@ -412,10 +412,11 @@ function buildMedievalDoor(
     frame.add(pin);
   }
 
-  // ── 문짝 — 경첩이 원점이라 널을 개구부 폭만큼 옆으로 밀어 매단다
+  // ── 문짝 — 경첩(pivot)은 개구부 왼쪽 끝. 널은 거기서 폭의 절반만큼 밀어 매단다
+  pivot.position.x = -openW / 2;
   const panel = new THREE.Group();
   panel.position.x = openW / 2;
-  hinge.add(panel);
+  pivot.add(panel);
 
   const panelW = openW * 0.94;
   const planks = 6;
@@ -449,7 +450,7 @@ function buildMedievalDoor(
     panel.add(ring);
   }
 
-  return { frame, hinge };
+  return { frame, mount, pivot };
 }
 
 /** 문이 열려도 문틀은 몸을 막는다 — 셀을 통째로 열어 두면 석조 문설주를 뚫고 지나간다.
@@ -595,24 +596,20 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
           group.add(wall);
           continue;
         }
-        // 문틀(석조)은 벽의 일부라 그대로 서 있고, 문짝만 경첩에서 돌아 열린다
-        const built = buildMedievalDoor(cs, level.ceiling, alongX, color, ch === 'G');
-        built.frame.position.set((col + 0.5) * cs, 0, (row + 0.5) * cs);
-        built.frame.rotation.y = alongX ? 0 : Math.PI / 2;
-        built.frame.name = `doorframe-${row}-${col}`;
-        group.add(built.frame);
-        // 경첩 — 문틀 개구부 한쪽 끝. 이름은 door- 로 둔다 (Stage 가 이걸 돌린다)
+        // 문틀(석조)은 벽의 일부라 그대로 서 있고, 문짝만 경첩에서 돌아 열린다.
+        // 문틀·문짝 모두 셀 중심에 놓고 같은 각도로 돌린다 — 경첩 위치는 그 안쪽 좌표라
+        // 회전과 섞이지 않는다
         const baseYaw = alongX ? 0 : Math.PI / 2;
-        const hingeLocal = -DOOR_OPEN_WIDTH / 2;
-        built.hinge.position.set(
-          (col + 0.5) * cs + (alongX ? hingeLocal : 0),
-          0,
-          (row + 0.5) * cs + (alongX ? 0 : hingeLocal),
-        );
-        built.hinge.rotation.y = baseYaw;
-        built.hinge.userData['baseYaw'] = baseYaw;
-        built.hinge.name = `door-${row}-${col}`;
-        group.add(built.hinge);
+        const built = buildMedievalDoor(cs, level.ceiling, alongX, color, ch === 'G');
+        for (const node of [built.frame, built.mount]) {
+          node.position.set((col + 0.5) * cs, 0, (row + 0.5) * cs);
+          node.rotation.y = baseYaw;
+        }
+        built.frame.name = `doorframe-${row}-${col}`;
+        // 이름은 경첩에 붙인다 — Stage 가 이것만 돌린다 (0 = 닫힘)
+        built.pivot.name = `door-${row}-${col}`;
+        group.add(built.frame);
+        group.add(built.mount);
         continue;
       }
       const color = COLOR_WALL;
