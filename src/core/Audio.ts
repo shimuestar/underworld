@@ -286,9 +286,10 @@ export class GameAudio {
         this.noise(0.04, 0.18, 360);
         break;
       case 'footstep_run':
-        // 질주 발소리 — 낮고 짧은 쿵. 처음 값(0.4/0.22)이 작다는 피드백에 키웠다
-        this.tone(95, 0.08, 'sine', 0.62, 0, 48);
-        this.noise(0.055, 0.42, 500);
+        // 질주 발소리 — 낮고 짧은 쿵. 두 번 키웠다 (0.4→0.62→0.95 + 저음 겹)
+        this.tone(95, 0.09, 'sine', 0.95, 0, 46);
+        this.tone(58, 0.07, 'sine', 0.55, 0, 40);
+        this.noise(0.06, 0.65, 560);
         break;
       case 'wall_crumble':
         // 벽 붕괴 — 묵직한 파열, 돌덩이가 잇달아 떨어지고 잔해가 구른다
