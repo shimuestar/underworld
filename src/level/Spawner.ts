@@ -34,6 +34,7 @@ const IMPLEMENTED = new Set([
   'slime_small',
   'slime_mother',
   'ghoul',
+  'leech',
 ]);
 
 /** 이 적 타입이 실제로 스폰되는가 — 레벨 검증이 이걸로 스텁 배치를 잡는다 */
@@ -130,6 +131,12 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
     const spawned = spawnEnemyAt(placement.type, x, z, nextEnemySpawnId++);
     // 죽은 척 배치 — 시체처럼 엎어져 시작한다 (구울). 기척·소음·피격이 깨운다
     if ((placement as { feign?: boolean }).feign) spawned.feigning = true;
+    // 천장 배치 (거머리) — 천장에 매달려 시작한다
+    if ((placement as { ceiling?: boolean }).ceiling && enemyDef(placement.type).ceilingLurk) {
+      spawned.lurking = true;
+      spawned.jumpY = level.ceiling - enemyDef(placement.type).height - 0.05;
+      spawned.prevJumpY = spawned.jumpY;
+    }
     enemies.push(spawned);
   }
   if (skippedNearAltar > 0) {

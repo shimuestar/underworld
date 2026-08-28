@@ -135,6 +135,12 @@ export interface EnemyDef {
   eatsMotes?: { senseRadius: number; healPerMote: number; frenzyPerStack: number; frenzyMax: number };
   /** 죽은 척 배치가 깨는 기척 반경(m) — 소음·피격은 반경과 무관하게 깨운다 */
   feignWakeRadius?: number;
+  /** 천장 잠복 (거머리) — 낙하 사냥의 모든 손잡이 */
+  ceilingLurk?: {
+    dropRadius: number; chitterRadius: number; dripIntervalTicks: number;
+    dropDurTicks: number; dropDamage: number; dropAoeRadius: number; dropWhiffTicks: number;
+    groundTicks: number; reascendMinDist: number; ascendDurTicks: number; fallStunTicks: number;
+  };
   /** 마법 방어막 (warden) — 실탄만 관통 */
   magicBarrier?: { blocksMagic: boolean; blocksMelee: boolean; piercedBy: string[] };
   /** caster_kite: 이 거리 안이면 물러난다 */

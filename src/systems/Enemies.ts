@@ -96,10 +96,17 @@ export function tick(world: World, dt: number): void {
     dropGoo(world, enemy);
     eatNearbyItems(world, enemy);
     emitBrood(world, enemy);
-    // 사출된 새끼의 낙하 — 돌진 도약(charging)은 제 코드가 높이를 관리한다
-    if (enemy.ai !== 'charging' && (enemy.jumpY ?? 0) > 0) {
+    // 사출된 새끼의 낙하 — 돌진 도약(charging)·거머리 수직 구간은 제 코드가 높이를 관리한다
+    if (
+      enemy.ai !== 'charging' &&
+      !enemy.lurking &&
+      (enemy.dropTicks ?? 0) <= 0 &&
+      (enemy.ascendTicks ?? 0) <= 0 &&
+      (enemy.jumpY ?? 0) > 0
+    ) {
       enemy.jumpY = Math.max(0, (enemy.jumpY ?? 0) - BROOD_FALL);
     }
+    tickLeechGround(world, enemy);
     // 피탄 경직 소진은 행동 뒤에 — 앞에서 줄이면 마지막 틱에 움직여버린다
     if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
     if ((enemy.slowTicks ?? 0) > 0) {
@@ -161,6 +168,7 @@ function alertWitnesses(world: World, corpse: EnemyState): void {
   for (const watcher of world.enemies) {
     if (!watcher.alive || watcher.ai !== 'idle' || watcher.id === corpse.id) continue;
     if (watcher.feigning) continue; // 죽은 척 — 눈을 감고 있다 (기척·소음·피격만 깨운다)
+    if (watcher.lurking) continue; // 천장 잠복 — 매달린 채 미동도 없다
     const def = enemyDef(watcher.type);
     if (def.blind) continue; // 장님(슬라임)은 눈이 없다 — 소리로만 산다
     const dx = corpse.x - watcher.x;
@@ -370,6 +378,42 @@ function releaseGrapple(world: World, enemy: EnemyState, shoved: boolean): void 
   }
 }
 
+/** 거머리 낙하 시작 — stunnedFall 이면 제자리 추락(뻗음), 아니면 먹이 좌표로 덮친다 */
+function startDrop(
+  world: World,
+  enemy: EnemyState,
+  lurk: NonNullable<ReturnType<typeof enemyDef>['ceilingLurk']>,
+  stunnedFall: boolean,
+): void {
+  enemy.lurking = false;
+  enemy.dropTicks = lurk.dropDurTicks;
+  enemy.dropFromY = enemy.jumpY ?? 0;
+  enemy.dropStunned = stunnedFall;
+  enemy.dropTargetX = stunnedFall ? enemy.x : world.player.x;
+  enemy.dropTargetZ = stunnedFall ? enemy.z : world.player.z;
+  enemy.ai = 'chase';
+  enemy.noticeTicks = 0;
+  world.events.emit(stunnedFall ? 'leech_fall' : 'leech_drop', {
+    enemyId: enemy.id, x: enemy.x, z: enemy.z,
+  });
+}
+
+/** 거머리 지상 체류 — 오래 머물렀고 먹이가 멀면 천장으로 되돌아간다 */
+function tickLeechGround(world: World, enemy: EnemyState): void {
+  const def = enemyDef(enemy.type);
+  const lurk = def.ceilingLurk;
+  if (!lurk || enemy.lurking) return;
+  if ((enemy.dropTicks ?? 0) > 0 || (enemy.ascendTicks ?? 0) > 0) return;
+  if (enemy.ai !== 'chase') return; // 공격·경직 중에는 재지 않는다
+  enemy.groundTicks = (enemy.groundTicks ?? lurk.groundTicks) - 1;
+  if ((enemy.groundTicks ?? 0) > 0) return;
+  const p = world.player;
+  if (Math.hypot(p.x - enemy.x, p.z - enemy.z) < lurk.reascendMinDist) return; // 아직 붙어 있다
+  enemy.ascendTicks = lurk.ascendDurTicks;
+  enemy.groundTicks = 0;
+  world.events.emit('leech_ascend', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+}
+
 function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   const def = enemyDef(enemy.type);
   const p = world.player;
@@ -377,6 +421,75 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   enemy.prevX = enemy.x;
   enemy.prevZ = enemy.z;
   enemy.prevJumpY = enemy.jumpY ?? 0;
+
+  // ── 거머리 수직 구간 — 낙하·재상승은 일반 AI 를 덮는다 ──
+  const lurk = def.ceilingLurk;
+  if (lurk && (enemy.dropTicks ?? 0) > 0) {
+    enemy.dropTicks = (enemy.dropTicks ?? 0) - 1;
+    const remain = Math.max(1, enemy.dropTicks ?? 0);
+    // 목표 좌표로 미끄러지며(벽은 밀어낸다) 가속 낙하
+    world.level.slideMove(
+      enemy,
+      def.radius,
+      ((enemy.dropTargetX ?? enemy.x) - enemy.x) / remain,
+      ((enemy.dropTargetZ ?? enemy.z) - enemy.z) / remain,
+    );
+    const t = 1 - (enemy.dropTicks ?? 0) / lurk.dropDurTicks;
+    enemy.jumpY = Math.max(0, (enemy.dropFromY ?? 0) * (1 - t * t));
+    if ((enemy.dropTicks ?? 0) > 0) return;
+    enemy.jumpY = 0;
+    enemy.groundTicks = lurk.groundTicks;
+    if (enemy.dropStunned) {
+      // 매달린 채 맞아 떨어졌다 — 길게 뻗는다 (올려다본 플레이어의 보상)
+      enemy.ai = 'recover';
+      enemy.timer = lurk.fallStunTicks;
+      enemy.whiffed = true;
+      world.events.emit('leech_splat', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+      return;
+    }
+    // 내려찍기 — 낙하점 광역. 회피 무적이면 통째로 헛디딘다
+    const idx = p.x - enemy.x;
+    const idz = p.z - enemy.z;
+    const idist = Math.hypot(idx, idz);
+    if (idist <= lurk.dropAoeRadius && p.iframeTicks <= 0) {
+      const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
+      const dmg = blocked ? lurk.dropDamage * balance.block.chipDamageRatio : lurk.dropDamage;
+      p.health -= dmg;
+      pushPlayer(p, idx, idz, 1.6, balance.playerKnockback.ticks);
+      world.events.emit('player_damaged', {
+        amount: dmg, health: p.health, blocked, srcX: enemy.x, srcZ: enemy.z, source: 'leech_drop',
+      });
+      if (p.health <= 0) {
+        p.health = 0;
+        world.dead = true;
+        world.events.emit('player_died', { tick: world.tick });
+      }
+      enemy.ai = 'recover';
+      enemy.timer = def.attack.recoverTicks;
+    } else {
+      enemy.ai = 'recover';
+      enemy.timer = lurk.dropWhiffTicks;
+      enemy.whiffed = true; // 바닥을 헛찍고 뻗었다 — 반격 창
+    }
+    world.events.emit('leech_land', { enemyId: enemy.id, x: enemy.x, z: enemy.z, hit: idist <= lurk.dropAoeRadius });
+    return;
+  }
+  if (lurk && (enemy.ascendTicks ?? 0) > 0) {
+    enemy.ascendTicks = (enemy.ascendTicks ?? 0) - 1;
+    const hang = world.level.ceiling - def.height - 0.05;
+    enemy.jumpY = hang * (1 - (enemy.ascendTicks ?? 0) / lurk.ascendDurTicks);
+    if ((enemy.ascendTicks ?? 0) === 0) {
+      enemy.lurking = true; // 다시 매달렸다 — 이름표도 다시 숨는다
+      enemy.ai = 'idle';
+      enemy.noticeTicks = 0;
+    }
+    return;
+  }
+  // 매달린 채 들켰다(소음·피격) — 어차피 내려와야 한다. 다친 채면 추락해 뻗는다
+  if (lurk && enemy.lurking && enemy.ai !== 'idle') {
+    startDrop(world, enemy, lurk, enemy.health < def.health);
+    return;
+  }
 
   // 밀려난 뒤 돌격 — chase 진입을 기다리지 않는다 (공격 도중 밀려나면 그 상태로 남아
   // 영영 돌격하지 못했다). 밀리는 중에는 판단하지 않는다 — 아직 가까워서 취소돼 버린다
@@ -474,6 +587,18 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       // 벽 너머는 안 보이므로 시야선은 그대로 요구한다
       const facingX = -Math.sin(enemy.yaw);
       const facingZ = -Math.cos(enemy.yaw);
+      // 천장 잠복(거머리) — 밑을 지나는 먹이만 노린다. 단서는 점액 방울·찌륵거림
+      if (enemy.lurking && def.ceilingLurk) {
+        const lk = def.ceilingLurk;
+        if (dist < 14 && world.tick % lk.dripIntervalTicks === enemy.id % lk.dripIntervalTicks) {
+          world.events.emit('leech_drip', { x: enemy.x, z: enemy.z });
+        }
+        if (dist <= lk.chitterRadius && world.tick % 90 === (enemy.id * 7) % 90) {
+          world.events.emit('leech_chitter', { x: enemy.x, z: enemy.z });
+        }
+        if (dist <= lk.dropRadius) startDrop(world, enemy, lk, false);
+        break;
+      }
       // 죽은 척(구울) — 엎어져서 아무것도 보지 않는다. 코앞 기척만 몸으로 느낀다.
       // 소음(alertNearbyAt)·피격(alertEnemy)은 밖에서 깨운다
       if (enemy.feigning) {

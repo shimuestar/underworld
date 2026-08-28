@@ -419,6 +419,17 @@ export interface EnemyState {
   broodTicks?: number;
   /** 삼킨 바닥 아이템 — 죽으면 전부 그 자리에 게워 낸다 (슬라임 식탐) */
   eatenItems?: GroundItemState[];
+  /** 천장 잠복 중 (거머리) — 매달려 있고 이름표도 없다. 밑 통과·소음·피격이 깨운다 */
+  lurking?: boolean;
+  /** 낙하 구간 남은 틱 / 이 낙하가 피격 추락(뻗음)인가 / 낙하 목표·시작 높이 */
+  dropTicks?: number;
+  dropStunned?: boolean;
+  dropTargetX?: number;
+  dropTargetZ?: number;
+  dropFromY?: number;
+  /** 재상승 구간 남은 틱 / 지상에 머문 뒤 재상승까지 남은 틱 */
+  ascendTicks?: number;
+  groundTicks?: number;
   /** 죽은 척 중 — 엎어져 있고 이름표도 없다. 기척·소음·피격이 깨운다 (구울) */
   feigning?: boolean;
   /** 광란 스택 — 생명 입자를 먹을 때마다 +1, 이속·공속이 빨라진다 (구울) */

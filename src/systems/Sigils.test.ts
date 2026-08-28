@@ -669,6 +669,38 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slime.ai).toBe('chase');
   });
 
+  it('거머리 — 밑을 지나면 떨어져 내려찍고, 비키면 바닥을 헛찍고 뻗는다', () => {
+    const leech = add('leech', 8, 6); // 플레이어(6,6)에서 2m — dropRadius(2.5) 안
+    leech.lurking = true;
+    leech.jumpY = 3.3;
+    leech.prevJumpY = 3.3;
+    const far = add('leech', 20, 6); // 멀다 — 계속 매달려 있다
+    far.lurking = true;
+    far.jumpY = 3.3;
+    for (let i = 0; i < 5; i++) Enemies.tick(world, DT);
+    expect(leech.lurking).toBe(false); // 밑을 지나자 낙하를 시작했다
+    // 옆으로 비킨다 — 낙하는 예고 시점 좌표로만 떨어진다 (움직이면 헛찍는다)
+    world.player.x = 10;
+    world.player.prevX = 10;
+    for (let i = 0; i < 60; i++) Enemies.tick(world, DT);
+    expect(leech.jumpY ?? 0).toBe(0); // 착지했다
+    expect(leech.whiffed).toBe(true); // 바닥을 헛찍고 뻗었다 — 반격 창
+    expect(far.lurking).toBe(true); // 밑을 안 지나면 미동도 없다
+  });
+
+  it('거머리 — 매달린 채 맞으면 추락해 길게 뻗는다', () => {
+    const leech = add('leech', 14, 6);
+    leech.lurking = true;
+    leech.jumpY = 3.3;
+    leech.prevJumpY = 3.3;
+    leech.health -= 5; // 피격 (피해 경로는 alertEnemy 로 깨운다)
+    leech.ai = 'chase';
+    for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+    expect(leech.jumpY ?? 0).toBe(0);
+    expect(leech.ai).toBe('recover'); // 낙하 경직 — 무방비
+    expect(leech.whiffed).toBe(true);
+  });
+
   it('구울 파먹기 — 물리는 동안 피가 닳고, 근접 연타 6번에 밀쳐낸다', () => {
     const g = add('ghoul', 7, 6); // 플레이어(6,6) 코앞
     g.ai = 'latched';

@@ -168,6 +168,15 @@
       "note": "복도를 기어다닌다"
     },
     {
+      "type": "leech",
+      "cell": [
+        9,
+        19
+      ],
+      "note": "복도 천장 — 올려다보면 안광이 보인다",
+      "ceiling": true
+    },
+    {
       "type": "slime",
       "cell": [
         17,

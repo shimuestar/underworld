@@ -306,6 +306,24 @@
       ]
     },
     {
+      "type": "leech",
+      "cell": [
+        3,
+        12
+      ],
+      "note": "복도 천장",
+      "ceiling": true
+    },
+    {
+      "type": "leech",
+      "cell": [
+        12,
+        20
+      ],
+      "note": "정문 관문 복도 천장",
+      "ceiling": true
+    },
+    {
       "type": "ghoul",
       "cell": [
         16,

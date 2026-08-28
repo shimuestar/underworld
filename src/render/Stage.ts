@@ -29,6 +29,7 @@ const ENEMY_COLORS: Record<string, number> = {
   slime: 0x3fae62,
   slime_mother: 0x2e8f52,
   ghoul: 0x8f9a86,
+  leech: 0x7a4b6e,
   slime_small: 0x63c97e,
 };
 /** 거미는 기둥+머리가 아니라 몸통·배·다리로 만든다 */
@@ -2164,7 +2165,32 @@ export class Stage {
     let legsPair: { left: THREE.Group; right: THREE.Group } | undefined;
     // 안광 — 조명이 아니라 자체 발광 눈. 어둠 속에서 멀리서도 "저기 뭔가 있다"가 읽힌다
     const eyes = makeEyeMaterials();
-    if (SLIME_TYPES.has(type)) {
+    if (type === 'leech') {
+      // 거머리 — 납작한 몸 + 늘어진 촉수 넷. 다리·머리가 없다 (천장에 매달리는 몸)
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(def.radius * 1.9, def.height, def.radius * 1.9),
+        bodyMat,
+      );
+      body.position.y = def.height / 2;
+      torso.add(body);
+      const tentMat = new THREE.MeshLambertMaterial({
+        color: new THREE.Color(baseColor).multiplyScalar(0.6),
+      });
+      flashMaterials.push(tentMat);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+        const tent = new THREE.Mesh(new THREE.BoxGeometry(0.07, def.height * 0.9, 0.07), tentMat);
+        tent.position.set(sx * def.radius * 0.6, def.height * 0.15, sz * def.radius * 0.6);
+        torso.add(tent);
+      }
+      // 아랫면 앞쪽 안광 — 올려다보면 저기 뭔가 있다
+      const ec2 = balance.lighting.enemyEyes;
+      for (const side of [-1, 1]) {
+        addGlowEye(
+          torso, side * def.radius * 0.35, def.height * 0.2, -def.radius * 0.9,
+          def.radius * ec2.radiusMul, eyes.eyeMat, eyes.haloMat, eyes.halos,
+        );
+      }
+    } else if (SLIME_TYPES.has(type)) {
       // 슬라임 — 반투명 젤 몸체 + 진한 핵. 무정형이라 다리·머리·눈이 없다.
       // 꿀렁임(squash&stretch)은 syncEnemies 가 torso.scale 로 만든다
       bodyMat.transparent = true;
@@ -2472,7 +2498,7 @@ export class Stage {
 
     // 맨팔 — 인간형은 모두 두 팔이다. 무기 팔(오른쪽)이 있으면 왼팔 하나만,
     // 없으면(궁수·주술사) 양팔을 단다. 궁수는 활을 향해 앞으로 들려 있다
-    if (!SPIDER_TYPES.has(type) && !SLIME_TYPES.has(type)) {
+    if (!SPIDER_TYPES.has(type) && !SLIME_TYPES.has(type) && type !== 'leech') {
       const armLen = def.height * 0.34;
       const forward = type === 'goblin_archer' ? 0.55 : type === 'ghoul' ? GHOUL_ARMS_FORWARD : 0;
       const makeArm = (side: number): THREE.Group => {
@@ -2959,6 +2985,11 @@ export class Stage {
         if (visual.chargeOrbLight) visual.chargeOrbLight.intensity = 2.2 * windupProgress;
       }
 
+      // 거머리 — 매달려 있는 동안 천천히 흔들린다 (숨쉬는 살덩이)
+      if (enemy.type === 'leech') {
+        visual.torso.rotation.z = enemy.lurking ? Math.sin(now / 520 + enemy.id) * 0.08 : 0;
+      }
+
       // 슬라임 꿀렁임 — 기는 동안 squash&stretch, 예고 때 터질 듯 부풀고, 도약 중 살짝 늘어난다
       if (SLIME_TYPES.has(enemy.type)) {
         const inflate = inWindup ? 0.3 * windupProgress : charging ? 0.18 : 0;
@@ -3303,7 +3334,7 @@ export class Stage {
    *  본체 파편(spawnDeathBurst)과 별개로, 그 적의 머리와 같은 크기·색의 상자 하나가
    *  높이 솟았다 떨어진다. 거미는 머리가 따로 없어 제외 */
   spawnHeadPop(enemyType: string, x: number, z: number): void {
-    if (SPIDER_TYPES.has(enemyType) || SLIME_TYPES.has(enemyType)) return; // 머리가 없다
+    if (SPIDER_TYPES.has(enemyType) || SLIME_TYPES.has(enemyType) || enemyType === 'leech') return; // 머리가 없다
     const def = enemyDef(enemyType);
     const headSize = def.radius * 0.9;
     const color = new THREE.Color(ENEMY_COLORS[enemyType] ?? ENEMY_COLOR_FALLBACK).multiplyScalar(

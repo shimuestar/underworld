@@ -315,11 +315,13 @@
       "note": "중정 남쪽을 기어다닌다"
     },
     {
-      "type": "slime",
+      "type": "leech",
       "cell": [
-        9,
-        10
-      ]
+        12,
+        9
+      ],
+      "note": "스폰 복도 천장 — 처음 지나는 길목",
+      "ceiling": true
     },
     {
       "type": "slime",

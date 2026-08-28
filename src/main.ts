@@ -346,6 +346,13 @@ for (const name of [
   'enemy_split',
   'grave_dropped',
   'slime_ate',
+  'leech_drip',
+  'leech_chitter',
+  'leech_drop',
+  'leech_fall',
+  'leech_land',
+  'leech_splat',
+  'leech_ascend',
   'ghoul_latch',
   'ghoul_bite',
   'grapple_struggle',
@@ -712,6 +719,25 @@ events.on('enemy_volley_start', (payload) => {
   const info = payload as { shots: number };
   audio.play('boss_volley_draw');
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
+});
+// 거머리 — 천장 단서(방울·찌륵), 낙하 비명, 착지, 피격 추락
+events.on('leech_drip', () => audio.play('leech_drip'));
+events.on('leech_chitter', () => audio.play('leech_chitter'));
+events.on('leech_drop', () => audio.play('leech_shriek'));
+events.on('leech_fall', (payload) => {
+  const lf = payload as { x: number; z: number };
+  audio.play('hit_flesh');
+  stage.spawnDeathBurst(lf.x, lf.z, 'leech', 0.5);
+  showReaction('거머리가 떨어졌다!', 1200);
+});
+events.on('leech_land', (payload) => {
+  const ll = payload as { hit: boolean };
+  audio.play(ll.hit ? 'heavy_hit' : 'hit_wall');
+});
+events.on('leech_splat', (payload) => {
+  const ls = payload as { x: number; z: number };
+  audio.play('hit_flesh');
+  stage.spawnDeathBurst(ls.x, ls.z, 'leech', 0.7);
 });
 // 구울 — 붙잡힘/몸부림/밀쳐내기/기상. 파먹히는 동안 근접 키 연타가 유일한 탈출구다
 events.on('ghoul_latch', () => {
