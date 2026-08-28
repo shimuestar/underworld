@@ -76,13 +76,20 @@
         4,
         14
       ],
-      "note": "전투 홀 순찰 2인조 — 생명 입자를 놓고 경쟁한다"
+      "note": "전투 홀 순찰 3인조 — 생명 입자를 놓고 경쟁한다"
     },
     {
       "type": "ghoul",
       "cell": [
         2,
         14
+      ]
+    },
+    {
+      "type": "ghoul",
+      "cell": [
+        3,
+        18
       ]
     },
     {
@@ -212,6 +219,24 @@
       "ceiling": true
     },
     {
+      "type": "leech",
+      "cell": [
+        2,
+        8
+      ],
+      "note": "대기실 천장",
+      "ceiling": true
+    },
+    {
+      "type": "leech",
+      "cell": [
+        19,
+        16
+      ],
+      "note": "출구 로비 남쪽 천장",
+      "ceiling": true
+    },
+    {
       "type": "slime",
       "cell": [
         17,
@@ -248,6 +273,14 @@
       "cell": [
         16,
         8
+      ],
+      "feign": true
+    },
+    {
+      "type": "ghoul",
+      "cell": [
+        16,
+        6
       ],
       "feign": true
     },

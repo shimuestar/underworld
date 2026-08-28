@@ -324,6 +324,24 @@
       "ceiling": true
     },
     {
+      "type": "leech",
+      "cell": [
+        4,
+        20
+      ],
+      "note": "로비B 천장",
+      "ceiling": true
+    },
+    {
+      "type": "leech",
+      "cell": [
+        15,
+        24
+      ],
+      "note": "옥좌 로비 천장",
+      "ceiling": true
+    },
+    {
       "type": "ghoul",
       "cell": [
         16,
@@ -343,16 +361,31 @@
     {
       "type": "ghoul",
       "cell": [
+        16,
+        8
+      ],
+      "feign": true
+    },
+    {
+      "type": "ghoul",
+      "cell": [
         14,
         10
       ],
-      "note": "옥좌 접근로 순찰 2인조"
+      "note": "옥좌 접근로 순찰 3인조"
     },
     {
       "type": "ghoul",
       "cell": [
         15,
         11
+      ]
+    },
+    {
+      "type": "ghoul",
+      "cell": [
+        14,
+        12
       ]
     },
     {
