@@ -355,6 +355,7 @@ for (const name of [
   'slime_spilled',
   'grave_recovered',
   'boss_brood',
+  'brood_pop',
   'enemy_died',
   'enemy_damaged',
   'enemy_alerted',
@@ -738,6 +739,12 @@ events.on('ghoul_rise', () => {
 events.on('ghoul_ate_mote', () => audio.play('hit_flesh'));
 // 슬라임 식탐 — 삼킬 때 꿀렁 (게워 내는 건 죽음 파편·자석 픽업이 이미 요란하다)
 events.on('slime_ate', () => audio.play('slime_windup'));
+// 새끼 사출 — 머리에서 한 마리씩 튀어나올 때마다 철퍽
+events.on('brood_pop', (payload) => {
+  const bp = payload as { x: number; z: number; enemyType: string };
+  audio.play('slime_split');
+  stage.spawnDeathBurst(bp.x, bp.z, bp.enemyType, 0.55);
+});
 // 어미 슬라임 새끼 분리 — 크게 철퍽이며 어미 색 파편이 사방으로 튄다
 events.on('boss_brood', (payload) => {
   const b = payload as { enemyType: string; x: number; z: number };

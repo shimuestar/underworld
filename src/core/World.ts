@@ -414,6 +414,9 @@ export interface EnemyState {
   splitHandled?: boolean;
   /** 다음 점액 방울까지 남은 틱 (슬라임 궤적) */
   gooDropTicks?: number;
+  /** 아직 머리에서 튀어나올 새끼 수 / 다음 사출까지 틱 (어미 슬라임 순차 사출) */
+  broodLeft?: number;
+  broodTicks?: number;
   /** 삼킨 바닥 아이템 — 죽으면 전부 그 자리에 게워 낸다 (슬라임 식탐) */
   eatenItems?: GroundItemState[];
   /** 죽은 척 중 — 엎어져 있고 이름표도 없다. 기척·소음·피격이 깨운다 (구울) */

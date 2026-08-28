@@ -95,6 +95,11 @@ export function tick(world: World, dt: number): void {
     tickEnemy(world, enemy, dt);
     dropGoo(world, enemy);
     eatNearbyItems(world, enemy);
+    emitBrood(world, enemy);
+    // 사출된 새끼의 낙하 — 돌진 도약(charging)은 제 코드가 높이를 관리한다
+    if (enemy.ai !== 'charging' && (enemy.jumpY ?? 0) > 0) {
+      enemy.jumpY = Math.max(0, (enemy.jumpY ?? 0) - BROOD_FALL);
+    }
     // 피탄 경직 소진은 행동 뒤에 — 앞에서 줄이면 마지막 틱에 움직여버린다
     if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
     if ((enemy.slowTicks ?? 0) > 0) {
@@ -221,38 +226,80 @@ function handleSplit(world: World, enemy: EnemyState): void {
   });
 }
 
-/** 새끼 분리 — 어미가 제 몸을 떼어 새끼들을 사방에 뿌린다. healthCost 만큼 체력을
- *  잃으므로 무리 소환이 공짜 인플레가 되지 않는다 — 어미를 갉아먹는 선택이다 */
+/** 새끼 분리 — 시전이 끝나면 큐만 건다. 실제 사출은 emitBrood 가 한 마리씩,
+ *  머리에서 순차적으로 뛰쳐나오게 한다. healthCost 는 여기서 한 번에 치른다 */
 function spawnBrood(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
   const brood = attack.brood;
   if (!brood) return;
-  const motherR = enemyDef(enemy.type).radius;
-  const def = enemyDef(brood.type);
-  for (let i = 0; i < brood.count; i++) {
-    const ang = enemy.yaw + (Math.PI * 2 * i) / brood.count;
-    const x = enemy.x + Math.sin(ang) * (motherR + def.radius + 0.35);
-    const z = enemy.z + Math.cos(ang) * (motherR + def.radius + 0.35);
-    const child: EnemyState = {
-      id: nextSplitId++,
-      type: brood.type,
-      x, z, prevX: x, prevZ: z,
-      yaw: ang, homeYaw: ang,
-      health: def.health, alive: true,
-      ai: 'chase',
-      timer: 0,
-      noticeTicks: balance.enemyAi.noticeDelayTicks,
-      burnTicks: 0, burnDamagePerTick: 0,
-      hearingMul: def.hearingMul,
-    };
-    // 사방으로 뿌려진다 — 어미 곁에 뭉쳐 태어나면 광역 한 방 감이다
-    pushEnemy(child, Math.sin(ang), Math.cos(ang), brood.flingDistance ?? 0, FLING_TICKS);
-    world.enemies.push(child);
-  }
+  enemy.broodLeft = brood.count;
+  enemy.broodTicks = 1; // 다음 틱부터 튀어나오기 시작
   enemy.health = Math.max(1, enemy.health - brood.healthCost); // 제 몸을 떼어 준 값
   world.events.emit('boss_brood', {
     enemyId: enemy.id, enemyType: enemy.type, count: brood.count, x: enemy.x, z: enemy.z,
   });
 }
+
+/** 새끼 사출 — 간격마다 한 마리씩 어미 머리에서 포물선으로 뛰쳐나온다.
+ *  플레이어가 가까우면(aimRange) 그쪽으로(랜덤 퍼짐), 멀면 제 앞 사방으로 */
+function emitBrood(world: World, enemy: EnemyState): void {
+  if (!enemy.broodLeft) return;
+  const brood = enemyDef(enemy.type).summonAttack?.brood;
+  if (!brood) {
+    enemy.broodLeft = 0;
+    return;
+  }
+  enemy.broodTicks = (enemy.broodTicks ?? 1) - 1;
+  if ((enemy.broodTicks ?? 0) > 0) return;
+  enemy.broodTicks = brood.emitIntervalTicks ?? 6;
+  enemy.broodLeft--;
+
+  const motherDef = enemyDef(enemy.type);
+  const def = enemyDef(brood.type);
+  const p = world.player;
+  const pdx = p.x - enemy.x;
+  const pdz = p.z - enemy.z;
+  const pdist = Math.hypot(pdx, pdz);
+  let dirX: number;
+  let dirZ: number;
+  if (pdist > 0.001 && pdist <= (brood.aimRange ?? 0)) {
+    // 가까우면 플레이어 쪽으로 — 랜덤 퍼짐을 섞어 다섯 마리가 부채꼴로 덮친다
+    const spread = (((brood.aimSpreadDeg ?? 0) * Math.PI) / 180) * (Math.random() - 0.5);
+    const cos = Math.cos(spread);
+    const sin = Math.sin(spread);
+    dirX = (pdx / pdist) * cos + (pdz / pdist) * sin;
+    dirZ = -(pdx / pdist) * sin + (pdz / pdist) * cos;
+  } else {
+    const i = brood.count - enemy.broodLeft - 1;
+    const ang = enemy.yaw + (Math.PI * 2 * i) / brood.count;
+    dirX = Math.sin(ang);
+    dirZ = Math.cos(ang);
+  }
+  const x = enemy.x + dirX * motherDef.radius * 0.5;
+  const z = enemy.z + dirZ * motherDef.radius * 0.5;
+  const child: EnemyState = {
+    id: nextSplitId++,
+    type: brood.type,
+    x, z, prevX: x, prevZ: z,
+    yaw: Math.atan2(-dirX, -dirZ), homeYaw: Math.atan2(-dirX, -dirZ),
+    health: def.health, alive: true,
+    ai: 'chase',
+    timer: 0,
+    noticeTicks: balance.enemyAi.noticeDelayTicks,
+    burnTicks: 0, burnDamagePerTick: 0,
+    hearingMul: def.hearingMul,
+    // 머리 높이에서 태어나 포물선으로 떨어진다 — 낙하는 틱 루프의 BROOD_FALL 감쇠
+    jumpY: motherDef.height * 0.9,
+    prevJumpY: motherDef.height * 0.9,
+  };
+  pushEnemy(child, dirX, dirZ, brood.flingDistance ?? 0, FLING_TICKS);
+  world.enemies.push(child);
+  world.events.emit('brood_pop', {
+    enemyId: child.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, left: enemy.broodLeft,
+  });
+}
+
+/** 사출된 새끼의 낙하 속도 (m/틱) — 렌더 전용 높이(jumpY)가 바닥까지 내려온다 */
+const BROOD_FALL = 0.1;
 
 /** 슬라임 식탐 — 바닥 아이템을 지나가며 삼킨다. 삼킨 것은 죽을 때 전부 게워 낸다.
  *  열쇠·비석·각인은 안 먹는다 (진행이 배 속에 갇히면 안 된다). 자석에 걸린 것

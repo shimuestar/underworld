@@ -63,7 +63,15 @@ export interface EnemyAttackDef {
   /** 맞으면 피해·밀침 대신 들러붙어 파먹는다 — 방어로 막으면 평소처럼 흘려보낸다 (구울) */
   latches?: boolean;
   /** 무리 소환 내용물 — type: 'summon' 공격 전용. healthCost 만큼 제 체력을 떼어 준다 */
-  brood?: { type: string; count: number; maxAlive: number; healthCost: number; cooldownTicks: number; flingDistance?: number };
+  brood?: {
+    type: string; count: number; maxAlive: number; healthCost: number; cooldownTicks: number;
+    flingDistance?: number;
+    /** 한 마리씩 튀어나오는 간격(틱) — 머리에서 순차 사출 */
+    emitIntervalTicks?: number;
+    /** 플레이어가 이 거리 안이면 사출 방향이 플레이어 쪽(랜덤 퍼짐)이 된다 */
+    aimRange?: number;
+    aimSpreadDeg?: number;
+  };
   /** 원거리 공격 사용 최소 거리 (이보다 가까우면 근접) */
   minRange?: number;
   /** 이 거리 안에서만 고른다 (돌격처럼 "중거리 전용" 기술) */

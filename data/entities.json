@@ -86,7 +86,7 @@
       "chargeAttack": { "type": "contact", "arcDeg": 160, "leapHeight": 2.4, "chargeSpeed": 12, "chargeRunTicks": 30, "minRange": 3.5, "maxRange": 10, "windupTicks": 38, "recoverTicks": 50, "whiffRecoverTicks": 80, "impactRangeMul": 1.35, "playerKnockback": 2.6, "parryable": false, "telegraph": "red", "cooldownTicks": 260 },
       "_summonNote": "새끼 분리 — 소환이 공짜 인플레가 되지 않게 체력을 대가로 치른다. maxAlive 는 층의 새끼 총수(분열체 포함) 기준",
       "summonAttack": { "type": "summon", "windupTicks": 48, "recoverTicks": 40, "impactRangeMul": 1, "parryable": false, "telegraph": "purple",
-        "brood": { "type": "slime_small", "count": 5, "maxAlive": 6, "healthCost": 30, "cooldownTicks": 540, "flingDistance": 3.2 } },
+        "brood": { "type": "slime_small", "count": 5, "maxAlive": 6, "healthCost": 30, "cooldownTicks": 540, "flingDistance": 3.2, "emitIntervalTicks": 6, "aimRange": 7, "aimSpreadDeg": 55 } },
       "counters": { "pistol": "poor", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "good", "magic": "best", "deflect": "none" },
       "drops": []
     },

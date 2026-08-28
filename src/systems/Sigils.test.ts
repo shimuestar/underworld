@@ -613,14 +613,17 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     const mom = add('slime_mother', 14, 6);
     mom.ai = 'chase';
     const before = mom.health;
-    // 소환 windup(48틱)을 지나 발동까지
+    // 소환 windup(48틱) 뒤 머리에서 한 마리씩 순차 사출 — 다섯이 다 나올 때까지
     for (
       let i = 0;
-      i < 70 && world.enemies.filter((e) => e.type === 'slime_small').length === 0;
+      i < 200 && world.enemies.filter((e) => e.type === 'slime_small').length < 5;
       i++
     )
       Enemies.tick(world, DT);
     expect(world.enemies.filter((e) => e.type === 'slime_small' && e.alive)).toHaveLength(5);
+    // 머리 높이에서 태어나 떨어지는 중이다 (마지막 사출 직후라 아직 공중)
+    const lastborn = world.enemies.filter((e) => e.type === 'slime_small').at(-1)!;
+    expect(lastborn.jumpY ?? 0).toBeGreaterThan(0);
     expect(mom.health).toBe(before - 30);
     expect(mom.summonCooldown).toBeGreaterThan(0); // 재사용 대기가 돈다
   });
