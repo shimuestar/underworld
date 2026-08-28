@@ -282,8 +282,10 @@ interface EnemyVisual {
   /** 시전 충전 구체 (warden) */
   chargeOrb?: THREE.Mesh;
   chargeOrbLight?: THREE.PointLight;
-  /** 활 (archer) */
-  bow?: THREE.Mesh;
+  /** 활 (archer) — 활대·시위·재어 둔 화살 리그. 당김은 syncEnemies 가 매 프레임 갱신 */
+  bowRig?: BowRig;
+  /** 시위 당김 0~1 — 놓는 순간 0으로 스냅해 시위가 튕겨 돌아간다 */
+  bowDraw?: number;
   /** 머리 위 이름표 + HP 바 */
   plate: THREE.Sprite;
   plateTexture: THREE.CanvasTexture;
@@ -597,6 +599,82 @@ const DOOR_SWING_RAD = (100 * Math.PI) / 180;
 const STAIR_STEPS_DROP = 2.6;
 /** 전진 거리 — 계단을 향해 걸어 들어간다. 등속이라 누른 순간부터 발이 나간다 */
 const DESCENT_FORWARD = 3.0;
+/** 궁수 활 리그 치수 — 렌더 전용 (활대 반높이 / 시위 최대 당김 거리) */
+const BOW_HALF = 0.55;
+const BOW_DRAW_DIST = 0.42;
+
+/** 궁수 활 리그 — 디버그 미리보기(debug/archer.ts)와 같은 코드를 쓰도록 밖으로 뺐다.
+ *  로컬 좌표: 활대는 ±y 세로, 등(불룩한 쪽)이 -x, 시위는 +x 쪽으로 당겨진다.
+ *  그룹을 y축 -90° 돌려 두므로 부모(torso) 기준 -z(표적 쪽)로 화살이 향한다 */
+export interface BowRig {
+  group: THREE.Group;
+  stringTop: THREE.Mesh;
+  stringBottom: THREE.Mesh;
+  arrow: THREE.Group;
+}
+
+export function buildBowRig(): BowRig {
+  const group = new THREE.Group();
+  const woodMat = new THREE.MeshLambertMaterial({ color: 0x6b4a24 });
+  // 활대 — 반원 호. z축 90° 돌려 세로로 세우면 호의 배가 -x(표적 쪽)를 본다
+  const limb = new THREE.Mesh(new THREE.TorusGeometry(BOW_HALF, 0.035, 6, 16, Math.PI), woodMat);
+  limb.rotation.z = Math.PI / 2;
+  group.add(limb);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.1), woodMat);
+  grip.position.x = -BOW_HALF; // 호의 배 가운데 — 손잡이
+  group.add(grip);
+  const stringMat = new THREE.MeshBasicMaterial({ color: 0xd8d2c0 });
+  const makeString = (): THREE.Mesh => {
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(0.016, 1, 0.016), stringMat);
+    group.add(seg);
+    return seg;
+  };
+  const stringTop = makeString();
+  const stringBottom = makeString();
+  // 재어 둔 화살 — 오늬(꼬리)가 리그 원점에 와서 시위에 걸린다. 촉은 -x(표적 쪽)
+  const arrow = new THREE.Group();
+  const shaft = new THREE.Mesh(
+    new THREE.BoxGeometry(0.85, 0.03, 0.03),
+    new THREE.MeshLambertMaterial({ color: 0x9a7d4e }),
+  );
+  shaft.position.x = -0.425;
+  arrow.add(shaft);
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(0.09, 0.05, 0.05),
+    new THREE.MeshLambertMaterial({ color: 0xb9c2cc }),
+  );
+  head.position.x = -0.88;
+  arrow.add(head);
+  const fletch = new THREE.Mesh(
+    new THREE.BoxGeometry(0.14, 0.11, 0.015),
+    new THREE.MeshLambertMaterial({ color: 0xc94f42 }),
+  );
+  fletch.position.x = -0.07;
+  arrow.add(fletch);
+  arrow.visible = false;
+  group.add(arrow);
+  group.rotation.y = -Math.PI / 2; // 로컬 -x → 부모 -z (표적 쪽)
+  const rig = { group, stringTop, stringBottom, arrow };
+  updateBowDraw(rig, 0, false);
+  return rig;
+}
+
+/** 당김 0~1 에 맞춰 시위 두 가닥과 재어 둔 화살을 옮긴다 */
+export function updateBowDraw(rig: BowRig, draw: number, showArrow: boolean): void {
+  const nockX = draw * BOW_DRAW_DIST;
+  const segLen = Math.hypot(BOW_HALF, nockX);
+  const segTilt = Math.atan2(nockX, BOW_HALF);
+  rig.stringTop.scale.y = segLen;
+  rig.stringBottom.scale.y = segLen;
+  rig.stringTop.position.set(nockX / 2, BOW_HALF / 2, 0);
+  rig.stringBottom.position.set(nockX / 2, -BOW_HALF / 2, 0);
+  rig.stringTop.rotation.z = segTilt;
+  rig.stringBottom.rotation.z = -segTilt;
+  rig.arrow.visible = showArrow;
+  rig.arrow.position.x = nockX;
+  rig.group.rotation.z = -0.18 * draw; // 당길수록 살짝 들려 조준한다
+}
+
 /** 헤드샷 머리 젖힘 지속(ms) */
 const HEADSHOT_SHAKE_MS = 320;
 /** 적 다리 위상 속도 — 보폭 1.4m 에 한 사이클 (rad/m) */
@@ -2222,14 +2300,13 @@ export class Stage {
       group.add(visual.chargeOrb);
     }
 
-    // 활 (궁수)
+    // 활 (궁수) — 곡궁 리그. 왼손 쪽에 세로로 들리고, 시위·화살은 매 프레임 갱신된다
     if (type === 'goblin_archer') {
-      visual.bow = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, 1.15, 0.08),
-        new THREE.MeshLambertMaterial({ color: 0x5c4426 }),
-      );
-      visual.bow.position.set(0.15, def.height * 0.58, -def.radius - 0.25);
-      torso.add(visual.bow);
+      const rig = buildBowRig();
+      rig.group.position.set(-def.radius * 0.55, def.height * 0.62, -def.radius - 0.15);
+      torso.add(rig.group);
+      visual.bowRig = rig;
+      visual.bowDraw = 0;
     }
 
     if (def.magicBarrier) {
@@ -2817,10 +2894,25 @@ export class Stage {
         if (visual.chargeOrbLight) visual.chargeOrbLight.intensity = 2.2 * windupProgress;
       }
 
-      // 활 시위 당기기 — windup에 활이 젖혀진다
-      if (visual.bow) {
-        const bowTilt = inWindup ? -0.35 * windupProgress : 0;
-        visual.bow.rotation.x += (bowTilt - visual.bow.rotation.x) * 0.3;
+      // 활 — windup 동안 시위를 당긴다: 재어 둔 화살이 보이고 오늬가 몸 쪽으로
+      // 미끄러지며 시위가 V 자로 꺾인다. 놓는 순간 0으로 스냅해 시위가 튕긴다
+      if (visual.bowRig) {
+        const drawTarget = inWindup ? Math.min(1, windupProgress * 1.15) : 0;
+        const prevDraw = visual.bowDraw ?? 0;
+        const draw = drawTarget > prevDraw ? prevDraw + (drawTarget - prevDraw) * 0.25 : drawTarget;
+        visual.bowDraw = draw;
+        updateBowDraw(visual.bowRig, draw, inWindup);
+        if (trembling) visual.bowRig.arrow.position.y = Math.sin(now / 16) * 0.012;
+        // 당길수록 활이 몸 앞으로 나간다 — 조준 자세
+        visual.bowRig.group.position.z = -(def2.radius + 0.15) - 0.12 * draw;
+        // 팔 — 왼팔은 활을 밀어 뻗고, 오른팔(시위 손)은 빠르게 들어올린 뒤 귀 쪽으로 끌어온다.
+        // 다리 스윙 블록이 먼저 쓴 각을 여기서 덮는다 (당기는 동안만 — 놓으면 팔젓기로 복귀)
+        if (visual.plainArms && draw > 0.001) {
+          const holdArm = visual.plainArms[0];
+          const drawArm = visual.plainArms[1];
+          if (holdArm) holdArm.rotation.x = 0.7 + 0.85 * draw; // 만작이면 거의 수평으로 뻗는다
+          if (drawArm) drawArm.rotation.x = 0.55 + 0.85 * Math.min(1, draw * 2.5) - 0.45 * draw;
+        }
       }
 
       // 방패 — 피격 시 흰 번쩍. 스태거·밀림 중엔 팔이 내려가 가드가 풀린다.
