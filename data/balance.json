@@ -587,8 +587,8 @@
     "attackNoiseRadius": 2,
     "_moveNoiseNote": "질주 발소리·회피 대시의 소음 — 이 반경의 대기 적이 듣는다. 걷기는 무음이라 몰래 갈 땐 걸어야 한다",
     "moveNoiseRadius": 1.5,
-    "_hitNoiseNote": "피격음 — 맞은 적 기준 이 반경의 동료도 깬다. 몰래 쏴도 바로 옆 놈은 듣는다",
-    "hitNoiseRadius": 2,
+    "_hitNoiseNote": "피격음 — 맞은 적 기준 이 반경의 동료도 깬다 (각도·시야선 무관). 격자 한 칸(4m)과 같아 같은 방 동료는 대개 듣는다 — 2에서 상향 (2026-08-28)",
+    "hitNoiseRadius": 4,
     "_chargeNote": "크게 밀려난 뒤 확률적으로 달려들며 찌른다 — 멀리서 그냥 걸어오면 위협이 없다",
     "chargeChanceAfterKnockback": 1.0
   },

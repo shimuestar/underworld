@@ -843,7 +843,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(eaves.ai).toBe('chase');
   });
 
-  it('피격음 — 화살에 맞은 적 코앞(2m)의 동료도 깬다', () => {
+  it('피격음 — 화살에 맞은 적 곁(4m)의 동료도 깬다', () => {
     const victim = add('goblin_runner', 14, 6); // 플레이어에게서 8m — 활 소음(4m) 밖
     const buddy = add('goblin_runner', 14, 7.5); // 피해자 옆 1.5m
     for (const e of [victim, buddy]) {
