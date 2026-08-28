@@ -350,6 +350,7 @@ for (const name of [
   'ghoul_head_broken',
   'ghoul_head_hop',
   'ghoul_moan',
+  'leech_struggle',
   'leech_face_attach',
   'leech_suck',
   'leech_face_kick',
@@ -743,6 +744,12 @@ events.on('enemy_volley_start', (payload) => {
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
 });
 events.on('ghoul_moan', () => audio.play('ghoul_moan'));
+// 거머리 몸부림 — 연타 한 번 = 쥐어뜯기 한 번
+events.on('leech_struggle', () => {
+  audio.play('struggle_push');
+  stage.triggerHammerSwing(1, 1.7);
+  stage.triggerCameraKick(0.16, 80);
+});
 // 거머리 얼굴 흡혈 — 부착/빨기/걷어차기/자진 이탈
 events.on('leech_face_attach', () => {
   audio.play('ghoul_latch');
@@ -1338,6 +1345,7 @@ function respawnAtAltar(): void {
   world.grappleEnemyId = null;
   world.grappleMash = 0;
   world.faceLeechId = null;
+  world.faceLeechMash = 0;
   world.dead = false;
   deathOverlay!.classList.remove('visible');
   events.emit('respawned', { x: point.x, z: point.z });
@@ -1591,6 +1599,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   world.grappleEnemyId = null;
   world.grappleMash = 0;
   world.faceLeechId = null;
+  world.faceLeechMash = 0;
 
   const p = world.player;
   p.x = at.x;
@@ -2189,12 +2198,15 @@ function render(alpha: number): void {
   const nearLever = world.leverInView !== null && !world.dead && !world.uiOpen;
   // 거머리 얼굴 가림 — 흡혈당하는 동안 화면을 덮는다
   faceLeechEl!.classList.toggle('visible', world.faceLeechId !== null);
-  // 구울 몸부림 게이지 — 연타가 원형 링을 시계 방향으로 채운다
-  const grappledNow = world.grappleEnemyId !== null;
-  grappleEl!.classList.toggle('visible', grappledNow);
-  if (grappledNow) {
-    const need = balance.ghoulGrapple.mashToEscape;
-    const done = Math.min(world.grappleMash, need);
+  // 몸부림 게이지 — 구울 파먹기·거머리 흡혈 공용. 연타가 원형 링을 채운다
+  const ghoulGrip = world.grappleEnemyId !== null;
+  const leechGrip = world.faceLeechId !== null;
+  grappleEl!.classList.toggle('visible', ghoulGrip || leechGrip);
+  if (ghoulGrip || leechGrip) {
+    const need = ghoulGrip
+      ? balance.ghoulGrapple.mashToEscape
+      : enemyDef('leech').faceSuck!.mashToEscape;
+    const done = Math.min(ghoulGrip ? world.grappleMash : world.faceLeechMash, need);
     grappleRing!.style.setProperty('--frac', String(done / need));
     grappleCount!.textContent = `${done}/${need}`;
   }

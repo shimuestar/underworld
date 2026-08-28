@@ -756,8 +756,10 @@ export class World {
   grappleEnemyId: number | null = null;
   /** 붙잡힌 동안 누적한 몸부림(근접 키) 횟수 */
   grappleMash = 0;
-  /** 얼굴에 붙어 흡혈 중인 거머리 id — 해머 한 방으로 떼어 걷어찬다 */
+  /** 얼굴에 붙어 흡혈 중인 거머리 id — 근접 연타(mashToEscape)로 떼어 걷어찬다 */
   faceLeechId: number | null = null;
+  /** 거머리를 떼어내려 누른 연타 횟수 */
+  faceLeechMash = 0;
 
   enemies: EnemyState[];
   level: Level;

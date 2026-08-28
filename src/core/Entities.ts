@@ -142,6 +142,8 @@ export interface EnemyDef {
   /** 얼굴 흡혈 (거머리) — 낙하 명중 시 얼굴에 붙어 피를 빤다 */
   faceSuck?: {
     intervalTicks: number; damage: number; heal: number; maxSucks: number;
+    /** 떼어내는 데 필요한 근접 연타 수 — 누르고 있는 동안은 피를 못 빤다 */
+    mashToEscape: number;
     kickDistance: number; kickStunTicks: number; selfDetachHop: number;
   };
   /** 천장 잠복 (거머리) — 낙하 사냥의 모든 손잡이 */

@@ -745,8 +745,21 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     Enemies.tick(world, DT);
     expect(world.player.health).toBe(hp - 6); // 빨렸다
     expect(l.health).toBe(18); // 10 + 8 — 빤 만큼 찼다
-    world.input = { ...Input.emptySnapshot(), meleePressed: true };
-    Enemies.tick(world, DT);
+    // 누르고 있으면 못 빤다 — 흡혈 타이머가 멈춘다
+    l.timer = 1;
+    const hp2 = world.player.health;
+    for (let i = 0; i < 10; i++) {
+      // 게임은 매 틱 입력을 새로 샘플링한다 — 홀드는 틱마다 참으로 들어온다
+      world.input = { ...Input.emptySnapshot(), meleeHeld: true };
+      Enemies.tick(world, DT);
+    }
+    expect(world.player.health).toBe(hp2); // 움켜쥔 동안 흡혈 없음
+    // 연타 6번에 떼어서 걷어찬다
+    const need = enemyDef2('leech').faceSuck!.mashToEscape;
+    for (let i = 0; i < need; i++) {
+      world.input = { ...Input.emptySnapshot(), meleePressed: true };
+      Enemies.tick(world, DT);
+    }
     expect(world.faceLeechId).toBeNull(); // 걷어찼다
     expect((l.kbTicks ?? 0) > 0).toBe(true); // 멀리 날아가는 중
     expect(l.whiffed).toBe(true); // 뻗었다 — 반격 창

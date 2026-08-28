@@ -418,6 +418,7 @@ function attachFace(world: World, enemy: EnemyState, def: ReturnType<typeof enem
   enemy.suckCount = 0;
   enemy.jumpY = balance.player.eyeHeight;
   world.faceLeechId = enemy.id;
+  world.faceLeechMash = 0;
   world.events.emit('leech_face_attach', { enemyId: enemy.id });
 }
 
@@ -434,7 +435,9 @@ function tickFaceSuck(world: World, enemy: EnemyState, def: ReturnType<typeof en
   enemy.x = p.x;
   enemy.z = p.z;
   enemy.jumpY = balance.player.eyeHeight;
-  enemy.timer--;
+  // 움켜쥐기 — 근접 키를 누르고 있는 동안은 입을 틀어막아 피를 못 빤다 (타이머 정지)
+  const gripping = world.input.meleeHeld || world.input.meleePressed;
+  if (!gripping) enemy.timer--;
   if (enemy.timer <= 0) {
     enemy.timer = fs.intervalTicks;
     enemy.suckCount = (enemy.suckCount ?? 0) + 1;
@@ -454,11 +457,16 @@ function tickFaceSuck(world: World, enemy: EnemyState, def: ReturnType<typeof en
       return;
     }
   }
-  // 해머 = 얼굴에서 떼어 발로 걷어찬다
+  // 떼어내기 — 좀비 파먹기처럼 연타다. mashToEscape 번 누르면 떼어서 발로 걷어찬다
   if (world.input.meleePressed) {
-    detachFace(world, enemy, def, 'kick');
-    world.input = { ...world.input, meleePressed: false }; // 이 타는 걷어차기다 — 스윙으로 새지 않게
+    world.faceLeechMash++;
+    world.events.emit('leech_struggle', { count: world.faceLeechMash, need: fs.mashToEscape });
+    if (world.faceLeechMash >= fs.mashToEscape) {
+      detachFace(world, enemy, def, 'kick');
+    }
   }
+  // 움켜쥔 손은 해머를 못 휘두른다 — 이 키는 지금 거머리를 쥐어뜯는 중이다
+  world.input = { ...world.input, meleePressed: false, meleeHeld: false };
 }
 
 /** 얼굴에서 떨어진다 — kick: 걷어차여 멀리 + 길게 뻗음 / self: 스스로 점프 / drop: 조용히 */
