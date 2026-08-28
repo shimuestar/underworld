@@ -854,6 +854,8 @@ events.on('crack_wall_broken', (payload) => {
 // ---- 피격 연출 — 붉은 비네트 + 피격음 (방어 성공 시엔 방어음만) ----
 const dmgDir = document.getElementById('dmgdir');
 const grappleEl = document.getElementById('grapple');
+const grappleRing = document.getElementById('grapple-ring');
+const grappleCount = document.getElementById('grapple-count');
 events.on('player_damaged', (payload) => {
   const hit = payload as { blocked?: boolean; srcX?: number; srcZ?: number };
   if (hit.blocked) return;
@@ -2101,13 +2103,14 @@ function render(alpha: number): void {
   // 제단/문 프롬프트 — 상호작용 가능한 것 안내
   const nearDoor = world.doorInView !== null && !world.dead && !world.uiOpen;
   const nearLever = world.leverInView !== null && !world.dead && !world.uiOpen;
-  // 구울 몸부림 게이지 — 물린 동안 몇 번 남았는지 알약으로 보여 준다
+  // 구울 몸부림 게이지 — 연타가 원형 링을 시계 방향으로 채운다
   const grappledNow = world.grappleEnemyId !== null;
   grappleEl!.classList.toggle('visible', grappledNow);
   if (grappledNow) {
     const need = balance.ghoulGrapple.mashToEscape;
     const done = Math.min(world.grappleMash, need);
-    grappleEl!.textContent = `물어뜯긴다! 근접 공격 연타!\n${'●'.repeat(done)}${'○'.repeat(need - done)}  ${done}/${need}`;
+    grappleRing!.style.setProperty('--frac', String(done / need));
+    grappleCount!.textContent = `${done}/${need}`;
   }
   const showAltarPrompt =
     world.altarInView && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;

@@ -448,23 +448,49 @@
         opacity: 0;
         pointer-events: none;
       }
-      /* 구울 몸부림 게이지 — 물린 동안 조준점 아래에 크게. 연타 진행이 알약으로 찬다 */
+      /* 구울 몸부림 게이지 — 물린 동안 조준점 아래. 연타가 원형 링을 시계 방향으로 채운다 */
       #grapple {
         position: fixed;
         left: 50%;
-        top: 58%;
+        top: 54%;
         transform: translateX(-50%);
-        text-align: center;
-        white-space: pre-line;
-        font: bold 22px/1.5 monospace;
-        color: #ff5a4a;
-        text-shadow: 0 0 8px rgba(120, 0, 0, 0.9), 0 2px 2px #000;
-        letter-spacing: 2px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
         opacity: 0;
         pointer-events: none;
       }
       #grapple.visible {
         opacity: 1;
+      }
+      #grapple-ring {
+        width: 94px;
+        height: 94px;
+        border-radius: 50%;
+        background: conic-gradient(#ff5a4a calc(var(--frac, 0) * 1turn), rgba(70, 12, 12, 0.55) 0turn);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 16px rgba(160, 0, 0, 0.75);
+      }
+      #grapple-inner {
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        background: rgba(12, 8, 8, 0.85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font: bold 20px monospace;
+        color: #ff6a5a;
+        text-shadow: 0 0 6px rgba(120, 0, 0, 0.9);
+      }
+      #grapple-label {
+        font: bold 20px monospace;
+        color: #ff5a4a;
+        text-shadow: 0 0 8px rgba(120, 0, 0, 0.9), 0 2px 2px #000;
+        letter-spacing: 2px;
       }
       /* 층 이동 암전 — 계단을 내려가는 동안 검게 잠긴다. 패링 탈색(#flash)과 달리
          일반 혼합이라 화면을 그냥 덮는다 */
@@ -492,7 +518,10 @@
     <div id="fade"></div>
     <div id="hurt"></div>
     <div id="dmgdir"></div>
-    <div id="grapple"></div>
+    <div id="grapple">
+      <div id="grapple-ring"><div id="grapple-inner"><span id="grapple-count"></span></div></div>
+      <div id="grapple-label">물어뜯긴다! 근접 공격 연타!</div>
+    </div>
     <div id="hud"></div>
     <div id="crosshair"></div>
     <div id="death">
