@@ -303,15 +303,18 @@ export class GameAudio {
         this.noise(0.05, 0.3, 700);
         break;
       case 'head_break':
-        // 머리 격파 — 마른 파열 + 묵직한 퍽 (총·화살·해머 스윙 공통 타격감)
-        this.noise(0.09, 0.85, 1600);
-        this.tone(170, 0.12, 'square', 0.55, 0, 65);
-        this.tone(520, 0.05, 'triangle', 0.35, 0, 220);
+        // 머리 격파 — 호박 으깨기: 겉이 빠직 갈라진 뒤 속이 퍽 터진다
+        this.noise(0.04, 0.9, 3200);
+        this.noise(0.22, 0.95, 750);
+        this.tone(85, 0.18, 'square', 0.8, 0, 45);
+        this.tone(240, 0.08, 'sawtooth', 0.5, 0, 90);
         break;
       case 'head_stomp':
-        // 밟아 터트리기 — 젖은 파열 + 낮은 퍽
-        this.noise(0.1, 0.7, 1000);
-        this.tone(110, 0.09, 'square', 0.5, 0, 60);
+        // 밟아 으깨기 — 같은 호박 소리를 발밑에서 더 크고 무겁게
+        this.noise(0.05, 1.0, 2800);
+        this.noise(0.26, 1.0, 600);
+        this.tone(70, 0.22, 'square', 0.9, 0, 38);
+        this.tone(200, 0.1, 'sawtooth', 0.55, 0, 80);
         break;
       case 'leech_suck':
         // 흡혈 — 젖은 빨아들임: 노이즈가 좁아지며 낮은 톤이 딸려 내려간다
