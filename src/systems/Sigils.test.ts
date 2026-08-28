@@ -695,6 +695,39 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(moans.length).toBeGreaterThan(0); // 걷기 5틱 뒤 첫 흐느낌
   });
 
+  it('거머리 흡혈 — 피를 빨아 제 몸을 채우고, 해머 한 방에 걷어차인다', () => {
+    const l = add('leech', 6.5, 6);
+    l.ai = 'latched';
+    l.timer = 1;
+    l.health = 10;
+    world.faceLeechId = l.id;
+    const hp = world.player.health;
+    world.input = Input.emptySnapshot();
+    Enemies.tick(world, DT);
+    expect(world.player.health).toBe(hp - 6); // 빨렸다
+    expect(l.health).toBe(18); // 10 + 8 — 빤 만큼 찼다
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Enemies.tick(world, DT);
+    expect(world.faceLeechId).toBeNull(); // 걷어찼다
+    expect((l.kbTicks ?? 0) > 0).toBe(true); // 멀리 날아가는 중
+    expect(l.whiffed).toBe(true); // 뻗었다 — 반격 창
+    world.input = Input.emptySnapshot();
+  });
+
+  it('거머리 흡혈 — 3번 빨면 배불러 스스로 떨어져 나간다', () => {
+    const l = add('leech', 6.5, 6);
+    l.ai = 'latched';
+    l.timer = 1;
+    world.faceLeechId = l.id;
+    const hp = world.player.health;
+    for (let i = 0; i < 200 && world.faceLeechId !== null; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect(world.faceLeechId).toBeNull();
+    expect(world.player.health).toBe(hp - 18); // 정확히 3번만 빨렸다
+  });
+
   it('거머리 — 밑을 지나면 떨어져 내려찍고, 비키면 바닥을 헛찍고 뻗는다', () => {
     const leech = add('leech', 8, 6); // 플레이어(6,6)에서 2m — dropRadius(2.5) 안
     leech.lurking = true;

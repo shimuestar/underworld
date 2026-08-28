@@ -139,6 +139,11 @@ export interface EnemyDef {
   idleWander?: { radius: number; speedMul: number; pauseTicks: number };
   /** 걷는 동안 이 간격으로 흐느낀다 — 들리는 거리(14m)에서만 (구울) */
   moanIntervalTicks?: number;
+  /** 얼굴 흡혈 (거머리) — 낙하 명중 시 얼굴에 붙어 피를 빤다 */
+  faceSuck?: {
+    intervalTicks: number; damage: number; heal: number; maxSucks: number;
+    kickDistance: number; kickStunTicks: number; selfDetachHop: number;
+  };
   /** 천장 잠복 (거머리) — 낙하 사냥의 모든 손잡이 */
   ceilingLurk?: {
     dropRadius: number; chitterRadius: number; dripIntervalTicks: number;

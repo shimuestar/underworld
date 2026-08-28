@@ -69,6 +69,8 @@
         "groundTicks": 300, "reascendMinDist": 7, "ascendDurTicks": 18, "fallStunTicks": 90
       },
       "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 24, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
+      "_faceSuckNote": "낙하가 명중하면 얼굴에 붙어 흡혈한다 — 화면을 가리고, 빨 때마다 제 몸을 채운다. 해머 한 방이면 떼어 걷어차고, maxSucks 번 빨면 배불러 스스로 뛰어내린다",
+      "faceSuck": { "intervalTicks": 55, "damage": 6, "heal": 8, "maxSucks": 3, "kickDistance": 5, "kickStunTicks": 50, "selfDetachHop": 3 },
       "counters": { "pistol": "best", "rifle": "best", "grenade": "poor", "flash": "good", "melee": "good", "magic": "good", "deflect": "none" },
       "drops": []
     },

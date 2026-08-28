@@ -59,6 +59,7 @@ export function tick(world: World, dt: number): void {
   for (const enemy of world.enemies) {
     if (!enemy.alive) {
       if (world.grappleEnemyId === enemy.id) releaseGrapple(world, enemy, false); // 죽으면 놓는다
+      if (world.faceLeechId === enemy.id) world.faceLeechId = null; // 얼굴에서 흘러내린다
       handleSplit(world, enemy); // 슬라임 분열 — 어디서 어떻게 죽었든 여기서 한 번만 가른다
       continue;
     }
@@ -99,6 +100,7 @@ export function tick(world: World, dt: number): void {
     // 사출된 새끼의 낙하 — 돌진 도약(charging)·거머리 수직 구간은 제 코드가 높이를 관리한다
     if (
       enemy.ai !== 'charging' &&
+      enemy.ai !== 'latched' &&
       !enemy.lurking &&
       (enemy.dropTicks ?? 0) <= 0 &&
       (enemy.ascendTicks ?? 0) <= 0 &&
@@ -409,6 +411,73 @@ function releaseGrapple(world: World, enemy: EnemyState, shoved: boolean): void 
   }
 }
 
+/** 얼굴 흡혈 틱 — 얼굴에 붙어 화면을 가리고 피를 빤다. 해머 한 방 = 떼어 걷어차기,
+ *  maxSucks 번 빨면 배불러 스스로 뒤로 점프해 떨어진다 */
+function tickFaceSuck(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  const fs = def.faceSuck!;
+  const p = world.player;
+  if (world.dead || world.faceLeechId !== enemy.id) {
+    detachFace(world, enemy, def, 'drop');
+    return;
+  }
+  // 얼굴 높이에 붙어 따라다닌다 — 모델은 Stage 가 숨기고 화면 가림(HUD)이 대신한다
+  enemy.x = p.x;
+  enemy.z = p.z;
+  enemy.jumpY = balance.player.eyeHeight;
+  enemy.timer--;
+  if (enemy.timer <= 0) {
+    enemy.timer = fs.intervalTicks;
+    enemy.suckCount = (enemy.suckCount ?? 0) + 1;
+    p.health -= fs.damage;
+    enemy.health = Math.min(def.health, enemy.health + fs.heal); // 빤 만큼 제 몸이 찬다
+    world.events.emit('leech_suck', { count: enemy.suckCount, max: fs.maxSucks });
+    world.events.emit('player_damaged', { amount: fs.damage, health: p.health, source: 'leech_suck' });
+    if (p.health <= 0) {
+      p.health = 0;
+      world.dead = true;
+      world.events.emit('player_died', { tick: world.tick });
+      detachFace(world, enemy, def, 'drop');
+      return;
+    }
+    if ((enemy.suckCount ?? 0) >= fs.maxSucks) {
+      detachFace(world, enemy, def, 'self'); // 배불렀다 — 스스로 뛰어내린다
+      return;
+    }
+  }
+  // 해머 = 얼굴에서 떼어 발로 걷어찬다
+  if (world.input.meleePressed) {
+    detachFace(world, enemy, def, 'kick');
+    world.input = { ...world.input, meleePressed: false }; // 이 타는 걷어차기다 — 스윙으로 새지 않게
+  }
+}
+
+/** 얼굴에서 떨어진다 — kick: 걷어차여 멀리 + 길게 뻗음 / self: 스스로 점프 / drop: 조용히 */
+function detachFace(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  how: 'kick' | 'self' | 'drop',
+): void {
+  if (world.faceLeechId === enemy.id) world.faceLeechId = null;
+  enemy.suckCount = 0;
+  const p = world.player;
+  const fx = -Math.sin(p.yaw);
+  const fz = -Math.cos(p.yaw);
+  enemy.x = p.x + fx * 0.8; // 얼굴 앞에서 출발
+  enemy.z = p.z + fz * 0.8;
+  enemy.jumpY = how === 'kick' ? 1.3 : 0.9;
+  const fs = def.faceSuck!;
+  if (how !== 'drop') {
+    pushEnemy(enemy, fx, fz, how === 'kick' ? fs.kickDistance : fs.selfDetachHop, 16);
+  }
+  enemy.ai = how === 'drop' ? 'chase' : 'recover';
+  enemy.timer = how === 'kick' ? fs.kickStunTicks : 30;
+  enemy.whiffed = how === 'kick'; // 걷어차인 놈은 무방비로 뻗는다
+  enemy.groundTicks = def.ceilingLurk?.groundTicks ?? 0;
+  if (how === 'kick') world.events.emit('leech_face_kick', { enemyId: enemy.id });
+  else if (how === 'self') world.events.emit('leech_face_detach', { enemyId: enemy.id });
+}
+
 /** 거머리 낙하 시작 — stunnedFall 이면 제자리 추락(뻗음), 아니면 먹이 좌표로 덮친다 */
 function startDrop(
   world: World,
@@ -529,6 +598,16 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     const idist = Math.hypot(idx, idz);
     if (idist <= lurk.dropAoeRadius && p.iframeTicks <= 0) {
       const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
+      // 명중 + 방어 실패 + 얼굴이 비어 있으면 — 들러붙어 흡혈 시작 (내려찍기 피해 대신)
+      if (!blocked && def.faceSuck && world.faceLeechId === null) {
+        enemy.ai = 'latched';
+        enemy.timer = def.faceSuck.intervalTicks;
+        enemy.suckCount = 0;
+        enemy.jumpY = balance.player.eyeHeight;
+        world.faceLeechId = enemy.id;
+        world.events.emit('leech_face_attach', { enemyId: enemy.id });
+        return;
+      }
       const dmg = blocked ? lurk.dropDamage * balance.block.chipDamageRatio : lurk.dropDamage;
       p.health -= dmg;
       pushPlayer(p, idx, idz, 1.6, balance.playerKnockback.ticks);
@@ -1001,6 +1080,11 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     // 파먹기 — 플레이어에게 매달려 일정 간격으로 물어뜯는다. 시선만 자유롭고
     // 이동·공격·스킬·회피는 전부 잠긴다. 근접 키 연타(mashToEscape)로 밀쳐내야 풀린다
     case 'latched': {
+      // 거머리 — 얼굴에 붙어 흡혈한다 (구울 파먹기와 다른 규칙)
+      if (def.faceSuck) {
+        tickFaceSuck(world, enemy, def);
+        break;
+      }
       const grip = balance.ghoulGrapple;
       if (world.dead || world.grappleEnemyId !== enemy.id || dist > 4) {
         releaseGrapple(world, enemy, false);

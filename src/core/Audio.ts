@@ -26,6 +26,7 @@ export type SoundName =
   | 'stairs_travel'
   | 'wall_crumble'
   | 'footstep_run'
+  | 'leech_suck'
   | 'leech_drip'
   | 'leech_chitter'
   | 'leech_shriek'
@@ -298,6 +299,11 @@ export class GameAudio {
         // 몸부림 — 짧은 힘쓰는 소리 (낮은 퍽 + 숨)
         this.tone(130, 0.07, 'square', 0.4, 0, 80);
         this.noise(0.05, 0.3, 700);
+        break;
+      case 'leech_suck':
+        // 흡혈 — 젖은 빨아들임: 노이즈가 좁아지며 낮은 톤이 딸려 내려간다
+        this.noise(0.28, 0.5, 900);
+        this.tone(340, 0.3, 'sawtooth', 0.3, 0, 90);
         break;
       case 'leech_drip':
         // 점액 방울 — 뚝. 천장에 뭔가 있다는 유일한 소리 단서라 또렷하고 짧게

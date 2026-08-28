@@ -435,6 +435,8 @@ export interface EnemyState {
   dropTargetX?: number;
   dropTargetZ?: number;
   dropFromY?: number;
+  /** 얼굴 흡혈 횟수 — maxSucks 에 닿으면 배불러 스스로 떨어진다 */
+  suckCount?: number;
   /** 재상승 구간 남은 틱 / 지상에 머문 뒤 재상승까지 남은 틱 */
   ascendTicks?: number;
   groundTicks?: number;
@@ -724,6 +726,8 @@ export class World {
   grappleEnemyId: number | null = null;
   /** 붙잡힌 동안 누적한 몸부림(근접 키) 횟수 */
   grappleMash = 0;
+  /** 얼굴에 붙어 흡혈 중인 거머리 id — 해머 한 방으로 떼어 걷어찬다 */
+  faceLeechId: number | null = null;
 
   enemies: EnemyState[];
   level: Level;

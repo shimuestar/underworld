@@ -347,6 +347,10 @@ for (const name of [
   'grave_dropped',
   'slime_ate',
   'ghoul_moan',
+  'leech_face_attach',
+  'leech_suck',
+  'leech_face_kick',
+  'leech_face_detach',
   'leech_drip',
   'leech_chitter',
   'leech_drop',
@@ -727,6 +731,25 @@ events.on('enemy_volley_start', (payload) => {
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
 });
 events.on('ghoul_moan', () => audio.play('ghoul_moan'));
+// 거머리 얼굴 흡혈 — 부착/빨기/걷어차기/자진 이탈
+events.on('leech_face_attach', () => {
+  audio.play('ghoul_latch');
+  stage.triggerCameraKick(0.5, 220);
+});
+events.on('leech_suck', () => {
+  audio.play('leech_suck');
+  stage.triggerCameraKick(0.24, 130);
+});
+events.on('leech_face_kick', () => {
+  audio.play('heavy_hit');
+  stage.triggerHammerSwing(2, 1.5); // 떼어서 걷어차는 손맛
+  stage.triggerCameraKick(0.38, 180);
+  showReaction('걷어찼다!', 1000);
+});
+events.on('leech_face_detach', () => {
+  audio.play('leech_shriek');
+  showReaction('거머리가 배불러 떨어져 나갔다', 1500);
+});
 // 거머리 — 천장 단서(방울·찌륵), 낙하 비명, 착지, 피격 추락
 events.on('leech_drip', () => audio.play('leech_drip'));
 events.on('leech_chitter', () => audio.play('leech_chitter'));
@@ -894,6 +917,7 @@ events.on('crack_wall_broken', (payload) => {
 // ---- 피격 연출 — 붉은 비네트 + 피격음 (방어 성공 시엔 방어음만) ----
 const dmgDir = document.getElementById('dmgdir');
 const grappleEl = document.getElementById('grapple');
+const faceLeechEl = document.getElementById('faceleech');
 const grappleRing = document.getElementById('grapple-ring');
 const grappleCount = document.getElementById('grapple-count');
 events.on('player_damaged', (payload) => {
@@ -1299,6 +1323,7 @@ function respawnAtAltar(): void {
   world.freezeTicks = 0;
   world.grappleEnemyId = null;
   world.grappleMash = 0;
+  world.faceLeechId = null;
   world.dead = false;
   deathOverlay!.classList.remove('visible');
   events.emit('respawned', { x: point.x, z: point.z });
@@ -1550,6 +1575,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   world.freezeTicks = 0;
   world.grappleEnemyId = null;
   world.grappleMash = 0;
+  world.faceLeechId = null;
 
   const p = world.player;
   p.x = at.x;
@@ -2143,6 +2169,8 @@ function render(alpha: number): void {
   // 제단/문 프롬프트 — 상호작용 가능한 것 안내
   const nearDoor = world.doorInView !== null && !world.dead && !world.uiOpen;
   const nearLever = world.leverInView !== null && !world.dead && !world.uiOpen;
+  // 거머리 얼굴 가림 — 흡혈당하는 동안 화면을 덮는다
+  faceLeechEl!.classList.toggle('visible', world.faceLeechId !== null);
   // 구울 몸부림 게이지 — 연타가 원형 링을 시계 방향으로 채운다
   const grappledNow = world.grappleEnemyId !== null;
   grappleEl!.classList.toggle('visible', grappledNow);

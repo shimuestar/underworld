@@ -3010,6 +3010,8 @@ export class Stage {
       // 랜턴 빔에 잡히거나 땅에 내려오면 제 색(자줏빛)이 드러난다. 안광은 위장 중에도
       // 남는다 — 올려다보는 플레이어에게 주는 유일한 시각 단서다
       if (enemy.type === 'leech') {
+        // 얼굴에 붙은 동안은 월드 모델을 숨긴다 — 화면 가림(HUD #faceleech)이 그 몸이다
+        visual.group.visible = enemy.ai !== 'latched';
         visual.torso.rotation.z = enemy.lurking ? Math.sin(now / 520 + enemy.id) * 0.08 : 0;
         if (visual.leechMats) {
           let camo = enemy.lurking === true;
