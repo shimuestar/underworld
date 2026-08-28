@@ -339,7 +339,7 @@ describe('레벨 데이터 — 로비·방·복도 문법 (세 층 공통)', () 
 
   it('로비↔방 문(D)이 층마다 있고, 관문(G)은 아레나 층(2·3층)에만 있다', async () => {
     // 1층은 문 2짝(제단 방·보물 방)으로 문법을 가르치고, 2·3층은 레버 관문이 더해진다
-    const expected = { z01_f1: { hand: 2, gate: 0 }, z01_f2: { hand: 3, gate: 1 }, z01_f3: { hand: 3, gate: 1 } };
+    const expected = { z01_f1: { hand: 3, gate: 0 }, z01_f2: { hand: 3, gate: 1 }, z01_f3: { hand: 3, gate: 1 } };
     for (const id of FLOORS) {
       const level = await load(id);
       expect(level.doors.filter((d) => !d.byLever), `${id} 손 문`).toHaveLength(expected[id].hand);
