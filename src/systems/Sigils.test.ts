@@ -666,6 +666,26 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slime.ai).toBe('chase');
   });
 
+  it('슬라임은 바닥 아이템을 삼키고, 죽으면 전부 게워 낸다 — 금액 그대로', () => {
+    const s1 = add('slime_small', 12, 6); // 새끼는 분열이 없어 게워 낸 것이 그대로 남는다
+    world.groundItems.push({ id: 4242, kind: 'gold', x: 12.3, z: 6, amount: 7 });
+    world.groundItems.push({ id: 4243, kind: 'potion', x: 11.9, z: 6.2 });
+    Enemies.tick(world, DT);
+    expect(world.groundItems.filter((g) => g.kind === 'gold' || g.kind === 'potion')).toHaveLength(0);
+    expect(s1.eatenItems).toHaveLength(2);
+    s1.alive = false;
+    Enemies.tick(world, DT);
+    expect(world.groundItems.find((g) => g.kind === 'gold')?.amount).toBe(7);
+    expect(world.groundItems.some((g) => g.kind === 'potion')).toBe(true);
+  });
+
+  it('슬라임은 열쇠를 삼키지 않는다 — 진행이 배 속에 갇히면 안 된다', () => {
+    add('slime_small', 12, 6);
+    world.groundItems.push({ id: 4244, kind: 'key', x: 12.2, z: 6 });
+    Enemies.tick(world, DT);
+    expect(world.groundItems.some((g) => g.kind === 'key')).toBe(true);
+  });
+
   it('점액 장판을 밟으면 느려진다', () => {
     world.stamina.value = 100;
     const run = (goo: boolean): number => {

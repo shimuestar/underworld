@@ -345,6 +345,8 @@ for (const name of [
   'headshot_kill',
   'enemy_split',
   'grave_dropped',
+  'slime_ate',
+  'slime_spilled',
   'grave_recovered',
   'boss_brood',
   'enemy_died',
@@ -704,6 +706,8 @@ events.on('enemy_volley_start', (payload) => {
   audio.play('boss_volley_draw');
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
 });
+// 슬라임 식탐 — 삼킬 때 꿀렁 (게워 내는 건 죽음 파편·자석 픽업이 이미 요란하다)
+events.on('slime_ate', () => audio.play('slime_windup'));
 // 어미 슬라임 새끼 분리 — 크게 철퍽이며 어미 색 파편이 사방으로 튄다
 events.on('boss_brood', (payload) => {
   const b = payload as { enemyType: string; x: number; z: number };

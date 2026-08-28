@@ -2925,7 +2925,9 @@ export class Stage {
         const wobble = solidIce ? 0 : Math.sin(now / 140 + enemy.id * 1.7) * 0.05;
         const sy = 1 + inflate + wobble;
         const sxz = 1 - inflate * 0.35 - wobble * 0.6;
-        visual.torso.scale.set(sxz, sy, sxz);
+        // 배부른 만큼 살짝 커진다 — 뭘 삼켰는지 몸집으로 읽힌다
+        const belly = 1 + Math.min(0.18, (enemy.eatenItems?.length ?? 0) * 0.025);
+        visual.torso.scale.set(sxz * belly, sy * belly, sxz * belly);
       }
 
       // 활 — windup 동안 시위를 당긴다: 재어 둔 화살이 보이고 오늬가 몸 쪽으로

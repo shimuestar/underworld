@@ -411,6 +411,8 @@ export interface EnemyState {
   splitHandled?: boolean;
   /** 다음 점액 방울까지 남은 틱 (슬라임 궤적) */
   gooDropTicks?: number;
+  /** 삼킨 바닥 아이템 — 죽으면 전부 그 자리에 게워 낸다 (슬라임 식탐) */
+  eatenItems?: GroundItemState[];
   /** 화상 잔여 틱 (Projectiles가 피해 적용) */
   burnTicks: number;
   burnDamagePerTick: number;

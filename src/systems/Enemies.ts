@@ -91,6 +91,7 @@ export function tick(world: World, dt: number): void {
     }
     tickEnemy(world, enemy, dt);
     dropGoo(world, enemy);
+    eatNearbyItems(world, enemy);
     // 피탄 경직 소진은 행동 뒤에 — 앞에서 줄이면 마지막 틱에 움직여버린다
     if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
     if ((enemy.slowTicks ?? 0) > 0) {
@@ -147,6 +148,21 @@ let nextGooId = 1;
 function handleSplit(world: World, enemy: EnemyState): void {
   if (enemy.splitHandled) return;
   enemy.splitHandled = true;
+  // 먹은 것을 게워 낸다 — 배 속 아이템은 죽으면 전부 그 자리에 쏟아진다 (금액 그대로)
+  if (enemy.eatenItems?.length) {
+    for (let i = 0; i < enemy.eatenItems.length; i++) {
+      const item = enemy.eatenItems[i]!;
+      const ang = (Math.PI * 2 * i) / enemy.eatenItems.length;
+      item.x = enemy.x + Math.sin(ang) * 0.5;
+      item.z = enemy.z + Math.cos(ang) * 0.5;
+      item.magnet = false;
+      item.y = undefined;
+      item.speed = undefined;
+      world.groundItems.push(item);
+    }
+    world.events.emit('slime_spilled', { count: enemy.eatenItems.length, x: enemy.x, z: enemy.z });
+    enemy.eatenItems = undefined;
+  }
   const split = enemyDef(enemy.type).split;
   if (!split) return;
   if (enemy.burnTicks > 0 || (enemy.freezeTicks ?? 0) > 0) return;
@@ -207,6 +223,24 @@ function spawnBrood(world: World, enemy: EnemyState, attack: EnemyAttackDef): vo
   world.events.emit('boss_brood', {
     enemyId: enemy.id, enemyType: enemy.type, count: brood.count, x: enemy.x, z: enemy.z,
   });
+}
+
+/** 슬라임 식탐 — 바닥 아이템을 지나가며 삼킨다. 삼킨 것은 죽을 때 전부 게워 낸다.
+ *  열쇠·비석·각인은 안 먹는다 (진행이 배 속에 갇히면 안 된다). 자석에 걸린 것
+ *  (플레이어가 이미 문 것)도 가로채지 않는다 */
+function eatNearbyItems(world: World, enemy: EnemyState): void {
+  const def = enemyDef(enemy.type);
+  if (!def.eatsItems) return;
+  const reach = def.radius + balance.pickups.slimeEat.reach;
+  for (let i = world.groundItems.length - 1; i >= 0; i--) {
+    const item = world.groundItems[i]!;
+    if (item.kind === 'key' || item.kind === 'grave' || item.kind === 'sigil') continue;
+    if (item.magnet) continue;
+    if (Math.hypot(item.x - enemy.x, item.z - enemy.z) > reach) continue;
+    world.groundItems.splice(i, 1);
+    (enemy.eatenItems ??= []).push(item);
+    world.events.emit('slime_ate', { enemyId: enemy.id, kind: item.kind, x: enemy.x, z: enemy.z });
+  }
 }
 
 /** 슬라임 궤적 — 기어가는 동안 일정 간격으로 점액을 떨군다 */

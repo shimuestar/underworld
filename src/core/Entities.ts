@@ -119,6 +119,8 @@ export interface EnemyDef {
   split?: { into: string; count: number; flingDistance?: number };
   /** 기어간 자리에 점액 장판을 남긴다 — 밟으면 느려진다 (balance.goo) */
   gooTrail?: boolean;
+  /** 바닥 아이템을 지나가며 삼킨다 — 죽으면 전부 게워 낸다 (슬라임) */
+  eatsItems?: boolean;
   /** 마법 방어막 (warden) — 실탄만 관통 */
   magicBarrier?: { blocksMagic: boolean; blocksMelee: boolean; piercedBy: string[] };
   /** caster_kite: 이 거리 안이면 물러난다 */
