@@ -241,6 +241,8 @@ interface EnemyVisual {
   headShakeUntil?: number;
   /** 다리(골반 피벗) — 인간형만. 이동 거리에 비례해 젓는다 */
   legs?: { left: THREE.Group; right: THREE.Group };
+  /** 맨팔(어깨 피벗) — 무기 팔이 아닌 팔. 걸을 때 다리와 반대 위상으로 젓는다 */
+  plainArms?: THREE.Group[];
   legPhase?: number;
   legBlend?: number;
   legLastX?: number;
@@ -2338,6 +2340,33 @@ export class Stage {
       torso.add(arm);
     }
 
+    // 맨팔 — 인간형은 모두 두 팔이다. 무기 팔(오른쪽)이 있으면 왼팔 하나만,
+    // 없으면(궁수·주술사) 양팔을 단다. 궁수는 활을 향해 앞으로 들려 있다
+    if (!SPIDER_TYPES.has(type)) {
+      const armMat = new THREE.MeshLambertMaterial({
+        color: new THREE.Color(baseColor).multiplyScalar(0.85),
+      });
+      flashMaterials.push(armMat);
+      const armLen = def.height * 0.34;
+      const forward = type === 'goblin_archer' ? 0.55 : 0;
+      const makeArm = (side: number): THREE.Group => {
+        const shoulder = new THREE.Group();
+        shoulder.position.set(side * def.radius * 0.92, def.height * 0.72, 0);
+        const limb = new THREE.Mesh(
+          new THREE.BoxGeometry(def.radius * 0.3, armLen, def.radius * 0.3),
+          armMat,
+        );
+        limb.position.y = -armLen / 2;
+        shoulder.add(limb);
+        shoulder.rotation.x = forward;
+        shoulder.userData['restRotX'] = forward; // 걸음 스윙이 이 각을 기준으로 돈다
+        torso.add(shoulder);
+        return shoulder;
+      };
+      visual.plainArms = [makeArm(-1)];
+      if (!weaponSpec) visual.plainArms.push(makeArm(1));
+    }
+
     return visual;
   }
 
@@ -2390,6 +2419,14 @@ export class Stage {
         const legSwing = Math.sin(visual.legPhase ?? 0) * 0.7 * (visual.legBlend ?? 0);
         visual.legs.left.rotation.x = legSwing;
         visual.legs.right.rotation.x = -legSwing;
+        // 맨팔은 다리와 반대 위상 — 사람 걸음의 팔젓기
+        if (visual.plainArms) {
+          for (let a = 0; a < visual.plainArms.length; a++) {
+            const shoulder = visual.plainArms[a]!;
+            const rest = (shoulder.userData['restRotX'] as number) ?? 0;
+            shoulder.rotation.x = rest + (a === 0 ? -legSwing : legSwing) * 0.55;
+          }
+        }
       }
 
       // 텔레그래프 — 섬광은 windup 종료 visualLeadTicks 전부터 판정 창 내내.
