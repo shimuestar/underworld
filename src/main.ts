@@ -761,7 +761,7 @@ events.on('leech_suck', () => {
   stage.triggerCameraKick(0.24, 130);
 });
 events.on('leech_face_kick', () => {
-  audio.play('heavy_hit');
+  audio.play('leech_kick'); // 빨판이 '뽁' 뜯기고 발끝이 퍽
   stage.triggerHammerSwing(2, 1.5); // 떼어서 걷어차는 손맛
   stage.triggerCameraKick(0.38, 180);
   showReaction('걷어찼다!', 1000);

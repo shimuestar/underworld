@@ -568,6 +568,7 @@ function throwGrenade(world: World, chargeFrac: number): void {
 function alertNearby(world: World, x: number, z: number, radius: number): void {
   for (const enemy of world.enemies) {
     if (!enemy.alive || enemy.ai !== 'idle') continue;
+    if (enemy.lurking) continue; // 천장 잠복(거머리) — 총성에도 초연하다 (기습 담당)
     if (Math.hypot(enemy.x - x, enemy.z - z) > radius) continue;
     alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
     world.events.emit('enemy_alerted', {

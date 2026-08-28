@@ -193,6 +193,8 @@ export function alertNearbyAt(
 ): void {
   for (const enemy of world.enemies) {
     if (!enemy.alive || enemy.ai !== 'idle') continue;
+    // 천장 잠복(거머리)은 소리에 초연하다 — 기습이 역할이라, 밑 통과와 직접 피격만 깨운다
+    if (enemy.lurking) continue;
     // 청각 배율 — 슬라임처럼 귀로 사는 적은 같은 소리를 더 멀리서 듣는다
     if (Math.hypot(enemy.x - x, enemy.z - z) > radius * (enemy.hearingMul ?? 1)) continue;
     alertEnemy(enemy, noticeTicks);

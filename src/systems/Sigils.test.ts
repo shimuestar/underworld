@@ -8,7 +8,7 @@ import { sigilColor, sigilDef } from '../core/SigilData';
 import { Input } from '../core/Input';
 import { addItem, initInventory, spillInventoryToGrave } from '../core/Inventory';
 import { enemyDef as enemyDef2 } from '../core/Entities';
-import { World, type BarrelState, type EnemyState } from '../core/World';
+import { alertNearbyAt, World, type BarrelState, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
@@ -797,6 +797,17 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(leech.jumpY ?? 0).toBe(0); // 착지했다
     expect(leech.whiffed).toBe(true); // 바닥을 헛찍고 뻗었다 — 반격 창
     expect(far.lurking).toBe(true); // 밑을 안 지나면 미동도 없다
+  });
+
+  it('천장 거머리는 소음에도 초연하다 — 총성급 소음이 나도 매달려 있다', () => {
+    const l = add('leech', 11, 6); // 5m — 낙하 트리거(3.4m) 밖
+    l.lurking = true;
+    l.jumpY = 3.3;
+    l.prevJumpY = 3.3;
+    alertNearbyAt(world, 6, 6, 12, 15); // 총성(12m)급 소음이 바로 옆에서 났다
+    for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+    expect(l.lurking).toBe(true); // 미동도 없다 — 기습 담당
+    expect(l.ai).toBe('idle');
   });
 
   it('멀리서 소음에 깬 거머리는 유도 활공 없이 제자리에 떨어진다', () => {

@@ -1316,6 +1316,7 @@ function litByLantern(world: World, dist: number, distX: number, distZ: number):
 function wakeAround(world: World, source: EnemyState, radius: number): void {
   for (const other of world.enemies) {
     if (other === source || !other.alive || other.ai !== 'idle') continue;
+    if (other.lurking) continue; // 천장 잠복(거머리) — 포효에도 초연하다 (기습 담당)
     if (Math.hypot(other.x - source.x, other.z - source.z) > radius) continue;
     alertEnemy(other, balance.enemyAi.noticeDelayTicks);
     world.events.emit('enemy_alerted', { enemyId: other.id, enemyType: other.type });

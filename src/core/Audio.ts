@@ -28,6 +28,7 @@ export type SoundName =
   | 'footstep_run'
   | 'head_break'
   | 'head_stomp'
+  | 'leech_kick'
   | 'leech_suck'
   | 'leech_drip'
   | 'leech_chitter'
@@ -318,6 +319,12 @@ export class GameAudio {
         this.noise(0.2, 1.2, 380, 0.06);
         this.tone(240, 0.1, 'sawtooth', 0.9, 0, 60);
         this.tone(52, 0.28, 'square', 1.3, 0, 34);
+        break;
+      case 'leech_kick':
+        // 떨쳐내기 — 빨판이 '뽁' 뜯기고(상승 톤) 발끝이 퍽 들어간다
+        this.tone(260, 0.09, 'sine', 0.75, 0, 1300);
+        this.noise(0.09, 0.95, 1600, 0.02);
+        this.tone(90, 0.13, 'square', 0.85, 0.05, 48);
         break;
       case 'leech_suck':
         // 흡혈 — 젖은 빨아들임: 노이즈가 좁아지며 낮은 톤이 딸려 내려간다

@@ -62,7 +62,7 @@
       "radius": 0.35, "height": 0.6,
       "aggroRange": 14, "attackRange": 1.5,
       "behavior": "swarm",
-      "_ceilingNote": "천장 잠복자 — ceiling:true 로 배치하면 천장에 붙어 시작한다. 단서는 점액 방울(뚝…뚝)과 근접 찌륵거림. 밑(dropRadius)을 지나면 그 좌표로 떨어지며 내려찍고(회피 전용), 지상전 몇 초 뒤 플레이어가 멀면 천장으로 되돌아간다. 매달린 채 맞으면 추락해 길게 뻗는다 — 올려다보는 플레이어의 보상",
+      "_ceilingNote": "천장 잠복자 — ceiling:true 로 배치하면 천장에 붙어 시작한다. 단서는 점액 방울(뚝…뚝)과 근접 찌륵거림. 총성·포효 등 어떤 소음에도 초연하다(기습 담당) — 밑(dropRadius) 통과와 직접 피격만 깨운다. 밑을 지나면 그 좌표로 떨어지며 내려찍고(회피 전용), 지상전 몇 초 뒤 플레이어가 멀면 천장으로 되돌아간다. 매달린 채 맞으면 추락해 길게 뻗는다 — 올려다보는 플레이어의 보상",
       "ceilingLurk": {
         "dropRadius": 3.4, "chitterRadius": 6, "dripIntervalTicks": 45,
         "dropDurTicks": 20, "dropDamage": 14, "dropAoeRadius": 1.6, "dropWhiffTicks": 55,
