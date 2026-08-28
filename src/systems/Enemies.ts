@@ -764,8 +764,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           break;
         }
       }
-      // 몸부림 — 근접 키 연타로 밀쳐낸다
-      if (world.input.meleePressed) {
+      // 몸부림 — 근접 키 연타로 밀쳐낸다. 한 키 체계가 근접을 상호작용으로
+      // 바꿔치기한 채 들어와도 몸부림으로 친다 (이중 안전망)
+      if (world.input.meleePressed || world.input.interactPressed) {
         world.grappleMash++;
         world.events.emit('grapple_struggle', { count: world.grappleMash, need: grip.mashToEscape });
         if (world.grappleMash >= grip.mashToEscape) {

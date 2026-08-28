@@ -1647,7 +1647,9 @@ function simulate(dt: number): void {
   // 시스템들이 계산한 값이라 한 틱(16ms) 늦지만 체감할 수 없다.
   // 레버 관문(byLever)은 손으로 못 여니 대상으로 안 친다 — 관문 앞 전투에서
   // 근접이 헛손질로 바뀌면 안 된다. 봉인된 출구도 같은 이유로 제외.
-  if (!world.dead && !world.uiOpen) {
+  // 구울에게 물린 동안은 병합을 끈다 — 근접 연타(몸부림)가 문·상자 상호작용으로
+  // 바뀌면 빠져나올 방법이 없다 (문 앞에서 물리면 연타가 전부 먹히던 버그)
+  if (!world.dead && !world.uiOpen && world.grappleEnemyId === null) {
     const interactable =
       (world.doorInView !== null && !world.doorInView.byLever) ||
       world.leverInView !== null ||
