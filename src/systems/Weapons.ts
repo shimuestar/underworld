@@ -614,12 +614,14 @@ function fire(world: World): void {
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
     const def = enemyDef(enemy.type);
+    // 공중의 적(천장 거머리·도약 중) — 몸이 뜬 만큼(jumpY) 피격 박스도 떠 있어야 맞는다
+    const yBase = enemy.jumpY ?? 0;
     const t = rayVsAabb(p.x, oy, p.z, dx, dy, dz, {
       minX: enemy.x - def.radius,
-      minY: 0,
+      minY: yBase,
       minZ: enemy.z - def.radius,
       maxX: enemy.x + def.radius,
-      maxY: def.height,
+      maxY: yBase + def.height,
       maxZ: enemy.z + def.radius,
     });
     if (t !== null && t < wallT && (!hit || t < hit.t)) hit = { enemy, t };

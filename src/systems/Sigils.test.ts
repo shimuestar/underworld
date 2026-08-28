@@ -807,6 +807,26 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(far.lurking).toBe(true); // 밑을 안 지나면 미동도 없다
   });
 
+  it('천장 거머리를 화살로 쏘면 공중의 몸에 맞고, 떨어져 뻗는다 — 선제 제거', () => {
+    const l = add('leech', 12, 6);
+    l.lurking = true;
+    l.jumpY = 3.3;
+    l.prevJumpY = 3.3;
+    world.projectiles.push({
+      id: 778001, owner: 'player', kind: 'arrow',
+      x: 6, y: 3.5, z: 6, prevX: 6, prevY: 3.5, prevZ: 6,
+      vx: 40, vy: 0, vz: 0, lifeTicks: 60,
+      damage: 5, burnTicks: 0, burnDamagePerTick: 0, radius: 0.15,
+    });
+    const hp = l.health;
+    for (let i = 0; i < 30 && l.health === hp; i++) Projectiles.tick(world, DT);
+    expect(l.health).toBeLessThan(hp); // 천장 높이의 몸에 맞았다 (jumpY 반영 박스)
+    for (let i = 0; i < 40; i++) Enemies.tick(world, DT);
+    expect(l.lurking).toBe(false);
+    expect(l.jumpY ?? 0).toBe(0); // 추락했다
+    expect(l.ai).toBe('recover'); // 낙하 경직 — 무방비
+  });
+
   it('천장 거머리는 소음에도 초연하다 — 총성급 소음이 나도 매달려 있다', () => {
     const l = add('leech', 11, 6); // 5m — 낙하 트리거(3.4m) 밖
     l.lurking = true;

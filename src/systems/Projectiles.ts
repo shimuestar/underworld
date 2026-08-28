@@ -762,12 +762,14 @@ function moveProjectiles(world: World, dt: number): void {
         if (!enemy.alive) continue;
         const def = enemyDef(enemy.type);
         const pad = proj.radius;
+        // 공중의 적(천장 거머리·도약 중) — 몸이 뜬 만큼(jumpY) 피격 박스도 떠 있어야 맞는다
+        const yBase = enemy.jumpY ?? 0;
         const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
           minX: enemy.x - def.radius - pad,
-          minY: -pad,
+          minY: yBase - pad,
           minZ: enemy.z - def.radius - pad,
           maxX: enemy.x + def.radius + pad,
-          maxY: def.height + pad,
+          maxY: yBase + def.height + pad,
           maxZ: enemy.z + def.radius + pad,
         });
         if (t !== null && t < hitT) {
