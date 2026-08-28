@@ -433,6 +433,21 @@
           rgba(190, 10, 10, 0.65) 100%
         );
       }
+      /* 방향 피격 지시 — 화면 중앙 링의 호 하나가 피해가 온 쪽을 가리킨다.
+         시선 기준 회전이라 뒤에서 맞으면 아래쪽 호가 뜬다 (회전각은 main 이 계산) */
+      #dmgdir {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        width: 34vmin;
+        height: 34vmin;
+        margin: -17vmin 0 0 -17vmin;
+        border: 1vmin solid transparent;
+        border-top-color: rgba(255, 46, 46, 0.9);
+        border-radius: 50%;
+        opacity: 0;
+        pointer-events: none;
+      }
       /* 층 이동 암전 — 계단을 내려가는 동안 검게 잠긴다. 패링 탈색(#flash)과 달리
          일반 혼합이라 화면을 그냥 덮는다 */
       #fade {
@@ -458,6 +473,7 @@
     <div id="flash"></div>
     <div id="fade"></div>
     <div id="hurt"></div>
+    <div id="dmgdir"></div>
     <div id="hud"></div>
     <div id="crosshair"></div>
     <div id="death">

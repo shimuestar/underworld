@@ -99,7 +99,7 @@ function explode(world: World, barrel: BarrelState): void {
   if (playerDist <= cfg.radius && p.iframeTicks <= 0) {
     const damage = damageAt(playerDist);
     p.health -= damage;
-    world.events.emit('player_damaged', { amount: damage, health: p.health });
+    world.events.emit('player_damaged', { amount: damage, health: p.health, srcX: barrel.x, srcZ: barrel.z });
     if (playerDist > 0) {
       pushPlayer(
         p,

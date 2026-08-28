@@ -514,7 +514,10 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
             });
           }
         }
-        world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
+        world.events.emit('player_damaged', {
+          amount: damage, health: p.health, blocked,
+          srcX: enemy.x, srcZ: enemy.z,
+        });
         if (p.health <= 0) {
           p.health = 0;
           world.dead = true;

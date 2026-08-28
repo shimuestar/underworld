@@ -979,7 +979,11 @@ function moveProjectiles(world: World, dt: number): void {
             p.webSwingsLeft = balance.web.breakSwings;
             world.events.emit('web_caught', { swings: p.webSwingsLeft });
           }
-          world.events.emit('player_damaged', { amount: damage, health: p.health, blocked });
+          // 출처 방향 = 날아온 방향의 반대 — 투사체는 이미 몸에 닿아 있어 속도로 되짚는다
+          world.events.emit('player_damaged', {
+            amount: damage, health: p.health, blocked,
+            srcX: p.x - proj.vx, srcZ: p.z - proj.vz,
+          });
           if (p.health <= 0) {
             p.health = 0;
             world.dead = true;
@@ -1180,7 +1184,7 @@ function explodeFireball(
   if (playerDist <= radius && p.iframeTicks <= 0) {
     const damage = damageAt(playerDist);
     p.health -= damage;
-    world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'fireball' });
+    world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'fireball', srcX: x, srcZ: z });
     if (p.health <= 0) {
       p.health = 0;
       world.dead = true;
@@ -1248,7 +1252,7 @@ function implodeBolt(
   if (directPlayer) return; // 직격 피해와 중복되지 않게 (밀림은 직격 쪽이 덮어쓴다)
   const damage = sp.damage * falloff;
   p.health -= damage;
-  world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'implode' });
+  world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'implode', srcX: x, srcZ: z });
   if (p.health <= 0) {
     p.health = 0;
     world.dead = true;
@@ -1360,7 +1364,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
   if (playerDist <= grenade.radius && p.iframeTicks <= 0) {
     const damage = damageAt(playerDist);
     p.health -= damage;
-    world.events.emit('player_damaged', { amount: damage, health: p.health });
+    world.events.emit('player_damaged', { amount: damage, health: p.health, srcX: proj.x, srcZ: proj.z });
     if (p.health <= 0) {
       p.health = 0;
       world.dead = true;

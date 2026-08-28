@@ -797,11 +797,33 @@ events.on('crack_wall_broken', (payload) => {
 });
 
 // ---- 피격 연출 — 붉은 비네트 + 피격음 (방어 성공 시엔 방어음만) ----
+const dmgDir = document.getElementById('dmgdir');
 events.on('player_damaged', (payload) => {
-  if ((payload as { blocked?: boolean }).blocked) return;
+  const hit = payload as { blocked?: boolean; srcX?: number; srcZ?: number };
+  if (hit.blocked) return;
   audio.play('player_hurt');
   hurtOverlay!.style.transition = 'none';
   hurtOverlay!.style.opacity = '1';
+  // 방향 피격 지시 — 시선 기준 각도로 링 조각을 돌린다: 정면 = 위, 등 뒤 = 아래 호.
+  // 뒤에서 맞으면 더 진하고 오래 남는다 ("등 뒤!" — 돌아보라는 신호)
+  if (dmgDir && hit.srcX !== undefined && hit.srcZ !== undefined) {
+    const pl = world.player;
+    const dx = hit.srcX - pl.x;
+    const dz = hit.srcZ - pl.z;
+    if (Math.hypot(dx, dz) > 0.001) {
+      const fx = -Math.sin(pl.yaw);
+      const fz = -Math.cos(pl.yaw);
+      const ang = Math.atan2(-dx * fz + dz * fx, dx * fx + dz * fz); // 오른쪽 = +
+      const behind = Math.abs(ang) > (Math.PI * 2) / 3;
+      dmgDir.style.transition = 'none';
+      dmgDir.style.transform = `rotate(${ang}rad)`;
+      dmgDir.style.opacity = behind ? '1' : '0.7';
+      requestAnimationFrame(() => {
+        dmgDir.style.transition = `opacity ${behind ? 850 : 500}ms ease-out`;
+        dmgDir.style.opacity = '0';
+      });
+    }
+  }
   requestAnimationFrame(() => {
     hurtOverlay!.style.transition = 'opacity 450ms ease-out';
     hurtOverlay!.style.opacity = '0';
