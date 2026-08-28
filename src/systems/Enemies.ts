@@ -145,9 +145,34 @@ let nextGooId = 1;
 
 /** 죽은 슬라임을 절반 둘로 가른다 — 화상 중(말라붙음)·빙결 중(통째로 깨짐) 사망은 예외.
  *  총알로 잡으면 몸값이 배가 되고 불·서리·광역이 정답이라는 상성이 이 두 예외로 표현된다 */
+/** 동료의 죽음을 목격한다 — 정면 반구(등 뒤만 사각) + 시야선 + 시야 거리 안이면
+ *  대기 중이던 적이 깬다. 소리(피격음 2m)와 별개의 '눈' 규칙이다: 격자 한 칸이 4m 라
+ *  피격음만으로는 같은 방 동료도 못 들었다. 등 뒤나 벽 너머에서 죽이면 여전히 모른다 —
+ *  보이지 않는 곳에서 하나씩 처리하는 은신 플레이는 그대로 성립한다 */
+function alertWitnesses(world: World, corpse: EnemyState): void {
+  for (const watcher of world.enemies) {
+    if (!watcher.alive || watcher.ai !== 'idle' || watcher.id === corpse.id) continue;
+    const def = enemyDef(watcher.type);
+    if (def.blind) continue; // 장님(슬라임)은 눈이 없다 — 소리로만 산다
+    const dx = corpse.x - watcher.x;
+    const dz = corpse.z - watcher.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist <= 0.001 || dist > def.aggroRange) continue;
+    const fx = -Math.sin(watcher.yaw);
+    const fz = -Math.cos(watcher.yaw);
+    if ((fx * dx + fz * dz) / dist <= 0) continue; // 등 뒤 반구 — 못 본다
+    if (!world.level.hasLineOfSight(watcher.x, watcher.z, corpse.x, corpse.z)) continue;
+    alertEnemy(watcher, balance.enemyAi.noticeDelayTicks);
+    world.events.emit('enemy_alerted', {
+      enemyId: watcher.id, enemyType: watcher.type, witnessed: true,
+    });
+  }
+}
+
 function handleSplit(world: World, enemy: EnemyState): void {
   if (enemy.splitHandled) return;
   enemy.splitHandled = true;
+  alertWitnesses(world, enemy); // 눈앞에서 동료가 터졌다 — 본 놈들은 깬다
   // 먹은 것을 게워 낸다 — 배 속 아이템은 죽으면 전부 그 자리에 쏟아진다 (금액 그대로)
   if (enemy.eatenItems?.length) {
     for (let i = 0; i < enemy.eatenItems.length; i++) {

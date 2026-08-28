@@ -666,6 +666,21 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slime.ai).toBe('chase');
   });
 
+  it('동료가 눈앞에서 죽으면 알아챈다 — 등 뒤·장님은 모른다', () => {
+    const victim = add('spider_small', 14, 6);
+    const front = add('spider_large', 18, 6); // 서쪽(희생자 쪽)을 보고 있다
+    front.yaw = Math.PI / 2;
+    const back = add('spider_large', 10, 6); // 서쪽을 보고 있다 — 희생자는 등 뒤(동쪽)
+    back.yaw = Math.PI / 2;
+    const blindOne = add('slime', 16, 6); // 희생자 쪽을 보지만 눈이 없다
+    blindOne.yaw = Math.PI / 2;
+    victim.alive = false;
+    Enemies.tick(world, DT);
+    expect(front.ai).toBe('chase'); // 정면에서 동료가 터지는 걸 봤다
+    expect(back.ai).toBe('idle');
+    expect(blindOne.ai).toBe('idle');
+  });
+
   it('슬라임은 바닥 아이템을 삼키고, 죽으면 전부 게워 낸다 — 금액 그대로', () => {
     const s1 = add('slime_small', 12, 6); // 새끼는 분열이 없어 게워 낸 것이 그대로 남는다
     world.groundItems.push({ id: 4242, kind: 'gold', x: 12.3, z: 6, amount: 7 });
