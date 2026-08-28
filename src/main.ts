@@ -1510,6 +1510,9 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
 }
 
 events.on('zone_cleared', () => {
+  // 내려갔다는 것은 자물쇠가 열려 있었다는 뜻 — 어떤 경로로 열렸든 여기서 못 박는다.
+  // (E 언락 이벤트 한 곳에만 의존하면, 흐름을 우회한 층이 되돌아올 때 다시 잠겨 보인다)
+  unlockedFloors.add(floorIndex);
   // 마지막 층이 아니면 나가는 게 아니라 내려가는 것이다.
   // 계단을 밟고 내려가는 동안 화면이 잠기고, 다 잠긴 뒤에 층을 갈아 끼운다 —
   // 그래야 지형이 바뀌는 순간이 안 보인다
@@ -2102,7 +2105,7 @@ function render(alpha: number): void {
     altarPrompt!.textContent = world.exitNeedsKey
       ? world.hasExitKey
         ? `${IK} — 열쇠로 자물쇠를 연다`
-        : '쇠사슬이 잠겨 있다 — 족장이 열쇠를 갖고 있다'
+        : '쇠사슬이 잠겨 있다 — 이 층의 주인이 열쇠를 쥐고 있다'
       : last
         ? `${IK} — 구역을 벗어난다`
         : `${IK} — 아래층으로 내려간다  (${floorIndex + 2}/${ZONE.length})`;

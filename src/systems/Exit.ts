@@ -37,6 +37,21 @@ export function tick(world: World, _dt: number): void {
     return;
   }
 
+  // 자가 회복 — 보스는 죽었는데 자물쇠는 잠겨 있고 열쇠가 손에도 바닥에도 없으면
+  // (테스트 점프 키 등으로 열쇠 흐름을 건너뛴 채 층을 오간 경우) 죽은 보스 자리에
+  // 열쇠를 다시 떨군다. 이 층에서 영영 못 내려가는 잠금은 어떤 경로로도 생기면 안 된다
+  if (world.exitNeedsKey && !world.hasExitKey) {
+    const bossEnemy = world.enemies.find((e) => enemyDef(e.type).boss);
+    if (
+      bossEnemy !== undefined &&
+      !bossEnemy.alive &&
+      !world.groundItems.some((g) => g.kind === 'key')
+    ) {
+      world.groundItems.push({ id: nextKeyId++, kind: 'key', x: bossEnemy.x, z: bossEnemy.z });
+      world.events.emit('exit_key_dropped', { x: bossEnemy.x, z: bossEnemy.z });
+    }
+  }
+
   const exit = world.level.exitPos;
   if (!exit) return;
 
