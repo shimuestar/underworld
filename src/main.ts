@@ -531,7 +531,12 @@ function presentExecute(power: number, x?: number, z?: number): void {
 events.on('boss_execute', () => presentExecute(1.15));
 events.on('melee_kill', (payload) => {
   // 처형(방패 강타)만 전용 연출 — 해머 처치는 자체 타격음이 이미 난다
-  const kill = payload as { execution: boolean; x?: number; z?: number };
+  const kill = payload as { execution: boolean; enemyType?: string; x?: number; z?: number };
+  // 구울은 해머에 죽으면 머리가 날아간다 — 썩은 목은 둔기 한 방을 못 버틴다
+  if (kill.enemyType === 'ghoul' && kill.x !== undefined && kill.z !== undefined) {
+    stage.spawnHeadPop('ghoul', kill.x, kill.z);
+    audio.play('heavy_hit');
+  }
   if (kill.execution) presentExecute(1, kill.x, kill.z);
 });
 // 불발 — 소리·모션은 누를 때마다, 글자 안내만 연타에도 한 번씩

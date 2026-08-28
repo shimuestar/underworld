@@ -96,6 +96,20 @@
     {
       "type": "spider_small",
       "cell": [
+        2,
+        20
+      ]
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        5,
+        15
+      ]
+    },
+    {
+      "type": "spider_small",
+      "cell": [
         9,
         8
       ]
@@ -111,6 +125,20 @@
       "type": "spider_small",
       "cell": [
         9,
+        11
+      ]
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        10,
+        8
+      ]
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        11,
         11
       ]
     },
@@ -141,6 +169,13 @@
       "cell": [
         9,
         4
+      ]
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        11,
+        2
       ]
     },
     {
@@ -237,6 +272,28 @@
         14,
         22
       ]
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        15,
+        17
+      ]
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        19,
+        9
+      ]
+    },
+    {
+      "type": "spider_large",
+      "cell": [
+        12,
+        19
+      ],
+      "note": "복도 사냥꾼"
     },
     {
       "type": "slime_mother",
@@ -380,15 +437,15 @@
       ],
       [
         11,
-        11
-      ],
-      [
-        11,
         17
       ],
       [
         12,
         1
+      ],
+      [
+        12,
+        10
       ],
       [
         12,
