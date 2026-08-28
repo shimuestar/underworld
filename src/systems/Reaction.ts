@@ -37,6 +37,29 @@ export function tick(world: World, _dt: number): void {
     return; // 경직 중에는 반응 불가 (입력은 버려진다)
   }
 
+  // Space 연타 = 회피. 반응 키와 무관하게 여기서 먼저 본다 —
+  // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다.
+  // 첫 타는 창만 열고, 창이 열려 있는 동안 한 번 더 누르면 나간다.
+  //
+  // 대시 이동보다 먼저 본다 — 대시 중(6틱)의 탭이 통째로 버려지면 연속 회피가
+  // "한 박자 늦게" 나간다 (탭 하나가 증발해 세 번째 탭이 필요해진다).
+  // 대시 중의 탭은 창만 열어 두고, 회피 시작 자체는 대시가 끝난 뒤에만 된다
+  if (p.sprintTapTicks && p.sprintTapTicks > 0) p.sprintTapTicks--;
+  const dashing = p.dodgeTicks > 0;
+  // 패드처럼 회피 버튼이 따로 있는 입력은 연타를 거치지 않는다
+  if (world.input.dodgePressed && !dashing) {
+    p.sprintTapTicks = 0;
+    if (tryDodge(world)) return;
+  }
+  if (world.input.sprintPressed) {
+    if (!dashing && (p.sprintTapTicks ?? 0) > 0) {
+      p.sprintTapTicks = 0; // 세 번째 타로 또 나가지 않게 창을 닫는다
+      if (tryDodge(world)) return;
+    } else {
+      p.sprintTapTicks = reaction.dodgeDoubleTapTicks;
+    }
+  }
+
   if (p.dodgeTicks > 0) {
     p.dodgeTicks--;
     const step =
@@ -44,24 +67,6 @@ export function tick(world: World, _dt: number): void {
       reaction.dodgeDashTicks;
     world.level.slideMove(p, balance.player.radius, p.dodgeDirX * step, p.dodgeDirZ * step);
     return; // 대시 중 추가 반응 불가
-  }
-
-  // Space 연타 = 회피. 반응 키와 무관하게 여기서 먼저 본다 —
-  // 빨강(패링 불가) 공격의 windup 중에도 실패 경직 없이 빠져나갈 수 있어야 한다.
-  // 첫 타는 창만 열고, 창이 열려 있는 동안 한 번 더 누르면 나간다
-  if (p.sprintTapTicks && p.sprintTapTicks > 0) p.sprintTapTicks--;
-  // 패드처럼 회피 버튼이 따로 있는 입력은 연타를 거치지 않는다
-  if (world.input.dodgePressed) {
-    p.sprintTapTicks = 0;
-    if (tryDodge(world)) return;
-  }
-  if (world.input.sprintPressed) {
-    if ((p.sprintTapTicks ?? 0) > 0) {
-      p.sprintTapTicks = 0; // 세 번째 타로 또 나가지 않게 창을 닫는다
-      if (tryDodge(world)) return;
-    } else {
-      p.sprintTapTicks = reaction.dodgeDoubleTapTicks;
-    }
   }
 
   // 판정은 버튼을 "누르는 순간" 한 번. 계속 누르고 있어도 다시 판정되지 않는다

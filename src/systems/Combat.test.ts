@@ -1112,3 +1112,32 @@ describe('창병 방패 — 공격 꼬리는 무방비다', () => {
     expect(openTicks / balance.loop.tickRate).toBeGreaterThan(0.5); // 초 단위로 반 초는 넘는다
   });
 });
+
+describe('회피 연타 응답성', () => {
+  const tap = (world: World): void => {
+    world.input = { ...Input.emptySnapshot(), sprint: true, sprintPressed: true };
+    Reaction.tick(world, DT);
+    world.input = Input.emptySnapshot();
+  };
+
+  it('여유 있는 연타(21틱 간격)도 회피가 나간다 — 창이 빡빡하면 한 박자 늦은 느낌이 된다', () => {
+    const world = makeWorld();
+    tap(world); // 첫 타 — 창만 연다
+    for (let i = 0; i < 21; i++) Reaction.tick(world, DT); // ~350ms 뒤
+    expect(world.player.dodgeTicks).toBe(0);
+    tap(world);
+    expect(world.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
+  });
+
+  it('대시 중의 탭도 창을 열어 둔다 — 연속 회피에 세 번째 탭이 필요하지 않다', () => {
+    const world = makeWorld();
+    tap(world);
+    tap(world); // 연타 성립 — 첫 대시
+    expect(world.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
+    tap(world); // 대시 중의 탭 — 버려지지 않고 창을 연다 (회피는 아직 안 나간다)
+    expect(world.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks - 1);
+    while (world.player.dodgeTicks > 0) Reaction.tick(world, DT); // 대시 소화
+    tap(world); // 대시가 끝난 직후 한 번 — 곧장 두 번째 대시
+    expect(world.player.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
+  });
+});
