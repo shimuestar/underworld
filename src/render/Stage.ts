@@ -658,6 +658,8 @@ interface Particle {
   bornMs: number;
   /** 없으면 DEATH_PARTICLE_LIFE_MS */
   lifeMs?: number;
+  /** 참 = 얼굴(-Z, 눈 쪽)을 매 프레임 카메라로 돌린다 — 떨어져 나간 머리용 */
+  faceCamera?: boolean;
   /** 초당 회전 (파편이 돌면서 날아간다) */
   spinX?: number;
   spinY?: number;
@@ -3029,8 +3031,7 @@ export class Stage {
       gravity: 9,
       lifeMs: 1500,
       bornMs: performance.now(),
-      spinX: 6 + Math.random() * 6,
-      spinZ: 5 + Math.random() * 6,
+      faceCamera: true, // 마구 구르는 대신 얼굴이 이쪽을 본다
     });
     this.scene.add(mesh);
   }
@@ -3339,7 +3340,17 @@ export class Stage {
         Math.max(0.04, p.oy + p.vy * age - 0.5 * (p.gravity ?? DEATH_GRAVITY) * age * age),
         p.oz + p.vz * age,
       );
-      if (p.spinX || p.spinY || p.spinZ) {
+      if (p.faceCamera) {
+        // 얼굴이 카메라를 본다 — 눈이 계속 보이게. 대신 살짝 끄덕이고 갸웃거린다
+        p.mesh.rotation.set(
+          Math.sin(age * 5) * 0.28,
+          Math.atan2(
+            -(this.camera.position.x - p.mesh.position.x),
+            -(this.camera.position.z - p.mesh.position.z),
+          ),
+          Math.sin(age * 3.4) * 0.2,
+        );
+      } else if (p.spinX || p.spinY || p.spinZ) {
         p.mesh.rotation.set(
           p.mesh.rotation.x + (p.spinX ?? 0) * 0.016,
           p.mesh.rotation.y + (p.spinY ?? 0) * 0.016,
