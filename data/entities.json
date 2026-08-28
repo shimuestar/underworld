@@ -58,7 +58,7 @@
     "slime_mother": {
       "name": "어미 슬라임",
       "zone": 1, "slice": true, "boss": true, "healthBars": 2,
-      "weight": "heavy", "xp": 80, "health": 260, "speed": 2.0, "damage": 20,
+      "weight": "heavy", "xp": 80, "health": 390, "speed": 2.0, "damage": 20,
       "radius": 1.1, "height": 1.7,
       "aggroRange": 18, "attackRange": 2.4,
       "blind": true, "hearingMul": 4,
