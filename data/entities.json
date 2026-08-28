@@ -75,7 +75,7 @@
     "ghoul": {
       "name": "구울",
       "zone": 1, "slice": true,
-      "weight": "medium", "xp": 30, "health": 55, "speed": 6.5, "damage": 16,
+      "weight": "medium", "xp": 30, "health": 110, "speed": 6.5, "damage": 13,
       "radius": 0.42, "height": 1.85,
       "aggroRange": 17, "attackRange": 2.0,
       "behavior": "charge",
