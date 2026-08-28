@@ -401,6 +401,8 @@ export interface GhoulHeadState {
   vz: number;
   /** 갓 떨어진 직후 무적 틱 — 콤보 연타가 공중에서 바로 지우지 못하게 */
   graceTicks?: number;
+  /** 착지 후 쉬는 틱 — 다 쉬어야 다음 통통 (쉼 없이 튀면 방정맞다) */
+  restTicks?: number;
 }
 
 /** 슬라임이 남긴 점액 장판 한 방울 — Enemies 가 떨구고 말리며, PlayerMove 가 밟기를 판정한다 */

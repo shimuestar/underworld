@@ -551,7 +551,8 @@ events.on('ghoul_head_broken', (payload) => {
     audio.play('head_stomp');
     stage.triggerCameraKick(0.42, 160); // 밟는 반동
   } else {
-    audio.play('hit_flesh');
+    audio.play('head_break'); // 마른 파열 — 총·화살·스윙 공통 타격감
+    stage.triggerCameraKick(0.16, 90);
   }
 });
 // 불발 — 소리·모션은 누를 때마다, 글자 안내만 연타에도 한 번씩

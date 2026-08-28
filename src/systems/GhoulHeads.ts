@@ -49,17 +49,28 @@ export function tick(world: World, dt: number): void {
   const cfg = balance.ghoulHead;
   for (const head of heads) {
     if ((head.graceTicks ?? 0) > 0) head.graceTicks = (head.graceTicks ?? 0) - 1;
-    // 수직 — 포물선. 땅에 닿으면 새 방향으로 다시 뛰어오른다 (영원히 통통)
+    // 착지 후 쉼 — 다 쉬어야 다음 통통. 쉬는 동안은 그 자리에 가만히 있다
+    if ((head.restTicks ?? 0) > 0) {
+      head.restTicks = (head.restTicks ?? 0) - 1;
+      if ((head.restTicks ?? 0) === 0) {
+        head.vy = cfg.hopVyMin + Math.random() * cfg.hopVySpan;
+        const ang = Math.random() * Math.PI * 2;
+        const speed = cfg.moveSpeedMin + Math.random() * cfg.moveSpeedSpan;
+        head.vx = Math.sin(ang) * speed;
+        head.vz = Math.cos(ang) * speed;
+        world.events.emit('ghoul_head_hop', { x: head.x, z: head.z });
+      }
+      continue;
+    }
+    // 수직 — 포물선. 땅에 닿으면 잠깐 쉬었다가 새 방향으로 다시 뛴다
     head.y += head.vy * dt;
     head.vy -= cfg.gravity * dt;
     if (head.y <= cfg.radius && head.vy < 0) {
       head.y = cfg.radius;
-      head.vy = cfg.hopVyMin + Math.random() * cfg.hopVySpan;
-      const ang = Math.random() * Math.PI * 2;
-      const speed = cfg.moveSpeedMin + Math.random() * cfg.moveSpeedSpan;
-      head.vx = Math.sin(ang) * speed;
-      head.vz = Math.cos(ang) * speed;
-      world.events.emit('ghoul_head_hop', { x: head.x, z: head.z });
+      head.vy = 0;
+      head.vx = 0;
+      head.vz = 0;
+      head.restTicks = cfg.restTicksMin + Math.floor(Math.random() * cfg.restTicksSpan);
     }
     // 수평 — 벽은 밀어내며 미끄러진다 (slideMove 는 {x,z,prevX,prevZ} 만 요구한다)
     const proxy = { x: head.x, z: head.z, prevX: head.x, prevZ: head.z };

@@ -26,6 +26,7 @@ export type SoundName =
   | 'stairs_travel'
   | 'wall_crumble'
   | 'footstep_run'
+  | 'head_break'
   | 'head_stomp'
   | 'leech_suck'
   | 'leech_drip'
@@ -300,6 +301,12 @@ export class GameAudio {
         // 몸부림 — 짧은 힘쓰는 소리 (낮은 퍽 + 숨)
         this.tone(130, 0.07, 'square', 0.4, 0, 80);
         this.noise(0.05, 0.3, 700);
+        break;
+      case 'head_break':
+        // 머리 격파 — 마른 파열 + 묵직한 퍽 (총·화살·해머 스윙 공통 타격감)
+        this.noise(0.09, 0.85, 1600);
+        this.tone(170, 0.12, 'square', 0.55, 0, 65);
+        this.tone(520, 0.05, 'triangle', 0.35, 0, 220);
         break;
       case 'head_stomp':
         // 밟아 터트리기 — 젖은 파열 + 낮은 퍽
