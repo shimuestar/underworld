@@ -64,11 +64,11 @@
       "behavior": "swarm",
       "_ceilingNote": "천장 잠복자 — ceiling:true 로 배치하면 천장에 붙어 시작한다. 단서는 점액 방울(뚝…뚝)과 근접 찌륵거림. 밑(dropRadius)을 지나면 그 좌표로 떨어지며 내려찍고(회피 전용), 지상전 몇 초 뒤 플레이어가 멀면 천장으로 되돌아간다. 매달린 채 맞으면 추락해 길게 뻗는다 — 올려다보는 플레이어의 보상",
       "ceilingLurk": {
-        "dropRadius": 2.5, "chitterRadius": 6, "dripIntervalTicks": 45,
+        "dropRadius": 3.4, "chitterRadius": 6, "dripIntervalTicks": 45,
         "dropDurTicks": 20, "dropDamage": 14, "dropAoeRadius": 1.6, "dropWhiffTicks": 55,
         "groundTicks": 300, "reascendMinDist": 7, "ascendDurTicks": 18, "fallStunTicks": 90
       },
-      "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 24, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
+      "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 24, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue", "latches": true },
       "_faceSuckNote": "낙하가 명중하면 얼굴에 붙어 흡혈한다 — 화면을 가리고, 빨 때마다 제 몸을 채운다. 해머 한 방이면 떼어 걷어차고, maxSucks 번 빨면 배불러 스스로 뛰어내린다",
       "faceSuck": { "intervalTicks": 55, "damage": 6, "heal": 8, "maxSucks": 3, "kickDistance": 5, "kickStunTicks": 50, "selfDetachHop": 3 },
       "counters": { "pistol": "best", "rifle": "best", "grenade": "poor", "flash": "good", "melee": "good", "magic": "good", "deflect": "none" },

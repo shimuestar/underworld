@@ -695,6 +695,32 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(moans.length).toBeGreaterThan(0); // 걷기 5틱 뒤 첫 흐느낌
   });
 
+  it('거머리 낙하 명중이면 얼굴에 들러붙는다 — 흡혈 진입 경로', () => {
+    const l = add('leech', 8, 6); // 플레이어(6,6) 2m — dropRadius 안
+    l.lurking = true;
+    l.jumpY = 3.3;
+    l.prevJumpY = 3.3;
+    // 플레이어가 가만히 서 있으면 낙하가 명중하고, 명중은 곧 얼굴 부착이다
+    for (let i = 0; i < 60 && world.faceLeechId === null; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect(world.faceLeechId).toBe(l.id);
+    expect(l.ai).toBe('latched');
+    world.faceLeechId = null; // 뒷정리
+  });
+
+  it('거머리 지상 할퀴기가 명중하면 얼굴로 기어올라 흡혈한다', () => {
+    const l = add('leech', 7.2, 6); // 근접 사거리 안 — 지상전
+    l.ai = 'chase';
+    for (let i = 0; i < 120 && world.faceLeechId === null; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect(world.faceLeechId).toBe(l.id); // 할퀴기 명중 = 부착
+    world.faceLeechId = null; // 뒷정리
+  });
+
   it('거머리 흡혈 — 피를 빨아 제 몸을 채우고, 해머 한 방에 걷어차인다', () => {
     const l = add('leech', 6.5, 6);
     l.ai = 'latched';

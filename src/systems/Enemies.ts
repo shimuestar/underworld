@@ -411,6 +411,16 @@ function releaseGrapple(world: World, enemy: EnemyState, shoved: boolean): void 
   }
 }
 
+/** 얼굴 부착 — 낙하 명중·할퀴기 명중이 여기로 모인다. 흡혈은 tickFaceSuck 이 잇는다 */
+function attachFace(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  enemy.ai = 'latched';
+  enemy.timer = def.faceSuck!.intervalTicks;
+  enemy.suckCount = 0;
+  enemy.jumpY = balance.player.eyeHeight;
+  world.faceLeechId = enemy.id;
+  world.events.emit('leech_face_attach', { enemyId: enemy.id });
+}
+
 /** 얼굴 흡혈 틱 — 얼굴에 붙어 화면을 가리고 피를 빤다. 해머 한 방 = 떼어 걷어차기,
  *  maxSucks 번 빨면 배불러 스스로 뒤로 점프해 떨어진다 */
 function tickFaceSuck(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
@@ -600,12 +610,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
       // 명중 + 방어 실패 + 얼굴이 비어 있으면 — 들러붙어 흡혈 시작 (내려찍기 피해 대신)
       if (!blocked && def.faceSuck && world.faceLeechId === null) {
-        enemy.ai = 'latched';
-        enemy.timer = def.faceSuck.intervalTicks;
-        enemy.suckCount = 0;
-        enemy.jumpY = balance.player.eyeHeight;
-        world.faceLeechId = enemy.id;
-        world.events.emit('leech_face_attach', { enemyId: enemy.id });
+        attachFace(world, enemy, def);
         return;
       }
       const dmg = blocked ? lurk.dropDamage * balance.block.chipDamageRatio : lurk.dropDamage;
@@ -1142,11 +1147,19 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (connected) {
         // 방어(정면) — 칩 데미지만 관통. 피해가 있으므로 연쇄는 여전히 리셋된다
         const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
-        // 들러붙기(구울) — 맞으면 피해·밀침 대신 매달려 파먹기 시작.
-        // 방어로 막았으면 평소의 칩 데미지·밀침으로 흘려보낸다
+        // 들러붙기 — 맞으면 피해·밀침 대신 몸에 붙는다. 구울은 붙잡기(그래플),
+        // 거머리는 얼굴로 기어올라 흡혈이다. 방어로 막았으면 평소처럼 흘려보낸다
         if (attack.latches && !blocked) {
-          startLatch(world, enemy);
-          break;
+          if (def.faceSuck) {
+            if (world.faceLeechId === null) {
+              attachFace(world, enemy, def);
+              break;
+            }
+            // 얼굴이 이미 찼다 — 평범한 타격으로 흘러간다
+          } else {
+            startLatch(world, enemy);
+            break;
+          }
         }
         const base = attack.damage ?? def.damage; // 공격별 피해 재정의 (방패 밀쳐내기 등)
         // 방어 관통 비율도 공격별로 열어 둔다 — 돌격처럼 몸으로 받으면 안 되는 기술은 더 아프다
