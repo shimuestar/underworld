@@ -533,6 +533,29 @@
         from { transform: scale(1) translate(0, 0); }
         to { transform: scale(1.07) translate(1.5%, 2.5%); }
       }
+      /* 흡혈 피 튀김 — 빨릴 때마다 화면에 핏방울이 튀어 아래로 흘러내리다 사라진다 */
+      #bloodfx {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      #bloodfx .blot {
+        position: absolute;
+        background: radial-gradient(
+          closest-side,
+          rgba(132, 12, 18, 0.92) 52%,
+          rgba(92, 6, 10, 0.78) 74%,
+          rgba(92, 6, 10, 0) 100%
+        );
+        animation: bloodsplat 1400ms ease-out forwards;
+      }
+      @keyframes bloodsplat {
+        0% { transform: scale(0.2) translateY(0); opacity: 0; }
+        8% { transform: scale(1.08) translateY(0); opacity: 1; }
+        55% { transform: scale(1) translateY(16px); opacity: 0.95; }
+        100% { transform: scale(1) translateY(52px); opacity: 0; }
+      }
       /* 층 이동 암전 — 계단을 내려가는 동안 검게 잠긴다. 패링 탈색(#flash)과 달리
          일반 혼합이라 화면을 그냥 덮는다 */
       #fade {
@@ -565,6 +588,7 @@
       <div class="blob b3"></div>
       <div class="hint">거머리가 피를 빤다 — 근접 연타로 떼어내라! (누르고 있으면 못 빤다)</div>
     </div>
+    <div id="bloodfx"></div>
     <div id="grapple">
       <div id="grapple-ring"><div id="grapple-inner"><span id="grapple-count"></span></div></div>
       <div id="grapple-label">물어뜯긴다! 근접 공격 연타!</div>

@@ -758,6 +758,7 @@ events.on('leech_face_attach', () => {
 events.on('leech_suck', () => {
   audio.play('leech_suck');
   stage.pulseFaceLeech(); // 리그가 훅 조인다
+  spawnBloodSplatter(); // 내 피가 화면에 튄다
   stage.triggerCameraKick(0.24, 130);
 });
 events.on('leech_face_kick', () => {
@@ -939,6 +940,26 @@ events.on('crack_wall_broken', (payload) => {
 const dmgDir = document.getElementById('dmgdir');
 const grappleEl = document.getElementById('grapple');
 const faceLeechEl = document.getElementById('faceleech');
+const bloodFx = document.getElementById('bloodfx');
+
+/** 흡혈 피 튀김 — 화면 가운데(빨판 입) 주변에 핏방울을 흩뿌린다. CSS 가 흘러내림·소멸을 맡는다 */
+function spawnBloodSplatter(): void {
+  if (!bloodFx) return;
+  const n = 6 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < n; i++) {
+    const blot = document.createElement('div');
+    blot.className = 'blot';
+    const size = 28 + Math.random() * 120;
+    blot.style.width = `${Math.round(size)}px`;
+    blot.style.height = `${Math.round(size * (0.6 + Math.random() * 0.7))}px`;
+    blot.style.left = `${18 + Math.random() * 64}%`;
+    blot.style.top = `${10 + Math.random() * 55}%`;
+    blot.style.borderRadius = `${40 + Math.random() * 45}% ${40 + Math.random() * 45}% ${40 + Math.random() * 45}% ${40 + Math.random() * 45}%`;
+    blot.style.animationDelay = `${Math.round(Math.random() * 90)}ms`;
+    bloodFx.appendChild(blot);
+    setTimeout(() => blot.remove(), 1700);
+  }
+}
 const grappleRing = document.getElementById('grapple-ring');
 const grappleCount = document.getElementById('grapple-count');
 events.on('player_damaged', (payload) => {
