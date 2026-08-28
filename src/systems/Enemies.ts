@@ -154,6 +154,13 @@ function resolveEnemyOverlaps(world: World): void {
 /** 새끼가 튕겨 나가는 데 쓰는 틱 — 거리(flingDistance)는 데이터, 이건 연출 속도다.
  *  바로 옆에서 태어나면 부모를 죽인 해머 한 방에 같이 죽어 분열의 의미가 없다 */
 const FLING_TICKS = 18;
+/** 분열·사출 흩뿌림 — 각도 지터(rad)·거리 배율 폭·튀어오르는 높이(m).
+ *  값이 일정하면 늘 같은 두 갈래로 갈라져 기계처럼 보인다 (연출 전용 랜덤) */
+const SCATTER_ANG_JITTER = 0.9;
+const SCATTER_DIST_MIN = 0.6;
+const SCATTER_DIST_SPAN = 0.8;
+const SCATTER_HOP_MIN = 0.4;
+const SCATTER_HOP_SPAN = 0.7;
 
 /** 슬라임 분열 대역 id — 투사체(100000)·열쇠(950000) 대역과 겹치지 않는다 */
 let nextSplitId = 700000;
@@ -211,7 +218,11 @@ function handleSplit(world: World, enemy: EnemyState): void {
   if (enemy.burnTicks > 0 || (enemy.freezeTicks ?? 0) > 0) return;
   const def = enemyDef(split.into);
   for (let i = 0; i < split.count; i++) {
-    const ang = enemy.yaw + Math.PI / 2 + (Math.PI * 2 * i) / split.count;
+    // 흩뿌림 — 대략 반대 방향 두 갈래에 각도·거리·높이를 흔든다 (늘 같은 패턴이면 기계 같다)
+    const ang =
+      enemy.yaw + Math.PI / 2 + (Math.PI * 2 * i) / split.count +
+      (Math.random() - 0.5) * SCATTER_ANG_JITTER;
+    const hop = SCATTER_HOP_MIN + Math.random() * SCATTER_HOP_SPAN;
     const x = enemy.x + Math.sin(ang) * 0.4;
     const z = enemy.z + Math.cos(ang) * 0.4;
     const child: EnemyState = {
@@ -225,9 +236,17 @@ function handleSplit(world: World, enemy: EnemyState): void {
       noticeTicks: balance.enemyAi.noticeDelayTicks,
       burnTicks: 0, burnDamagePerTick: 0,
       hearingMul: def.hearingMul,
+      jumpY: hop, // 살덩이가 튀어오르며 갈라진다 — 낙하는 틱 루프의 감쇠가 맡는다
+      prevJumpY: hop,
     };
     // 튕겨 나가며 태어난다 — 부모 자리에 겹쳐 있으면 해머 한 방에 같이 죽는다
-    pushEnemy(child, Math.sin(ang), Math.cos(ang), split.flingDistance ?? 0, FLING_TICKS);
+    pushEnemy(
+      child,
+      Math.sin(ang),
+      Math.cos(ang),
+      (split.flingDistance ?? 0) * (SCATTER_DIST_MIN + Math.random() * SCATTER_DIST_SPAN),
+      FLING_TICKS + Math.floor(Math.random() * 7) - 3,
+    );
     world.enemies.push(child);
   }
   world.events.emit('enemy_split', {
@@ -279,7 +298,8 @@ function emitBrood(world: World, enemy: EnemyState): void {
     dirZ = -(pdx / pdist) * sin + (pdz / pdist) * cos;
   } else {
     const i = brood.count - enemy.broodLeft - 1;
-    const ang = enemy.yaw + (Math.PI * 2 * i) / brood.count;
+    const ang =
+      enemy.yaw + (Math.PI * 2 * i) / brood.count + (Math.random() - 0.5) * SCATTER_ANG_JITTER * 0.6;
     dirX = Math.sin(ang);
     dirZ = Math.cos(ang);
   }
@@ -300,7 +320,13 @@ function emitBrood(world: World, enemy: EnemyState): void {
     jumpY: motherDef.height * 0.9,
     prevJumpY: motherDef.height * 0.9,
   };
-  pushEnemy(child, dirX, dirZ, brood.flingDistance ?? 0, FLING_TICKS);
+  pushEnemy(
+    child,
+    dirX,
+    dirZ,
+    (brood.flingDistance ?? 0) * (0.8 + Math.random() * 0.4),
+    FLING_TICKS + Math.floor(Math.random() * 5) - 2,
+  );
   world.enemies.push(child);
   world.events.emit('brood_pop', {
     enemyId: child.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, left: enemy.broodLeft,
