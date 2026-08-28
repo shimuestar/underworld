@@ -135,7 +135,12 @@ describe('1구역 층 구성', () => {
         expect(reachable.has(`${xc},${xr}`)).toBe(true);
       });
 
-      it('제단이 있고, 밟지 않고 출구까지 가는 우회로도 있다', () => {
+      it('제단은 2층부터 — 있다면 밟지 않고 출구까지 가는 우회로도 있다', () => {
+        // 1층은 제단이 없다 (2026-08-28, 사용자 결정) — 그 안치소는 거미 둥지가 됐다
+        if (json.id === 'z01_f1') {
+          expect(find(grid, 'A')).toHaveLength(0);
+          return;
+        }
         expect(find(grid, 'A').length).toBeGreaterThan(0);
         const bypass = flood(grid, [sc, sr], (ch) => (!SOLID.has(ch) || OPENABLE.has(ch)) && ch !== 'A');
         expect(bypass.has(`${xc},${xr}`)).toBe(true);
