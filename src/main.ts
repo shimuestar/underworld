@@ -757,6 +757,7 @@ events.on('leech_face_attach', () => {
 });
 events.on('leech_suck', () => {
   audio.play('leech_suck');
+  stage.pulseFaceLeech(); // 리그가 훅 조인다
   stage.triggerCameraKick(0.24, 130);
 });
 events.on('leech_face_kick', () => {
@@ -2196,8 +2197,9 @@ function render(alpha: number): void {
   // 제단/문 프롬프트 — 상호작용 가능한 것 안내
   const nearDoor = world.doorInView !== null && !world.dead && !world.uiOpen;
   const nearLever = world.leverInView !== null && !world.dead && !world.uiOpen;
-  // 거머리 얼굴 가림 — 흡혈당하는 동안 화면을 덮는다
+  // 거머리 얼굴 가림 — 실물 리그(카메라 앞) + 가장자리 비네트(HUD)
   faceLeechEl!.classList.toggle('visible', world.faceLeechId !== null);
+  stage.setFaceLeech(world.faceLeechId !== null);
   // 몸부림 게이지 — 구울 파먹기·거머리 흡혈 공용. 연타가 원형 링을 채운다
   const ghoulGrip = world.grappleEnemyId !== null;
   const leechGrip = world.faceLeechId !== null;

@@ -799,6 +799,17 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(far.lurking).toBe(true); // 밑을 안 지나면 미동도 없다
   });
 
+  it('멀리서 소음에 깬 거머리는 유도 활공 없이 제자리에 떨어진다', () => {
+    const l = add('leech', 18, 6); // 플레이어(6,6)에서 12m — 발밑 사냥 반경 밖
+    l.lurking = true;
+    l.jumpY = 3.3;
+    l.prevJumpY = 3.3;
+    l.ai = 'chase'; // 총성 따위 소음에 깬 상태
+    for (let i = 0; i < 40; i++) Enemies.tick(world, DT);
+    expect(l.jumpY ?? 0).toBe(0); // 떨어지긴 했다
+    expect(Math.abs(l.x - 18)).toBeLessThan(1); // 12m 를 날아오지 않았다 — 제자리 낙하
+  });
+
   it('거머리 — 매달린 채 맞으면 추락해 길게 뻗는다', () => {
     const leech = add('leech', 14, 6);
     leech.lurking = true;

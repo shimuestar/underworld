@@ -303,18 +303,21 @@ export class GameAudio {
         this.noise(0.05, 0.3, 700);
         break;
       case 'head_break':
-        // 머리 격파 — 호박 으깨기: 겉이 빠직 갈라진 뒤 속이 퍽 터진다
-        this.noise(0.04, 0.9, 3200);
-        this.noise(0.22, 0.95, 750);
-        this.tone(85, 0.18, 'square', 0.8, 0, 45);
-        this.tone(240, 0.08, 'sawtooth', 0.5, 0, 90);
+        // 머리 격파 — 호박 으깨기. 로우패스+짧은 감쇠에 눌려 약하게 들려서
+        // 겹을 늘리고 게인을 크게 문다 (컴프레서가 상한을 잡는다)
+        this.noise(0.06, 1.5, 5200); // 빠직 — 밝은 균열
+        this.noise(0.3, 1.5, 950); // 퍽 — 두껍고 젖은 파열
+        this.noise(0.18, 1.0, 480, 0.05); // 으깨짐 여운 — 한 박자 늦게
+        this.tone(300, 0.09, 'sawtooth', 0.8, 0, 70); // 크런치
+        this.tone(62, 0.24, 'square', 1.1, 0, 40); // 몸통 울림
         break;
       case 'head_stomp':
         // 밟아 으깨기 — 같은 호박 소리를 발밑에서 더 크고 무겁게
-        this.noise(0.05, 1.0, 2800);
-        this.noise(0.26, 1.0, 600);
-        this.tone(70, 0.22, 'square', 0.9, 0, 38);
-        this.tone(200, 0.1, 'sawtooth', 0.55, 0, 80);
+        this.noise(0.07, 1.7, 4200);
+        this.noise(0.34, 1.7, 750);
+        this.noise(0.2, 1.2, 380, 0.06);
+        this.tone(240, 0.1, 'sawtooth', 0.9, 0, 60);
+        this.tone(52, 0.28, 'square', 1.3, 0, 34);
         break;
       case 'leech_suck':
         // 흡혈 — 젖은 빨아들임: 노이즈가 좁아지며 낮은 톤이 딸려 내려간다

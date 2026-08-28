@@ -684,6 +684,73 @@ export function updateBowDraw(rig: BowRig, draw: number, showArrow: boolean): vo
   rig.group.rotation.z = -0.18 * draw; // 당길수록 살짝 들려 조준한다
 }
 
+/** 얼굴에 붙은 거머리 리그 — 카메라 정면 0.3m 에 매달린 실물. 몸통이 화면 가운데를
+ *  덮고 촉수가 화면 밖으로 뻗는다. 디버그 미리보기(debug/leechface.ts)와 코드를 공유한다 */
+export function buildFaceLeechRig(): THREE.Group {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshLambertMaterial({
+    color: 0x7a4b6e,
+    emissive: 0x2a1030, // 어두운 던전에서도 실루엣이 읽히게 은은히 자체 발광
+    emissiveIntensity: 0.55,
+  });
+  // 몸통 — 시야 가운데를 덮는 젖은 살덩이
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.12), bodyMat);
+  body.name = 'flbody';
+  group.add(body);
+  // 빨판 입 — 화면 정중앙, 검은 원통이 다가온다
+  const mouth = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.075, 0.1, 0.05, 12),
+    new THREE.MeshBasicMaterial({ color: 0x12060e }),
+  );
+  mouth.rotation.x = Math.PI / 2;
+  mouth.position.z = 0.07;
+  mouth.name = 'flmouth';
+  group.add(mouth);
+  // 촉수 — 화면 네 귀퉁이 밖으로 뻗어 '감싸 쥔' 그림을 만든다
+  const tentMat = new THREE.MeshLambertMaterial({
+    color: 0x5c3853,
+    emissive: 0x1c0a18,
+    emissiveIntensity: 0.5,
+  });
+  for (let i = 0; i < 6; i++) {
+    const ang = (Math.PI * 2 * i) / 6 + 0.35;
+    const tent = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 0.05), tentMat);
+    tent.name = `fltent${i}`;
+    tent.position.set(Math.cos(ang) * 0.24, Math.sin(ang) * 0.19, -0.01);
+    tent.rotation.z = ang - Math.PI / 2;
+    // 피벗을 몸통 쪽 끝으로 — 끝이 꿈틀거려야 살아 있다
+    tent.geometry.translate(0, 0.25, 0);
+    group.add(tent);
+  }
+  // 눈 — 나를 보고 있다
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff5030 });
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), eyeMat);
+    eye.position.set(side * 0.09, 0.09, 0.06);
+    group.add(eye);
+  }
+  return group;
+}
+
+/** 리그 꿈틀거림 — 맥동(빨기 박자)과 촉수 물결. pulse 는 최근 흡혈 후 경과(ms) */
+export function animateFaceLeechRig(group: THREE.Group, nowMs: number, msSinceSuck: number): void {
+  // 흡혈 순간 훅 조였다가 풀린다 + 느린 숨쉬기
+  const suckSqueeze = msSinceSuck < 260 ? (1 - msSinceSuck / 260) * 0.16 : 0;
+  const breath = Math.sin(nowMs / 420) * 0.04;
+  const s = 1 + breath + suckSqueeze;
+  const body = group.getObjectByName('flbody');
+  if (body) body.scale.set(s, 1 / s + suckSqueeze * 0.5, s);
+  const mouth = group.getObjectByName('flmouth');
+  if (mouth) mouth.position.z = 0.07 + suckSqueeze_z(msSinceSuck);
+  for (let i = 0; i < 6; i++) {
+    const tent = group.getObjectByName(`fltent${i}`);
+    if (tent) tent.rotation.z += Math.sin(nowMs / 300 + i * 1.7) * 0.0035;
+  }
+}
+function suckSqueeze_z(msSinceSuck: number): number {
+  return msSinceSuck < 260 ? (1 - msSinceSuck / 260) * 0.05 : 0;
+}
+
 /** 거머리 위장색 — GridLoader 의 천장 돌빛(COLOR_CEILING)과 같은 값 */
 const LEECH_CAMO_COLOR = 0x342f28;
 const LEECH_TMP_DIR = new THREE.Vector3();
@@ -797,6 +864,9 @@ export class Stage {
   private lanternSpill!: THREE.PointLight;
   /** 랜턴이 켜져 있는가 — 거머리 위장 해제 판정에 쓴다 (setLanternOn 이 갱신) */
   private lanternIsOn = true;
+  /** 얼굴에 붙은 거머리 실물 — 카메라 자식. 흡혈 순간(pulse) 훅 조인다 */
+  private faceLeechRig: THREE.Group | null = null;
+  private faceLeechSuckAt = 0;
   private readonly muzzleLight: THREE.PointLight;
   private readonly eyeHeight = balance.player.eyeHeight;
   private readonly enemyVisuals = new Map<number, EnemyVisual>();
@@ -3505,6 +3575,27 @@ export class Stage {
       v.mat.dispose();
       this.gooVisuals.delete(id);
     }
+  }
+
+  /** 얼굴 거머리 표시 — 매 프레임 호출. 붙어 있으면 카메라 앞 실물이 꿈틀거린다 */
+  setFaceLeech(on: boolean): void {
+    if (on && !this.faceLeechRig) {
+      this.faceLeechRig = buildFaceLeechRig();
+      this.faceLeechRig.position.set(0, -0.02, -0.3);
+      this.camera.add(this.faceLeechRig);
+    }
+    if (this.faceLeechRig) {
+      this.faceLeechRig.visible = on;
+      if (on) {
+        const now = performance.now();
+        animateFaceLeechRig(this.faceLeechRig, now, now - this.faceLeechSuckAt);
+      }
+    }
+  }
+
+  /** 흡혈 순간 — 리그가 훅 조인다 */
+  pulseFaceLeech(): void {
+    this.faceLeechSuckAt = performance.now();
   }
 
   flashEnemyHit(enemyId: number): void {

@@ -503,20 +503,21 @@
       #faceleech.visible {
         opacity: 1;
       }
+      /* 실물 리그(3D)가 가운데를 맡는다 — 얼룩은 가장자리를 조이는 비네트로만 */
       #faceleech .blob {
         position: absolute;
         border-radius: 50%;
         background: radial-gradient(
           closest-side,
-          rgba(44, 17, 50, 0.97) 52%,
-          rgba(44, 17, 50, 0.88) 72%,
+          rgba(44, 17, 50, 0.55) 40%,
+          rgba(44, 17, 50, 0.42) 68%,
           rgba(44, 17, 50, 0) 100%
         );
         animation: leechwobble 900ms ease-in-out infinite alternate;
       }
-      #faceleech .b1 { left: -14%; top: -20%; width: 76%; height: 88%; }
-      #faceleech .b2 { right: -16%; top: 22%; width: 72%; height: 84%; animation-delay: 300ms; }
-      #faceleech .b3 { left: 12%; bottom: -28%; width: 82%; height: 74%; animation-delay: 600ms; }
+      #faceleech .b1 { left: -30%; top: -34%; width: 70%; height: 82%; }
+      #faceleech .b2 { right: -32%; top: 30%; width: 66%; height: 78%; animation-delay: 300ms; }
+      #faceleech .b3 { left: 4%; bottom: -40%; width: 78%; height: 68%; animation-delay: 600ms; }
       #faceleech .hint {
         position: absolute;
         left: 50%;

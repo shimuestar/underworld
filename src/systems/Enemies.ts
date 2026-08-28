@@ -507,8 +507,16 @@ function startDrop(
   enemy.dropTicks = lurk.dropDurTicks;
   enemy.dropFromY = enemy.jumpY ?? 0;
   enemy.dropStunned = stunnedFall;
-  enemy.dropTargetX = stunnedFall ? enemy.x : world.player.x;
-  enemy.dropTargetZ = stunnedFall ? enemy.z : world.player.z;
+  // 활공 상한 — 소음에 깬 거머리가 12m 를 날아와 덮치면 피할 방법이 없다.
+  // 발밑 사냥 반경 언저리(dropRadius×1.15)까지만 유도하고, 그 밖이면 제자리로
+  // 떨어져 지상전으로 잇는다 (지상 도약은 적색 예고가 있어 공정하다)
+  const p2 = world.player;
+  const gdx = p2.x - enemy.x;
+  const gdz = p2.z - enemy.z;
+  const gd = Math.hypot(gdx, gdz);
+  const homing = !stunnedFall && gd <= lurk.dropRadius * 1.15;
+  enemy.dropTargetX = homing ? p2.x : enemy.x;
+  enemy.dropTargetZ = homing ? p2.z : enemy.z;
   enemy.ai = 'chase';
   enemy.noticeTicks = 0;
   world.events.emit(stunnedFall ? 'leech_fall' : 'leech_drop', {
