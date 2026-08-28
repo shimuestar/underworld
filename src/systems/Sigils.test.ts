@@ -17,6 +17,7 @@ import * as Mana from './Mana';
 import * as Pickups from './Pickups';
 import * as PlayerMove from './PlayerMove';
 import * as Projectiles from './Projectiles';
+import * as GhoulHeads from './GhoulHeads';
 import * as Weapons from './Weapons';
 import * as Sigils from './Sigils';
 
@@ -912,6 +913,44 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(eaves.ai).toBe('idle');
     castSlot(1); // 화염구는 +X 로 날아간다 — 이 적과는 무관
     expect(eaves.ai).toBe('chase');
+  });
+
+  it('구울이 목 날아가 죽으면 통통 튀는 머리 소품이 남는다', () => {
+    GhoulHeads.init(world);
+    world.events.emit('melee_kill', { enemyType: 'ghoul', execution: false, x: 12, z: 6 });
+    expect(world.ghoulHeads).toHaveLength(1);
+    const head = world.ghoulHeads![0]!;
+    const y0 = head.y;
+    for (let i = 0; i < 120; i++) GhoulHeads.tick(world, DT);
+    expect(world.ghoulHeads).toHaveLength(1); // 사라지지 않는다
+    expect(head.y).not.toBe(y0); // 튀는 중
+  });
+
+  it('구울 머리 — 화살이 맞으면 터지고, 코앞 해머는 밟아 터트린다', () => {
+    GhoulHeads.init(world);
+    // 화살
+    (world.ghoulHeads ??= []).push({ id: 1, x: 12, z: 6, y: 0.3, vy: 0, vx: 0, vz: 0 });
+    world.projectiles.push({
+      id: 777001, owner: 'player', kind: 'arrow',
+      x: 6, y: 0.3, z: 6, prevX: 6, prevY: 0.3, prevZ: 6,
+      vx: 40, vy: 0, vz: 0, lifeTicks: 60,
+      damage: 5, burnTicks: 0, burnDamagePerTick: 0, radius: 0.15,
+    });
+    const broken: unknown[] = [];
+    world.events.on('ghoul_head_broken', (pl) => broken.push(pl));
+    for (let i = 0; i < 30 && world.ghoulHeads!.length > 0; i++) Projectiles.tick(world, DT);
+    expect(world.ghoulHeads).toHaveLength(0);
+    expect(broken).toHaveLength(1);
+    // 밟기 — 발밑(1m) 머리에 해머
+    world.stamina.value = 100;
+    world.ghoulHeads!.push({ id: 2, x: 7, z: 6, y: 0.24, vy: 0, vx: 0, vz: 0 });
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    for (let i = 0; i < 40 && world.ghoulHeads!.length > 0; i++) {
+      Weapons.tick(world, DT);
+      world.input = Input.emptySnapshot();
+    }
+    expect(world.ghoulHeads).toHaveLength(0);
+    expect((broken[1] as { stomp: boolean }).stomp).toBe(true); // 밟아 터트렸다
   });
 
   it('해머 피격음 — 뒤에서 때려도 맞은 적 곁 4m 의 등 돌린 동료가 듣는다', () => {

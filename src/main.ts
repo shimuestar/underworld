@@ -18,6 +18,7 @@ import { Stage } from './render/Stage';
 import { grenadeThrowSpeed } from './systems/Weapons';
 import * as PlayerMove from './systems/PlayerMove';
 import * as Enemies from './systems/Enemies';
+import * as GhoulHeads from './systems/GhoulHeads';
 import * as Weapons from './systems/Weapons';
 import * as Projectiles from './systems/Projectiles';
 import * as Mana from './systems/Mana';
@@ -346,6 +347,8 @@ for (const name of [
   'enemy_split',
   'grave_dropped',
   'slime_ate',
+  'ghoul_head_broken',
+  'ghoul_head_hop',
   'ghoul_moan',
   'leech_face_attach',
   'leech_suck',
@@ -536,12 +539,20 @@ events.on('boss_execute', () => presentExecute(1.15));
 events.on('melee_kill', (payload) => {
   // 처형(방패 강타)만 전용 연출 — 해머 처치는 자체 타격음이 이미 난다
   const kill = payload as { execution: boolean; enemyType?: string; x?: number; z?: number };
-  // 구울은 해머에 죽으면 머리가 날아간다 — 썩은 목은 둔기 한 방을 못 버틴다
-  if (kill.enemyType === 'ghoul' && kill.x !== undefined && kill.z !== undefined) {
-    stage.spawnHeadPop('ghoul', kill.x, kill.z);
-    audio.play('heavy_hit');
-  }
+  // 구울 머리는 파티클이 아니라 소품(GhoulHeads)이 튄다 — 여기서는 소리만
+  if (kill.enemyType === 'ghoul') audio.play('heavy_hit');
   if (kill.execution) presentExecute(1, kill.x, kill.z);
+});
+// 구울 머리 소품이 부서졌다 — 밟았으면 발밑 파열, 아니면 살 터지는 소리
+events.on('ghoul_head_broken', (payload) => {
+  const hb = payload as { x: number; z: number; stomp: boolean };
+  stage.spawnDeathBurst(hb.x, hb.z, 'ghoul', hb.stomp ? 1.1 : 0.7);
+  if (hb.stomp) {
+    audio.play('head_stomp');
+    stage.triggerCameraKick(0.42, 160); // 밟는 반동
+  } else {
+    audio.play('hit_flesh');
+  }
 });
 // 불발 — 소리·모션은 누를 때마다, 글자 안내만 연타에도 한 번씩
 let emptyHintUntil = 0;
@@ -825,7 +836,8 @@ events.on('headshot', (payload) => {
 events.on('headshot_kill', (payload) => {
   const kill = payload as { enemyType: string; x: number; z: number };
   audio.play('heavy_hit');
-  stage.spawnHeadPop(kill.enemyType, kill.x, kill.z); // 머리가 떨어져 나간다
+  // 구울 머리는 소품(GhoulHeads)으로 남는다 — 파티클 머리는 다른 적만
+  if (kill.enemyType !== 'ghoul') stage.spawnHeadPop(kill.enemyType, kill.x, kill.z);
   stage.spawnDeathBurst(kill.x, kill.z, kill.enemyType, balance.weapons.headshotKillBurstScale);
   const d = Math.hypot(kill.x - world.player.x, kill.z - world.player.z);
   if (d < 14) stage.triggerCameraKick(0.35 * (1 - d / 14), 200);
@@ -1318,6 +1330,7 @@ function respawnAtAltar(): void {
   world.chestInView = null;
   world.projectiles.length = 0;
   world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
+  world.ghoulHeads = []; // 튀는 머리도 층에 속한다
   // 바닥 보상은 리셋하되 비석만은 남긴다 — 유품은 다시 죽어도 그 자리에 있다
   world.groundItems = world.groundItems.filter((g) => g.kind === 'grave');
   world.freezeTicks = 0;
@@ -1546,6 +1559,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   }
   world.projectiles.length = 0;
   world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
+  world.ghoulHeads = []; // 튀는 머리도 층에 속한다
 
   // 도착 지점 — 내려왔으면 입구 계단 앞, 올라왔으면 출구 계단 앞
   const at = arrival === 'exit' && level.exitPos ? level.exitPos : level.spawn;
@@ -1689,9 +1703,11 @@ Corruption.init(world);
 Stamina.init(world);
 Exit.init(world); // 보스가 죽으면 열쇠를 떨군다
 Enemies.init(world); // 공격 행동 소음 — 시전·휘두름이 코앞의 적을 깨운다
+GhoulHeads.init(world); // 구울 머리 소품 — 목이 날아가면 통통 튀는 머리가 남는다
 const systems = [
   PlayerMove.tick,
   Enemies.tick,
+  GhoulHeads.tick,
   Reaction.tick,
   Sigils.tick,
   Pickups.tick,
@@ -2039,6 +2055,7 @@ function render(alpha: number): void {
   stage.setMuzzleFlash(world.weapon.muzzleFlash > 0);
   stage.syncEnemies(world.enemies, alpha);
   stage.syncGoo(world.gooPuddles, balance.goo.lifeTicks);
+  stage.syncGhoulHeads(world.ghoulHeads);
   stage.syncProjectiles(world.projectiles, alpha);
   stage.syncGroundItems(world.groundItems);
   stage.syncLifeMotes(world.lifeMotes);

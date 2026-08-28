@@ -171,6 +171,17 @@ export function alertEnemy(enemy: EnemyState, noticeTicks: number): void {
   enemy.noticeTicks = noticeTicks;
 }
 
+/** 구울 머리를 부순다 — stomp 면 밟아 터트린 것 (연출은 main 이 ghoul_head_broken 으로 잇는다) */
+export function breakGhoulHead(world: World, headId: number, stomp: boolean): void {
+  const heads = world.ghoulHeads;
+  if (!heads) return;
+  const idx = heads.findIndex((h) => h.id === headId);
+  if (idx < 0) return;
+  const head = heads[idx]!;
+  heads.splice(idx, 1);
+  world.events.emit('ghoul_head_broken', { x: head.x, z: head.z, stomp });
+}
+
 /** (x,z)에서 난 소음 — 반경 안의 대기(idle) 적을 깨운다. 각도·시야선 무관 (소리다).
  *  noticeTicks 는 부르는 쪽이 준다 (World 는 데이터에 의존하지 않는다 — pushPlayer 규약) */
 export function alertNearbyAt(
@@ -377,6 +388,18 @@ export type EnemyAiState =
   | 'charging'
   /** 들러붙어 파먹기 — 플레이어에게 매달려 있다. 근접 연타로 밀쳐내야 풀린다 (구울) */
   | 'latched';
+
+/** 통통 튀는 구울 머리 소품 — GhoulHeads 가 굴리고, Weapons/Projectiles 가 부순다 */
+export interface GhoulHeadState {
+  id: number;
+  x: number;
+  z: number;
+  /** 렌더·피격용 높이 (바닥 = radius) */
+  y: number;
+  vy: number;
+  vx: number;
+  vz: number;
+}
 
 /** 슬라임이 남긴 점액 장판 한 방울 — Enemies 가 떨구고 말리며, PlayerMove 가 밟기를 판정한다 */
 export interface GooPuddle {
@@ -721,6 +744,9 @@ export class World {
 
   /** 슬라임 점액 장판 — 층 이동 시 loadFloor 가 비운다. 없으면 빈 배열로 취급 */
   gooPuddles?: GooPuddle[];
+
+  /** 통통 튀는 구울 머리들 — 층 이동·부활 시 비운다 */
+  ghoulHeads?: GhoulHeadState[];
 
   /** 구울에게 붙잡혀 파먹히는 중 — 그 구울의 id. 근접 연타로 밀쳐내야 풀린다 */
   grappleEnemyId: number | null = null;

@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type World } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -710,6 +710,28 @@ function moveProjectiles(world: World, dt: number): void {
       }
     }
 
+    // 튀는 구울 머리 — 화살이 맞으면 터진다
+    let hitHead: number | null = null;
+    if (proj.owner === 'player' && proj.kind === 'arrow' && world.ghoulHeads?.length) {
+      const hcfg = balance.ghoulHead;
+      for (const head of world.ghoulHeads) {
+        const pad = hcfg.radius + proj.radius;
+        const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
+          minX: head.x - pad,
+          minY: head.y - pad,
+          minZ: head.z - pad,
+          maxX: head.x + pad,
+          maxY: head.y + pad,
+          maxZ: head.z + pad,
+        });
+        if (t !== null && t < hitT) {
+          hitT = t;
+          hitHead = head.id;
+          hitBarrelTarget = null; // 머리가 통보다 앞이다
+        }
+      }
+    }
+
     // 부술 수 있는 적 투사체 — 화염구·수류탄이 공중에서 맞히면 함께 사라진다.
     // 히트스캔인 총알은 이 경로를 타지 않는다 (Weapons 는 투사체를 만들지 않는다)
     let hitProjectile: ProjectileState | null = null;
@@ -729,6 +751,7 @@ function moveProjectiles(world: World, dt: number): void {
           hitT = t;
           hitProjectile = other;
           hitBarrelTarget = null; // 돌이 통보다 앞이다
+          hitHead = null;
         }
       }
     }
@@ -750,6 +773,7 @@ function moveProjectiles(world: World, dt: number): void {
           hitT = t;
           hitEnemy = enemy;
           hitBarrelTarget = null; // 적이 통보다 앞이다
+          hitHead = null;
           hitProjectile = null;
         }
       }
@@ -808,7 +832,7 @@ function moveProjectiles(world: World, dt: number): void {
         proj.y += dirY * hitT;
         proj.z += dirZ * hitT;
         const bodyHit =
-          hitEnemy !== null || hitPlayer || hitBarrelTarget !== null || hitProjectile !== null;
+          hitEnemy !== null || hitPlayer || hitBarrelTarget !== null || hitProjectile !== null || hitHead !== null;
         // 금 간 벽(C)에는 튕기지 않고 부딪히는 즉시 터진다 — 튕기는 수류탄으로
         // 균열 벽을 맞히기가 고역이라, 벽 쪽이 받아 준다
         if (!bodyHit && hitSurface === 'wall') {
@@ -833,6 +857,15 @@ function moveProjectiles(world: World, dt: number): void {
         continue;
       }
       // 폭발통에 꽂혔다 — 마법·화염구는 즉발이다 (총·해머의 누적 규칙과 다르다)
+      if (hitHead !== null) {
+        breakGhoulHead(world, hitHead, false);
+        world.events.emit('arrow_impact', {
+          x: proj.x + dirX * hitT, y: proj.y + dirY * hitT, z: proj.z + dirZ * hitT, hitEnemy: true,
+        });
+        world.projectiles.splice(i, 1);
+        continue;
+      }
+
       if (hitBarrelTarget) {
         const bx = proj.x + dirX * hitT;
         const by = proj.y + dirY * hitT;

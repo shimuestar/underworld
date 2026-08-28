@@ -3421,6 +3421,55 @@ export class Stage {
     this.scene.add(mesh);
   }
 
+  /** 튀는 구울 머리 — id 키 동기화. 회전은 튄 방향으로 천천히 구른다 */
+  private readonly headPropVisuals = new Map<number, THREE.Group>();
+
+  syncGhoulHeads(heads: { id: number; x: number; y: number; z: number; vx: number; vz: number }[] | undefined): void {
+    const seen = new Set<number>();
+    const now = performance.now();
+    for (const head of heads ?? []) {
+      seen.add(head.id);
+      let group = this.headPropVisuals.get(head.id);
+      if (!group) {
+        group = new THREE.Group();
+        const def = enemyDef('ghoul');
+        const headSize = def.radius * 0.9;
+        const color = new THREE.Color(ENEMY_COLORS['ghoul']!).multiplyScalar(HEAD_DARKEN);
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(headSize, headSize, headSize),
+          new THREE.MeshLambertMaterial({ color }),
+        );
+        group.add(mesh);
+        const ec = balance.lighting.enemyEyes;
+        const eyeR = def.radius * ec.radiusMul;
+        const eyeMat = new THREE.MeshLambertMaterial({
+          color: 0x1a0505,
+          emissive: new THREE.Color(ec.color),
+          emissiveIntensity: 0.4, // 죽었는데도 희미하게 — 그래서 더 기분 나쁘다
+        });
+        for (const side of [-1, 1]) {
+          const eye = new THREE.Mesh(new THREE.SphereGeometry(eyeR, 6, 5), eyeMat);
+          eye.position.set(side * headSize * ec.spacingMul, headSize * 0.08, -headSize / 2);
+          group.add(eye);
+        }
+        this.scene.add(group);
+        this.headPropVisuals.set(head.id, group);
+      }
+      group.position.set(head.x, head.y, head.z);
+      // 얼굴이 카메라 쪽을 힐끗거린다 — 통통 튀는 리듬에 맞춰 갸웃
+      group.rotation.set(
+        Math.sin(now / 180 + head.id) * 0.25,
+        Math.atan2(-(this.camera.position.x - head.x), -(this.camera.position.z - head.z)),
+        Math.sin(now / 240 + head.id * 2) * 0.2,
+      );
+    }
+    for (const [id, group] of this.headPropVisuals) {
+      if (seen.has(id)) continue;
+      this.disposeGroup(group);
+      this.headPropVisuals.delete(id);
+    }
+  }
+
   /** 점액 장판 시각 — id 키 동기화. 마르는(수명↓) 동안 옅어진다 */
   private readonly gooVisuals = new Map<number, { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }>();
 

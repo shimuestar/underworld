@@ -6,7 +6,7 @@
 import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, hitBarrel, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, hitBarrel, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type World } from '../core/World';
 
 /** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
  *  활을 넣으면서 실제로 방패·경직·무기 교체 세 곳이 bowDraw 를 안 지워
@@ -362,6 +362,23 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     }
   }
 
+  // 튀는 구울 머리 — 호 안이면 부수고, 아주 가까우면(stompRange) 밟아 터트린다
+  {
+    const hcfg = balance.ghoulHead;
+    for (const head of [...(world.ghoulHeads ?? [])]) {
+      const toX = head.x - p.x;
+      const toZ = head.z - p.z;
+      const dist = Math.hypot(toX, toZ);
+      if (dist <= hcfg.stompRange) {
+        breakGhoulHead(world, head.id, true); // 발밑 — 밟아 터트린다 (각도 무관)
+        hitAny = true;
+      } else if (dist <= range + hcfg.radius && dist > 0 && (facingX * toX + facingZ * toZ) / dist >= arcCos) {
+        breakGhoulHead(world, head.id, false);
+        hitAny = true;
+      }
+    }
+  }
+
   // 1·2타는 짧은 후딜로 바로 이어칠 수 있게 하고(연결), 마무리 강타만 크게 쉰다.
   // 헛스윙이면 추가 후딜 — 마구 휘두르기 억제
   // 헛쳤을 때의 추가 후딜은 마무리 3타에만 크게 붙인다. 1·2타에 그대로 물리면
@@ -622,6 +639,34 @@ function fire(world: World): void {
     });
     if (t !== null && t < wallT && (!barrelHit || t < barrelHit.t)) barrelHit = { barrel, t };
   }
+  // 튀는 구울 머리 — 총알이 맞으면 터진다 (적·통이 더 앞이면 그쪽이 먼저 받는다)
+  const hcfg = balance.ghoulHead;
+  let headHit: { id: number; t: number; hx: number; hy: number; hz: number } | null = null;
+  for (const head of world.ghoulHeads ?? []) {
+    const t = rayVsAabb(p.x, oy, p.z, dx, dy, dz, {
+      minX: head.x - hcfg.radius,
+      minY: head.y - hcfg.radius,
+      minZ: head.z - hcfg.radius,
+      maxX: head.x + hcfg.radius,
+      maxY: head.y + hcfg.radius,
+      maxZ: head.z + hcfg.radius,
+    });
+    if (t !== null && t < wallT && (!headHit || t < headHit.t)) {
+      headHit = { id: head.id, t, hx: head.x, hy: head.y, hz: head.z };
+    }
+  }
+  if (headHit && (!hit || headHit.t < hit.t) && (!barrelHit || headHit.t < barrelHit.t)) {
+    breakGhoulHead(world, headHit.id, false);
+    alertNearby(world, p.x, p.z, pistol.noiseRadius); // 총성은 그대로 난다
+    world.events.emit('shot_fired', {
+      ex: p.x + dx * headHit.t,
+      ey: oy + dy * headHit.t,
+      ez: p.z + dz * headHit.t,
+      hitEnemy: true, // 살 맞는 소리 — 벽 착탄음보다 이게 맞다
+    });
+    return;
+  }
+
   if (barrelHit && (!hit || barrelHit.t < hit.t)) {
     hit = null; // 통이 적보다 앞 — 총알은 여기서 멈춘다
     hitBarrel(barrelHit.barrel, bcfg.fuseByHits);

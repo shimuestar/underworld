@@ -547,6 +547,17 @@
     "shoveDistance": 3.2,
     "escapeIframeTicks": 24
   },
+  "_ghoulHeadNote": "구울 머리 소품 — 사라지지 않고 통통 튀며 돌아다닌다. 총·활·해머로 부수고, stompRange 안 해머는 밟아 터트리기다",
+  "ghoulHead": {
+    "radius": 0.24,
+    "hopVyMin": 2.0,
+    "hopVySpan": 1.6,
+    "moveSpeedMin": 1.0,
+    "moveSpeedSpan": 1.2,
+    "gravity": 9,
+    "stompRange": 1.3,
+    "max": 6
+  },
   "_gooNote": "슬라임 점액 장판 — 기어간 자리에 남아 밟으면 느려진다. 마르면(수명) 사라진다",
   "goo": {
     "radius": 1.1,
