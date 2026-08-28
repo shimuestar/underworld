@@ -669,22 +669,30 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slime.ai).toBe('chase');
   });
 
-  it('구울은 대기 중 생성 지점 주변을 어슬렁거리고, 걷는 동안 흐느낀다', () => {
-    const g = add('ghoul', 14, 6);
-    g.homeX = 14;
+  it('구울은 대기 중 생성 지점 반경을 벗어나지 않고 어슬렁거린다', () => {
+    world.lantern.on = false; // 랜턴 빔이 깨우지 않게 — 배회만 잰다
+    // 배회 반경(3m)만큼 다가와도 시야(17m) 밖이도록 21m 에 둔다 (최소 거리 18m)
+    const g = add('ghoul', 27, 6);
+    g.homeX = 27;
     g.homeZ = 6;
-    g.moanTicks = 5; // 랜덤 초기 오프셋을 시드 — 걷기 5틱 뒤 첫 흐느낌 (결정적 테스트)
-    const moans: unknown[] = [];
-    world.events.on('ghoul_moan', (pl) => moans.push(pl));
     let moved = 0;
     for (let i = 0; i < 600; i++) {
       Enemies.tick(world, DT);
-      moved = Math.max(moved, Math.hypot(g.x - 14, g.z - 6));
+      moved = Math.max(moved, Math.hypot(g.x - 27, g.z - 6));
     }
-    expect(g.ai).toBe('idle'); // 배회는 여전히 대기 상태다 (플레이어를 본 게 아니다)
+    expect(g.ai).toBe('idle'); // 시야 밖 — 배회는 대기 상태 그대로다
     expect(moved).toBeGreaterThan(0.5); // 실제로 돌아다녔다
     expect(moved).toBeLessThan(3.6); // 생성 지점 반경(3m) 언저리를 벗어나지 않는다
-    expect(moans.length).toBeGreaterThan(0); // 걷는 동안 흐느꼈다 (플레이어 8m — 들리는 거리)
+  });
+
+  it('구울은 걷는 동안 흐느낀다 — 추격 중에도, 들리는 거리에서만', () => {
+    const g = add('ghoul', 14, 6);
+    g.ai = 'chase'; // 걷기만 하면 된다 — 배회든 추격이든
+    g.moanTicks = 5; // 랜덤 초기 오프셋을 시드 (결정적 테스트)
+    const moans: unknown[] = [];
+    world.events.on('ghoul_moan', (pl) => moans.push(pl));
+    for (let i = 0; i < 60; i++) Enemies.tick(world, DT);
+    expect(moans.length).toBeGreaterThan(0); // 걷기 5틱 뒤 첫 흐느낌
   });
 
   it('거머리 — 밑을 지나면 떨어져 내려찍고, 비키면 바닥을 헛찍고 뻗는다', () => {
