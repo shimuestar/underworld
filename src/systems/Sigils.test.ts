@@ -17,6 +17,7 @@ import * as Mana from './Mana';
 import * as Pickups from './Pickups';
 import * as PlayerMove from './PlayerMove';
 import * as Projectiles from './Projectiles';
+import * as Weapons from './Weapons';
 import * as Sigils from './Sigils';
 
 const DT = 1 / 60;
@@ -911,6 +912,24 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(eaves.ai).toBe('idle');
     castSlot(1); // 화염구는 +X 로 날아간다 — 이 적과는 무관
     expect(eaves.ai).toBe('chase');
+  });
+
+  it('해머 피격음 — 뒤에서 때려도 맞은 적 곁 4m 의 등 돌린 동료가 듣는다', () => {
+    world.stamina.value = 100;
+    const victim = add('spider_small', 7.5, 6); // 플레이어(6,6) 정면 — 해머 사거리 안
+    victim.yaw = Math.PI / 2; // 서쪽을 본다... 방향은 무관 — 소리 규약 검증
+    const buddy = add('spider_small', 11, 6); // 피해자에게서 3.5m
+    buddy.yaw = -Math.PI / 2; // 동쪽(반대편)을 본다 — 플레이어를 등졌다
+    buddy.homeYaw = -Math.PI / 2;
+    world.lantern.on = false; // 랜턴 빔이 깨우지 않게 — 소리만 잰다
+    victim.health = 1000;
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    for (let i = 0; i < 40 && victim.health === 1000; i++) {
+      Weapons.tick(world, DT);
+      world.input = Input.emptySnapshot();
+    }
+    expect(victim.health).toBeLessThan(1000); // 해머가 맞았다
+    expect(buddy.ai).toBe('chase'); // 등 돌린 동료가 피격음(4m)을 들었다
   });
 
   it('피격음 — 화살에 맞은 적 곁(4m)의 동료도 깬다', () => {
