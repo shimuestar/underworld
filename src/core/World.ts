@@ -432,10 +432,12 @@ export interface EnemyState {
   /** 보스 전용 — 연속 패링 누적 (parriesToStagger 도달 시 스태거) */
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
-  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley';
+  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley' | 'summon';
   /** 연사 남은 발수 / 재사용 대기 (족장 화살 세례) */
   volleyLeft?: number;
   volleyCooldown?: number;
+  /** 무리 소환 재사용 대기 (어미 슬라임) */
+  summonCooldown?: number;
   /** 거리 조건으로 나가는 돌격의 재사용 대기 (족장) */
   chargeCooldown?: number;
   /** 돌격이 겨눈 지점 — 예고가 끝나는 순간의 플레이어 좌표로 고정한다.

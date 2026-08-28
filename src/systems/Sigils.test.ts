@@ -556,6 +556,30 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(eaves.ai).toBe('chase');
   });
 
+  it('어미 슬라임 — 제 몸을 떼어 새끼 다섯을 뿌리고 그만큼 체력을 잃는다', () => {
+    const mom = add('slime_mother', 14, 6);
+    mom.ai = 'chase';
+    const before = mom.health;
+    // 소환 windup(48틱)을 지나 발동까지
+    for (
+      let i = 0;
+      i < 70 && world.enemies.filter((e) => e.type === 'slime_small').length === 0;
+      i++
+    )
+      Enemies.tick(world, DT);
+    expect(world.enemies.filter((e) => e.type === 'slime_small' && e.alive)).toHaveLength(5);
+    expect(mom.health).toBe(before - 30);
+    expect(mom.summonCooldown).toBeGreaterThan(0); // 재사용 대기가 돈다
+  });
+
+  it('어미 슬라임 — 화상 중에는 말라붙어 새끼를 못 떼어낸다', () => {
+    const mom = add('slime_mother', 14, 6);
+    mom.ai = 'chase';
+    mom.burnTicks = 600;
+    for (let i = 0; i < 70; i++) Enemies.tick(world, DT);
+    expect(world.enemies.filter((e) => e.type === 'slime_small')).toHaveLength(0);
+  });
+
   it('슬라임은 죽으면 절반 둘로 갈라진다 — 화상·빙결 중 사망은 예외다', () => {
     const s1 = add('slime', 12, 6);
     s1.health = 0;

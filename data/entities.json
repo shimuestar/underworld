@@ -55,6 +55,24 @@
       "counters": { "pistol": "best", "rifle": "best", "grenade": "good", "flash": "good", "melee": "good", "magic": "good", "deflect": "none" },
       "drops": []
     },
+    "slime_mother": {
+      "name": "어미 슬라임",
+      "zone": 1, "slice": true, "boss": true, "healthBars": 2,
+      "weight": "heavy", "xp": 80, "health": 260, "speed": 2.0, "damage": 20,
+      "radius": 1.1, "height": 1.7,
+      "aggroRange": 18, "attackRange": 2.4,
+      "blind": true, "hearingMul": 4,
+      "gooTrail": true,
+      "behavior": "swarm",
+      "_bossNote": "1층 보스 — 출구 열쇠를 쥔다. 눈이 없고 귀가 밝다(4배). 핵심 기믹은 새끼 분리: 제 체력 30을 떼어 새끼 다섯을 사방에 뿌려 무리 전투를 강제한다. 화상 중엔 말라붙어 못 떼어낸다 — 불이 무리를 끊는 정답. 죽으면 출구 열쇠를 떨군다",
+      "attack": { "type": "contact", "arcDeg": 160, "windupTicks": 40, "recoverTicks": 45, "whiffRecoverTicks": 60, "impactRangeMul": 1.35, "playerKnockback": 2.2, "parryable": false, "telegraph": "red" },
+      "chargeAttack": { "type": "contact", "arcDeg": 160, "leapHeight": 2.4, "chargeSpeed": 12, "chargeRunTicks": 30, "minRange": 3.5, "maxRange": 10, "windupTicks": 38, "recoverTicks": 50, "whiffRecoverTicks": 80, "impactRangeMul": 1.35, "playerKnockback": 2.6, "parryable": false, "telegraph": "red", "cooldownTicks": 260 },
+      "_summonNote": "새끼 분리 — 소환이 공짜 인플레가 되지 않게 체력을 대가로 치른다. maxAlive 는 층의 새끼 총수(분열체 포함) 기준",
+      "summonAttack": { "type": "summon", "windupTicks": 48, "recoverTicks": 40, "impactRangeMul": 1, "parryable": false, "telegraph": "purple",
+        "brood": { "type": "slime_small", "count": 5, "maxAlive": 6, "healthCost": 30, "cooldownTicks": 540 } },
+      "counters": { "pistol": "poor", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "good", "magic": "best", "deflect": "none" },
+      "drops": []
+    },
     "slime": {
       "name": "슬라임",
       "zone": 1, "slice": true,

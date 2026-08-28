@@ -27,12 +27,13 @@ const ENEMY_COLORS: Record<string, number> = {
   spider_small: 0x14141a,
   spider_large: 0xd8d8cf,
   slime: 0x3fae62,
+  slime_mother: 0x2e8f52,
   slime_small: 0x63c97e,
 };
 /** 거미는 기둥+머리가 아니라 몸통·배·다리로 만든다 */
 const SPIDER_TYPES = new Set(['spider_small', 'spider_large']);
 /** 슬라임 — 반투명 젤 덩어리. 다리·팔·머리·눈이 없다 (무정형) */
-const SLIME_TYPES = new Set(['slime', 'slime_small']);
+const SLIME_TYPES = new Set(['slime', 'slime_small', 'slime_mother']);
 const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
 
 /** 거미 몸 — 낮게 깔린 몸통 + 뒤로 부푼 배 + 사방으로 뻗은 다리 8개.

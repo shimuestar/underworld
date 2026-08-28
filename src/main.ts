@@ -344,6 +344,7 @@ for (const name of [
   'weapon_kill',
   'headshot_kill',
   'enemy_split',
+  'boss_brood',
   'enemy_died',
   'enemy_damaged',
   'enemy_alerted',
@@ -700,6 +701,14 @@ events.on('enemy_volley_start', (payload) => {
   const info = payload as { shots: number };
   audio.play('boss_volley_draw');
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
+});
+// 어미 슬라임 새끼 분리 — 크게 철퍽이며 어미 색 파편이 사방으로 튄다
+events.on('boss_brood', (payload) => {
+  const b = payload as { enemyType: string; x: number; z: number };
+  audio.play('slime_split');
+  audio.play('heavy_hit');
+  stage.spawnDeathBurst(b.x, b.z, b.enemyType, 1.8);
+  showReaction('어미가 새끼를 떼어냈다!', 1400);
 });
 // 슬라임 분열 — 젖은 파열음 + 부모 색 파편이 갈라지는 자리에서 튄다
 events.on('enemy_split', (payload) => {
@@ -2102,8 +2111,10 @@ function render(alpha: number): void {
     bossBarColor = hb.index > 1 ? BOSS_BAR_COLORS.outer : BOSS_BAR_COLORS.last;
     const bar = '█'.repeat(Math.round(hb.frac * 24)).padEnd(24, '░');
     const stage2 = hb.count > 1 ? ` ×${hb.index}` : '';
-    const streak = `패링 ${boss.parryStreak ?? 0}/${def.parriesToStagger}`;
-    bossLine = `족장${stage2} ${bar} ${Math.max(0, Math.round(boss.health))}/${def.health}  [${streak}]\n`;
+    // 패링 카운터가 있는 보스(족장)만 스트릭을 보여 준다 — 어미 슬라임은 패링이 없다
+    const streak =
+      def.parriesToStagger !== undefined ? `  [패링 ${boss.parryStreak ?? 0}/${def.parriesToStagger}]` : '';
+    bossLine = `${def.name ?? '보스'}${stage2} ${bar} ${Math.max(0, Math.round(boss.health))}/${def.health}${streak}\n`;
   }
   // HP·마나·랜턴은 하단 게이지가 이미 보여 준다 — 위에서 숫자로 겹쳐 읽지 않는다.
   // 연쇄 배율만은 어디에도 안 나오므로 spell 줄로 옮겨 살려 둔다

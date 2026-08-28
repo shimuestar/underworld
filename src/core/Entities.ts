@@ -60,6 +60,8 @@ export interface EnemyAttackDef {
   projectileSpeed?: number;
   projectileRadius?: number;
   projectileKind?: string;
+  /** 무리 소환 내용물 — type: 'summon' 공격 전용. healthCost 만큼 제 체력을 떼어 준다 */
+  brood?: { type: string; count: number; maxAlive: number; healthCost: number; cooldownTicks: number };
   /** 원거리 공격 사용 최소 거리 (이보다 가까우면 근접) */
   minRange?: number;
   /** 이 거리 안에서만 고른다 (돌격처럼 "중거리 전용" 기술) */
@@ -129,6 +131,8 @@ export interface EnemyDef {
   volleyAttack?: EnemyAttackDef;
   /** 돌격 공격 — 멀리 떨어졌을 때 달려들며 찌른다 (창병) */
   chargeAttack?: EnemyAttackDef;
+  /** 무리 소환 — 제 몸을 떼어 새끼를 뿌린다 (어미 슬라임). brood 필드가 내용물 */
+  summonAttack?: EnemyAttackDef;
   /** 방패 밀쳐내기 — 연타를 멈추지 않는 상대를 떼어낸다 (창병) */
   shieldBash?: EnemyAttackDef;
   /** 완벽 패링만 받는다 — 일반 대역(guardDepth)에서 눌러도 성립하지 않는다.
@@ -146,6 +150,7 @@ export interface EnemyDef {
 
 /** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격 */
 export function currentAttack(def: EnemyDef, enemy: { attackMode?: string }): EnemyAttackDef {
+  if (enemy.attackMode === 'summon' && def.summonAttack) return def.summonAttack;
   if (enemy.attackMode === 'bash' && def.shieldBash) return def.shieldBash;
   if (enemy.attackMode === 'charge' && def.chargeAttack) return def.chargeAttack;
   if (enemy.attackMode === 'volley' && def.volleyAttack) return def.volleyAttack;

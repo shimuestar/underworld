@@ -169,6 +169,36 @@ function handleSplit(world: World, enemy: EnemyState): void {
   });
 }
 
+/** 새끼 분리 — 어미가 제 몸을 떼어 새끼들을 사방에 뿌린다. healthCost 만큼 체력을
+ *  잃으므로 무리 소환이 공짜 인플레가 되지 않는다 — 어미를 갉아먹는 선택이다 */
+function spawnBrood(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
+  const brood = attack.brood;
+  if (!brood) return;
+  const motherR = enemyDef(enemy.type).radius;
+  const def = enemyDef(brood.type);
+  for (let i = 0; i < brood.count; i++) {
+    const ang = enemy.yaw + (Math.PI * 2 * i) / brood.count;
+    const x = enemy.x + Math.sin(ang) * (motherR + def.radius + 0.35);
+    const z = enemy.z + Math.cos(ang) * (motherR + def.radius + 0.35);
+    world.enemies.push({
+      id: nextSplitId++,
+      type: brood.type,
+      x, z, prevX: x, prevZ: z,
+      yaw: ang, homeYaw: ang,
+      health: def.health, alive: true,
+      ai: 'chase',
+      timer: 0,
+      noticeTicks: balance.enemyAi.noticeDelayTicks,
+      burnTicks: 0, burnDamagePerTick: 0,
+      hearingMul: def.hearingMul,
+    });
+  }
+  enemy.health = Math.max(1, enemy.health - brood.healthCost); // 제 몸을 떼어 준 값
+  world.events.emit('boss_brood', {
+    enemyId: enemy.id, enemyType: enemy.type, count: brood.count, x: enemy.x, z: enemy.z,
+  });
+}
+
 /** 슬라임 궤적 — 기어가는 동안 일정 간격으로 점액을 떨군다 */
 function dropGoo(world: World, enemy: EnemyState): void {
   if (!enemyDef(enemy.type).gooTrail) return;
@@ -227,6 +257,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   }
 
   if ((enemy.volleyCooldown ?? 0) > 0) enemy.volleyCooldown = (enemy.volleyCooldown ?? 0) - 1;
+  if ((enemy.summonCooldown ?? 0) > 0) enemy.summonCooldown = (enemy.summonCooldown ?? 0) - 1;
   if ((enemy.chargeCooldown ?? 0) > 0) enemy.chargeCooldown = (enemy.chargeCooldown ?? 0) - 1;
 
   // 연타를 멈추면 막아낸 기록이 사라진다 (붙어서 계속 때릴 때만 밀쳐내기가 나간다)
@@ -335,6 +366,22 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         startWindup(world, enemy, currentAttack(def, enemy));
         break;
       }
+      // 새끼 분리 — 몸에서 슬라임 다섯을 떼어 무리를 만든다 (어미 슬라임).
+      // 제 체력을 대가로 치르고, 살아 있는 새끼가 많으면 아껴 둔다.
+      // 화상 중엔 말라붙어 떼어낼 몸이 없다 — 불이 무리를 끊는 정답
+      const brood = def.summonAttack?.brood;
+      if (
+        def.summonAttack &&
+        brood &&
+        (enemy.summonCooldown ?? 0) <= 0 &&
+        enemy.burnTicks <= 0 &&
+        world.enemies.filter((e) => e.alive && e.type === brood.type).length < brood.maxAlive
+      ) {
+        enemy.attackMode = 'summon';
+        enemy.summonCooldown = brood.cooldownTicks;
+        startWindup(world, enemy, def.summonAttack);
+        break;
+      }
       // 돌격 — 중거리(minRange~maxRange)에 들어오면 달려들며 내리찍는다.
       // maxRange 가 있는 돌격만 거리로 발동한다 (창병처럼 wantsCharge 로 쓰는 쪽과 구분)
       const ch = def.chargeAttack;
@@ -402,7 +449,12 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
       if (enemy.timer > 0) break;
 
-      if (attack.type === 'projectile') {
+      if (attack.type === 'summon') {
+        // 시전 완료 — 부풀었던 몸에서 새끼들이 떨어져 나간다
+        spawnBrood(world, enemy, attack);
+        enemy.ai = 'recover';
+        enemy.timer = attack.recoverTicks;
+      } else if (attack.type === 'projectile') {
         // 쏘기 직전 사선을 한 번 더 확인 — 겨누는 0.5초 사이 아군이 끼어들 수 있다.
         // 끼어들었으면 쏘지 않고 내린다 (아군 등에 쏘는 것보다 훨씬 낫다)
         // (교착을 풀려고 포기한 상태라면 그대로 쏜다 — 안전장치)

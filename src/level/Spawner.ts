@@ -32,6 +32,7 @@ const IMPLEMENTED = new Set([
   'spider_large',
   'slime',
   'slime_small',
+  'slime_mother',
 ]);
 
 /** 이 적 타입이 실제로 스폰되는가 — 레벨 검증이 이걸로 스텁 배치를 잡는다 */
