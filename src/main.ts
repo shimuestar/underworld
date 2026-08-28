@@ -2076,6 +2076,9 @@ function render(alpha: number): void {
   const chainMult = balance.chain.multipliers[Math.min(mana.chainIndex, balance.chain.multipliers.length - 1)]!;
   const hudText =
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
+    // 좌표 — 월드(m)와 격자 칸 [행,열]. 칸 표기는 레벨 JSON entities/torches 와 같은 규약이라
+    // "이 자리 이상해" 를 그대로 데이터 좌표로 옮길 수 있다
+    `위치 ${floorIndex + 1}층  (${p.x.toFixed(1)}, ${p.z.toFixed(1)})  칸 [${Math.floor(p.z / level.cellSize)},${Math.floor(p.x / level.cellSize)}]\n` +
     `9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}${p.blocking ? '  [방어]' : ''}\n` +
     `spell ${spellHudText()}   스킬 ${world.sigils.inventory.length}개   chain ×${chainMult}\n` +
     `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}\n` +
