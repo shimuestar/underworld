@@ -171,6 +171,19 @@ describe('1구역 층 구성', () => {
         expect(dropped).toEqual([]);
       });
 
+      it('스폰 근처에 적이 없다 — 내려오자마자 전투가 붙으면 안 된다', () => {
+        const level = new Level(json);
+        const near = json.entities
+          .filter((e) => e.type !== 'barrel' && e.type !== 'chest')
+          .filter((e) => {
+            const x = (e.cell[1]! + 0.5) * level.cellSize;
+            const z = (e.cell[0]! + 0.5) * level.cellSize;
+            return Math.hypot(x - level.spawn.x, z - level.spawn.z) < 16;
+          })
+          .map((e) => `${e.type}[${e.cell}]`);
+        expect(near).toEqual([]);
+      });
+
       it('스포너가 배치를 하나도 흘리지 않는다', () => {
         const level = new Level(json);
         // 매복 대기조(group)는 트리거로 나오는 것이라 처음부터 안 선다 — 세지 않는다

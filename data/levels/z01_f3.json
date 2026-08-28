@@ -45,13 +45,13 @@
       "type": "goblin_runner",
       "cell": [
         4,
-        6
+        17
       ]
     },
     {
       "type": "goblin_runner",
       "cell": [
-        5,
+        15,
         8
       ]
     },
@@ -73,8 +73,8 @@
     {
       "type": "goblin_spear",
       "cell": [
-        5,
-        3
+        16,
+        6
       ]
     },
     {
