@@ -6,6 +6,7 @@ import { Events } from '../core/Events';
 import sigilsJson from '../../data/sigils.json';
 import { sigilColor, sigilDef } from '../core/SigilData';
 import { Input } from '../core/Input';
+import { enemyDef as enemyDef2 } from '../core/Entities';
 import { World, type BarrelState, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
@@ -450,6 +451,46 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.groundItems).toHaveLength(0);
     expect(world.sigils.inventory.filter((id) => id === 'sig_darkvision')).toHaveLength(1);
     expect(world.xp).toBe(xp + balance.sigil.duplicateXp[sigilDef('sig_darkvision').tier]);
+  });
+
+  it('화살이 머리 높이에 맞으면 헤드샷 — 몸통 높이는 아니다', () => {
+    const headFrac = balance.weapons.pistol.hitZones.headFrac;
+    const shoot = (y: number): string[] => {
+      const target = add('goblin_runner', 12, 6);
+      target.health = 1000;
+      const log: string[] = [];
+      world.events.on('headshot', () => log.push('head'));
+      world.projectiles.push({
+        id: 555000 + Math.round(y * 100), owner: 'player', kind: 'arrow',
+        x: 6, y, z: 6, prevX: 6, prevY: y, prevZ: 6,
+        vx: 40, vy: 0, vz: 0, lifeTicks: 60,
+        damage: 5, burnTicks: 0, burnDamagePerTick: 0, radius: 0.15,
+      });
+      for (let i = 0; i < 30 && target.health === 1000; i++) Projectiles.tick(world, DT);
+      target.alive = false; // 다음 발사가 같은 적을 또 맞히지 않게 치운다
+      return log;
+    };
+    const h = enemyDef2('goblin_runner').height;
+    expect(shoot(h * (headFrac + 0.05))).toEqual(['head']);
+    expect(shoot(h * (headFrac - 0.2))).toEqual([]);
+  });
+
+  it('화살 헤드샷으로 죽이면 히트스톱과 headshot_kill 이 걸린다', () => {
+    const target = add('goblin_runner', 12, 6);
+    target.health = 3; // 한 방 거리
+    const kills: unknown[] = [];
+    world.events.on('headshot_kill', (p) => kills.push(p));
+    const h = enemyDef2('goblin_runner').height;
+    world.projectiles.push({
+      id: 556000, owner: 'player', kind: 'arrow',
+      x: 6, y: h * 0.95, z: 6, prevX: 6, prevY: h * 0.95, prevZ: 6,
+      vx: 40, vy: 0, vz: 0, lifeTicks: 60,
+      damage: 5, burnTicks: 0, burnDamagePerTick: 0, radius: 0.15,
+    });
+    for (let i = 0; i < 30 && target.alive; i++) Projectiles.tick(world, DT);
+    expect(target.alive).toBe(false);
+    expect(kills).toHaveLength(1);
+    expect(world.freezeTicks).toBe(balance.weapons.headshotKillFreezeTicks);
   });
 
   it('수류탄은 금 간 벽에 튕기지 않고 부딪히는 즉시 터져 벽을 부순다', () => {

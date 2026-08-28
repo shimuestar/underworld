@@ -987,7 +987,8 @@ function moveProjectiles(world: World, dt: number): void {
           }
         }
       } else if (hitEnemy && proj.kind !== 'frost') {
-        applyProjectileHit(world, proj, hitEnemy, shieldedAtImpact); // 얼음 화살은 위에서 터졌다
+        // 착탄 높이를 넘긴다 — 화살 헤드샷 판정 (얼음 화살은 위에서 터졌다)
+        applyProjectileHit(world, proj, hitEnemy, shieldedAtImpact, proj.y + dirY * hitT);
       }
       world.projectiles.splice(i, 1);
       i = removeBroken(world, hitProjectile, i);
@@ -1026,8 +1027,17 @@ function applyProjectileHit(
   enemy: (typeof world.enemies)[number],
   /** 착탄 순간의 방패 상태. 폭발이 상태를 바꾸기 전에 확정해 넘긴다 */
   shielded: boolean,
+  /** 착탄 높이(y) — 화살 헤드샷 판정에 쓴다 */
+  impactY = 0,
 ): void {
   const def = enemyDef(enemy.type);
+  // 화살 헤드샷 — 부위 경계는 권총과 같은 값(hitZones.headFrac)을 쓴다.
+  // 피해 보정은 없다 (활은 당김이 아니라 자리로 승부하는 무기가 아니다) — 연출·판정만
+  const headHit =
+    proj.kind === 'arrow' &&
+    proj.owner === 'player' &&
+    impactY / def.height >= balance.weapons.pistol.hitZones.headFrac;
+  if (headHit) world.events.emit('headshot', { enemyId: enemy.id });
 
   // 정면 방패 — 화염구가 명중하면 방패가 부서진다. 방패가 화염을 일부 먹으므로 피해 감소
   if (shielded) {
@@ -1092,6 +1102,11 @@ function applyProjectileHit(
       // 어느 쪽이든 마나는 0 이다 (Mana 는 두 이벤트를 모두 구독하지 않는다)
       if (proj.kind === 'arrow') {
         world.events.emit('weapon_kill', { weapon: 'bow', enemyType: enemy.type });
+        if (headHit) {
+          // 헤드샷 처치 — 잠깐 시간이 멎고(패링 히트스톱과 같은 결) 크게 터진다
+          world.freezeTicks = Math.max(world.freezeTicks, balance.weapons.headshotKillFreezeTicks);
+          world.events.emit('headshot_kill', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+        }
       } else {
         // 마법 처치도 마나 0 — 마나는 패링/처형 경로로만 (combat.md §5)
         world.events.emit('spell_kill', { enemyType: enemy.type });

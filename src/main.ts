@@ -328,6 +328,7 @@ for (const name of [
   'stamina_recovered',
   'stamina_blocked',
   'weapon_kill',
+  'headshot_kill',
   'enemy_died',
   'enemy_damaged',
   'enemy_alerted',
@@ -682,9 +683,19 @@ events.on('enemy_volley_start', (payload) => {
   audio.play('boss_volley_draw');
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
 });
-events.on('headshot', () => {
+events.on('headshot', (payload) => {
   audio.play('headshot');
+  const id = (payload as { enemyId?: number }).enemyId;
+  if (id !== undefined) stage.headshotFlinch(id); // 머리가 홱 젖혀진다
   showReaction('헤드샷!', 700);
+});
+// 헤드샷 처치 — 히트스톱(시스템이 걸었다)에 큰 파열과 묵직한 소리를 얹는다
+events.on('headshot_kill', (payload) => {
+  const kill = payload as { enemyType: string; x: number; z: number };
+  audio.play('heavy_hit');
+  stage.spawnDeathBurst(kill.x, kill.z, kill.enemyType, balance.weapons.headshotKillBurstScale);
+  const d = Math.hypot(kill.x - world.player.x, kill.z - world.player.z);
+  if (d < 14) stage.triggerCameraKick(0.35 * (1 - d / 14), 200);
 });
 
 events.on('block_hit', (payload) => {

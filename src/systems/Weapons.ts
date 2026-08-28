@@ -718,6 +718,15 @@ function fire(world: World): void {
     hit.enemy.alive = false;
     // 총기 처치는 마나 0 — 여기서 마나 이벤트를 발행하지 않는다 (하드 룰)
     world.events.emit('weapon_kill', { weapon: 'pistol', enemyType: hit.enemy.type, zone });
+    if (zone === 'head') {
+      // 헤드샷 처치 — 잠깐 시간이 멎고(패링 히트스톱과 같은 결) 크게 터진다
+      world.freezeTicks = Math.max(world.freezeTicks, balance.weapons.headshotKillFreezeTicks);
+      world.events.emit('headshot_kill', {
+        enemyType: hit.enemy.type,
+        x: hit.enemy.x,
+        z: hit.enemy.z,
+      });
+    }
     world.events.emit('enemy_died', {
       enemyType: hit.enemy.type,
       x: hit.enemy.x,

@@ -235,6 +235,10 @@ interface EnemyVisual {
   iceShownMs?: number;
   /** 몸통+머리 서브그룹 — 공격 모션(기울임/내지름)의 피벗 (발 기준) */
   torso: THREE.Group;
+  /** 머리 상자 — 헤드샷 때 젖혀진다 (거미는 머리가 따로 없어 undefined) */
+  head?: THREE.Mesh;
+  /** 헤드샷 젖힘이 끝나는 시각 */
+  headShakeUntil?: number;
   /** 텔레그래프 발광을 적용할 머티리얼들 (몸통/머리/창끝) */
   flashMaterials: THREE.MeshLambertMaterial[];
   shield?: THREE.Mesh;
@@ -585,6 +589,8 @@ const DOOR_SWING_RAD = (100 * Math.PI) / 180;
 const STAIR_STEPS_DROP = 2.6;
 /** 전진 거리 — 계단을 향해 걸어 들어간다. 등속이라 누른 순간부터 발이 나간다 */
 const DESCENT_FORWARD = 3.0;
+/** 헤드샷 머리 젖힘 지속(ms) */
+const HEADSHOT_SHAKE_MS = 320;
 /** 족장의 열쇠 표시색 — 금빛 */
 const KEY_COLOR = 0xf0c34a;
 /** 처음엔 천천히, 끝에서 훅 — 계단을 딛다 마지막에 어둠으로 잠기는 느낌 */
@@ -2016,6 +2022,7 @@ export class Stage {
 
     const bodyMat = new THREE.MeshLambertMaterial({ color: baseColor });
     flashMaterials.push(bodyMat);
+    let headMesh: THREE.Mesh | undefined; // 헤드샷 젖힘용 — 거미는 없다
     // 안광 — 조명이 아니라 자체 발광 눈. 어둠 속에서 멀리서도 "저기 뭔가 있다"가 읽힌다
     const eyes = makeEyeMaterials();
     if (SPIDER_TYPES.has(type)) {
@@ -2038,6 +2045,7 @@ export class Stage {
       const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), headMat);
       head.position.set(0, def.height - headSize / 2, -def.radius * 0.2);
       torso.add(head);
+      headMesh = head;
 
       // 눈 둘 — 머리 앞면(-Z)에 살짝 박혀 나온다. 눈높이는 얼굴 중앙보다 약간 위
       const ec = balance.lighting.enemyEyes;
@@ -2085,6 +2093,7 @@ export class Stage {
       eyeHalos: eyes.halos,
       eyeHaloBase: eyes.halos[0]?.scale.x ?? 0,
       torso,
+      head: headMesh,
       flashMaterials,
       shieldBaseZ: 0,
       hitFlashUntil: 0,
@@ -2341,6 +2350,18 @@ export class Stage {
           const t = Math.min(1, (now - (visual.iceShownMs ?? now)) / 220);
           const pop = 1 + 0.7 * (1 - t) * (1 - t);
           visual.ice.scale.set(pop, pop, pop);
+        }
+      }
+      // 헤드샷 — 머리가 홱 젖혀졌다가 떨며 되돌아온다. 자세(torso)는 안 건드린다
+      if (visual.head) {
+        const shakeLeft = (visual.headShakeUntil ?? 0) - now;
+        if (shakeLeft > 0) {
+          const k = shakeLeft / HEADSHOT_SHAKE_MS;
+          visual.head.rotation.x = -0.6 * k;
+          visual.head.rotation.z = 0.28 * k * Math.sin((1 - k) * 26);
+        } else if (visual.head.rotation.x !== 0 || visual.head.rotation.z !== 0) {
+          visual.head.rotation.x = 0;
+          visual.head.rotation.z = 0;
         }
       }
       const hitLeft = visual.hitFlashUntil - now;
@@ -2959,6 +2980,12 @@ export class Stage {
   electrifyEnemy(enemyId: number): void {
     const visual = this.enemyVisuals.get(enemyId);
     if (visual) visual.zapUntil = performance.now() + ZAP_BODY_MS;
+  }
+
+  /** 헤드샷 — 머리가 젖혀지는 연출을 켠다 */
+  headshotFlinch(enemyId: number): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    if (visual) visual.headShakeUntil = performance.now() + HEADSHOT_SHAKE_MS;
   }
 
   flashEnemyHit(enemyId: number): void {

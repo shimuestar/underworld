@@ -201,6 +201,9 @@
   },
 
   "weapons": {
+    "_headshotKillNote": "헤드샷 처치 연출 — 잠깐의 히트스톱(패링 4틱과 같은 결)과 큰 파편 배율",
+    "headshotKillFreezeTicks": 4,
+    "headshotKillBurstScale": 2.3,
     "hammer": {
       "_damageNote": "권총(34)의 약 60%",
       "damage": 20,
