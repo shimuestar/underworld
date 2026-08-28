@@ -492,6 +492,9 @@ function detachFace(
   enemy.timer = how === 'kick' ? fs.kickStunTicks : 30;
   enemy.whiffed = how === 'kick'; // 걷어차인 놈은 무방비로 뻗는다
   enemy.groundTicks = def.ceilingLurk?.groundTicks ?? 0;
+  // 배불리 먹고 스스로 내려온 놈은 무거워서 천장에 다시 못 올라간다 —
+  // 재상승 + 위장 때문에 '사라진 것처럼' 보이던 문제의 답이기도 하다
+  if (how === 'self') enemy.gorged = true;
   if (how === 'kick') world.events.emit('leech_face_kick', { enemyId: enemy.id });
   else if (how === 'self') world.events.emit('leech_face_detach', { enemyId: enemy.id });
 }
@@ -529,6 +532,7 @@ function tickLeechGround(world: World, enemy: EnemyState): void {
   const def = enemyDef(enemy.type);
   const lurk = def.ceilingLurk;
   if (!lurk || enemy.lurking) return;
+  if (enemy.gorged) return; // 배불리 먹었다 — 무거워서 못 올라간다. 지상전뿐
   if ((enemy.dropTicks ?? 0) > 0 || (enemy.ascendTicks ?? 0) > 0) return;
   if (enemy.ai !== 'chase') return; // 공격·경직 중에는 재지 않는다
   enemy.groundTicks = (enemy.groundTicks ?? lurk.groundTicks) - 1;

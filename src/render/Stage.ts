@@ -3083,6 +3083,9 @@ export class Stage {
         // 얼굴에 붙은 동안은 월드 모델을 숨긴다 — 화면 가림(HUD #faceleech)이 그 몸이다
         visual.group.visible = enemy.ai !== 'latched';
         visual.torso.rotation.z = enemy.lurking ? Math.sin(now / 520 + enemy.id) * 0.08 : 0;
+        // 배불리 먹은 놈은 통통하다 — 피를 얼마나 뺏겼는지 몸집으로 보인다
+        const fat = enemy.gorged ? 1.35 : 1;
+        visual.torso.scale.set(fat, fat, fat);
         if (visual.leechMats) {
           let camo = enemy.lurking === true;
           if (camo && this.lanternIsOn) {

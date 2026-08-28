@@ -778,6 +778,14 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     }
     expect(world.faceLeechId).toBeNull();
     expect(world.player.health).toBe(hp - 18); // 정확히 3번만 빨렸다
+    // 사라지지 않는다 — 배불러 무거워진 채 지상에 남는다 (재상승·위장 금지)
+    expect(l.gorged).toBe(true);
+    for (let i = 0; i < 400; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect(l.alive).toBe(true); // 개체가 삭제되지 않았다
+    expect(l.lurking ?? false).toBe(false); // 천장으로 되돌아가지 않았다 (재잠복 = 사라져 보임)
   });
 
   it('거머리 — 밑을 지나면 떨어져 내려찍고, 비키면 바닥을 헛찍고 뻗는다', () => {

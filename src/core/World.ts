@@ -466,6 +466,8 @@ export interface EnemyState {
   dropFromY?: number;
   /** 얼굴 흡혈 횟수 — maxSucks 에 닿으면 배불러 스스로 떨어진다 */
   suckCount?: number;
+  /** 배불리 먹었다 — 무거워서 천장에 다시 못 올라가고 지상에 남는다 (몸도 통통해진다) */
+  gorged?: boolean;
   /** 재상승 구간 남은 틱 / 지상에 머문 뒤 재상승까지 남은 틱 */
   ascendTicks?: number;
   groundTicks?: number;
