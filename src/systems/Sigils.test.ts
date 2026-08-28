@@ -6,12 +6,14 @@ import { Events } from '../core/Events';
 import sigilsJson from '../../data/sigils.json';
 import { sigilColor, sigilDef } from '../core/SigilData';
 import { Input } from '../core/Input';
+import { addItem, initInventory, spillInventoryToGrave } from '../core/Inventory';
 import { enemyDef as enemyDef2 } from '../core/Entities';
 import { World, type BarrelState, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
 import * as Mana from './Mana';
+import * as Pickups from './Pickups';
 import * as PlayerMove from './PlayerMove';
 import * as Projectiles from './Projectiles';
 import * as Sigils from './Sigils';
@@ -554,6 +556,33 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     // 대시 — 그 자리에서 듣는다
     world.events.emit('dodge_step', {});
     expect(eaves.ai).toBe('chase');
+  });
+
+  it('죽으면 가방 소모품만 비석에 남고, 그 자리를 밟으면 되찾는다', () => {
+    initInventory(world);
+    addItem(world, 'potion');
+    addItem(world, 'potion');
+    addItem(world, 'mana');
+    expect(spillInventoryToGrave(world, 12, 6)).toBe(true);
+    expect(world.inventory.every((s2) => s2 === null)).toBe(true); // 가방이 통째로 비었다
+    const grave = world.groundItems.find((g) => g.kind === 'grave')!;
+    expect(grave.graveItems!.reduce((n, s2) => n + s2.count, 0)).toBe(3);
+    // 6m 밖 — 비석은 자석에 걸리지 않는다
+    Pickups.tick(world, DT);
+    expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(true);
+    expect(world.inventory.every((s2) => s2 === null)).toBe(true);
+    // 밟으면 전부 회수
+    world.player.x = 12;
+    world.player.z = 6;
+    Pickups.tick(world, DT);
+    expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(false);
+    expect(world.inventory.filter((s2) => s2 !== null).length).toBeGreaterThan(0);
+  });
+
+  it('가방이 비어 있으면 비석이 서지 않는다', () => {
+    initInventory(world);
+    expect(spillInventoryToGrave(world, 12, 6)).toBe(false);
+    expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(false);
   });
 
   it('어미 슬라임 — 제 몸을 떼어 새끼 다섯을 뿌리고 그만큼 체력을 잃는다', () => {

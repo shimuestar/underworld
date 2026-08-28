@@ -271,13 +271,15 @@ export interface LifeMoteState {
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
-  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow' | 'key';
+  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow' | 'key' | 'grave';
   x: number;
   z: number;
   /** kind==='sigil' 일 때만 */
   sigilId?: string;
   /** kind==='gold' 일 때 획득량 */
   amount?: number;
+  /** kind==='grave' — 죽으며 떨어뜨린 가방 내용물. 회수 시 들어가는 만큼 다시 담는다 */
+  graveItems?: { kind: ItemKind; count: number }[];
   /** 자석 흡수 중 — 공중으로 떠서 플레이어에게 날아간다 */
   magnet?: boolean;
   /** 비행 중 높이와 현재 속도 (자석 상태에서만 의미 있음) */

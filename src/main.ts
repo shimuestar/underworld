@@ -6,7 +6,7 @@ import { DebugOverlay } from './render/DebugOverlay';
 import { Input } from './core/Input';
 import { Loop } from './core/Loop';
 import { World, type ItemKind } from './core/World';
-import { countOf, initInventory, itemColor, itemDef } from './core/Inventory';
+import { countOf, initInventory, spillInventoryToGrave, itemColor, itemDef } from './core/Inventory';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt } from './level/Spawner';
@@ -344,6 +344,8 @@ for (const name of [
   'weapon_kill',
   'headshot_kill',
   'enemy_split',
+  'grave_dropped',
+  'grave_recovered',
   'boss_brood',
   'enemy_died',
   'enemy_damaged',
@@ -1150,6 +1152,9 @@ events.on('sigil_duplicate', (payload) => {
 events.on('player_died', () => {
   Projectiles.endChannel(world);
   if (world.godMode) return; // 무적 중에는 사망 화면도 뜨지 않는다 (자원은 틱 끝에 되돌아간다)
+  // 죽은 자리에 비석 — 가방 소모품만 떨어뜨린다 (스킬·기본 무기·탄약·골드는 그대로).
+  // 부활 후 그 자리로 돌아와 밟으면 되찾는다
+  spillInventoryToGrave(world, world.player.x, world.player.z);
   const dk = keyLabel('Enter', 'interact');
   deathHint!.textContent = !world.respawn
     ? `${dk} 키로 재시작`
@@ -1157,6 +1162,17 @@ events.on('player_died', () => {
       ? `${dk} — 이 층 처음부터` // 제단을 아직 안 밟았다 — 층 입구로 돌아간다
       : `${dk} — 제단에서 부활`;
   deathOverlay.classList.add('visible');
+});
+
+events.on('grave_dropped', () =>
+  showReaction('유품이 비석에 남았다 — 그 자리로 돌아가면 되찾는다', 2600),
+);
+events.on('grave_recovered', (payload) => {
+  audio.play('pickup_gold');
+  showReaction(
+    (payload as { partial?: boolean }).partial ? '유품 일부 회수 — 가방이 가득하다' : '유품을 모두 회수했다',
+    1800,
+  );
 });
 
 /** 제단 리스폰 — 위치·체력 복원, 탄약 상한, 마나 0, 각인·오염 유지, 구간 진행도 초기화 */
@@ -1201,7 +1217,8 @@ function respawnAtAltar(): void {
   world.chestInView = null;
   world.projectiles.length = 0;
   world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
-  world.groundItems.length = 0;
+  // 바닥 보상은 리셋하되 비석만은 남긴다 — 유품은 다시 죽어도 그 자리에 있다
+  world.groundItems = world.groundItems.filter((g) => g.kind === 'grave');
   world.freezeTicks = 0;
   world.dead = false;
   deathOverlay!.classList.remove('visible');

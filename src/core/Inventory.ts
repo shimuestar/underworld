@@ -63,6 +63,45 @@ export function hasRoom(world: World, kind: ItemKind): boolean {
   );
 }
 
+/** 비석 id 대역 — 픽업(500000)·분열(700000)·열쇠(950000)와 구분 */
+let nextGraveId = 960000;
+
+/** 죽음 — 가방을 통째로 비워 그 자리 비석에 담는다. 스킬(각인)·기본 무기·탄약·골드는
+ *  잃지 않는다: 순수하게 가방 소모품만이다. 가방이 비어 있었으면 비석도 서지 않는다 */
+export function spillInventoryToGrave(world: World, x: number, z: number): boolean {
+  const spill: { kind: ItemKind; count: number }[] = [];
+  for (let i = 0; i < world.inventory.length; i++) {
+    const slot = world.inventory[i];
+    if (!slot) continue;
+    const found = spill.find((s) => s.kind === slot.kind);
+    if (found) found.count += slot.count;
+    else spill.push({ kind: slot.kind, count: slot.count });
+    world.inventory[i] = null;
+  }
+  if (spill.length === 0) return false;
+  world.groundItems.push({ id: nextGraveId++, kind: 'grave', x, z, graveItems: spill });
+  world.events.emit('grave_dropped', { x, z, kinds: spill.length });
+  return true;
+}
+
+/** 비석 회수 — 들어가는 만큼 가방에 담는다. 가방이 차면 남은 것은 비석에 남는다 */
+export function recoverGrave(
+  world: World,
+  grave: { graveItems?: { kind: ItemKind; count: number }[] },
+): 'all' | 'partial' | 'none' {
+  const items = grave.graveItems ?? [];
+  let took = 0;
+  for (const stack of items) {
+    while (stack.count > 0 && addItem(world, stack.kind)) {
+      stack.count--;
+      took++;
+    }
+  }
+  grave.graveItems = items.filter((s) => s.count > 0);
+  if (grave.graveItems.length === 0) return took > 0 ? 'all' : 'none';
+  return took > 0 ? 'partial' : 'none';
+}
+
 export function countOf(world: World, kind: ItemKind): number {
   let total = 0;
   for (const slot of world.inventory) if (slot?.kind === kind) total += slot.count;

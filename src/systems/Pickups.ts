@@ -7,7 +7,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import { addItem, hasRoom } from '../core/Inventory';
+import { addItem, hasRoom, recoverGrave } from '../core/Inventory';
 import type { ItemKind, World } from '../core/World';
 
 let nextPickupId = 500000; // 각인 아이템 id 대역과 구분
@@ -124,6 +124,20 @@ export function tick(world: World, dt: number): void {
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
     const item = world.groundItems[i]!;
     if (item.kind === 'sigil') continue; // 각인은 Sigils 담당
+    // 비석 — 돌이라 자석에 걸리지 않는다. 밟을 만큼 다가가야 유품을 다시 담아 간다
+    if (item.kind === 'grave') {
+      if (Math.hypot(p.x - item.x, p.z - item.z) > balance.pickups.grave.radius) continue;
+      const result = recoverGrave(world, item);
+      if (result === 'all') {
+        world.groundItems.splice(i, 1);
+        world.events.emit('grave_recovered', { partial: false });
+      } else if (result === 'partial') {
+        world.events.emit('grave_recovered', { partial: true });
+      } else {
+        blocked = true; // 가방이 가득 — 기존 "가방이 가득 찼다" 안내를 그대로 쓴다
+      }
+      continue;
+    }
 
     // 버린 직후에는 자석이 물지 않는다 (버리자마자 도로 주워지는 것을 막는다)
     if (item.noMagnetTicks && item.noMagnetTicks > 0) {

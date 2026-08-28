@@ -3491,6 +3491,25 @@ export class Stage {
   /** 바닥 아이템 비주얼 — 각인(팔면체 보석) / 포션(붉은 약병) / 골드(낮은 더미) */
   private makeGroundItem(kind: GroundItemState['kind'], sigilId?: string): THREE.Group {
     const group = new THREE.Group();
+    if (kind === 'grave') {
+      // 비석 — 봉분 위 잿빛 돌판 + 둥근 머리. 돌이라 부유·회전하지 않는다 (grounded)
+      const stone = new THREE.MeshLambertMaterial({ color: 0x8b8f96 });
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.13), stone);
+      slab.position.y = 0.36;
+      group.add(slab);
+      // 둥근 머리 — 축을 눕힌 원기둥. 아래 절반은 돌판에 묻힌다
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.13, 12), stone);
+      top.rotation.x = Math.PI / 2;
+      top.position.y = 0.67;
+      group.add(top);
+      const mound = new THREE.Mesh(
+        new THREE.BoxGeometry(0.66, 0.12, 0.44),
+        new THREE.MeshLambertMaterial({ color: 0x4a4038 }),
+      );
+      mound.position.y = 0.06;
+      group.add(mound);
+      return group;
+    }
     if (kind === 'key') {
       // 족장의 열쇠 — 금빛 고리 + 대 + 이빨 둘. 부유·회전은 syncGroundItems 가 준다
       const gold = new THREE.MeshLambertMaterial({
@@ -3721,10 +3740,10 @@ export class Stage {
       // 자석에 걸리면 로직이 계산한 높이(item.y)로 날아간다. 아니면 제자리 부유
       // 골드·화살은 바닥에 놓인 물건이라 떠서 흔들리지 않는다.
       // 화살은 눕혀 둔 것이라 물약처럼 가슴 높이에서 까딱거리면 안 된다
-      const grounded = item.kind === 'gold' || item.kind === 'arrow';
+      const grounded = item.kind === 'gold' || item.kind === 'arrow' || item.kind === 'grave';
       const bob =
         item.y ??
-        (grounded ? (item.kind === 'gold' ? 0.12 : GROUND_ARROW_Y)
+        (grounded ? (item.kind === 'gold' ? 0.12 : item.kind === 'grave' ? 0 : GROUND_ARROW_Y)
                   : 0.55 + Math.sin(now / 400 + item.id) * 0.1);
       group.position.set(item.x, bob, item.z);
       const gem = group.getObjectByName('gem');
