@@ -402,6 +402,14 @@ export interface EnemyState {
   timer: number;
   /** 배치된 초기 방향 — 대기 중 시선 훑기의 기준축 */
   homeYaw?: number;
+  /** 생성 지점 — 대기 배회의 중심 (Spawner 가 채운다) */
+  homeX?: number;
+  homeZ?: number;
+  /** 배회 목적지·멈춤·흐느낌 카운터 (구울) */
+  wanderX?: number;
+  wanderZ?: number;
+  wanderPause?: number;
+  moanTicks?: number;
   /** 도약 중 지면에서 뜬 높이(m). 렌더 전용 — 판정은 XZ 평면 그대로다 */
   jumpY?: number;
   prevJumpY?: number;

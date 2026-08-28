@@ -63,6 +63,8 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
   };
   if (def.boss) enemy.parryStreak = 0;
   if (def.hearingMul !== undefined) enemy.hearingMul = def.hearingMul; // World 는 def 를 모른다
+  enemy.homeX = x; // 대기 배회의 중심
+  enemy.homeZ = z;
   return enemy;
 }
 

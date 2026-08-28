@@ -346,6 +346,7 @@ for (const name of [
   'enemy_split',
   'grave_dropped',
   'slime_ate',
+  'ghoul_moan',
   'leech_drip',
   'leech_chitter',
   'leech_drop',
@@ -720,6 +721,7 @@ events.on('enemy_volley_start', (payload) => {
   audio.play('boss_volley_draw');
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
 });
+events.on('ghoul_moan', () => audio.play('ghoul_moan'));
 // 거머리 — 천장 단서(방울·찌륵), 낙하 비명, 착지, 피격 추락
 events.on('leech_drip', () => audio.play('leech_drip'));
 events.on('leech_chitter', () => audio.play('leech_chitter'));

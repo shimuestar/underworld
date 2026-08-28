@@ -29,6 +29,7 @@ export type SoundName =
   | 'leech_drip'
   | 'leech_chitter'
   | 'leech_shriek'
+  | 'ghoul_moan'
   | 'ghoul_latch'
   | 'struggle_push'
   | 'ghoul_shriek'
@@ -311,6 +312,11 @@ export class GameAudio {
         // 낙하 비명 — 치솟는 쇳소리 (구울보다 가늘고 높다)
         this.tone(1500, 0.2, 'sawtooth', 0.45, 0, 2600);
         this.noise(0.12, 0.25, 3200);
+        break;
+      case 'ghoul_moan':
+        // 흐느낌 — 낮게 떨리는 이중 신음. 배회하는 구울의 위치 단서
+        this.tone(200, 0.55, 'sine', 0.32, 0, 140);
+        this.tone(305, 0.4, 'triangle', 0.16, 0, 235);
         break;
       case 'ghoul_latch':
         // 물컹 붙잡힘 — 젖은 노이즈 + 뚝 떨어지는 톤

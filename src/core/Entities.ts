@@ -135,6 +135,10 @@ export interface EnemyDef {
   eatsMotes?: { senseRadius: number; healPerMote: number; frenzyPerStack: number; frenzyMax: number };
   /** 죽은 척 배치가 깨는 기척 반경(m) — 소음·피격은 반경과 무관하게 깨운다 */
   feignWakeRadius?: number;
+  /** 대기 배회 — 생성 지점 반경 안을 어슬렁거린다 (구울) */
+  idleWander?: { radius: number; speedMul: number; pauseTicks: number };
+  /** 걷는 동안 이 간격으로 흐느낀다 — 들리는 거리(14m)에서만 (구울) */
+  moanIntervalTicks?: number;
   /** 천장 잠복 (거머리) — 낙하 사냥의 모든 손잡이 */
   ceilingLurk?: {
     dropRadius: number; chitterRadius: number; dripIntervalTicks: number;

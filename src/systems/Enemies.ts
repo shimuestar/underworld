@@ -107,6 +107,7 @@ export function tick(world: World, dt: number): void {
       enemy.jumpY = Math.max(0, (enemy.jumpY ?? 0) - BROOD_FALL);
     }
     tickLeechGround(world, enemy);
+    tickGhoulMoan(world, enemy);
     // 피탄 경직 소진은 행동 뒤에 — 앞에서 줄이면 마지막 틱에 움직여버린다
     if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
     if ((enemy.slowTicks ?? 0) > 0) {
@@ -414,6 +415,51 @@ function tickLeechGround(world: World, enemy: EnemyState): void {
   world.events.emit('leech_ascend', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
 }
 
+/** 대기 배회 — 생성 지점 반경 안 아무 데나 골라 걷고, 도착하면 잠깐 멈춘다 */
+function wanderIdle(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  dt: number,
+): void {
+  const w = def.idleWander!;
+  if ((enemy.wanderPause ?? 0) > 0) {
+    enemy.wanderPause = (enemy.wanderPause ?? 0) - 1;
+    return;
+  }
+  // 벽에 막혀 영영 못 가는 목적지는 이따금 포기한다
+  if (world.tick % 300 === enemy.id % 300) {
+    enemy.wanderX = undefined;
+    return;
+  }
+  const dxw = (enemy.wanderX ?? enemy.x) - enemy.x;
+  const dzw = (enemy.wanderZ ?? enemy.z) - enemy.z;
+  const dw = Math.hypot(dxw, dzw);
+  if (enemy.wanderX === undefined || dw < 0.3) {
+    const ang = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * w.radius;
+    enemy.wanderX = (enemy.homeX ?? enemy.x) + Math.sin(ang) * r;
+    enemy.wanderZ = (enemy.homeZ ?? enemy.z) + Math.cos(ang) * r;
+    enemy.wanderPause = Math.floor(w.pauseTicks * (0.5 + Math.random()));
+    return;
+  }
+  enemy.yaw = Math.atan2(-dxw, -dzw);
+  moveAvoiding(world, enemy, def, dxw / dw, dzw / dw, def.speed * w.speedMul * slowFactor(enemy) * dt);
+}
+
+/** 흐느낌 — 걷는 동안 이따금. 위치를 소리로 흘리는 단서라 들리는 거리에서만 낸다 */
+function tickGhoulMoan(world: World, enemy: EnemyState): void {
+  const interval = enemyDef(enemy.type).moanIntervalTicks;
+  if (!interval || enemy.feigning) return;
+  if (Math.hypot(enemy.x - enemy.prevX, enemy.z - enemy.prevZ) < 1e-4) return; // 걷는 동안만
+  enemy.moanTicks = (enemy.moanTicks ?? Math.floor(interval * Math.random())) - 1;
+  if ((enemy.moanTicks ?? 0) > 0) return;
+  enemy.moanTicks = interval;
+  const p = world.player;
+  if (Math.hypot(p.x - enemy.x, p.z - enemy.z) > 14) return;
+  world.events.emit('ghoul_moan', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+}
+
 function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   const def = enemyDef(enemy.type);
   const p = world.player;
@@ -576,11 +622,17 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     case 'idle': {
       // 가만히 서 있어도 천천히 좌우를 살핀다 — 사각이 고정되면 한 자리에서
       // 영영 안 들킨다. id 로 위상을 흩어 전원이 같은 방향을 보지 않게 한다
-      const scan = balance.enemyAi.vision;
-      enemy.yaw =
-        (enemy.homeYaw ?? 0) +
-        Math.sin(((world.tick + enemy.id * 37) / scan.scanTicks) * Math.PI * 2) *
-          ((scan.scanArcDeg * Math.PI) / 360);
+      if (def.idleWander && !enemy.feigning) {
+        // 배회(구울) — 생성 지점을 중심으로 어슬렁거린다. 걷는 쪽을 보므로
+        // 아래 시야 판정도 걷는 방향 기준이다 (시선 훑기 대신)
+        wanderIdle(world, enemy, def, dt);
+      } else {
+        const scan = balance.enemyAi.vision;
+        enemy.yaw =
+          (enemy.homeYaw ?? 0) +
+          Math.sin(((world.tick + enemy.id * 37) / scan.scanTicks) * Math.PI * 2) *
+            ((scan.scanArcDeg * Math.PI) / 360);
+      }
 
       // 랜턴 빔에 잡히면 시야각과 무관하게 즉시 알아챈다 — 어둠 속에서 빛을
       // 든 쪽이 먼저 들킨다. 단 등진 적은 빛이 등을 비춰도 못 알아챈다 (은신).
