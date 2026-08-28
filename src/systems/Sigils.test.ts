@@ -666,6 +666,52 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slime.ai).toBe('chase');
   });
 
+  it('구울 파먹기 — 물리는 동안 피가 닳고, 근접 연타 6번에 밀쳐낸다', () => {
+    const g = add('ghoul', 7, 6); // 플레이어(6,6) 코앞
+    g.ai = 'latched';
+    g.timer = 1; // 다음 틱에 첫 물기
+    g.latchDirX = 1;
+    g.latchDirZ = 0;
+    world.grappleEnemyId = g.id;
+    world.grappleMash = 0;
+    const hp = world.player.health;
+    world.input = Input.emptySnapshot();
+    Enemies.tick(world, DT);
+    expect(world.player.health).toBe(hp - balance.ghoulGrapple.biteDamage); // 물어뜯겼다
+    for (let i = 0; i < balance.ghoulGrapple.mashToEscape; i++) {
+      world.input = { ...Input.emptySnapshot(), meleePressed: true };
+      Enemies.tick(world, DT);
+    }
+    expect(world.grappleEnemyId).toBeNull(); // 밀쳐냈다
+    expect(g.ai).toBe('recover');
+    expect(g.whiffed).toBe(true); // 무방비 — 반격 창
+    expect(world.player.iframeTicks).toBeGreaterThan(0);
+    world.input = Input.emptySnapshot();
+  });
+
+  it('구울 굶주림 — 생명 입자를 먹으면 회복하고 광란이 쌓인다', () => {
+    const g = add('ghoul', 20, 6);
+    g.ai = 'chase';
+    g.health = 40;
+    world.lifeMotes.push({ id: 1, x: 21, y: 0.5, z: 6, ageTicks: 0, homing: false, speed: 0 });
+    for (let i = 0; i < 30 && world.lifeMotes.length > 0; i++) Enemies.tick(world, DT);
+    expect(world.lifeMotes).toHaveLength(0); // 플레이어보다 가까웠다 — 뺏겼다
+    expect(g.frenzyStacks).toBe(1);
+    expect(g.health).toBe(40 + 6);
+  });
+
+  it('죽은 척 구울 — 코앞 기척(3m)에만 일어난다', () => {
+    const near = add('ghoul', 8.5, 6); // 2.5m
+    near.feigning = true;
+    const far = add('ghoul', 14, 6); // 8m
+    far.feigning = true;
+    Enemies.tick(world, DT);
+    expect(near.feigning).toBe(false);
+    expect(near.ai).toBe('chase');
+    expect(far.ai).toBe('idle');
+    expect(far.feigning).toBe(true);
+  });
+
   it('동료가 눈앞에서 죽으면 알아챈다 — 등 뒤·장님은 모른다', () => {
     const victim = add('spider_small', 14, 6);
     const front = add('spider_large', 18, 6); // 서쪽(희생자 쪽)을 보고 있다
@@ -674,6 +720,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     back.yaw = Math.PI / 2;
     const blindOne = add('slime', 16, 6); // 희생자 쪽을 보지만 눈이 없다
     blindOne.yaw = Math.PI / 2;
+    world.lantern.on = false; // 랜턴 빔(+X)이 back 을 비춰 깨우지 않게 — 목격 규칙만 잰다
     victim.alive = false;
     Enemies.tick(world, DT);
     expect(front.ai).toBe('chase'); // 정면에서 동료가 터지는 걸 봤다

@@ -58,6 +58,7 @@ export function tick(world: World, dt: number): void {
 
   for (const enemy of world.enemies) {
     if (!enemy.alive) {
+      if (world.grappleEnemyId === enemy.id) releaseGrapple(world, enemy, false); // 죽으면 놓는다
       handleSplit(world, enemy); // 슬라임 분열 — 어디서 어떻게 죽었든 여기서 한 번만 가른다
       continue;
     }
@@ -68,6 +69,7 @@ export function tick(world: World, dt: number): void {
     // 빙결 — AI 를 아예 안 돌린다: 이동·회전·공격 예고·돌진·방패 추적 전부 멈춘다.
     // 하던 동작은 얼음이 풀리면 그 자리에서 이어진다
     if ((enemy.freezeTicks ?? 0) > 0) {
+      if (world.grappleEnemyId === enemy.id) releaseGrapple(world, enemy, false); // 얼면 놓는다
       enemy.freezeTicks = (enemy.freezeTicks ?? 0) - 1;
       enemy.prevX = enemy.x;
       enemy.prevZ = enemy.z;
@@ -80,6 +82,7 @@ export function tick(world: World, dt: number): void {
     // 감전 — 빙결과 같은 규약. AI 를 안 돌리니 하던 동작이 풀릴 때 그 자리에서 이어진다.
     // 공격 중이었다면 떨림이 끝나는 순간 그 공격을 이어서 마친다
     if ((enemy.shockTicks ?? 0) > 0) {
+      if (world.grappleEnemyId === enemy.id) releaseGrapple(world, enemy, false); // 감전에도 놓는다
       enemy.shockTicks = (enemy.shockTicks ?? 0) - 1;
       enemy.prevX = enemy.x;
       enemy.prevZ = enemy.z;
@@ -152,6 +155,7 @@ let nextGooId = 1;
 function alertWitnesses(world: World, corpse: EnemyState): void {
   for (const watcher of world.enemies) {
     if (!watcher.alive || watcher.ai !== 'idle' || watcher.id === corpse.id) continue;
+    if (watcher.feigning) continue; // 죽은 척 — 눈을 감고 있다 (기척·소음·피격만 깨운다)
     const def = enemyDef(watcher.type);
     if (def.blind) continue; // 장님(슬라임)은 눈이 없다 — 소리로만 산다
     const dx = corpse.x - watcher.x;
@@ -281,6 +285,44 @@ function dropGoo(world: World, enemy: EnemyState): void {
   if (puddles.length > goo.maxPuddles) puddles.shift(); // 오래된 것부터 마른 셈 친다
 }
 
+/** 들러붙기 시작 — 돌격이 맞으면 피해 대신 매달린다 (attack.latches) */
+function startLatch(world: World, enemy: EnemyState): void {
+  const p = world.player;
+  const dx = enemy.x - p.x;
+  const dz = enemy.z - p.z;
+  const d = Math.hypot(dx, dz) || 1;
+  enemy.latchDirX = dx / d;
+  enemy.latchDirZ = dz / d;
+  enemy.ai = 'latched';
+  enemy.timer = balance.ghoulGrapple.biteIntervalTicks;
+  enemy.jumpY = 0;
+  world.grappleEnemyId = enemy.id;
+  world.grappleMash = 0;
+  world.events.emit('ghoul_latch', { enemyId: enemy.id, enemyType: enemy.type });
+}
+
+/** 손아귀 풀기 — shoved 면 플레이어가 밀쳐낸 것: 구울이 튕겨 나가 무방비가 되고
+ *  플레이어는 잠깐 무적(연속 붙잡기 방지). 아니면(사망·빙결 등) 조용히 놓는다 */
+function releaseGrapple(world: World, enemy: EnemyState, shoved: boolean): void {
+  if (world.grappleEnemyId === enemy.id) {
+    world.grappleEnemyId = null;
+    world.grappleMash = 0;
+  }
+  if (enemy.ai !== 'latched') return;
+  if (shoved) {
+    const grip = balance.ghoulGrapple;
+    pushEnemy(enemy, enemy.latchDirX ?? 1, enemy.latchDirZ ?? 0, grip.shoveDistance, 16);
+    enemy.ai = 'recover';
+    enemy.timer = enemyDef(enemy.type).chargeAttack?.recoverTicks ?? 45;
+    enemy.whiffed = true; // 밀쳐낸 직후는 무방비 — 반격 창
+    world.player.iframeTicks = Math.max(world.player.iframeTicks, grip.escapeIframeTicks);
+    world.events.emit('grapple_escape', { enemyId: enemy.id, enemyType: enemy.type });
+  } else {
+    enemy.ai = 'chase';
+    enemy.timer = 0;
+  }
+}
+
 function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   const def = enemyDef(enemy.type);
   const p = world.player;
@@ -385,6 +427,16 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       // 벽 너머는 안 보이므로 시야선은 그대로 요구한다
       const facingX = -Math.sin(enemy.yaw);
       const facingZ = -Math.cos(enemy.yaw);
+      // 죽은 척(구울) — 엎어져서 아무것도 보지 않는다. 코앞 기척만 몸으로 느낀다.
+      // 소음(alertNearbyAt)·피격(alertEnemy)은 밖에서 깨운다
+      if (enemy.feigning) {
+        if (dist <= (def.feignWakeRadius ?? 0)) {
+          alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
+          world.events.emit('ghoul_rise', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+          world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type });
+        }
+        break;
+      }
       const behind = dist > 0.001 && (facingX * distX + facingZ * distZ) / dist <= 0;
       // 장님(슬라임)은 시야·인기척·랜턴 어느 것으로도 못 알아챈다 — 소리(alertNearbyAt)와
       // 피격만이 깨운다. 걸어서(무음) 지나가면 코앞이라도 무해하다
@@ -450,6 +502,36 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         enemy.summonCooldown = brood.cooldownTicks;
         startWindup(world, enemy, def.summonAttack);
         break;
+      }
+      // 굶주림(구울) — 생명 입자가 플레이어보다 가까우면 먹으러 간다.
+      // 처치가 구울 곁에서 나면 입자를 놓고 플레이어와 경쟁하게 된다
+      const hunger = def.eatsMotes;
+      if (hunger) {
+        let mote = null as { x: number; z: number } | null;
+        let moteDist = hunger.senseRadius;
+        for (const m of world.lifeMotes) {
+          if (m.homing) continue; // 플레이어에게 이미 빨려가는 것은 못 뺏는다
+          const d = Math.hypot(m.x - enemy.x, m.z - enemy.z);
+          if (d < moteDist) {
+            moteDist = d;
+            mote = m;
+          }
+        }
+        if (mote && moteDist < dist) {
+          if (moteDist <= 0.9) {
+            world.lifeMotes.splice(world.lifeMotes.indexOf(mote as never), 1);
+            enemy.health = Math.min(def.health, enemy.health + hunger.healPerMote);
+            enemy.frenzyStacks = Math.min(hunger.frenzyMax, (enemy.frenzyStacks ?? 0) + 1);
+            world.events.emit('ghoul_ate_mote', {
+              enemyId: enemy.id, stacks: enemy.frenzyStacks, x: enemy.x, z: enemy.z,
+            });
+          } else {
+            const mdx = mote.x - enemy.x;
+            const mdz = mote.z - enemy.z;
+            moveAvoiding(world, enemy, def, mdx / moteDist, mdz / moteDist, moveSpeed(enemy, def) * dt);
+          }
+          break;
+        }
       }
       // 돌격 — 중거리(minRange~maxRange)에 들어오면 달려들며 내리찍는다.
       // maxRange 가 있는 돌격만 거리로 발동한다 (창병처럼 wantsCharge 로 쓰는 쪽과 구분)
@@ -652,11 +734,70 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       break;
     }
 
+    // 파먹기 — 플레이어에게 매달려 일정 간격으로 물어뜯는다. 시선만 자유롭고
+    // 이동·공격·스킬·회피는 전부 잠긴다. 근접 키 연타(mashToEscape)로 밀쳐내야 풀린다
+    case 'latched': {
+      const grip = balance.ghoulGrapple;
+      if (world.dead || world.grappleEnemyId !== enemy.id || dist > 4) {
+        releaseGrapple(world, enemy, false);
+        break;
+      }
+      // 플레이어 몸에 붙어 있는다 — 붙잡은 방향을 유지한 채
+      const hold = balance.player.radius + def.radius + 0.1;
+      enemy.x = p.x + (enemy.latchDirX ?? 0) * hold;
+      enemy.z = p.z + (enemy.latchDirZ ?? 0) * hold;
+      enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));
+      // 물어뜯기
+      enemy.timer--;
+      if (enemy.timer <= 0) {
+        enemy.timer = grip.biteIntervalTicks;
+        p.health -= grip.biteDamage;
+        world.events.emit('ghoul_bite', { enemyId: enemy.id });
+        world.events.emit('player_damaged', {
+          amount: grip.biteDamage, health: p.health, srcX: enemy.x, srcZ: enemy.z, source: 'ghoul_bite',
+        });
+        if (p.health <= 0) {
+          p.health = 0;
+          world.dead = true;
+          world.events.emit('player_died', { tick: world.tick });
+          releaseGrapple(world, enemy, false);
+          break;
+        }
+      }
+      // 몸부림 — 근접 키 연타로 밀쳐낸다
+      if (world.input.meleePressed) {
+        world.grappleMash++;
+        world.events.emit('grapple_struggle', { count: world.grappleMash, need: grip.mashToEscape });
+        if (world.grappleMash >= grip.mashToEscape) {
+          releaseGrapple(world, enemy, true);
+          break;
+        }
+      }
+      // 남은 시스템(무기·스킬·반응·아이템)이 이번 틱에 아무것도 못 하게 입력을 비운다.
+      // 시선(lookDX/DY)만 남긴다 — 얼굴을 파먹는 걸 보는 것까지 막을 이유는 없다
+      world.input = {
+        ...world.input,
+        moveX: 0, moveForward: 0, sprint: false, sprintPressed: false, dodgePressed: false,
+        meleePressed: false, meleeHeld: false, rangedPressed: false, rangedHeld: false,
+        reload: false, reactionPressed: false, reactionHeld: false, reactionReleased: false,
+        castPressed: false, useSkill: 0, skillHeld: 0, selectedSkillHeld: false,
+        cycleSkill: false, useSelectedSkill: false, interactPressed: false,
+        cycleRanged: 0, useSlot: 0, batterySwap: false,
+      };
+      break;
+    }
+
     case 'impact': {
       const connected = attackReaches(def, enemy, attack, p.x, p.z) && p.iframeTicks <= 0;
       if (connected) {
         // 방어(정면) — 칩 데미지만 관통. 피해가 있으므로 연쇄는 여전히 리셋된다
         const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
+        // 들러붙기(구울) — 맞으면 피해·밀침 대신 매달려 파먹기 시작.
+        // 방어로 막았으면 평소의 칩 데미지·밀침으로 흘려보낸다
+        if (attack.latches && !blocked) {
+          startLatch(world, enemy);
+          break;
+        }
         const base = attack.damage ?? def.damage; // 공격별 피해 재정의 (방패 밀쳐내기 등)
         // 방어 관통 비율도 공격별로 열어 둔다 — 돌격처럼 몸으로 받으면 안 되는 기술은 더 아프다
         const chip = attack.blockedDamageRatio ?? balance.block.chipDamageRatio;
@@ -831,7 +972,13 @@ function slowFactor(enemy: EnemyState): number {
 
 /** 이동 속도 — 둔화 배율을 곱한다 (공격 리듬은 그대로다) */
 function moveSpeed(enemy: EnemyState, def: ReturnType<typeof enemyDef>): number {
-  return def.speed * slowFactor(enemy);
+  return def.speed * slowFactor(enemy) * frenzyMul(enemy, def);
+}
+
+/** 광란 배율 — 생명 입자를 먹은 만큼 빨라진다 (이속·공속 공용, 구울) */
+function frenzyMul(enemy: EnemyState, def: ReturnType<typeof enemyDef>): number {
+  if (!def.eatsMotes || !enemy.frenzyStacks) return 1;
+  return 1 + def.eatsMotes.frenzyPerStack * enemy.frenzyStacks;
 }
 
 function moveAvoiding(
@@ -1012,7 +1159,7 @@ function advanceStrike(
 
 function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
   enemy.ai = 'windup';
-  enemy.timer = attack.windupTicks;
+  enemy.timer = Math.max(1, Math.round(attack.windupTicks / frenzyMul(enemy, enemyDef(enemy.type))));
   enemy.whiffed = false;
   enemy.recoiled = false;
   enemy.strikeProgress = 0;

@@ -346,6 +346,12 @@ for (const name of [
   'enemy_split',
   'grave_dropped',
   'slime_ate',
+  'ghoul_latch',
+  'ghoul_bite',
+  'grapple_struggle',
+  'grapple_escape',
+  'ghoul_rise',
+  'ghoul_ate_mote',
   'slime_spilled',
   'grave_recovered',
   'boss_brood',
@@ -706,6 +712,27 @@ events.on('enemy_volley_start', (payload) => {
   audio.play('boss_volley_draw');
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
 });
+// 구울 — 붙잡힘/몸부림/밀쳐내기/기상. 파먹히는 동안 근접 키 연타가 유일한 탈출구다
+events.on('ghoul_latch', () => {
+  audio.play('ghoul_latch');
+  stage.triggerCameraKick(0.4, 200);
+  showReaction('구울이 물어뜯는다! 근접 공격 연타로 밀쳐내라!', 2600);
+});
+events.on('ghoul_bite', () => stage.triggerCameraKick(0.28, 130));
+events.on('grapple_struggle', (payload) => {
+  const st = payload as { count: number; need: number };
+  showReaction(`밀쳐내는 중… ${st.count}/${st.need} — 근접 키 연타!`, 800);
+});
+events.on('grapple_escape', () => {
+  audio.play('heavy_hit');
+  stage.triggerCameraKick(0.3, 160);
+  showReaction('밀쳐냈다!', 1000);
+});
+events.on('ghoul_rise', () => {
+  audio.play('ghoul_shriek');
+  showReaction('시체가 일어난다!', 1600);
+});
+events.on('ghoul_ate_mote', () => audio.play('hit_flesh'));
 // 슬라임 식탐 — 삼킬 때 꿀렁 (게워 내는 건 죽음 파편·자석 픽업이 이미 요란하다)
 events.on('slime_ate', () => audio.play('slime_windup'));
 // 어미 슬라임 새끼 분리 — 크게 철퍽이며 어미 색 파편이 사방으로 튄다
@@ -1224,6 +1251,8 @@ function respawnAtAltar(): void {
   // 바닥 보상은 리셋하되 비석만은 남긴다 — 유품은 다시 죽어도 그 자리에 있다
   world.groundItems = world.groundItems.filter((g) => g.kind === 'grave');
   world.freezeTicks = 0;
+  world.grappleEnemyId = null;
+  world.grappleMash = 0;
   world.dead = false;
   deathOverlay!.classList.remove('visible');
   events.emit('respawned', { x: point.x, z: point.z });
@@ -1473,6 +1502,8 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   world.exitLockedNotified = false;
   world.cleared = false;
   world.freezeTicks = 0;
+  world.grappleEnemyId = null;
+  world.grappleMash = 0;
 
   const p = world.player;
   p.x = at.x;

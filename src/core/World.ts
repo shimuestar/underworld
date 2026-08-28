@@ -166,6 +166,7 @@ export function applyFrostOnHit(events: Events, enemy: EnemyState, damage: numbe
 }
 
 export function alertEnemy(enemy: EnemyState, noticeTicks: number): void {
+  enemy.feigning = false; // 죽은 척은 깨는 순간 끝난다
   enemy.ai = 'chase';
   enemy.noticeTicks = noticeTicks;
 }
@@ -373,7 +374,9 @@ export type EnemyAiState =
   /** 연사 — 제자리에서 일정 간격으로 여러 발 (족장 화살 세례) */
   | 'volley'
   /** 돌격 달리기 — 예고 뒤 타격 전까지 플레이어를 향해 달린다 */
-  | 'charging';
+  | 'charging'
+  /** 들러붙어 파먹기 — 플레이어에게 매달려 있다. 근접 연타로 밀쳐내야 풀린다 (구울) */
+  | 'latched';
 
 /** 슬라임이 남긴 점액 장판 한 방울 — Enemies 가 떨구고 말리며, PlayerMove 가 밟기를 판정한다 */
 export interface GooPuddle {
@@ -413,6 +416,13 @@ export interface EnemyState {
   gooDropTicks?: number;
   /** 삼킨 바닥 아이템 — 죽으면 전부 그 자리에 게워 낸다 (슬라임 식탐) */
   eatenItems?: GroundItemState[];
+  /** 죽은 척 중 — 엎어져 있고 이름표도 없다. 기척·소음·피격이 깨운다 (구울) */
+  feigning?: boolean;
+  /** 광란 스택 — 생명 입자를 먹을 때마다 +1, 이속·공속이 빨라진다 (구울) */
+  frenzyStacks?: number;
+  /** 들러붙은 방향 — 플레이어 → 나 (파먹는 동안 이 방향으로 매달린다) */
+  latchDirX?: number;
+  latchDirZ?: number;
   /** 화상 잔여 틱 (Projectiles가 피해 적용) */
   burnTicks: number;
   burnDamagePerTick: number;
@@ -687,6 +697,11 @@ export class World {
 
   /** 슬라임 점액 장판 — 층 이동 시 loadFloor 가 비운다. 없으면 빈 배열로 취급 */
   gooPuddles?: GooPuddle[];
+
+  /** 구울에게 붙잡혀 파먹히는 중 — 그 구울의 id. 근접 연타로 밀쳐내야 풀린다 */
+  grappleEnemyId: number | null = null;
+  /** 붙잡힌 동안 누적한 몸부림(근접 키) 횟수 */
+  grappleMash = 0;
 
   enemies: EnemyState[];
   level: Level;

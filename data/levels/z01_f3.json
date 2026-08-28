@@ -306,6 +306,23 @@
       ]
     },
     {
+      "type": "ghoul",
+      "cell": [
+        16,
+        7
+      ],
+      "note": "옥좌 접근로 — 죽은 척 매복",
+      "feign": true
+    },
+    {
+      "type": "ghoul",
+      "cell": [
+        14,
+        10
+      ],
+      "note": "옥좌 접근로 순찰"
+    },
+    {
       "type": "goblin_chieftain",
       "cell": [
         17,

@@ -28,6 +28,7 @@ const ENEMY_COLORS: Record<string, number> = {
   spider_large: 0xd8d8cf,
   slime: 0x3fae62,
   slime_mother: 0x2e8f52,
+  ghoul: 0x8f9a86,
   slime_small: 0x63c97e,
 };
 /** 거미는 기둥+머리가 아니라 몸통·배·다리로 만든다 */
@@ -2810,6 +2811,13 @@ export class Stage {
         if (leanTarget < 0) leanTarget *= k;
       }
 
+      // 구울 자세 — 굽은 등 / 죽은 척(엎어짐) / 파먹기(몸을 파묻고 꿈틀).
+      // 전진 제한(위 clamp) 뒤에 덮는다 — 파먹기는 이미 몸이 붙어 있는 상태다
+      if (enemy.type === 'ghoul') {
+        if (enemy.ai === 'latched') leanTarget = -0.5 + Math.sin(now / 85) * 0.1;
+        else if (enemy.feigning) leanTarget = -1.42;
+        else leanTarget += -0.2;
+      }
       if (trembling) leanTarget += Math.sin(now / 14) * 0.05;
       // 피탄 움찔 — 상체가 짧게 젖혀졌다 돌아온다 (+ = 뒤로). 남은 틱 비율로 감쇠
       const flinch =

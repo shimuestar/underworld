@@ -33,6 +33,7 @@ const IMPLEMENTED = new Set([
   'slime',
   'slime_small',
   'slime_mother',
+  'ghoul',
 ]);
 
 /** 이 적 타입이 실제로 스폰되는가 — 레벨 검증이 이걸로 스텁 배치를 잡는다 */
@@ -126,14 +127,10 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
         continue;
       }
     }
-    enemies.push(
-      spawnEnemyAt(
-        placement.type,
-        x,
-        z,
-        nextEnemySpawnId++,
-      ),
-    );
+    const spawned = spawnEnemyAt(placement.type, x, z, nextEnemySpawnId++);
+    // 죽은 척 배치 — 시체처럼 엎어져 시작한다 (구울). 기척·소음·피격이 깨운다
+    if ((placement as { feign?: boolean }).feign) spawned.feigning = true;
+    enemies.push(spawned);
   }
   if (skippedNearAltar > 0) {
     console.warn(`[spawn] 제단 안전 반경 안이라 ${skippedNearAltar}마리를 건너뛰었다`);

@@ -289,6 +289,23 @@
       ]
     },
     {
+      "type": "ghoul",
+      "cell": [
+        14,
+        16
+      ],
+      "note": "중정 길목 — 죽은 척 매복",
+      "feign": true
+    },
+    {
+      "type": "ghoul",
+      "cell": [
+        12,
+        14
+      ],
+      "note": "중정 순찰 — 입자를 놓고 경쟁한다"
+    },
+    {
       "type": "slime",
       "cell": [
         14,

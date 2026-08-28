@@ -60,6 +60,8 @@ export interface EnemyAttackDef {
   projectileSpeed?: number;
   projectileRadius?: number;
   projectileKind?: string;
+  /** 맞으면 피해·밀침 대신 들러붙어 파먹는다 — 방어로 막으면 평소처럼 흘려보낸다 (구울) */
+  latches?: boolean;
   /** 무리 소환 내용물 — type: 'summon' 공격 전용. healthCost 만큼 제 체력을 떼어 준다 */
   brood?: { type: string; count: number; maxAlive: number; healthCost: number; cooldownTicks: number; flingDistance?: number };
   /** 원거리 공격 사용 최소 거리 (이보다 가까우면 근접) */
@@ -121,6 +123,10 @@ export interface EnemyDef {
   gooTrail?: boolean;
   /** 바닥 아이템을 지나가며 삼킨다 — 죽으면 전부 게워 낸다 (슬라임) */
   eatsItems?: boolean;
+  /** 생명 입자를 먹는다 — 회복 + 광란 스택(이속·공속 배율). 플레이어와 입자 경쟁 (구울) */
+  eatsMotes?: { senseRadius: number; healPerMote: number; frenzyPerStack: number; frenzyMax: number };
+  /** 죽은 척 배치가 깨는 기척 반경(m) — 소음·피격은 반경과 무관하게 깨운다 */
+  feignWakeRadius?: number;
   /** 마법 방어막 (warden) — 실탄만 관통 */
   magicBarrier?: { blocksMagic: boolean; blocksMelee: boolean; piercedBy: string[] };
   /** caster_kite: 이 거리 안이면 물러난다 */

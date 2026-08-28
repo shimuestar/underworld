@@ -20,6 +20,9 @@ export function tick(world: World, dt: number): void {
   p.prevY = p.y;
   p.prevZ = p.z;
 
+  // 구울에게 붙잡혔다 — 시선만 자유. 이동·질주·밀림 소화는 몸부림(근접 연타)으로 풀릴 때까지 없다
+  if (world.grappleEnemyId !== null) return;
+
   // 거미줄 — 여기서는 느려지기만 한다. 벗기는 건 해머(Weapons)뿐이라
   // 시간이 흐르거나 발버둥친다고 풀리지 않는다
   const webbed = (p.webSwingsLeft ?? 0) > 0;

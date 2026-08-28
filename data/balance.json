@@ -537,6 +537,14 @@
     "scarRatio": 0.5
   },
 
+  "_ghoulGrappleNote": "구울 파먹기 — 붙잡히면 이동·공격이 잠기고, 근접 키를 mashToEscape 번 연타해야 밀쳐낸다. 시선은 자유",
+  "ghoulGrapple": {
+    "biteDamage": 4,
+    "biteIntervalTicks": 26,
+    "mashToEscape": 6,
+    "shoveDistance": 3.2,
+    "escapeIframeTicks": 24
+  },
   "_gooNote": "슬라임 점액 장판 — 기어간 자리에 남아 밟으면 느려진다. 마르면(수명) 사라진다",
   "goo": {
     "radius": 1.1,
