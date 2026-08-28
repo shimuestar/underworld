@@ -713,6 +713,8 @@ export class Stage {
   private descentMs = 1;
   /** +1 = 내려간다, −1 = 올라간다 */
   private descentDir = 1;
+  /** 1인칭 다리 — 아래를 내려다보면 보인다. 걸음(bobPhase)과 같은 위상으로 젓는다 */
+  private playerLegs: { group: THREE.Group; left: THREE.Group; right: THREE.Group } | null = null;
   /** 걷기 흔들림 — 위상은 이동 거리로 돌고, blend 로 멈출 때 부드럽게 빠진다 */
   private bobPhase = 0;
   private bobBlend = 0;
@@ -1498,6 +1500,7 @@ export class Stage {
     if (this.bobBlend > 0.01) {
       this.camera.position.y += Math.sin(this.bobPhase) * bob.amp * this.bobBlend;
     }
+    this.updatePlayerLegs(x, z, yaw);
 
     const now = performance.now();
     if (now < this.camKickUntil) {
@@ -1521,6 +1524,41 @@ export class Stage {
       const f = flashLeft / this.executeFlashMs;
       this.executeFlash.intensity = balance.lighting.flashIntensity * this.executeFlashPower * f * f;
     }
+  }
+
+  /** 1인칭 다리 — 골반 피벗에 허벅지·장화 상자. 발소리·카메라 밥과 위상이 같아
+   *  내려다보면 걸음에 맞춰 다리가 갈마들며 나간다. 멈추면 blend 로 곧게 선다 */
+  private updatePlayerLegs(x: number, z: number, yaw: number): void {
+    if (!this.playerLegs) {
+      const cloth = new THREE.MeshLambertMaterial({ color: 0x2a2620 });
+      const boot = new THREE.MeshLambertMaterial({ color: 0x17140f });
+      const group = new THREE.Group();
+      const makeLeg = (): THREE.Group => {
+        const hip = new THREE.Group();
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.86, 0.17), cloth);
+        leg.position.y = -0.43;
+        hip.add(leg);
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.09, 0.28), boot);
+        foot.position.set(0, -0.87, -0.06); // 발끝이 앞(-Z)으로
+        hip.add(foot);
+        return hip;
+      };
+      const left = makeLeg();
+      left.position.x = -0.11;
+      const right = makeLeg();
+      right.position.x = 0.11;
+      group.add(left, right);
+      this.scene.add(group);
+      this.playerLegs = { group, left, right };
+    }
+    const legs = this.playerLegs;
+    // 몸은 눈보다 살짝 뒤 — 내려다보면 가슴 아래로 다리가 보이는 자리
+    legs.group.position.set(x + Math.sin(yaw) * 0.14, 0.92, z + Math.cos(yaw) * 0.14);
+    legs.group.rotation.y = yaw;
+    // 걸음과 같은 위상 — 빨리 뛰면 젓는 것도 빨라진다. 멈추면 곧게 선다
+    const swing = Math.sin(this.bobPhase) * 0.62 * this.bobBlend;
+    legs.left.rotation.x = swing;
+    legs.right.rotation.x = -swing;
   }
 
   setLanternOn(on: boolean): void {
