@@ -639,6 +639,10 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     s1.alive = false;
     Enemies.tick(world, DT);
     expect(world.enemies.filter((e) => e.type === 'slime_small' && e.alive)).toHaveLength(2);
+    // 갈라진 새끼는 튕겨 나간다 — 부모 자리에 겹쳐 태어나면 해머 한 방에 같이 죽는다
+    for (const child of world.enemies.filter((e) => e.type === 'slime_small')) {
+      expect(child.kbTicks ?? 0).toBeGreaterThan(0);
+    }
     // 화상 중 사망 — 말라붙어 갈라지지 않는다
     const s2 = add('slime', 20, 6);
     s2.burnTicks = 10;

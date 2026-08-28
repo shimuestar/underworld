@@ -10,7 +10,7 @@
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, playerBlocks, pushPlayer, type EnemyState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, playerBlocks, pushEnemy, pushPlayer, type EnemyState, type World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -134,6 +134,10 @@ function resolveEnemyOverlaps(world: World): void {
   }
 }
 
+/** 새끼가 튕겨 나가는 데 쓰는 틱 — 거리(flingDistance)는 데이터, 이건 연출 속도다.
+ *  바로 옆에서 태어나면 부모를 죽인 해머 한 방에 같이 죽어 분열의 의미가 없다 */
+const FLING_TICKS = 18;
+
 /** 슬라임 분열 대역 id — 투사체(100000)·열쇠(950000) 대역과 겹치지 않는다 */
 let nextSplitId = 700000;
 let nextGooId = 1;
@@ -151,7 +155,7 @@ function handleSplit(world: World, enemy: EnemyState): void {
     const ang = enemy.yaw + Math.PI / 2 + (Math.PI * 2 * i) / split.count;
     const x = enemy.x + Math.sin(ang) * 0.4;
     const z = enemy.z + Math.cos(ang) * 0.4;
-    world.enemies.push({
+    const child: EnemyState = {
       id: nextSplitId++,
       type: split.into,
       x, z, prevX: x, prevZ: z,
@@ -162,7 +166,10 @@ function handleSplit(world: World, enemy: EnemyState): void {
       noticeTicks: balance.enemyAi.noticeDelayTicks,
       burnTicks: 0, burnDamagePerTick: 0,
       hearingMul: def.hearingMul,
-    });
+    };
+    // 튕겨 나가며 태어난다 — 부모 자리에 겹쳐 있으면 해머 한 방에 같이 죽는다
+    pushEnemy(child, Math.sin(ang), Math.cos(ang), split.flingDistance ?? 0, FLING_TICKS);
+    world.enemies.push(child);
   }
   world.events.emit('enemy_split', {
     parentType: enemy.type, into: split.into, count: split.count, x: enemy.x, z: enemy.z,
@@ -180,7 +187,7 @@ function spawnBrood(world: World, enemy: EnemyState, attack: EnemyAttackDef): vo
     const ang = enemy.yaw + (Math.PI * 2 * i) / brood.count;
     const x = enemy.x + Math.sin(ang) * (motherR + def.radius + 0.35);
     const z = enemy.z + Math.cos(ang) * (motherR + def.radius + 0.35);
-    world.enemies.push({
+    const child: EnemyState = {
       id: nextSplitId++,
       type: brood.type,
       x, z, prevX: x, prevZ: z,
@@ -191,7 +198,10 @@ function spawnBrood(world: World, enemy: EnemyState, attack: EnemyAttackDef): vo
       noticeTicks: balance.enemyAi.noticeDelayTicks,
       burnTicks: 0, burnDamagePerTick: 0,
       hearingMul: def.hearingMul,
-    });
+    };
+    // 사방으로 뿌려진다 — 어미 곁에 뭉쳐 태어나면 광역 한 방 감이다
+    pushEnemy(child, Math.sin(ang), Math.cos(ang), brood.flingDistance ?? 0, FLING_TICKS);
+    world.enemies.push(child);
   }
   enemy.health = Math.max(1, enemy.health - brood.healthCost); // 제 몸을 떼어 준 값
   world.events.emit('boss_brood', {

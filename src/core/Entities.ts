@@ -61,7 +61,7 @@ export interface EnemyAttackDef {
   projectileRadius?: number;
   projectileKind?: string;
   /** 무리 소환 내용물 — type: 'summon' 공격 전용. healthCost 만큼 제 체력을 떼어 준다 */
-  brood?: { type: string; count: number; maxAlive: number; healthCost: number; cooldownTicks: number };
+  brood?: { type: string; count: number; maxAlive: number; healthCost: number; cooldownTicks: number; flingDistance?: number };
   /** 원거리 공격 사용 최소 거리 (이보다 가까우면 근접) */
   minRange?: number;
   /** 이 거리 안에서만 고른다 (돌격처럼 "중거리 전용" 기술) */
@@ -116,7 +116,7 @@ export interface EnemyDef {
   /** 청각 배율 — 모든 소음 반경이 이 배로 들린다. Spawner 가 EnemyState 로 복사한다 */
   hearingMul?: number;
   /** 죽으면 갈라진다 — 화상·빙결 중 사망이면 갈라지지 않는다 (Enemies.handleSplit) */
-  split?: { into: string; count: number };
+  split?: { into: string; count: number; flingDistance?: number };
   /** 기어간 자리에 점액 장판을 남긴다 — 밟으면 느려진다 (balance.goo) */
   gooTrail?: boolean;
   /** 마법 방어막 (warden) — 실탄만 관통 */
