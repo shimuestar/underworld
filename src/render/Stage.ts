@@ -3002,6 +3002,19 @@ export class Stage {
       new THREE.BoxGeometry(headSize, headSize, headSize),
       new THREE.MeshLambertMaterial({ color }),
     );
+    // 눈 — 살아 있을 때와 같은 안광이 붙은 채로 굴러간다 (죽는 순간 빛이 꺼진 붉은 눈)
+    const ec = balance.lighting.enemyEyes;
+    const eyeR = def.radius * ec.radiusMul;
+    const eyeMat = new THREE.MeshLambertMaterial({
+      color: 0x1a0505,
+      emissive: new THREE.Color(ec.color),
+      emissiveIntensity: 0.5, // 살아 있을 때보다 흐리게 — 꺼져 가는 눈
+    });
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(eyeR, 6, 5), eyeMat);
+      eye.position.set(side * headSize * ec.spacingMul, headSize * 0.08, -headSize / 2);
+      mesh.add(eye);
+    }
     const ang = Math.random() * Math.PI * 2;
     const ox = x;
     const oy = def.height - headSize / 2; // 머리가 있던 그 높이에서
@@ -3316,9 +3329,8 @@ export class Stage {
       const age = (now - p.bornMs) / 1000;
       const lifeFrac = (now - p.bornMs) / (p.lifeMs ?? DEATH_PARTICLE_LIFE_MS);
       if (lifeFrac >= 1) {
-        this.scene.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        (p.mesh.material as THREE.Material).dispose();
+        // 자식까지 걷는다 — 떨어져 나간 머리에는 눈이 붙어 있다
+        this.disposeGroup(p.mesh);
         this.particles.splice(i, 1);
         continue;
       }
