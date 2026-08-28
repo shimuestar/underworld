@@ -289,6 +289,8 @@ interface EnemyVisual {
   /** 시전 충전 구체 (warden) */
   chargeOrb?: THREE.Mesh;
   chargeOrbLight?: THREE.PointLight;
+  /** 거머리 위장 재질 — 매달린 동안 천장 돌빛, 랜턴에 잡히거나 내려오면 제 색 (mul 은 부위 명암) */
+  leechMats?: { mat: THREE.MeshLambertMaterial; mul: number }[];
   /** 활 (archer) — 활대·시위·재어 둔 화살 리그. 당김은 syncEnemies 가 매 프레임 갱신 */
   bowRig?: BowRig;
   /** 시위 당김 0~1 — 놓는 순간 0으로 스냅해 시위가 튕겨 돌아간다 */
@@ -682,6 +684,11 @@ export function updateBowDraw(rig: BowRig, draw: number, showArrow: boolean): vo
   rig.group.rotation.z = -0.18 * draw; // 당길수록 살짝 들려 조준한다
 }
 
+/** 거머리 위장색 — GridLoader 의 천장 돌빛(COLOR_CEILING)과 같은 값 */
+const LEECH_CAMO_COLOR = 0x342f28;
+const LEECH_TMP_DIR = new THREE.Vector3();
+const LEECH_TMP_COLOR = new THREE.Color();
+
 /** 구울 팔 각도 — 두 팔을 앞으로 나란히 (수평보다 살짝 처져 스산하게) */
 const GHOUL_ARMS_FORWARD = 1.45;
 /** 할퀴기 치켜들기 / 밀쳐냈을 때 — 머리 위로 들린다 */
@@ -783,6 +790,8 @@ export class Stage {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly lantern: THREE.SpotLight;
   private lanternSpill!: THREE.PointLight;
+  /** 랜턴이 켜져 있는가 — 거머리 위장 해제 판정에 쓴다 (setLanternOn 이 갱신) */
+  private lanternIsOn = true;
   private readonly muzzleLight: THREE.PointLight;
   private readonly eyeHeight = balance.player.eyeHeight;
   private readonly enemyVisuals = new Map<number, EnemyVisual>();
@@ -1661,6 +1670,7 @@ export class Stage {
   }
 
   setLanternOn(on: boolean): void {
+    this.lanternIsOn = on;
     this.lantern.visible = on;
     this.lanternSpill.visible = on;
   }
@@ -2162,6 +2172,7 @@ export class Stage {
     const bodyMat = new THREE.MeshLambertMaterial({ color: baseColor });
     flashMaterials.push(bodyMat);
     let headMesh: THREE.Mesh | undefined; // 헤드샷 젖힘용 — 거미는 없다
+    let leechMats: { mat: THREE.MeshLambertMaterial; mul: number }[] | undefined; // 거머리 위장용
     let legsPair: { left: THREE.Group; right: THREE.Group } | undefined;
     // 안광 — 조명이 아니라 자체 발광 눈. 어둠 속에서 멀리서도 "저기 뭔가 있다"가 읽힌다
     const eyes = makeEyeMaterials();
@@ -2177,6 +2188,10 @@ export class Stage {
         color: new THREE.Color(baseColor).multiplyScalar(0.6),
       });
       flashMaterials.push(tentMat);
+      leechMats = [
+        { mat: bodyMat, mul: 1 },
+        { mat: tentMat, mul: 0.6 },
+      ];
       for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
         const tent = new THREE.Mesh(new THREE.BoxGeometry(0.07, def.height * 0.9, 0.07), tentMat);
         tent.position.set(sx * def.radius * 0.6, def.height * 0.15, sz * def.radius * 0.6);
@@ -2303,6 +2318,7 @@ export class Stage {
       torso,
       head: headMesh,
       legs: legsPair,
+      leechMats,
       flashMaterials,
       shieldBaseZ: 0,
       hitFlashUntil: 0,
@@ -2985,9 +3001,30 @@ export class Stage {
         if (visual.chargeOrbLight) visual.chargeOrbLight.intensity = 2.2 * windupProgress;
       }
 
-      // 거머리 — 매달려 있는 동안 천천히 흔들린다 (숨쉬는 살덩이)
+      // 거머리 — 매달려 있는 동안 천천히 흔들리고, 천장 돌빛으로 위장한다.
+      // 랜턴 빔에 잡히거나 땅에 내려오면 제 색(자줏빛)이 드러난다. 안광은 위장 중에도
+      // 남는다 — 올려다보는 플레이어에게 주는 유일한 시각 단서다
       if (enemy.type === 'leech') {
         visual.torso.rotation.z = enemy.lurking ? Math.sin(now / 520 + enemy.id) * 0.08 : 0;
+        if (visual.leechMats) {
+          let camo = enemy.lurking === true;
+          if (camo && this.lanternIsOn) {
+            const dx = enemy.x - this.camera.position.x;
+            const dz = enemy.z - this.camera.position.z;
+            const d = Math.hypot(dx, dz);
+            if (d > 0.001 && d <= balance.lantern.noticeRange) {
+              this.camera.getWorldDirection(LEECH_TMP_DIR);
+              const flat = Math.hypot(LEECH_TMP_DIR.x, LEECH_TMP_DIR.z) || 1;
+              const dot = ((LEECH_TMP_DIR.x / flat) * dx + (LEECH_TMP_DIR.z / flat) * dz) / d;
+              if (dot >= Math.cos((balance.lantern.angleDeg * Math.PI) / 180)) camo = false;
+            }
+          }
+          const base = camo ? LEECH_CAMO_COLOR : ENEMY_COLORS['leech']!;
+          for (const entry of visual.leechMats) {
+            LEECH_TMP_COLOR.setHex(base).multiplyScalar(entry.mul);
+            entry.mat.color.lerp(LEECH_TMP_COLOR, 0.15);
+          }
+        }
       }
 
       // 슬라임 꿀렁임 — 기는 동안 squash&stretch, 예고 때 터질 듯 부풀고, 도약 중 살짝 늘어난다
