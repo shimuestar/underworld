@@ -710,6 +710,17 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     world.faceLeechId = null; // 뒷정리
   });
 
+  it('지상 거머리는 4m 밖이면 뛰어들어 얼굴에 붙는다', () => {
+    const l = add('leech', 11, 6); // 5m — 도약 대역(4~9m)
+    l.ai = 'chase';
+    for (let i = 0; i < 150 && world.faceLeechId === null; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect(world.faceLeechId).toBe(l.id); // 도약 명중 = 부착
+    world.faceLeechId = null; // 뒷정리
+  });
+
   it('거머리 지상 할퀴기가 명중하면 얼굴로 기어올라 흡혈한다', () => {
     const l = add('leech', 7.2, 6); // 근접 사거리 안 — 지상전
     l.ai = 'chase';

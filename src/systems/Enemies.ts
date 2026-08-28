@@ -885,8 +885,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (
         ch?.maxRange !== undefined &&
         (enemy.chargeCooldown ?? 0) <= 0 &&
-        // 이미 누가 물고 있으면 달려들지 않는다 — 떼가 번갈아 물면 빠져나올 수 없다
-        !(ch.latches && world.grappleEnemyId !== null) &&
+        // 이미 누가 물고(구울)·빨고(거머리) 있으면 달려들지 않는다 — 번갈아 붙으면 못 빠져나온다
+        !(ch.latches && (def.faceSuck ? world.faceLeechId !== null : world.grappleEnemyId !== null)) &&
         dist >= (ch.minRange ?? 0) &&
         dist <= ch.maxRange &&
         world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
