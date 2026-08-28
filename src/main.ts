@@ -258,6 +258,20 @@ window.addEventListener('keydown', (e) => {
     showReaction(killed > 0 ? `(테스트) 시야 내 ${killed}마리 처치` : '(테스트) 시야에 적 없음');
     console.log('[debug] 시야 내 몰살', killed);
   }
+  // 테스트용 층 바로 이동 (6·7·8 → 1-1·1-2·1-3) — 계단 연출 없이 즉시.
+  // 층 상태는 loadFloor 가 얼리고 되살리므로 오가도 진행이 깨지지 않는다 (슬라이스 검증 시 제거)
+  if ((e.code === 'Digit6' || e.code === 'Digit7' || e.code === 'Digit8') && !world.dead && !world.uiOpen && !traveling) {
+    const target = e.code === 'Digit6' ? 0 : e.code === 'Digit7' ? 1 : 2;
+    if (target !== floorIndex && target < ZONE.length) {
+      traveling = true;
+      screenFade(1, 160);
+      afterMs(180, () => {
+        loadFloor(target);
+        screenFade(0, 240);
+      });
+      console.log('[debug] 층 바로 이동', `1-${target + 1}`);
+    }
+  }
   // 테스트용 스킬 전부 획득 — 구현된 것만. 오염은 안 쌓인다 (슬라이스 검증 시 제거)
   if (e.code === 'KeyU' && !world.dead && !world.uiOpen) {
     if (world.skillTestMode) {
