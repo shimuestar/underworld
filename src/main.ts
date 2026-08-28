@@ -693,6 +693,7 @@ events.on('headshot', (payload) => {
 events.on('headshot_kill', (payload) => {
   const kill = payload as { enemyType: string; x: number; z: number };
   audio.play('heavy_hit');
+  stage.spawnHeadPop(kill.enemyType, kill.x, kill.z); // 머리가 떨어져 나간다
   stage.spawnDeathBurst(kill.x, kill.z, kill.enemyType, balance.weapons.headshotKillBurstScale);
   const d = Math.hypot(kill.x - world.player.x, kill.z - world.player.z);
   if (d < 14) stage.triggerCameraKick(0.35 * (1 - d / 14), 200);

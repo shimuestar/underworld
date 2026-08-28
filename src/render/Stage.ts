@@ -2988,6 +2988,40 @@ export class Stage {
     if (visual) visual.headShakeUntil = performance.now() + HEADSHOT_SHAKE_MS;
   }
 
+  /** 헤드샷 처치 — 머리가 떨어져 나가 포물선으로 튄다.
+   *  본체 파편(spawnDeathBurst)과 별개로, 그 적의 머리와 같은 크기·색의 상자 하나가
+   *  높이 솟았다 떨어진다. 거미는 머리가 따로 없어 제외 */
+  spawnHeadPop(enemyType: string, x: number, z: number): void {
+    if (SPIDER_TYPES.has(enemyType)) return;
+    const def = enemyDef(enemyType);
+    const headSize = def.radius * 0.9;
+    const color = new THREE.Color(ENEMY_COLORS[enemyType] ?? ENEMY_COLOR_FALLBACK).multiplyScalar(
+      HEAD_DARKEN,
+    );
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(headSize, headSize, headSize),
+      new THREE.MeshLambertMaterial({ color }),
+    );
+    const ang = Math.random() * Math.PI * 2;
+    const ox = x;
+    const oy = def.height - headSize / 2; // 머리가 있던 그 높이에서
+    const oz = z;
+    mesh.position.set(ox, oy, oz);
+    this.particles.push({
+      mesh,
+      ox, oy, oz,
+      vx: Math.cos(ang) * (1.2 + Math.random() * 1.6),
+      vy: 3.6 + Math.random() * 1.4, // 위로 솟았다가
+      vz: Math.sin(ang) * (1.2 + Math.random() * 1.6),
+      gravity: 9,
+      lifeMs: 1500,
+      bornMs: performance.now(),
+      spinX: 6 + Math.random() * 6,
+      spinZ: 5 + Math.random() * 6,
+    });
+    this.scene.add(mesh);
+  }
+
   flashEnemyHit(enemyId: number): void {
     const visual = this.enemyVisuals.get(enemyId);
     if (visual) visual.hitFlashUntil = performance.now() + HIT_FLASH_MS;
