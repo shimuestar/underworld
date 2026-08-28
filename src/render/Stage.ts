@@ -2309,11 +2309,32 @@ export class Stage {
       }
     }
 
+    // 팔 살빛 — 무기 팔의 팔뚝과 맨팔이 같은 색을 쓴다
+    const armMat = new THREE.MeshLambertMaterial({
+      color: new THREE.Color(baseColor).multiplyScalar(0.85),
+    });
+    flashMaterials.push(armMat);
+
     // 근접 무기 — 어깨 피벗 팔에 쥐고 치켜들었다 내리찍는다
     const weaponSpec = MELEE_WEAPONS[type];
     if (weaponSpec) {
       const arm = new THREE.Group();
       arm.position.set(def.radius * 0.85, def.height * 0.72, 0);
+      // 팔뚝 — 어깨에서 손잡이까지. 이게 없으면 몽둥이만 허공에 떠 있다 (실측 피드백)
+      const limbLen = Math.min(def.height * 0.28, weaponSpec.length * 0.5);
+      const limb = new THREE.Mesh(
+        new THREE.BoxGeometry(def.radius * 0.32, def.radius * 0.32, limbLen),
+        armMat,
+      );
+      limb.position.z = -limbLen / 2;
+      arm.add(limb);
+      // 손 — 자루를 감싸 쥔 뭉치
+      const hand = new THREE.Mesh(
+        new THREE.BoxGeometry(weaponSpec.width + 0.07, weaponSpec.width + 0.07, 0.14),
+        armMat,
+      );
+      hand.position.z = -limbLen;
+      arm.add(hand);
       const shaft = new THREE.Mesh(
         new THREE.BoxGeometry(weaponSpec.width, weaponSpec.width, weaponSpec.length),
         new THREE.MeshLambertMaterial({ color: weaponSpec.color }),
@@ -2343,10 +2364,6 @@ export class Stage {
     // 맨팔 — 인간형은 모두 두 팔이다. 무기 팔(오른쪽)이 있으면 왼팔 하나만,
     // 없으면(궁수·주술사) 양팔을 단다. 궁수는 활을 향해 앞으로 들려 있다
     if (!SPIDER_TYPES.has(type)) {
-      const armMat = new THREE.MeshLambertMaterial({
-        color: new THREE.Color(baseColor).multiplyScalar(0.85),
-      });
-      flashMaterials.push(armMat);
       const armLen = def.height * 0.34;
       const forward = type === 'goblin_archer' ? 0.55 : 0;
       const makeArm = (side: number): THREE.Group => {
