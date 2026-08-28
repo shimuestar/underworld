@@ -321,32 +321,43 @@ describe('관문(G)과 레버', () => {
   });
 });
 
-describe('레벨 데이터', () => {
-  it('z01_f2 의 문 두 짝 모두 밀려 들어갈 벽을 찾는다', async () => {
-    const levelJson = (await import('../../data/levels/z01_f2.json')).default;
-    const level = new Level(levelJson as never);
-    expect(level.doors).toHaveLength(2);
-    for (const door of level.doors) {
-      // 축은 하나만 잡히고, 미는 쪽은 벽이어야 한다 (허공으로 밀면 판이 드러난다)
-      expect(Math.abs(door.dirX) + Math.abs(door.dirZ)).toBe(1);
-      expect(level.charAt(door.col + door.dirX, door.row + door.dirZ)).toBe('#');
+describe('레벨 데이터 — 로비·방·복도 문법 (세 층 공통)', () => {
+  const FLOORS = ['z01_f1', 'z01_f2', 'z01_f3'] as const;
+  const load = async (id: string): Promise<Level> =>
+    new Level((await import(`../../data/levels/${id}.json`)).default as never);
+
+  it('모든 문이 밀려 들어갈 벽을 찾는다 — 허공으로 밀면 판이 드러난다', async () => {
+    for (const id of FLOORS) {
+      const level = await load(id);
+      for (const door of level.doors) {
+        // 축은 하나만 잡히고, 미는 쪽은 벽이어야 한다
+        expect(Math.abs(door.dirX) + Math.abs(door.dirZ), `${id} 문 [${door.row},${door.col}]`).toBe(1);
+        expect(level.charAt(door.col + door.dirX, door.row + door.dirZ)).toBe('#');
+      }
     }
   });
 
-  it('보스 아레나 북쪽만 관문(G)이고, 그걸 여는 레버가 실제로 있다', async () => {
-    const levelJson = (await import('../../data/levels/z01_f2.json')).default;
-    const level = new Level(levelJson as never);
-    const gates = level.doors.filter((d) => d.byLever);
-    expect(gates).toHaveLength(1);
-    expect([gates[0]!.row, gates[0]!.col]).toEqual([14, 13]);
-    // 나머지 한 짝(보물방)은 손으로 연다
-    expect(level.doors.filter((d) => !d.byLever)).toHaveLength(1);
+  it('로비↔방 문(D)이 층마다 있고, 관문(G)은 아레나 층(2·3층)에만 있다', async () => {
+    // 1층은 문 2짝(제단 방·보물 방)으로 문법을 가르치고, 2·3층은 레버 관문이 더해진다
+    const expected = { z01_f1: { hand: 2, gate: 0 }, z01_f2: { hand: 3, gate: 1 }, z01_f3: { hand: 3, gate: 1 } };
+    for (const id of FLOORS) {
+      const level = await load(id);
+      expect(level.doors.filter((d) => !d.byLever), `${id} 손 문`).toHaveLength(expected[id].hand);
+      expect(level.doors.filter((d) => d.byLever), `${id} 관문`).toHaveLength(expected[id].gate);
+    }
+  });
 
-    // 레버가 이 관문을 가리키고, 레버 칸이 벽 안이 아니어야 한다
-    expect(level.levers).toHaveLength(1);
-    const lever = level.levers[0]!;
-    expect(lever.opens).toEqual([14, 13]);
-    expect(level.solidAt(lever.cell[1]!, lever.cell[0]!)).toBe(false);
+  it('관문마다 그걸 여는 레버가 실제로 있고, 레버 칸은 벽 안이 아니다', async () => {
+    for (const id of FLOORS) {
+      const level = await load(id);
+      for (const gate of level.doors.filter((d) => d.byLever)) {
+        const lever = level.levers.find(
+          (l) => l.opens?.[0] === gate.row && l.opens?.[1] === gate.col,
+        );
+        expect(lever, `${id} 관문 [${gate.row},${gate.col}] 을 여는 레버가 없다`).toBeTruthy();
+        expect(level.solidAt(lever!.cell[1]!, lever!.cell[0]!)).toBe(false);
+      }
+    }
   });
 });
 

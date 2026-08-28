@@ -3,6 +3,9 @@
 // ?view=front|corner|top(입구) / exit|exitcorner(출구 — 쇠사슬·자물쇠 포함)
 import * as THREE from 'three';
 import { Level, buildLevelGroup } from '../src/level/GridLoader';
+import z01f1 from '../data/levels/z01_f1.json';
+import z01f2 from '../data/levels/z01_f2.json';
+import z01f3 from '../data/levels/z01_f3.json';
 
 const def = {
   id: 'debug',
@@ -14,7 +17,10 @@ const def = {
   lighting: { ambient: 0.04, torches: [] as number[][] },
 };
 
-const level = new Level(def as never);
+// ?level=z01_f1 → 실제 층을 통째로 짓는다 (레벨 구조 확인용 — view=map 과 함께 쓴다)
+const REAL: Record<string, unknown> = { z01_f1: z01f1, z01_f2: z01f2, z01_f3: z01f3 };
+const lvParam = new URLSearchParams(location.search).get('level');
+const level = new Level(((lvParam && REAL[lvParam]) || def) as never);
 const group = buildLevelGroup(level, {
   color: '#FF8C3B',
   intensity: 2.2,
@@ -56,6 +62,19 @@ if (view === 'front') {
 } else if (view === 'exitcorner') {
   camera.position.set(ex - 3.2, 2.2, ez - 3.0);
   camera.lookAt(ex + 0.5, 0.6, ez + 3);
+} else if (view === 'map') {
+  // 층 전체 탑뷰 — 로비·방·복도 구조를 한눈에 본다. 천장을 벗겨야 속이 보인다
+  group.traverse((o) => {
+    if (o.name === 'ceiling') o.visible = false;
+  });
+  const w = level.cols * 4;
+  const d = level.rows * 4;
+  const need = Math.max(d, w / camera.aspect);
+  camera.far = 600;
+  camera.updateProjectionMatrix();
+  camera.position.set(w / 2, need / (2 * Math.tan(((camera.fov / 2) * Math.PI) / 180)) + 6, d / 2 + 0.01);
+  camera.lookAt(w / 2, 0, d / 2);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.1));
 } else {
   camera.position.set(sx, 7.5, sz - 1.2);
   camera.lookAt(sx, 0, sz - 2.2);

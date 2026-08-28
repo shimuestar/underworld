@@ -990,6 +990,7 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
     }),
   );
   ceiling.rotation.x = Math.PI / 2;
+  ceiling.name = 'ceiling'; // 디버그 탑뷰가 이름으로 찾아 숨긴다
   ceiling.position.set(width / 2, level.ceiling, depth / 2);
   group.add(ceiling);
 
