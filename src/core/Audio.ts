@@ -27,6 +27,7 @@ export type SoundName =
   | 'wall_crumble'
   | 'footstep_run'
   | 'ghoul_latch'
+  | 'struggle_push'
   | 'ghoul_shriek'
   | 'slime_windup'
   | 'slime_split'
@@ -288,6 +289,11 @@ export class GameAudio {
         // 걷기 발소리 — 질주보다 낮고 부드럽다. 이건 나만 듣는다 (적 감지는 질주만)
         this.tone(78, 0.06, 'sine', 0.3, 0, 44);
         this.noise(0.04, 0.18, 360);
+        break;
+      case 'struggle_push':
+        // 몸부림 — 짧은 힘쓰는 소리 (낮은 퍽 + 숨)
+        this.tone(130, 0.07, 'square', 0.4, 0, 80);
+        this.noise(0.05, 0.3, 700);
         break;
       case 'ghoul_latch':
         // 물컹 붙잡힘 — 젖은 노이즈 + 뚝 떨어지는 톤

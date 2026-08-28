@@ -719,13 +719,16 @@ events.on('ghoul_latch', () => {
   showReaction('구울이 물어뜯는다! 근접 공격 연타로 밀쳐내라!', 2600);
 });
 events.on('ghoul_bite', () => stage.triggerCameraKick(0.28, 130));
-events.on('grapple_struggle', (payload) => {
-  const st = payload as { count: number; need: number };
-  showReaction(`밀쳐내는 중… ${st.count}/${st.need} — 근접 키 연타!`, 800);
+events.on('grapple_struggle', () => {
+  // 연타 한 번 = 두 손으로 한 번 밀친다 — 게이지는 HUD(#grapple)가 그린다
+  audio.play('struggle_push');
+  stage.triggerHammerSwing(1, 1.7);
+  stage.triggerCameraKick(0.18, 80);
 });
 events.on('grapple_escape', () => {
   audio.play('heavy_hit');
-  stage.triggerCameraKick(0.3, 160);
+  stage.triggerHammerSwing(3, 1.1); // 마지막 큰 밀치기 — 구울이 이 동작에 맞춰 튕겨 나간다
+  stage.triggerCameraKick(0.42, 200);
   showReaction('밀쳐냈다!', 1000);
 });
 events.on('ghoul_rise', () => {
@@ -850,6 +853,7 @@ events.on('crack_wall_broken', (payload) => {
 
 // ---- 피격 연출 — 붉은 비네트 + 피격음 (방어 성공 시엔 방어음만) ----
 const dmgDir = document.getElementById('dmgdir');
+const grappleEl = document.getElementById('grapple');
 events.on('player_damaged', (payload) => {
   const hit = payload as { blocked?: boolean; srcX?: number; srcZ?: number };
   if (hit.blocked) return;
@@ -1659,9 +1663,9 @@ function simulate(dt: number): void {
       (world.onExitPad && (world.exitOpen || world.exitNeedsKey));
     if (interactable && world.input.meleePressed) {
       world.input = { ...world.input, meleePressed: false, interactPressed: true };
-    } else if (!interactable && world.input.interactPressed && !world.input.meleePressed) {
-      world.input = { ...world.input, interactPressed: false, meleePressed: true };
     }
+    // E → 해머 변환은 없앴다 (2026-08-28, 사용자 결정): E 는 상호작용 전용이고
+    // 대상이 없으면 아무 일도 하지 않는다. 근접 키 → 상호작용 방향만 남긴다
   }
 
   // Menu 버튼 = Tab. 가방·각인 창은 스냅샷을 안 거치는 raw 입력이라 여기서 본다.
@@ -2097,6 +2101,14 @@ function render(alpha: number): void {
   // 제단/문 프롬프트 — 상호작용 가능한 것 안내
   const nearDoor = world.doorInView !== null && !world.dead && !world.uiOpen;
   const nearLever = world.leverInView !== null && !world.dead && !world.uiOpen;
+  // 구울 몸부림 게이지 — 물린 동안 몇 번 남았는지 알약으로 보여 준다
+  const grappledNow = world.grappleEnemyId !== null;
+  grappleEl!.classList.toggle('visible', grappledNow);
+  if (grappledNow) {
+    const need = balance.ghoulGrapple.mashToEscape;
+    const done = Math.min(world.grappleMash, need);
+    grappleEl!.textContent = `물어뜯긴다! 근접 공격 연타!\n${'●'.repeat(done)}${'○'.repeat(need - done)}  ${done}/${need}`;
+  }
   const showAltarPrompt =
     world.altarInView && !world.altarEnteredThisApproach && !world.uiOpen && !world.dead;
   // 출구 발판 위 — 서 있는 동안 계속 띄운다 (3초 뒤 사라지면 못 보고 지나친다).

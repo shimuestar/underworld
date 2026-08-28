@@ -743,7 +743,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         break;
       }
       // 플레이어 몸에 붙어 있는다 — 붙잡은 방향을 유지한 채
-      const hold = balance.player.radius + def.radius + 0.1;
+      // 몸부림이 쌓일수록 팔 길이만큼 밀려난다 — 힘겨루기가 그림으로 보인다
+      const hold = balance.player.radius + def.radius + 0.1 + world.grappleMash * grip.pryPerMash;
       enemy.x = p.x + (enemy.latchDirX ?? 0) * hold;
       enemy.z = p.z + (enemy.latchDirZ ?? 0) * hold;
       enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));

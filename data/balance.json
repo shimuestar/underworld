@@ -542,6 +542,8 @@
     "biteDamage": 4,
     "biteIntervalTicks": 26,
     "mashToEscape": 6,
+    "_pryNote": "연타 한 번마다 구울이 이만큼씩 떨어진다 — 힘겨루기가 눈에 보인다",
+    "pryPerMash": 0.14,
     "shoveDistance": 3.2,
     "escapeIframeTicks": 24
   },

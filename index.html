@@ -448,6 +448,24 @@
         opacity: 0;
         pointer-events: none;
       }
+      /* 구울 몸부림 게이지 — 물린 동안 조준점 아래에 크게. 연타 진행이 알약으로 찬다 */
+      #grapple {
+        position: fixed;
+        left: 50%;
+        top: 58%;
+        transform: translateX(-50%);
+        text-align: center;
+        white-space: pre-line;
+        font: bold 22px/1.5 monospace;
+        color: #ff5a4a;
+        text-shadow: 0 0 8px rgba(120, 0, 0, 0.9), 0 2px 2px #000;
+        letter-spacing: 2px;
+        opacity: 0;
+        pointer-events: none;
+      }
+      #grapple.visible {
+        opacity: 1;
+      }
       /* 층 이동 암전 — 계단을 내려가는 동안 검게 잠긴다. 패링 탈색(#flash)과 달리
          일반 혼합이라 화면을 그냥 덮는다 */
       #fade {
@@ -474,6 +492,7 @@
     <div id="fade"></div>
     <div id="hurt"></div>
     <div id="dmgdir"></div>
+    <div id="grapple"></div>
     <div id="hud"></div>
     <div id="crosshair"></div>
     <div id="death">
