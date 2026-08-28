@@ -753,7 +753,8 @@ events.on('leech_struggle', () => {
 // 거머리 얼굴 흡혈 — 부착/빨기/걷어차기/자진 이탈
 events.on('leech_face_attach', () => {
   audio.play('ghoul_latch');
-  stage.triggerCameraKick(0.5, 220);
+  // 붙는 순간 크게 밀리는 반동(0.5)이 '뒤로 밀렸다'로 읽혔다 — 살짝 움찔만 (몸은 원래 안 밀린다)
+  stage.triggerCameraKick(0.12, 90);
 });
 events.on('leech_suck', () => {
   audio.play('leech_suck');
