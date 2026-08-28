@@ -157,8 +157,6 @@ const FLING_TICKS = 18;
 /** 분열·사출 흩뿌림 — 각도 지터(rad)·거리 배율 폭·튀어오르는 높이(m).
  *  값이 일정하면 늘 같은 두 갈래로 갈라져 기계처럼 보인다 (연출 전용 랜덤) */
 const SCATTER_ANG_JITTER = 0.9;
-const SCATTER_DIST_MIN = 0.6;
-const SCATTER_DIST_SPAN = 0.8;
 const SCATTER_HOP_MIN = 0.4;
 const SCATTER_HOP_SPAN = 0.7;
 
@@ -217,11 +215,17 @@ function handleSplit(world: World, enemy: EnemyState): void {
   if (!split) return;
   if (enemy.burnTicks > 0 || (enemy.freezeTicks ?? 0) > 0) return;
   const def = enemyDef(split.into);
+  // 흩뿌림 — 쌍둥이 금지: 기준 방향부터 랜덤이고, '가까운 놈/먼 놈' 역할을 갈라 뽑아
+  // (누가 먼 쪽인지도 랜덤) 거리·높이·속도를 각자 굴린다. 한 놈은 발치에 철퍽,
+  // 한 놈은 저 멀리 날아가는 그림이 나와야 살덩이답다
+  const farIndex = Math.random() < 0.5 ? 0 : 1;
+  const baseAng = Math.random() * Math.PI * 2;
   for (let i = 0; i < split.count; i++) {
-    // 흩뿌림 — 대략 반대 방향 두 갈래에 각도·거리·높이를 흔든다 (늘 같은 패턴이면 기계 같다)
     const ang =
-      enemy.yaw + Math.PI / 2 + (Math.PI * 2 * i) / split.count +
-      (Math.random() - 0.5) * SCATTER_ANG_JITTER;
+      baseAng + (Math.PI * 2 * i) / split.count +
+      ((Math.random() - 0.5) * (Math.PI / split.count)) * 1.4;
+    const far = i % 2 === farIndex;
+    const distMul = far ? 1.0 + Math.random() * 0.6 : 0.35 + Math.random() * 0.4;
     const hop = SCATTER_HOP_MIN + Math.random() * SCATTER_HOP_SPAN;
     const x = enemy.x + Math.sin(ang) * 0.4;
     const z = enemy.z + Math.cos(ang) * 0.4;
@@ -244,7 +248,7 @@ function handleSplit(world: World, enemy: EnemyState): void {
       child,
       Math.sin(ang),
       Math.cos(ang),
-      (split.flingDistance ?? 0) * (SCATTER_DIST_MIN + Math.random() * SCATTER_DIST_SPAN),
+      (split.flingDistance ?? 0) * distMul,
       FLING_TICKS + Math.floor(Math.random() * 7) - 3,
     );
     world.enemies.push(child);
