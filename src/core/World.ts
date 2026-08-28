@@ -24,6 +24,8 @@ export interface PlayerState {
   /** 회피 대시 잔여 틱 */
   dodgeTicks: number;
   dodgeDirX: number;
+  /** 이번 대시의 거리 배율 — 옆 대시는 짧다 (dodgeSideDistanceMul). 시작 시 계산 */
+  dodgeDistMul?: number;
   dodgeDirZ: number;
   /** 회피 무적 잔여 틱 */
   iframeTicks: number;

@@ -40,7 +40,8 @@ export function tick(world: World, _dt: number): void {
   if (p.dodgeTicks > 0) {
     p.dodgeTicks--;
     const step =
-      (reaction.dodgeDistance * world.modifiers.dodgeDistanceMul) / reaction.dodgeDashTicks;
+      (reaction.dodgeDistance * world.modifiers.dodgeDistanceMul * (p.dodgeDistMul ?? 1)) /
+      reaction.dodgeDashTicks;
     world.level.slideMove(p, balance.player.radius, p.dodgeDirX * step, p.dodgeDirZ * step);
     return; // 대시 중 추가 반응 불가
   }
@@ -314,6 +315,11 @@ function startDodge(world: World): void {
   const len = Math.hypot(dirX, dirZ);
   p.dodgeDirX = dirX / len;
   p.dodgeDirZ = dirZ / len;
+  // 옆 대시는 짧다 — 적을 보면서 살짝 비켜 바로 반격하는 스텝.
+  // 시선과 나란하면(앞뒤) 1배, 직각이면 dodgeSideDistanceMul, 대각선은 그 사이
+  const along = Math.abs(p.dodgeDirX * fx + p.dodgeDirZ * fz);
+  const sideMul = reaction.dodgeSideDistanceMul;
+  p.dodgeDistMul = sideMul + (1 - sideMul) * along;
   p.dodgeTicks = reaction.dodgeDashTicks;
   p.iframeTicks = world.modifiers.dodgeIFrameTicks; // sig_dash 부착 시 연장
   world.events.emit('dodge_step', {});

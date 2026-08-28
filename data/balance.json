@@ -74,6 +74,8 @@
     "dodgeIFrameTicks": 8,
     "dodgeDistance": 3.5,
     "dodgeDashTicks": 6,
+    "_dodgeSideNote": "옆으로(시선과 직각) 대시할 때의 거리 배율 — 적을 보면서 살짝 비켜 바로 반격하는 용도라 짧다. 앞뒤 대시는 1배, 대각선은 그 사이를 보간",
+    "dodgeSideDistanceMul": 0.5,
     "inputBufferTicks": 4
   },
 
