@@ -774,6 +774,11 @@ interface Particle {
   spinZ?: number;
   /** 없으면 DEATH_GRAVITY */
   gravity?: number;
+  /** 이 높이에 닿으면 착지해 눕는다 — 날아간 머리가 바닥에 머물다 사라지게 */
+  restY?: number;
+  landedAtAge?: number;
+  landedX?: number;
+  landedZ?: number;
 }
 
 interface Tracer {
@@ -3379,7 +3384,7 @@ export class Stage {
     );
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(headSize, headSize, headSize),
-      new THREE.MeshLambertMaterial({ color }),
+      new THREE.MeshLambertMaterial({ color, transparent: true }), // 끝 페이드용
     );
     // 눈 — 살아 있을 때와 같은 안광이 붙은 채로 굴러간다 (죽는 순간 빛이 꺼진 붉은 눈)
     const ec = balance.lighting.enemyEyes;
@@ -3406,7 +3411,8 @@ export class Stage {
       vy: 3.6 + Math.random() * 1.4, // 위로 솟았다가
       vz: Math.sin(ang) * (1.2 + Math.random() * 1.6),
       gravity: 9,
-      lifeMs: 1500,
+      lifeMs: 4600, // 날아가는 ~1초 + 바닥에 3초쯤 머문 뒤 사라진다
+      restY: headSize / 2, // 바닥에 닿으면 그 자리에 눕는다
       bornMs: performance.now(),
       faceCamera: true, // 마구 구르는 대신 얼굴이 이쪽을 본다
     });
@@ -3768,20 +3774,29 @@ export class Stage {
         this.particles.splice(i, 1);
         continue;
       }
-      p.mesh.position.set(
-        p.ox + p.vx * age,
-        Math.max(0.04, p.oy + p.vy * age - 0.5 * (p.gravity ?? DEATH_GRAVITY) * age * age),
-        p.oz + p.vz * age,
-      );
+      const ballisticY = p.oy + p.vy * age - 0.5 * (p.gravity ?? DEATH_GRAVITY) * age * age;
+      if (p.restY !== undefined && p.landedAtAge === undefined && ballisticY <= p.restY && age > 0.1) {
+        // 착지 — 그 자리에 눕는다. 더 미끄러지지 않는다
+        p.landedAtAge = age;
+        p.landedX = p.ox + p.vx * age;
+        p.landedZ = p.oz + p.vz * age;
+      }
+      if (p.landedAtAge !== undefined) {
+        p.mesh.position.set(p.landedX ?? p.ox, p.restY ?? 0.04, p.landedZ ?? p.oz);
+      } else {
+        p.mesh.position.set(p.ox + p.vx * age, Math.max(0.04, ballisticY), p.oz + p.vz * age);
+      }
       if (p.faceCamera) {
-        // 얼굴이 카메라를 본다 — 눈이 계속 보이게. 대신 살짝 끄덕이고 갸웃거린다
+        // 얼굴이 카메라를 본다 — 눈이 계속 보이게. 나는 동안은 끄덕이고,
+        // 착지하면 거의 가만히 놓인다 (바닥의 머리가 계속 흔들리면 이상하다)
+        const wob = p.landedAtAge !== undefined ? 0.15 : 1;
         p.mesh.rotation.set(
-          Math.sin(age * 5) * 0.28,
+          Math.sin(age * 5) * 0.28 * wob,
           Math.atan2(
             -(this.camera.position.x - p.mesh.position.x),
             -(this.camera.position.z - p.mesh.position.z),
           ),
-          Math.sin(age * 3.4) * 0.2,
+          Math.sin(age * 3.4) * 0.2 * wob,
         );
       } else if (p.spinX || p.spinY || p.spinZ) {
         p.mesh.rotation.set(
@@ -3790,7 +3805,11 @@ export class Stage {
           p.mesh.rotation.z + (p.spinZ ?? 0) * 0.016,
         );
       }
-      (p.mesh.material as THREE.MeshLambertMaterial).opacity = 1 - lifeFrac * lifeFrac;
+      // 눕는 파편(머리)은 끝 0.4초에만 옅어진다 — 그 전엔 또렷이 바닥에 남는다
+      (p.mesh.material as THREE.MeshLambertMaterial).opacity =
+        p.restY !== undefined
+          ? Math.min(1, ((p.lifeMs ?? DEATH_PARTICLE_LIFE_MS) - (now - p.bornMs)) / 400)
+          : 1 - lifeFrac * lifeFrac;
     }
   }
 
