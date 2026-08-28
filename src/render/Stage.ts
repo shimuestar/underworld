@@ -681,6 +681,8 @@ export function updateBowDraw(rig: BowRig, draw: number, showArrow: boolean): vo
   rig.group.rotation.z = -0.18 * draw; // 당길수록 살짝 들려 조준한다
 }
 
+/** 구울 팔 각도 — 두 팔을 앞으로 나란히 (수평보다 살짝 처져 스산하게) */
+const GHOUL_ARMS_FORWARD = 1.45;
 /** 헤드샷 머리 젖힘 지속(ms) */
 const HEADSHOT_SHAKE_MS = 320;
 /** 적 다리 위상 속도 — 보폭 1.4m 에 한 사이클 (rad/m) */
@@ -2468,7 +2470,7 @@ export class Stage {
     // 없으면(궁수·주술사) 양팔을 단다. 궁수는 활을 향해 앞으로 들려 있다
     if (!SPIDER_TYPES.has(type) && !SLIME_TYPES.has(type)) {
       const armLen = def.height * 0.34;
-      const forward = type === 'goblin_archer' ? 0.55 : 0;
+      const forward = type === 'goblin_archer' ? 0.55 : type === 'ghoul' ? GHOUL_ARMS_FORWARD : 0;
       const makeArm = (side: number): THREE.Group => {
         const shoulder = new THREE.Group();
         shoulder.position.set(side * def.radius * 0.92, def.height * 0.72, 0);
@@ -2817,6 +2819,12 @@ export class Stage {
         if (enemy.ai === 'latched') leanTarget = -0.5 + Math.sin(now / 85) * 0.1;
         else if (enemy.feigning) leanTarget = -1.42;
         else leanTarget += -0.2;
+        // 두 팔은 언제나 앞으로 나란히 — 걷든 덮치든 좀비 팔이다. 걸음 스윙이 먼저
+        // 쓴 각을 여기서 덮는다. 죽은 척일 때만 팔을 몸에 붙이고 눕는다 (안 그러면 땅에 박힌다)
+        if (visual.plainArms) {
+          const armRot = enemy.feigning ? 0.05 : GHOUL_ARMS_FORWARD;
+          for (const shoulder of visual.plainArms) shoulder.rotation.x = armRot;
+        }
       }
       if (trembling) leanTarget += Math.sin(now / 14) * 0.05;
       // 피탄 움찔 — 상체가 짧게 젖혀졌다 돌아온다 (+ = 뒤로). 남은 틱 비율로 감쇠
