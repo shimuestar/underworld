@@ -26,9 +26,13 @@ const ENEMY_COLORS: Record<string, number> = {
   goblin_chieftain: 0x8f5a30,
   spider_small: 0x14141a,
   spider_large: 0xd8d8cf,
+  slime: 0x3fae62,
+  slime_small: 0x63c97e,
 };
 /** 거미는 기둥+머리가 아니라 몸통·배·다리로 만든다 */
 const SPIDER_TYPES = new Set(['spider_small', 'spider_large']);
+/** 슬라임 — 반투명 젤 덩어리. 다리·팔·머리·눈이 없다 (무정형) */
+const SLIME_TYPES = new Set(['slime', 'slime_small']);
 const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
 
 /** 거미 몸 — 낮게 깔린 몸통 + 뒤로 부푼 배 + 사방으로 뻗은 다리 8개.
@@ -2152,7 +2156,28 @@ export class Stage {
     let legsPair: { left: THREE.Group; right: THREE.Group } | undefined;
     // 안광 — 조명이 아니라 자체 발광 눈. 어둠 속에서 멀리서도 "저기 뭔가 있다"가 읽힌다
     const eyes = makeEyeMaterials();
-    if (SPIDER_TYPES.has(type)) {
+    if (SLIME_TYPES.has(type)) {
+      // 슬라임 — 반투명 젤 몸체 + 진한 핵. 무정형이라 다리·머리·눈이 없다.
+      // 꿀렁임(squash&stretch)은 syncEnemies 가 torso.scale 로 만든다
+      bodyMat.transparent = true;
+      bodyMat.opacity = 0.82;
+      const jelly = new THREE.Mesh(
+        new THREE.BoxGeometry(def.radius * 1.9, def.height, def.radius * 1.9),
+        bodyMat,
+      );
+      jelly.position.y = def.height / 2;
+      torso.add(jelly);
+      const coreMat = new THREE.MeshLambertMaterial({
+        color: new THREE.Color(baseColor).multiplyScalar(0.45),
+      });
+      flashMaterials.push(coreMat);
+      const core = new THREE.Mesh(
+        new THREE.BoxGeometry(def.radius * 0.8, def.height * 0.45, def.radius * 0.8),
+        coreMat,
+      );
+      core.position.y = def.height * 0.42;
+      torso.add(core);
+    } else if (SPIDER_TYPES.has(type)) {
       buildSpiderBody(torso, def, bodyMat, eyes, baseColor, flashMaterials);
     } else {
       // 몸통은 충돌 원과 같은 반경의 8각 기둥 — 박스로 두면 모서리가 반경 밖으로
@@ -2438,7 +2463,7 @@ export class Stage {
 
     // 맨팔 — 인간형은 모두 두 팔이다. 무기 팔(오른쪽)이 있으면 왼팔 하나만,
     // 없으면(궁수·주술사) 양팔을 단다. 궁수는 활을 향해 앞으로 들려 있다
-    if (!SPIDER_TYPES.has(type)) {
+    if (!SPIDER_TYPES.has(type) && !SLIME_TYPES.has(type)) {
       const armLen = def.height * 0.34;
       const forward = type === 'goblin_archer' ? 0.55 : 0;
       const makeArm = (side: number): THREE.Group => {
@@ -2892,6 +2917,15 @@ export class Stage {
         if (visual.chargeOrbLight) visual.chargeOrbLight.intensity = 2.2 * windupProgress;
       }
 
+      // 슬라임 꿀렁임 — 기는 동안 squash&stretch, 예고 때 터질 듯 부풀고, 도약 중 살짝 늘어난다
+      if (SLIME_TYPES.has(enemy.type)) {
+        const inflate = inWindup ? 0.3 * windupProgress : charging ? 0.18 : 0;
+        const wobble = solidIce ? 0 : Math.sin(now / 140 + enemy.id * 1.7) * 0.05;
+        const sy = 1 + inflate + wobble;
+        const sxz = 1 - inflate * 0.35 - wobble * 0.6;
+        visual.torso.scale.set(sxz, sy, sxz);
+      }
+
       // 활 — windup 동안 시위를 당긴다: 재어 둔 화살이 보이고 오늬가 몸 쪽으로
       // 미끄러지며 시위가 V 자로 꺾인다. 놓는 순간 0으로 스냅해 시위가 튕긴다
       if (visual.bowRig) {
@@ -3225,7 +3259,7 @@ export class Stage {
    *  본체 파편(spawnDeathBurst)과 별개로, 그 적의 머리와 같은 크기·색의 상자 하나가
    *  높이 솟았다 떨어진다. 거미는 머리가 따로 없어 제외 */
   spawnHeadPop(enemyType: string, x: number, z: number): void {
-    if (SPIDER_TYPES.has(enemyType)) return;
+    if (SPIDER_TYPES.has(enemyType) || SLIME_TYPES.has(enemyType)) return; // 머리가 없다
     const def = enemyDef(enemyType);
     const headSize = def.radius * 0.9;
     const color = new THREE.Color(ENEMY_COLORS[enemyType] ?? ENEMY_COLOR_FALLBACK).multiplyScalar(
@@ -3265,6 +3299,43 @@ export class Stage {
       faceCamera: true, // 마구 구르는 대신 얼굴이 이쪽을 본다
     });
     this.scene.add(mesh);
+  }
+
+  /** 점액 장판 시각 — id 키 동기화. 마르는(수명↓) 동안 옅어진다 */
+  private readonly gooVisuals = new Map<number, { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }>();
+
+  syncGoo(
+    puddles: { id: number; x: number; z: number; ticks: number }[] | undefined,
+    lifeTicks: number,
+  ): void {
+    const seen = new Set<number>();
+    for (const goo of puddles ?? []) {
+      seen.add(goo.id);
+      let v = this.gooVisuals.get(goo.id);
+      if (!v) {
+        const mat = new THREE.MeshBasicMaterial({
+          color: 0x49c06a,
+          transparent: true,
+          opacity: 0.28,
+          depthWrite: false,
+        });
+        const mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 12), mat);
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.set(goo.x, 0.02, goo.z);
+        mesh.scale.set(balance.goo.radius, balance.goo.radius, 1);
+        this.scene.add(mesh);
+        v = { mesh, mat };
+        this.gooVisuals.set(goo.id, v);
+      }
+      v.mat.opacity = 0.28 * Math.min(1, goo.ticks / (lifeTicks * 0.35));
+    }
+    for (const [id, v] of this.gooVisuals) {
+      if (seen.has(id)) continue;
+      v.mesh.removeFromParent();
+      v.mesh.geometry.dispose();
+      v.mat.dispose();
+      this.gooVisuals.delete(id);
+    }
   }
 
   flashEnemyHit(enemyId: number): void {

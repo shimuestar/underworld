@@ -50,8 +50,17 @@ export function tick(world: World, dt: number): void {
     return;
   }
 
+  // 점액 장판 수명 — 슬라임 시스템의 일부라 여기서 마른다
+  if (world.gooPuddles?.length) {
+    for (const goo of world.gooPuddles) goo.ticks--;
+    world.gooPuddles = world.gooPuddles.filter((goo) => goo.ticks > 0);
+  }
+
   for (const enemy of world.enemies) {
-    if (!enemy.alive) continue;
+    if (!enemy.alive) {
+      handleSplit(world, enemy); // 슬라임 분열 — 어디서 어떻게 죽었든 여기서 한 번만 가른다
+      continue;
+    }
     // 감전 누적은 전기가 닿아 있는 동안만 산다 — 유예가 다하면 처음부터 다시 쌓아야 한다.
     // "끊기지 않고 2.5초" 라는 규칙이 이 유예로 표현된다
     if ((enemy.shockGrace ?? 0) > 0) enemy.shockGrace = (enemy.shockGrace ?? 0) - 1;
@@ -81,6 +90,7 @@ export function tick(world: World, dt: number): void {
       continue;
     }
     tickEnemy(world, enemy, dt);
+    dropGoo(world, enemy);
     // 피탄 경직 소진은 행동 뒤에 — 앞에서 줄이면 마지막 틱에 움직여버린다
     if ((enemy.flinchTicks ?? 0) > 0) enemy.flinchTicks = (enemy.flinchTicks ?? 0) - 1;
     if ((enemy.slowTicks ?? 0) > 0) {
@@ -122,6 +132,54 @@ function resolveEnemyOverlaps(world: World): void {
       world.level.slideMove(b, enemyDef(b.type).radius, nx, nz);
     }
   }
+}
+
+/** 슬라임 분열 대역 id — 투사체(100000)·열쇠(950000) 대역과 겹치지 않는다 */
+let nextSplitId = 700000;
+let nextGooId = 1;
+
+/** 죽은 슬라임을 절반 둘로 가른다 — 화상 중(말라붙음)·빙결 중(통째로 깨짐) 사망은 예외.
+ *  총알로 잡으면 몸값이 배가 되고 불·서리·광역이 정답이라는 상성이 이 두 예외로 표현된다 */
+function handleSplit(world: World, enemy: EnemyState): void {
+  if (enemy.splitHandled) return;
+  enemy.splitHandled = true;
+  const split = enemyDef(enemy.type).split;
+  if (!split) return;
+  if (enemy.burnTicks > 0 || (enemy.freezeTicks ?? 0) > 0) return;
+  const def = enemyDef(split.into);
+  for (let i = 0; i < split.count; i++) {
+    const ang = enemy.yaw + Math.PI / 2 + (Math.PI * 2 * i) / split.count;
+    const x = enemy.x + Math.sin(ang) * 0.4;
+    const z = enemy.z + Math.cos(ang) * 0.4;
+    world.enemies.push({
+      id: nextSplitId++,
+      type: split.into,
+      x, z, prevX: x, prevZ: z,
+      yaw: enemy.yaw, homeYaw: enemy.yaw,
+      health: def.health, alive: true,
+      ai: 'chase', // 반으로 갈라진 몸은 이미 성나 있다
+      timer: 0,
+      noticeTicks: balance.enemyAi.noticeDelayTicks,
+      burnTicks: 0, burnDamagePerTick: 0,
+      hearingMul: def.hearingMul,
+    });
+  }
+  world.events.emit('enemy_split', {
+    parentType: enemy.type, into: split.into, count: split.count, x: enemy.x, z: enemy.z,
+  });
+}
+
+/** 슬라임 궤적 — 기어가는 동안 일정 간격으로 점액을 떨군다 */
+function dropGoo(world: World, enemy: EnemyState): void {
+  if (!enemyDef(enemy.type).gooTrail) return;
+  if (Math.hypot(enemy.x - enemy.prevX, enemy.z - enemy.prevZ) < 1e-4) return;
+  enemy.gooDropTicks = (enemy.gooDropTicks ?? 0) - 1;
+  if ((enemy.gooDropTicks ?? 0) > 0) return;
+  const goo = balance.goo;
+  enemy.gooDropTicks = goo.dropIntervalTicks;
+  const puddles = (world.gooPuddles ??= []);
+  puddles.push({ id: nextGooId++, x: enemy.x, z: enemy.z, ticks: goo.lifeTicks });
+  if (puddles.length > goo.maxPuddles) puddles.shift(); // 오래된 것부터 마른 셈 친다
 }
 
 function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
@@ -228,9 +286,12 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       const facingX = -Math.sin(enemy.yaw);
       const facingZ = -Math.cos(enemy.yaw);
       const behind = dist > 0.001 && (facingX * distX + facingZ * distZ) / dist <= 0;
-      const lit = !behind && litByLantern(world, dist, distX, distZ);
+      // 장님(슬라임)은 시야·인기척·랜턴 어느 것으로도 못 알아챈다 — 소리(alertNearbyAt)와
+      // 피격만이 깨운다. 걸어서(무음) 지나가면 코앞이라도 무해하다
+      const blind = def.blind ?? false;
+      const lit = !behind && !blind && litByLantern(world, dist, distX, distZ);
       if (
-        (lit || (dist <= def.aggroRange && seesPlayer(enemy, dist, distX, distZ))) &&
+        (lit || (dist <= def.aggroRange && !blind && seesPlayer(enemy, dist, distX, distZ))) &&
         world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
       ) {
         alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);

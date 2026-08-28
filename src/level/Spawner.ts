@@ -30,6 +30,8 @@ const IMPLEMENTED = new Set([
   'goblin_chieftain',
   'spider_small',
   'spider_large',
+  'slime',
+  'slime_small',
 ]);
 
 /** 이 적 타입이 실제로 스폰되는가 — 레벨 검증이 이걸로 스텁 배치를 잡는다 */
@@ -57,6 +59,7 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
     burnDamagePerTick: 0,
   };
   if (def.boss) enemy.parryStreak = 0;
+  if (def.hearingMul !== undefined) enemy.hearingMul = def.hearingMul; // World 는 def 를 모른다
   return enemy;
 }
 

@@ -181,7 +181,8 @@ export function alertNearbyAt(
 ): void {
   for (const enemy of world.enemies) {
     if (!enemy.alive || enemy.ai !== 'idle') continue;
-    if (Math.hypot(enemy.x - x, enemy.z - z) > radius) continue;
+    // 청각 배율 — 슬라임처럼 귀로 사는 적은 같은 소리를 더 멀리서 듣는다
+    if (Math.hypot(enemy.x - x, enemy.z - z) > radius * (enemy.hearingMul ?? 1)) continue;
     alertEnemy(enemy, noticeTicks);
     world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, noise: true });
   }
@@ -372,6 +373,14 @@ export type EnemyAiState =
   /** 돌격 달리기 — 예고 뒤 타격 전까지 플레이어를 향해 달린다 */
   | 'charging';
 
+/** 슬라임이 남긴 점액 장판 한 방울 — Enemies 가 떨구고 말리며, PlayerMove 가 밟기를 판정한다 */
+export interface GooPuddle {
+  id: number;
+  x: number;
+  z: number;
+  ticks: number;
+}
+
 export interface EnemyState {
   id: number;
   type: string;
@@ -394,6 +403,12 @@ export interface EnemyState {
   /** 마법 방어막에 해머를 맞은 횟수 / 깨졌는가 (warden) */
   barrierHits?: number;
   barrierBroken?: boolean;
+  /** 청각 배율 — 소음 반경이 이 배로 들린다 (World 는 데이터 비의존이라 Spawner 가 def 에서 복사) */
+  hearingMul?: number;
+  /** 분열을 이미 처리했는가 — 죽은 슬라임을 두 번 가르지 않는다 */
+  splitHandled?: boolean;
+  /** 다음 점액 방울까지 남은 틱 (슬라임 궤적) */
+  gooDropTicks?: number;
   /** 화상 잔여 틱 (Projectiles가 피해 적용) */
   burnTicks: number;
   burnDamagePerTick: number;
@@ -663,6 +678,9 @@ export class World {
 
   /** 지금 바라보고 있는 아직 안 당긴 레버 (없으면 null) — HUD 안내가 읽는다 */
   leverInView: { row: number; col: number } | null = null;
+
+  /** 슬라임 점액 장판 — 층 이동 시 loadFloor 가 비운다. 없으면 빈 배열로 취급 */
+  gooPuddles?: GooPuddle[];
 
   enemies: EnemyState[];
   level: Level;

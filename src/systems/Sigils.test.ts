@@ -556,6 +556,53 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(eaves.ai).toBe('chase');
   });
 
+  it('슬라임은 죽으면 절반 둘로 갈라진다 — 화상·빙결 중 사망은 예외다', () => {
+    const s1 = add('slime', 12, 6);
+    s1.health = 0;
+    s1.alive = false;
+    Enemies.tick(world, DT);
+    expect(world.enemies.filter((e) => e.type === 'slime_small' && e.alive)).toHaveLength(2);
+    // 화상 중 사망 — 말라붙어 갈라지지 않는다
+    const s2 = add('slime', 20, 6);
+    s2.burnTicks = 10;
+    s2.alive = false;
+    // 빙결 중 사망 — 통째로 깨져 갈라지지 않는다
+    const s3 = add('slime', 24, 6);
+    s3.freezeTicks = 10;
+    s3.alive = false;
+    Enemies.tick(world, DT);
+    expect(world.enemies.filter((e) => e.type === 'slime_small')).toHaveLength(2); // 그대로
+  });
+
+  it('슬라임은 눈이 없다 — 코앞에 서도 못 보고, 소리는 배로 듣는다', () => {
+    Enemies.init(world);
+    const slime = add('slime', 6, 8); // 플레이어(6,6) 정면 2m — 보통 적이면 인기척에 깬다
+    slime.yaw = Math.atan2(-(6 - slime.x), -(6 - slime.z)); // 플레이어를 정면에 둔다
+    slime.hearingMul = 2.5; // 스포너가 def 에서 복사하는 값 — 직접 만든 개체라 손으로 준다
+    for (let i = 0; i < 60; i++) Enemies.tick(world, DT);
+    expect(slime.ai).toBe('idle'); // 시야·인기척으로는 안 깬다
+    world.events.emit('dodge_step', {}); // 대시 소음 1.5m × 청각 2.5 = 3.75m — 2m 거리라 들린다
+    expect(slime.ai).toBe('chase');
+  });
+
+  it('점액 장판을 밟으면 느려진다', () => {
+    world.stamina.value = 100;
+    const run = (goo: boolean): number => {
+      world.player.x = 6;
+      world.player.z = 6;
+      world.player.prevX = 6;
+      world.player.prevZ = 6;
+      world.gooPuddles = goo ? [{ id: 1, x: 6, z: 6, ticks: 600 }] : [];
+      world.input = { ...Input.emptySnapshot(), moveForward: 1 };
+      for (let i = 0; i < 10; i++) PlayerMove.tick(world, DT);
+      world.input = Input.emptySnapshot();
+      return Math.hypot(world.player.x - 6, world.player.z - 6);
+    };
+    const slow = run(true);
+    const fast = run(false);
+    expect(slow).toBeLessThan(fast * 0.7);
+  });
+
   it('시전 소음 — 빗나가도 등 뒤 코앞(2m)의 대기 적은 깬다', () => {
     Enemies.init(world);
     Sigils.acquire(world, 'sig_fireball');

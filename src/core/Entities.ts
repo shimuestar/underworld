@@ -109,6 +109,14 @@ export interface EnemyDef {
   /** true면 처형이 아니라 사망 시 드랍 (처형 불가능한 적/보스) */
   dropsOnDeath?: boolean;
   behavior?: string;
+  /** 눈이 없다 — 시야·인기척·랜턴으로 못 알아챈다. 소리와 피격만 깨운다 (슬라임) */
+  blind?: boolean;
+  /** 청각 배율 — 모든 소음 반경이 이 배로 들린다. Spawner 가 EnemyState 로 복사한다 */
+  hearingMul?: number;
+  /** 죽으면 갈라진다 — 화상·빙결 중 사망이면 갈라지지 않는다 (Enemies.handleSplit) */
+  split?: { into: string; count: number };
+  /** 기어간 자리에 점액 장판을 남긴다 — 밟으면 느려진다 (balance.goo) */
+  gooTrail?: boolean;
   /** 마법 방어막 (warden) — 실탄만 관통 */
   magicBarrier?: { blocksMagic: boolean; blocksMelee: boolean; piercedBy: string[] };
   /** caster_kite: 이 거리 안이면 물러난다 */

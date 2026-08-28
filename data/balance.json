@@ -533,6 +533,14 @@
     "scarRatio": 0.5
   },
 
+  "_gooNote": "슬라임 점액 장판 — 기어간 자리에 남아 밟으면 느려진다. 마르면(수명) 사라진다",
+  "goo": {
+    "radius": 1.1,
+    "playerSlowMul": 0.55,
+    "lifeTicks": 300,
+    "dropIntervalTicks": 14,
+    "maxPuddles": 40
+  },
   "enemyAi": {
     "strafe": {
       "_comment": "캐스터(궁수/주술사)가 아군에 사선이 막혔을 때 옆으로 각을 잡는 동작. giveUpTicks는 교착 방지용 안전장치(10초) — 평소엔 각이 날 때까지 쏘지 않는다",

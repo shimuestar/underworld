@@ -26,6 +26,8 @@ export type SoundName =
   | 'stairs_travel'
   | 'wall_crumble'
   | 'footstep_run'
+  | 'slime_windup'
+  | 'slime_split'
   | 'footstep_walk'
   | 'chain_locked'
   | 'unlock_chain'
@@ -284,6 +286,16 @@ export class GameAudio {
         // 걷기 발소리 — 질주보다 낮고 부드럽다. 이건 나만 듣는다 (적 감지는 질주만)
         this.tone(78, 0.06, 'sine', 0.3, 0, 44);
         this.noise(0.04, 0.18, 360);
+        break;
+      case 'slime_windup':
+        // 꿀렁 — 낮은 사인이 미끄러져 내려가고 젖은 노이즈가 낀다 (몸이 부풀어 오르는 소리)
+        this.tone(180, 0.28, 'sine', 0.5, 0, 70);
+        this.noise(0.2, 0.25, 500);
+        break;
+      case 'slime_split':
+        // 철퍽 — 갈라지는 젖은 파열
+        this.noise(0.16, 0.55, 900);
+        this.tone(240, 0.12, 'triangle', 0.35, 0, 110);
         break;
       case 'footstep_run':
         // 질주 발소리 — 낮고 짧은 쿵. 두 번 키웠다 (0.4→0.62→0.95 + 저음 겹)

@@ -343,6 +343,7 @@ for (const name of [
   'stamina_blocked',
   'weapon_kill',
   'headshot_kill',
+  'enemy_split',
   'enemy_died',
   'enemy_damaged',
   'enemy_alerted',
@@ -460,7 +461,10 @@ for (const name of [
 const audio = new GameAudio();
 app.addEventListener('click', () => audio.unlock());
 events.on('enemy_windup', (payload) => {
-  const telegraph = (payload as { telegraph?: string }).telegraph;
+  const wind = payload as { telegraph?: string; enemyType?: string };
+  // 슬라임 — 몸이 부풀어 오르는 꿀렁임을 텔레그래프 소리에 얹는다
+  if (wind.enemyType?.startsWith('slime')) audio.play('slime_windup');
+  const telegraph = wind.telegraph;
   audio.play(
     telegraph === 'red'
       ? 'telegraph_red'
@@ -696,6 +700,12 @@ events.on('enemy_volley_start', (payload) => {
   const info = payload as { shots: number };
   audio.play('boss_volley_draw');
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
+});
+// 슬라임 분열 — 젖은 파열음 + 부모 색 파편이 갈라지는 자리에서 튄다
+events.on('enemy_split', (payload) => {
+  const sp = payload as { parentType: string; x: number; z: number };
+  audio.play('slime_split');
+  stage.spawnDeathBurst(sp.x, sp.z, sp.parentType, 0.9);
 });
 events.on('headshot', (payload) => {
   audio.play('headshot');
@@ -1181,6 +1191,7 @@ function respawnAtAltar(): void {
   world.chests = spawnChests(levelJson.entities, level);
   world.chestInView = null;
   world.projectiles.length = 0;
+  world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
   world.groundItems.length = 0;
   world.freezeTicks = 0;
   world.dead = false;
@@ -1404,6 +1415,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     world.pulledLevers = new Set();
   }
   world.projectiles.length = 0;
+  world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
 
   // 도착 지점 — 내려왔으면 입구 계단 앞, 올라왔으면 출구 계단 앞
   const at = arrival === 'exit' && level.exitPos ? level.exitPos : level.spawn;
@@ -1888,6 +1900,7 @@ function render(alpha: number): void {
   stage.setAmbientBoost(world.modifiers.ambientVisionBoost);
   stage.setMuzzleFlash(world.weapon.muzzleFlash > 0);
   stage.syncEnemies(world.enemies, alpha);
+  stage.syncGoo(world.gooPuddles, balance.goo.lifeTicks);
   stage.syncProjectiles(world.projectiles, alpha);
   stage.syncGroundItems(world.groundItems);
   stage.syncLifeMotes(world.lifeMotes);

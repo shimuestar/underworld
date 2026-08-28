@@ -55,6 +55,37 @@
       "counters": { "pistol": "best", "rifle": "best", "grenade": "good", "flash": "good", "melee": "good", "magic": "good", "deflect": "none" },
       "drops": []
     },
+    "slime": {
+      "name": "슬라임",
+      "zone": 1, "slice": true,
+      "weight": "medium", "xp": 10, "health": 42, "speed": 2.6, "damage": 14,
+      "radius": 0.55, "height": 0.9,
+      "aggroRange": 16, "attackRange": 1.6,
+      "_natureNote": "눈이 없다 — 시야·인기척·랜턴으로는 절대 못 알아채고 소리로만 깬다(청각 2.5배). 걸어서(무음) 지나가면 코앞이라도 무해. 총성 한 발에 방의 슬라임이 전부 깬다",
+      "blind": true, "hearingMul": 2.5,
+      "_splitNote": "죽으면 절반 둘로 갈라진다. 화상 중 사망(말라붙음)·빙결 중 사망(통째로 깨짐)은 예외 — 총알로 잡으면 몸값이 배가 되고, 불·서리·광역이 정답",
+      "split": { "into": "slime_small", "count": 2 },
+      "gooTrail": true,
+      "behavior": "swarm",
+      "attack": { "type": "contact", "arcDeg": 150, "windupTicks": 26, "recoverTicks": 34, "whiffRecoverTicks": 50, "impactRangeMul": 1.25, "parryable": false, "telegraph": "red" },
+      "_pounceNote": "도약 몸통 박치기 — 부풀었다가 예고 시점 좌표로 몸을 던진다. 적색(회피 전용)이라 옆 대시가 정답",
+      "chargeAttack": { "type": "contact", "arcDeg": 150, "leapHeight": 1.6, "chargeSpeed": 13, "chargeRunTicks": 24, "minRange": 2.6, "maxRange": 6.5, "windupTicks": 30, "recoverTicks": 40, "whiffRecoverTicks": 70, "impactRangeMul": 1.3, "playerKnockback": 1.4, "parryable": false, "telegraph": "red", "cooldownTicks": 160 },
+      "counters": { "pistol": "poor", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "good", "magic": "best", "deflect": "none" },
+      "drops": []
+    },
+    "slime_small": {
+      "name": "새끼 슬라임",
+      "zone": 1, "slice": true,
+      "weight": "light", "xp": 4, "health": 16, "speed": 3.4, "damage": 8,
+      "radius": 0.34, "height": 0.55,
+      "aggroRange": 16, "attackRange": 1.2,
+      "blind": true, "hearingMul": 2.5,
+      "gooTrail": true,
+      "behavior": "swarm",
+      "attack": { "type": "contact", "arcDeg": 150, "windupTicks": 20, "recoverTicks": 26, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": false, "telegraph": "red" },
+      "counters": { "pistol": "poor", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "best", "magic": "best", "deflect": "none" },
+      "drops": []
+    },
     "goblin_archer": {
       "name": "고블린 궁수",
       "zone": 1, "slice": true,
