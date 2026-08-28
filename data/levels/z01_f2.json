@@ -226,20 +226,6 @@
       "type": "spider_small",
       "cell": [
         20,
-        18
-      ]
-    },
-    {
-      "type": "spider_small",
-      "cell": [
-        18,
-        20
-      ]
-    },
-    {
-      "type": "spider_small",
-      "cell": [
-        20,
         20
       ]
     },
@@ -294,7 +280,15 @@
         14,
         16
       ],
-      "note": "중정 길목 — 죽은 척 매복",
+      "note": "중정 길목 — 시체 더미 매복",
+      "feign": true
+    },
+    {
+      "type": "ghoul",
+      "cell": [
+        15,
+        16
+      ],
       "feign": true
     },
     {
@@ -303,7 +297,14 @@
         12,
         14
       ],
-      "note": "중정 순찰 — 입자를 놓고 경쟁한다"
+      "note": "중정 순찰 2인조 — 입자를 놓고 경쟁한다"
+    },
+    {
+      "type": "ghoul",
+      "cell": [
+        12,
+        15
+      ]
     },
     {
       "type": "slime",

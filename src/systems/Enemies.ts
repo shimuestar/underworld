@@ -434,6 +434,14 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
           world.events.emit('ghoul_rise', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
           world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type });
+          // 시체 더미 — 하나가 일어나면 곁(4m)의 죽은 척들도 함께 벌떡 일어난다 (떼 매복)
+          for (const buddy of world.enemies) {
+            if (!buddy.alive || !buddy.feigning || buddy.id === enemy.id) continue;
+            if (Math.hypot(buddy.x - enemy.x, buddy.z - enemy.z) > 4) continue;
+            alertEnemy(buddy, balance.enemyAi.noticeDelayTicks);
+            world.events.emit('ghoul_rise', { enemyId: buddy.id, enemyType: buddy.type, x: buddy.x, z: buddy.z });
+            world.events.emit('enemy_alerted', { enemyId: buddy.id, enemyType: buddy.type });
+          }
         }
         break;
       }
@@ -539,6 +547,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (
         ch?.maxRange !== undefined &&
         (enemy.chargeCooldown ?? 0) <= 0 &&
+        // 이미 누가 물고 있으면 달려들지 않는다 — 떼가 번갈아 물면 빠져나올 수 없다
+        !(ch.latches && world.grappleEnemyId !== null) &&
         dist >= (ch.minRange ?? 0) &&
         dist <= ch.maxRange &&
         world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)

@@ -76,7 +76,14 @@
         4,
         14
       ],
-      "note": "전투 홀 순찰 — 생명 입자를 놓고 경쟁한다"
+      "note": "전투 홀 순찰 2인조 — 생명 입자를 놓고 경쟁한다"
+    },
+    {
+      "type": "ghoul",
+      "cell": [
+        2,
+        14
+      ]
     },
     {
       "type": "slime",
@@ -145,7 +152,7 @@
       "note": "안치소 둥지 주인 — 제단이 있던 자리"
     },
     {
-      "type": "ghoul",
+      "type": "spider_small",
       "cell": [
         9,
         16
@@ -179,9 +186,25 @@
       "type": "ghoul",
       "cell": [
         15,
+        7
+      ],
+      "note": "보스 방 어귀 — 시체 더미 (하나가 일어나면 다 일어난다)",
+      "feign": true
+    },
+    {
+      "type": "ghoul",
+      "cell": [
+        15,
         8
       ],
-      "note": "보스 방 어귀 — 죽은 척 매복",
+      "feign": true
+    },
+    {
+      "type": "ghoul",
+      "cell": [
+        16,
+        8
+      ],
       "feign": true
     },
     {
@@ -196,6 +219,13 @@
       "type": "spider_small",
       "cell": [
         19,
+        22
+      ]
+    },
+    {
+      "type": "spider_small",
+      "cell": [
+        14,
         22
       ]
     },
