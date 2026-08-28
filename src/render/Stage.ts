@@ -683,6 +683,10 @@ export function updateBowDraw(rig: BowRig, draw: number, showArrow: boolean): vo
 
 /** 구울 팔 각도 — 두 팔을 앞으로 나란히 (수평보다 살짝 처져 스산하게) */
 const GHOUL_ARMS_FORWARD = 1.45;
+/** 할퀴기 치켜들기 / 밀쳐냈을 때 — 머리 위로 들린다 */
+const GHOUL_ARMS_RAISED = 2.65;
+/** 내려찍기 끝 각 — 앞으로 나란히보다 아래까지 후려친다 */
+const GHOUL_ARMS_SLAM = 0.7;
 /** 헤드샷 머리 젖힘 지속(ms) */
 const HEADSHOT_SHAKE_MS = 320;
 /** 적 다리 위상 속도 — 보폭 1.4m 에 한 사이클 (rad/m) */
@@ -2542,7 +2546,8 @@ export class Stage {
         visual.legs.left.rotation.x = legSwing;
         visual.legs.right.rotation.x = -legSwing;
         // 맨팔은 다리와 반대 위상 — 사람 걸음의 팔젓기
-        if (visual.plainArms) {
+        if (visual.plainArms && enemy.type !== 'ghoul') {
+          // 구울은 제외 — 팔이 언제나 앞으로 나란히라 걸음 스윙이 없다 (아래 포즈 블록 전담)
           for (let a = 0; a < visual.plainArms.length; a++) {
             const shoulder = visual.plainArms[a]!;
             const rest = (shoulder.userData['restRotX'] as number) ?? 0;
@@ -2819,11 +2824,30 @@ export class Stage {
         if (enemy.ai === 'latched') leanTarget = -0.5 + Math.sin(now / 85) * 0.1;
         else if (enemy.feigning) leanTarget = -1.42;
         else leanTarget += -0.2;
-        // 두 팔은 언제나 앞으로 나란히 — 걷든 덮치든 좀비 팔이다. 걸음 스윙이 먼저
-        // 쓴 각을 여기서 덮는다. 죽은 척일 때만 팔을 몸에 붙이고 눕는다 (안 그러면 땅에 박힌다)
+        // 팔 — 기본은 앞으로 나란히(좀비 팔). 할퀴기는 치켜들었다 내려찍고,
+        // 밀쳐내지거나 넉백당하면 팔이 위로 들린 채 나가떨어진다.
+        // 죽은 척일 때만 팔을 몸에 붙이고 눕는다 (안 그러면 땅에 박힌다)
         if (visual.plainArms) {
-          const armRot = enemy.feigning ? 0.05 : GHOUL_ARMS_FORWARD;
-          for (const shoulder of visual.plainArms) shoulder.rotation.x = armRot;
+          let armTarget = GHOUL_ARMS_FORWARD;
+          let armSnap = 0.35;
+          if (enemy.feigning) {
+            armTarget = 0.05;
+            armSnap = 1;
+          } else if ((enemy.kbTicks ?? 0) > 0) {
+            armTarget = GHOUL_ARMS_RAISED; // 밀쳐냄 — 두 팔이 들리며 뒤로 날아간다
+            armSnap = 0.55;
+          } else if (isMelee && inWindup) {
+            armTarget =
+              GHOUL_ARMS_FORWARD + (GHOUL_ARMS_RAISED - GHOUL_ARMS_FORWARD) * windupProgress;
+          } else if (isMelee && striking) {
+            // 내려찍기 — 판정 진행도(strikeProgress)를 그대로 따라간다 (그림 = 판정)
+            armTarget =
+              GHOUL_ARMS_RAISED + (GHOUL_ARMS_SLAM - GHOUL_ARMS_RAISED) * (enemy.strikeProgress ?? 0);
+            armSnap = 1;
+          }
+          for (const shoulder of visual.plainArms) {
+            shoulder.rotation.x += (armTarget - shoulder.rotation.x) * armSnap;
+          }
         }
       }
       if (trembling) leanTarget += Math.sin(now / 14) * 0.05;
