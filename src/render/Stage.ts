@@ -239,6 +239,12 @@ interface EnemyVisual {
   head?: THREE.Mesh;
   /** 헤드샷 젖힘이 끝나는 시각 */
   headShakeUntil?: number;
+  /** 다리(골반 피벗) — 인간형만. 이동 거리에 비례해 젓는다 */
+  legs?: { left: THREE.Group; right: THREE.Group };
+  legPhase?: number;
+  legBlend?: number;
+  legLastX?: number;
+  legLastZ?: number;
   /** 텔레그래프 발광을 적용할 머티리얼들 (몸통/머리/창끝) */
   flashMaterials: THREE.MeshLambertMaterial[];
   shield?: THREE.Mesh;
@@ -591,6 +597,8 @@ const STAIR_STEPS_DROP = 2.6;
 const DESCENT_FORWARD = 3.0;
 /** 헤드샷 머리 젖힘 지속(ms) */
 const HEADSHOT_SHAKE_MS = 320;
+/** 적 다리 위상 속도 — 보폭 1.4m 에 한 사이클 (rad/m) */
+const ENEMY_LEG_FREQ = (Math.PI * 2) / 1.4;
 /** 족장의 열쇠 표시색 — 금빛 */
 const KEY_COLOR = 0xf0c34a;
 /** 처음엔 천천히, 끝에서 훅 — 계단을 딛다 마지막에 어둠으로 잠기는 느낌 */
@@ -2063,6 +2071,7 @@ export class Stage {
     const bodyMat = new THREE.MeshLambertMaterial({ color: baseColor });
     flashMaterials.push(bodyMat);
     let headMesh: THREE.Mesh | undefined; // 헤드샷 젖힘용 — 거미는 없다
+    let legsPair: { left: THREE.Group; right: THREE.Group } | undefined;
     // 안광 — 조명이 아니라 자체 발광 눈. 어둠 속에서 멀리서도 "저기 뭔가 있다"가 읽힌다
     const eyes = makeEyeMaterials();
     if (SPIDER_TYPES.has(type)) {
@@ -2070,12 +2079,33 @@ export class Stage {
     } else {
       // 몸통은 충돌 원과 같은 반경의 8각 기둥 — 박스로 두면 모서리가 반경 밖으로
       // 0.21m 튀어나와(0.5→0.707) 비스듬히 부딪칠 때 뚫고 들어가 보인다
+      // 몸통 — 예전엔 바닥까지 통기둥이었다. 아랫도리를 다리 두 개로 바꾼다
+      const legH = def.height * 0.3;
+      const bodyH = def.height * 0.78 - legH;
       const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(def.radius, def.radius, def.height * 0.78, 8),
+        new THREE.CylinderGeometry(def.radius, def.radius * 0.92, bodyH, 8),
         bodyMat,
       );
-      body.position.y = (def.height * 0.78) / 2;
+      body.position.y = legH + bodyH / 2;
       torso.add(body);
+      // 다리 — 골반 피벗. 걸을 때 syncEnemies 가 이동 거리만큼 젓는다
+      const legMat = new THREE.MeshLambertMaterial({
+        color: new THREE.Color(baseColor).multiplyScalar(0.72),
+      });
+      flashMaterials.push(legMat);
+      const makeLeg = (side: number): THREE.Group => {
+        const hip = new THREE.Group();
+        hip.position.set(side * def.radius * 0.42, legH, 0);
+        const leg = new THREE.Mesh(
+          new THREE.BoxGeometry(def.radius * 0.38, legH, def.radius * 0.44),
+          legMat,
+        );
+        leg.position.y = -legH / 2;
+        hip.add(leg);
+        torso.add(hip);
+        return hip;
+      };
+      legsPair = { left: makeLeg(-1), right: makeLeg(1) };
 
       const headMat = new THREE.MeshLambertMaterial({
         color: new THREE.Color(baseColor).multiplyScalar(HEAD_DARKEN),
@@ -2134,6 +2164,7 @@ export class Stage {
       eyeHaloBase: eyes.halos[0]?.scale.x ?? 0,
       torso,
       head: headMesh,
+      legs: legsPair,
       flashMaterials,
       shieldBaseZ: 0,
       hitFlashUntil: 0,
@@ -2342,6 +2373,24 @@ export class Stage {
       );
       visual.group.rotation.y = enemy.yaw;
       if (shocked) visual.zapUntil = Math.max(visual.zapUntil ?? 0, now + 40); // 떠는 내내 전류가 보인다
+
+      // 다리 젓기 — 실제로 움직인 거리만큼 위상이 돈다 (플레이어 걸음과 같은 방식).
+      // 감전·빙결 중에는 젓지 않는다 — 감전의 좌우 떨림이 걸음으로 오인되지 않게
+      if (visual.legs) {
+        const ix = visual.group.position.x;
+        const iz = visual.group.position.z;
+        const step = Math.hypot(ix - (visual.legLastX ?? ix), iz - (visual.legLastZ ?? iz));
+        visual.legLastX = ix;
+        visual.legLastZ = iz;
+        const stiff = shocked || (enemy.freezeTicks ?? 0) > 0;
+        const walking = !stiff && step > 0.0008 && step < 1;
+        if (walking) visual.legPhase = (visual.legPhase ?? 0) + step * ENEMY_LEG_FREQ;
+        visual.legBlend =
+          (visual.legBlend ?? 0) + ((walking ? 1 : 0) - (visual.legBlend ?? 0)) * 0.15;
+        const legSwing = Math.sin(visual.legPhase ?? 0) * 0.7 * (visual.legBlend ?? 0);
+        visual.legs.left.rotation.x = legSwing;
+        visual.legs.right.rotation.x = -legSwing;
+      }
 
       // 텔레그래프 — 섬광은 windup 종료 visualLeadTicks 전부터 판정 창 내내.
       // 색은 공격 유형 규약: 청=패링 가능, 적=회피 전용, 보라=마법 투사체.
