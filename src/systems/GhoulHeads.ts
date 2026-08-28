@@ -8,7 +8,8 @@ import { breakGhoulHead, type World } from '../core/World';
 
 let nextHeadId = 980000; // 비석(960000)·열쇠(950000) 대역과 구분
 
-/** 구독. 시작 시 1회 — 구울이 목이 날아가는 방식으로 죽으면 머리가 소품으로 남는다 */
+/** 구독. 시작 시 1회 — 구울은 어떻게 죽든(총·화살·해머·폭발·화상) 머리가 소품으로 남는다.
+ *  enemy_died 는 모든 사망 경로에서 정확히 한 번 나므로 이 하나만 들으면 중복이 없다 */
 export function init(world: World): void {
   const spawn = (payload: unknown): void => {
     const kill = payload as { enemyType?: string; x?: number; z?: number };
@@ -39,8 +40,7 @@ export function init(world: World): void {
       breakGhoulHead(world, oldest.id, false);
     }
   };
-  world.events.on('melee_kill', spawn);
-  world.events.on('headshot_kill', spawn);
+  world.events.on('enemy_died', spawn);
 }
 
 export function tick(world: World, dt: number): void {

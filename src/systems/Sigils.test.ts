@@ -958,9 +958,9 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(eaves.ai).toBe('chase');
   });
 
-  it('구울이 목 날아가 죽으면 통통 튀는 머리 소품이 남는다', () => {
+  it('구울은 어떻게 죽든 통통 튀는 머리 소품이 남는다', () => {
     GhoulHeads.init(world);
-    world.events.emit('melee_kill', { enemyType: 'ghoul', execution: false, x: 12, z: 6 });
+    world.events.emit('enemy_died', { enemyType: 'ghoul', x: 12, z: 6 }); // 총·화살·폭발 전부 이 경로
     expect(world.ghoulHeads).toHaveLength(1);
     const head = world.ghoulHeads![0]!;
     expect(head.vx).toBeGreaterThan(0); // 죽인 사람(서쪽) 반대쪽 — 뒤로 날아간다
