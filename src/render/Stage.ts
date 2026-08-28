@@ -2161,14 +2161,15 @@ export class Stage {
       // 꿀렁임(squash&stretch)은 syncEnemies 가 torso.scale 로 만든다
       bodyMat.transparent = true;
       bodyMat.opacity = 0.82;
+      // 아래가 퍼진 8각 방울 — 정육면체는 젤이 아니라 상자로 보였다 (스크린샷 검증)
       const jelly = new THREE.Mesh(
-        new THREE.BoxGeometry(def.radius * 1.9, def.height, def.radius * 1.9),
+        new THREE.CylinderGeometry(def.radius * 0.8, def.radius * 1.3, def.height, 8),
         bodyMat,
       );
       jelly.position.y = def.height / 2;
       torso.add(jelly);
       const coreMat = new THREE.MeshLambertMaterial({
-        color: new THREE.Color(baseColor).multiplyScalar(0.45),
+        color: new THREE.Color(baseColor).multiplyScalar(0.28),
       });
       flashMaterials.push(coreMat);
       const core = new THREE.Mesh(
