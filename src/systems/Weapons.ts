@@ -366,6 +366,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
   {
     const hcfg = balance.ghoulHead;
     for (const head of [...(world.ghoulHeads ?? [])]) {
+      if ((head.graceTicks ?? 0) > 0) continue; // 갓 날아가는 중 — 콤보 연타로는 안 지워진다
       const toX = head.x - p.x;
       const toZ = head.z - p.z;
       const dist = Math.hypot(toX, toZ);
@@ -643,6 +644,7 @@ function fire(world: World): void {
   const hcfg = balance.ghoulHead;
   let headHit: { id: number; t: number; hx: number; hy: number; hz: number } | null = null;
   for (const head of world.ghoulHeads ?? []) {
+    if ((head.graceTicks ?? 0) > 0) continue; // 갓 날아가는 중 — 아직 못 부순다
     const t = rayVsAabb(p.x, oy, p.z, dx, dy, dz, {
       minX: head.x - hcfg.radius,
       minY: head.y - hcfg.radius,

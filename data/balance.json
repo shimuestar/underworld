@@ -556,6 +556,10 @@
     "moveSpeedSpan": 1.2,
     "gravity": 9,
     "stompRange": 1.3,
+    "_launchNote": "머리는 죽인 사람 반대쪽(뒤)으로 날아가고, 잠깐(grace)은 안 부서진다 — 콤보 연타가 공중의 머리를 바로 지워버리지 않게",
+    "launchSpeedMin": 2.4,
+    "launchSpeedSpan": 1.2,
+    "spawnGraceTicks": 40,
     "max": 6
   },
   "_gooNote": "슬라임 점액 장판 — 기어간 자리에 남아 밟으면 느려진다. 마르면(수명) 사라진다",

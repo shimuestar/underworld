@@ -15,16 +15,23 @@ export function init(world: World): void {
     if (kill.enemyType !== 'ghoul' || kill.x === undefined || kill.z === undefined) return;
     const cfg = balance.ghoulHead;
     const heads = (world.ghoulHeads ??= []);
-    const ang = Math.random() * Math.PI * 2;
-    const speed = cfg.moveSpeedMin + Math.random() * cfg.moveSpeedSpan;
+    // 죽인 사람 반대쪽(뒤)으로 날아간다 — 콤보 호 밖으로 빠져나가야 연타에 안 지워진다
+    const p = world.player;
+    const adx = kill.x - p.x;
+    const adz = kill.z - p.z;
+    const ad = Math.hypot(adx, adz);
+    const ang = ad > 0.001 ? Math.atan2(adx, adz) : Math.random() * Math.PI * 2;
+    const jitter = (Math.random() - 0.5) * 0.6;
+    const speed = cfg.launchSpeedMin + Math.random() * cfg.launchSpeedSpan;
     heads.push({
       id: nextHeadId++,
       x: kill.x,
       z: kill.z,
       y: 1.4, // 어깨 높이에서 떨어져 나온다
       vy: cfg.hopVyMin + Math.random() * cfg.hopVySpan,
-      vx: Math.sin(ang) * speed,
-      vz: Math.cos(ang) * speed,
+      vx: Math.sin(ang + jitter) * speed,
+      vz: Math.cos(ang + jitter) * speed,
+      graceTicks: cfg.spawnGraceTicks,
     });
     // 상한 — 넘치면 가장 오래된 머리가 조용히 터진다
     if (heads.length > cfg.max) {
@@ -41,6 +48,7 @@ export function tick(world: World, dt: number): void {
   if (!heads || heads.length === 0) return;
   const cfg = balance.ghoulHead;
   for (const head of heads) {
+    if ((head.graceTicks ?? 0) > 0) head.graceTicks = (head.graceTicks ?? 0) - 1;
     // 수직 — 포물선. 땅에 닿으면 새 방향으로 다시 뛰어오른다 (영원히 통통)
     head.y += head.vy * dt;
     head.vy -= cfg.gravity * dt;

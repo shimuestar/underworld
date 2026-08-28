@@ -715,6 +715,7 @@ function moveProjectiles(world: World, dt: number): void {
     if (proj.owner === 'player' && proj.kind === 'arrow' && world.ghoulHeads?.length) {
       const hcfg = balance.ghoulHead;
       for (const head of world.ghoulHeads) {
+        if ((head.graceTicks ?? 0) > 0) continue; // 갓 날아가는 중
         const pad = hcfg.radius + proj.radius;
         const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
           minX: head.x - pad,

@@ -399,6 +399,8 @@ export interface GhoulHeadState {
   vy: number;
   vx: number;
   vz: number;
+  /** 갓 떨어진 직후 무적 틱 — 콤보 연타가 공중에서 바로 지우지 못하게 */
+  graceTicks?: number;
 }
 
 /** 슬라임이 남긴 점액 장판 한 방울 — Enemies 가 떨구고 말리며, PlayerMove 가 밟기를 판정한다 */

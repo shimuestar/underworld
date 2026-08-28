@@ -920,6 +920,8 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     world.events.emit('melee_kill', { enemyType: 'ghoul', execution: false, x: 12, z: 6 });
     expect(world.ghoulHeads).toHaveLength(1);
     const head = world.ghoulHeads![0]!;
+    expect(head.vx).toBeGreaterThan(0); // 죽인 사람(서쪽) 반대쪽 — 뒤로 날아간다
+    expect(head.graceTicks ?? 0).toBeGreaterThan(0); // 갓 날아가는 동안은 안 부서진다
     const y0 = head.y;
     for (let i = 0; i < 120; i++) GhoulHeads.tick(world, DT);
     expect(world.ghoulHeads).toHaveLength(1); // 사라지지 않는다
