@@ -414,8 +414,6 @@ const STAIR_STONE = 0x4a443b;
 /** 봉인된 출구 — 꺼진 돌바닥. 열린 초록과 한눈에 구분돼야 한다 */
 export const COLOR_EXIT_LOCKED = 0x3a3f44;
 export const COLOR_EXIT_OPEN = 0x3fae5a;
-const GLYPH_RUNES = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
-
 /** XZ 평면 레이 vs 직사각형 — 최소 t(≥0)와 부딪힌 축. 안 만나면 null.
  *  원점이 상자 안이면 t=0 (격자의 "출발점이 벽 안" 규약과 같다) */
 function rayVsRect(
@@ -1087,7 +1085,7 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
 
   // 벽 문자 — 오염 25 전에는 룬 문자열(해독 불가), 이후 원문 (Stage가 교체)
   for (const glyph of level.glyphs) {
-    const mesh = buildGlyphMesh(glyph, level, false);
+    const mesh = buildGlyphMesh(glyph, level);
     if (mesh) group.add(mesh);
   }
 
@@ -1179,8 +1177,9 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   return group;
 }
 
-/** 벽 문자 텍스처 — readable이면 원문, 아니면 원문에서 파생된 룬 문자열 */
-export function glyphTexture(text: string, readable: boolean): THREE.CanvasTexture {
+/** 벽 문자 텍스처 — 해독된 원문. 해독 전에는 글리프를 아예 그리지 않으므로
+ *  (visible=false) 룬 문자열 분기가 없다 — '벽의 알 수 없는 글자' 제거 (2026-08-28) */
+export function glyphTexture(text: string): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 128;
@@ -1188,23 +1187,14 @@ export function glyphTexture(text: string, readable: boolean): THREE.CanvasTextu
   ctx.clearRect(0, 0, 512, 128);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  if (readable) {
-    ctx.font = '44px monospace';
-    ctx.fillStyle = '#b8e0c0';
-    ctx.fillText(text, 256, 64);
-  } else {
-    const garbled = [...text]
-      .map((ch) => (ch === ' ' ? ' ' : GLYPH_RUNES[ch.charCodeAt(0) % GLYPH_RUNES.length]))
-      .join('');
-    ctx.font = '46px serif';
-    ctx.fillStyle = '#6a4444';
-    ctx.fillText(garbled, 256, 64);
-  }
+  ctx.font = '44px monospace';
+  ctx.fillStyle = '#b8e0c0';
+  ctx.fillText(text, 256, 64);
   const texture = new THREE.CanvasTexture(canvas);
   return texture;
 }
 
-function buildGlyphMesh(glyph: GlyphDef, level: Level, readable: boolean): THREE.Mesh | null {
+function buildGlyphMesh(glyph: GlyphDef, level: Level): THREE.Mesh | null {
   const [row, col] = glyph.cell;
   if (row === undefined || col === undefined) return null;
   const cs = level.cellSize;
@@ -1215,7 +1205,7 @@ function buildGlyphMesh(glyph: GlyphDef, level: Level, readable: boolean): THREE
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(3, 0.75),
     new THREE.MeshBasicMaterial({
-      map: glyphTexture(glyph.text, readable),
+      map: glyphTexture(glyph.text),
       transparent: true,
       opacity: 0.85,
       depthWrite: false,
@@ -1223,6 +1213,7 @@ function buildGlyphMesh(glyph: GlyphDef, level: Level, readable: boolean): THREE
   );
   mesh.name = 'glyph';
   mesh.userData['glyphText'] = glyph.text;
+  mesh.visible = false; // 해독(오염 임계) 전에는 안 보인다 — 벽에 룬을 그리지 않는다
 
   const y = 2.9; // 제단 기둥(2.2)보다 높게 — 가려지지 않도록
   switch (glyph.dir) {

@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
 import { currentAttack, enemyDef, healthBarState, shieldLowered } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
-import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, glyphTexture } from '../level/GridLoader';
+import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN } from '../level/GridLoader';
 import type {
   BarrelState,
   ChestState,
@@ -1187,12 +1187,10 @@ export class Stage {
 
   /** 오염 25 임계 — 벽 문자를 원문으로 교체 */
   setGlyphsReadable(readable: boolean): void {
+    // 해독 전 글리프는 룬 대신 아예 숨긴다 — 벽의 '알 수 없는 글자'를 없앴다.
+    // 텍스처는 처음부터 원문으로 구워져 있어 여기선 보이기만 켠다
     this.scene.traverse((obj) => {
-      if (obj.name !== 'glyph' || !(obj instanceof THREE.Mesh)) return;
-      const material = obj.material as THREE.MeshBasicMaterial;
-      material.map?.dispose();
-      material.map = glyphTexture(obj.userData['glyphText'] as string, readable);
-      material.needsUpdate = true;
+      if (obj.name === 'glyph') obj.visible = readable;
     });
   }
 
