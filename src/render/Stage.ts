@@ -44,13 +44,11 @@ const BLOOD_COLORS: Record<string, number> = {
   spider_small: 0x3e9b2c, // 녹색 체액 — 흰 몸·돌바닥과 대비
   spider_large: 0x3e9b2c,
   leech: 0x4a1030, // 검자줏빛
+  slime: 0x328b4e, // 슬라임 점액 — 세 종 공통 한 색
+  slime_small: 0x328b4e,
+  slime_mother: 0x328b4e,
 };
 export function bloodColorOf(enemyType: string): number {
-  if (SLIME_TYPES.has(enemyType)) {
-    return new THREE.Color(ENEMY_COLORS[enemyType] ?? ENEMY_COLOR_FALLBACK)
-      .multiplyScalar(0.8)
-      .getHex();
-  }
   return BLOOD_COLORS[enemyType] ?? BLOOD_RED;
 }
 
@@ -3743,7 +3741,7 @@ export class Stage {
     dirX: number,
     dirZ: number,
     enemyType: string,
-    hit: { damage: number; headshot?: boolean; heavy?: boolean },
+    hit: { damage: number; headshot?: boolean; heavy?: boolean; death?: boolean },
   ): void {
     const cfg = balance.hitBlood;
     const color = bloodColorOf(enemyType);
@@ -3751,6 +3749,7 @@ export class Stage {
     let count = cfg.countMin + hit.damage * cfg.countPerDamage;
     if (hit.headshot) count *= cfg.headshotMul;
     if (hit.heavy) count *= cfg.heavyMul;
+    if (hit.death) count *= cfg.deathMul;
     const baseAng = Math.atan2(dirZ, dirX);
     const coneRad = (cfg.coneDeg * Math.PI) / 180;
     for (let i = 0; i < Math.min(cfg.countMax, Math.round(count)); i++) {

@@ -919,7 +919,7 @@ events.on('enemy_damaged', (payload) => {
   spawnHitBloodOn(hit.enemyId, {
     damage: hit.damage,
     headshot: hit.zone === 'head',
-    heightFrac: hit.zone === 'head' ? 0.85 : hit.zone === 'legs' ? 0.25 : 0.55,
+    heightFrac: hit.zone === 'head' ? 0.85 : hit.zone === 'limb' ? 0.25 : 0.55,
   });
 });
 
@@ -1159,17 +1159,37 @@ events.on('enemy_died', (payload) => {
   // 폭발로 죽었으면 파편이 폭심 반대쪽으로 날아간다 (살아남은 적은 몸이 밀린다)
   const launch = dead.blastX !== undefined ? balance.explosionKnockback.burstLaunch : 0;
   const deathAt = panAt(dead.x, dead.z);
+  // 죽는 순간 피 — 평소 타격의 2배(deathMul)로 터진다. 잘 죽는 잔챙이(작은 거미 등)는
+  // 비-사망 타격이 드물어 피를 못 보던 문제도 이걸로 메워진다. 방향은 플레이어 반대쪽
+  const spillDeathBlood = (): void => {
+    let bdx = dead.x - world.player.x;
+    let bdz = dead.z - world.player.z;
+    const bd = Math.hypot(bdx, bdz);
+    if (bd > 0.001) {
+      bdx /= bd;
+      bdz /= bd;
+    } else {
+      bdx = 0;
+      bdz = 1;
+    }
+    stage.spawnHitBlood(
+      dead.x, dead.z, enemyDef(dead.enemyType).height * 0.5, bdx, bdz, dead.enemyType,
+      { damage: balance.hitBlood.deathDamage, death: true },
+    );
+  };
   if (executedThisFrame) {
     // 처형 — 사망 연출도 해머가 닿는 순간까지 미룬다
     afterMs(executeContactMs, () => {
       audio.play('enemy_death', deathAt);
       stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType, 1.8);
+      spillDeathBlood();
     });
   } else {
     audio.play('enemy_death', deathAt);
     stage.spawnDeathBurst(
       dead.x, dead.z, dead.enemyType, 1, dead.blastX ?? 0, dead.blastZ ?? 0, launch,
     );
+    spillDeathBlood();
   }
   executedThisFrame = false;
 });
