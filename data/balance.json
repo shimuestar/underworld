@@ -590,6 +590,8 @@
   "_minimapNote": "전장의 안개 — 가 본 곳(revealRadius)만 그려지고 층별로 기억된다(사망에도 유지). 적은 시야(viewArcDeg 호 + 벽에 안 가림) 안이거나, 공격을 주고받은 지 combatSolid+Fade 이내(실시간 추적)만 표시. 소리 핑은 pingMs 동안 깜빡. 신 모드는 전부 표시 (2026-08-29)",
   "minimap": {
     "revealRadius": 6,
+    "_sightNote": "보는 방향으로 이만큼(칸) 먼저 그려진다 — 벽에 막히면 그 벽까지만, 너머는 미지",
+    "sightRevealCells": 3,
     "viewArcDeg": 100,
     "combatSolidMs": 4000,
     "combatFadeMs": 1000,

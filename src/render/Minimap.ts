@@ -139,27 +139,46 @@ export class Minimap {
     }
   }
 
-  /** 발길이 닿은 자리 — 반경 안 셀의 안개를 걷는다. 매 프레임 호출해도 새 셀만 지운다 */
-  private reveal(px: number, pz: number): void {
+  /** 한 칸 밝히기 — 새 셀만 안개를 걷는다 */
+  private revealCell(col: number, row: number, fctx: CanvasRenderingContext2D): void {
+    if (col < 0 || row < 0 || col >= this.level.cols || row >= this.level.rows) return;
+    const key = row * 4096 + col;
+    if (this.revealed.has(key)) return;
+    this.revealed.add(key);
+    fctx.clearRect(col * this.cellPx, row * this.cellPx, this.cellPx, this.cellPx);
+  }
+
+  /** 레이 한 줄 — 지나는 셀을 밝히고, 벽 셀을 만나면 그 벽까지 밝힌 뒤 멈춘다.
+   *  벽 너머는 어느 방식으로도 밝혀지지 않는다 (못 가 본 곳은 미지) */
+  private revealRay(
+    px: number, pz: number, dx: number, dz: number, range: number,
+    fctx: CanvasRenderingContext2D,
+  ): void {
     const cs = this.level.cellSize;
-    const r = balance.minimap.revealRadius;
+    const step = cs * 0.4;
+    for (let d = 0; d <= range; d += step) {
+      const col = Math.floor((px + dx * d) / cs);
+      const row = Math.floor((pz + dz * d) / cs);
+      this.revealCell(col, row, fctx);
+      if (this.level.solidAt(col, row)) return; // 벽 — 여기까지 보이고 그 뒤는 미지
+    }
+  }
+
+  /** 안개 걷기 — ① 몸 주변(전방향, revealRadius) ② 시선 방향(viewArc 호, sightRevealCells 칸).
+   *  둘 다 레이 기반이라 벽 너머는 새지 않는다. 매 프레임 호출해도 새 셀만 지운다 */
+  private reveal(px: number, pz: number, yaw: number): void {
+    const cfg = balance.minimap;
+    const cs = this.level.cellSize;
     const fctx = this.fog.getContext('2d')!;
-    const c0 = Math.floor((px - r) / cs);
-    const c1 = Math.floor((px + r) / cs);
-    const r0 = Math.floor((pz - r) / cs);
-    const r1 = Math.floor((pz + r) / cs);
-    for (let row = r0; row <= r1; row++) {
-      for (let col = c0; col <= c1; col++) {
-        if (row < 0 || col < 0 || row >= this.level.rows || col >= this.level.cols) continue;
-        const key = row * 4096 + col;
-        if (this.revealed.has(key)) continue;
-        // 셀 중심이 반경 안일 때만 — 대각 모서리가 성급히 밝혀지지 않게
-        const cx = col * cs + cs / 2;
-        const cz = row * cs + cs / 2;
-        if (Math.hypot(cx - px, cz - pz) > r) continue;
-        this.revealed.add(key);
-        fctx.clearRect(col * this.cellPx, row * this.cellPx, this.cellPx, this.cellPx);
-      }
+    // 몸 주변 — 360° 부챗살
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 45) {
+      this.revealRay(px, pz, Math.sin(a), Math.cos(a), cfg.revealRadius, fctx);
+    }
+    // 시선 — 보는 방향으로 더 멀리 (2° 간격 부챗살)
+    const halfArc = ((cfg.viewArcDeg / 2) * Math.PI) / 180;
+    const sightRange = cfg.sightRevealCells * cs;
+    for (let a = -halfArc; a <= halfArc; a += Math.PI / 90) {
+      this.revealRay(px, pz, -Math.sin(yaw + a), -Math.cos(yaw + a), sightRange, fctx);
     }
   }
 
@@ -191,7 +210,7 @@ export class Minimap {
     if (!this.visible) return;
     const cfg = balance.minimap;
     const now = performance.now();
-    this.reveal(player.x, player.z);
+    this.reveal(player.x, player.z, player.yaw);
     const ctx = this.ctx;
     const s = PX_PER_UNIT;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
