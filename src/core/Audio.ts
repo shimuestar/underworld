@@ -27,6 +27,7 @@ export type SoundName =
   | 'wall_crumble'
   | 'footstep_run'
   | 'head_break'
+  | 'head_shriek'
   | 'head_hop'
   | 'head_stomp'
   | 'leech_kick'
@@ -331,6 +332,14 @@ export class GameAudio {
         // 머리가 다시 뛴다 — 낮고 짧은 '통'. 여러 개가 자주 뛰므로 작게 (거리 감쇠는 패닝 몫)
         this.tone(170, 0.07, 'sine', 0.42, 0, 120);
         this.noise(0.035, 0.2, 1100);
+        break;
+      case 'head_shriek':
+        // 머리의 마지막 괴성 — 으깨지는 파열음(head_break/stomp)과 동시에 내면
+        // 컴프레서에 눌려 안 들린다. 파열 잔향이 빠질 무렵 늦게 시작해, 치솟았다
+        // 길게 꺾여 내려간다 (죽는 비명)
+        this.tone(750, 0.16, 'sawtooth', 1.0, 0.12, 1500); // 치솟음
+        this.tone(1500, 0.45, 'sawtooth', 0.95, 0.27, 240); // 꺾여 내려가는 울부짖음
+        this.noise(0.32, 0.5, 3000, 0.14); // 쇳소리 숨
         break;
       case 'head_break':
         // 머리 격파 — 호박 으깨기. 로우패스+짧은 감쇠에 눌려 약하게 들려서
