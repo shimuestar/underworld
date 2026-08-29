@@ -27,6 +27,7 @@ export type SoundName =
   | 'wall_crumble'
   | 'footstep_run'
   | 'head_break'
+  | 'head_hop'
   | 'head_stomp'
   | 'leech_kick'
   | 'leech_suck'
@@ -325,6 +326,11 @@ export class GameAudio {
         // 몸부림 — 짧은 힘쓰는 소리 (낮은 퍽 + 숨)
         this.tone(130, 0.07, 'square', 0.4, 0, 80);
         this.noise(0.05, 0.3, 700);
+        break;
+      case 'head_hop':
+        // 머리가 다시 뛴다 — 낮고 짧은 '통'. 여러 개가 자주 뛰므로 작게 (거리 감쇠는 패닝 몫)
+        this.tone(170, 0.07, 'sine', 0.42, 0, 120);
+        this.noise(0.035, 0.2, 1100);
         break;
       case 'head_break':
         // 머리 격파 — 호박 으깨기. 로우패스+짧은 감쇠에 눌려 약하게 들려서

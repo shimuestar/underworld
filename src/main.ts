@@ -546,6 +546,11 @@ events.on('melee_kill', (payload) => {
   if (kill.enemyType === 'ghoul') audio.play('heavy_hit');
   if (kill.execution) presentExecute(1, kill.x, kill.z);
 });
+// 구울 머리가 다시 뛴다 — 낮은 '통' (여러 개가 자주 뛰므로 소리는 작게, 방향은 패닝)
+events.on('ghoul_head_hop', (payload) => {
+  const h = payload as { x: number; z: number };
+  audio.play('head_hop', panAt(h.x, h.z));
+});
 // 구울 머리 소품이 부서졌다 — 밟았으면 발밑 파열, 아니면 살 터지는 소리
 events.on('ghoul_head_broken', (payload) => {
   const hb = payload as { x: number; z: number; stomp: boolean };
@@ -891,14 +896,22 @@ events.on('hammer_swing', (payload) => {
  *  플레이어→적, 높이는 부위별 비율 × 키 (+ 공중이면 jumpY) */
 function spawnHitBloodOn(
   enemyId: number,
-  hit: { damage: number; headshot?: boolean; heavy?: boolean; heightFrac?: number },
+  hit: {
+    damage: number;
+    headshot?: boolean;
+    heavy?: boolean;
+    heightFrac?: number;
+    /** 참 = 적→플레이어 쪽(정면)으로 튄다. 원거리 사격은 몸 뒤로 튀면 몸에 가려 안 보인다 */
+    towardPlayer?: boolean;
+  },
 ): void {
   const e = world.enemies.find((en) => en.id === enemyId);
   if (!e || !e.alive || e.health <= 0) return;
   const def = enemyDef(e.type);
   const pl = world.player;
-  let dirX = e.x - pl.x;
-  let dirZ = e.z - pl.z;
+  const sign = hit.towardPlayer ? -1 : 1;
+  let dirX = (e.x - pl.x) * sign;
+  let dirZ = (e.z - pl.z) * sign;
   const d = Math.hypot(dirX, dirZ);
   if (d > 0.001) {
     dirX /= d;
@@ -920,6 +933,7 @@ events.on('enemy_damaged', (payload) => {
     damage: hit.damage,
     headshot: hit.zone === 'head',
     heightFrac: hit.zone === 'head' ? 0.85 : hit.zone === 'limb' ? 0.25 : 0.55,
+    towardPlayer: true, // 총알이 몸 뒤로 뚫는 그림은 몸에 가려 안 보인다 — 정면으로
   });
 });
 
