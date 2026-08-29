@@ -573,6 +573,30 @@
     "dropIntervalTicks": 14,
     "maxPuddles": 40
   },
+  "_hitBloodNote": "플레이어 공격이 적을 맞힐 때 튀는 피 파편 — 개수는 피해량 비례, 헤드샷·강타 배율. 죽는 타격은 사망 파편이 담당하므로 생략(main 이 살아 있는 적에게만 부른다). stain 은 착지한 방울이 남기는 바닥 얼룩",
+  "hitBlood": {
+    "countMin": 3,
+    "countPerDamage": 0.22,
+    "countMax": 14,
+    "headshotMul": 1.5,
+    "heavyMul": 2,
+    "coneDeg": 55,
+    "speedMin": 1.2,
+    "speedSpan": 2.6,
+    "upKickMin": 1.0,
+    "upKickSpan": 1.8,
+    "lifeMs": 700,
+    "sizeMin": 0.045,
+    "sizeSpan": 0.075,
+    "stain": {
+      "chance": 0.5,
+      "lifeMs": 8000,
+      "fadeMs": 1500,
+      "max": 40,
+      "radiusMin": 0.1,
+      "radiusSpan": 0.16
+    }
+  },
   "_hitMarkerNote": "월드 고정 피격 마커 — 가해자의 실제 좌표를 기억하고 시선을 돌리면 화면 위를 미끄러지며 따라온다. 마커가 위 정중앙에 오면 그 적을 정면으로 보고 있다는 뜻",
   "hitMarker": {
     "lifeMs": 1600,

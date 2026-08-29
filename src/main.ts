@@ -869,10 +869,47 @@ events.on('hammer_swing', (payload) => {
   stage.triggerHammerSwing(sw.step ?? 1, sw.speedMul ?? 1);
   if (sw.heavy) showReaction('강타!', 700);
 });
+/** 타격 피 파편 — 살아 있는 적에게만 (죽는 타격은 사망 파편이 담당). 분사 방향은
+ *  플레이어→적, 높이는 부위별 비율 × 키 (+ 공중이면 jumpY) */
+function spawnHitBloodOn(
+  enemyId: number,
+  hit: { damage: number; headshot?: boolean; heavy?: boolean; heightFrac?: number },
+): void {
+  const e = world.enemies.find((en) => en.id === enemyId);
+  if (!e || !e.alive || e.health <= 0) return;
+  const def = enemyDef(e.type);
+  const pl = world.player;
+  let dirX = e.x - pl.x;
+  let dirZ = e.z - pl.z;
+  const d = Math.hypot(dirX, dirZ);
+  if (d > 0.001) {
+    dirX /= d;
+    dirZ /= d;
+  } else {
+    dirX = 0;
+    dirZ = 1;
+  }
+  const y = (e.jumpY ?? 0) + def.height * (hit.heightFrac ?? 0.55);
+  stage.spawnHitBlood(e.x, e.z, y, dirX, dirZ, e.type, hit);
+}
+
+// 권총 명중 — 관통 방향으로 핏방울. 부위(zone)에 따라 맞은 높이가 다르다.
+// zone 없는 enemy_damaged(주문 피해 등)는 제외 — 마법은 제 이펙트가 담당한다
+events.on('enemy_damaged', (payload) => {
+  const hit = payload as { enemyId: number; zone?: string; damage?: number };
+  if (hit.zone === undefined || hit.damage === undefined) return;
+  spawnHitBloodOn(hit.enemyId, {
+    damage: hit.damage,
+    headshot: hit.zone === 'head',
+    heightFrac: hit.zone === 'head' ? 0.85 : hit.zone === 'legs' ? 0.25 : 0.55,
+  });
+});
+
 events.on('melee_hit', (payload) => {
-  const hit = payload as { enemyId: number; heavy?: boolean };
+  const hit = payload as { enemyId: number; damage?: number; heavy?: boolean };
   audio.play(hit.heavy ? 'heavy_hit' : 'melee_hit');
   stage.flashEnemyHit(hit.enemyId);
+  spawnHitBloodOn(hit.enemyId, { damage: hit.damage ?? 10, heavy: hit.heavy });
   if (hit.heavy) {
     stage.triggerCameraKick(1.2, 300);
     const e = world.enemies.find((x) => x.id === hit.enemyId);

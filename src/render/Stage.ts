@@ -37,6 +37,22 @@ const SPIDER_TYPES = new Set(['spider_small', 'spider_large']);
 /** 슬라임 — 반투명 젤 덩어리. 다리·팔·머리·눈이 없다 (무정형) */
 const SLIME_TYPES = new Set(['slime', 'slime_small', 'slime_mother']);
 const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
+/** 타격 피 색 — 인간형은 검붉게, 특수 체액은 따로. 슬라임류는 몸 색 점액을 그대로 쓴다 */
+const BLOOD_RED = 0x7d1014;
+const BLOOD_COLORS: Record<string, number> = {
+  ghoul: 0x5c0d10, // 시체의 검은 피
+  spider_small: 0xb9b184, // 창백한 진물
+  spider_large: 0xb9b184,
+  leech: 0x4a1030, // 검자줏빛
+};
+export function bloodColorOf(enemyType: string): number {
+  if (SLIME_TYPES.has(enemyType)) {
+    return new THREE.Color(ENEMY_COLORS[enemyType] ?? ENEMY_COLOR_FALLBACK)
+      .multiplyScalar(0.8)
+      .getHex();
+  }
+  return BLOOD_COLORS[enemyType] ?? BLOOD_RED;
+}
 
 /** 거미 몸 — 낮게 깔린 몸통 + 뒤로 부푼 배 + 사방으로 뻗은 다리 8개.
  *  키(def.height)가 낮아 기둥+머리로 만들면 그냥 통조림처럼 보인다 */
@@ -843,6 +859,8 @@ interface Particle {
   gravity?: number;
   /** 이 높이에 닿으면 착지해 눕는다 — 날아간 머리가 바닥에 머물다 사라지게 */
   restY?: number;
+  /** 착지하면 이 색의 핏자국(spawnBloodStain)을 남긴다 — 타격 피 방울용 */
+  stainColor?: number;
   landedAtAge?: number;
   landedX?: number;
   landedZ?: number;
@@ -867,6 +885,8 @@ export class Stage {
   /** 얼굴에 붙은 거머리 실물 — 카메라 자식. 흡혈 순간(pulse) 훅 조인다 */
   private faceLeechRig: THREE.Group | null = null;
   private faceLeechSuckAt = 0;
+  /** 바닥 핏자국 — 타격 피 방울이 착지한 자리. 상한·수명은 balance.hitBlood.stain */
+  private bloodStains: { mesh: THREE.Mesh; bornMs: number }[] = [];
   private readonly muzzleLight: THREE.PointLight;
   private readonly eyeHeight = balance.player.eyeHeight;
   private readonly enemyVisuals = new Map<number, EnemyVisual>();
@@ -1176,6 +1196,7 @@ export class Stage {
       (p.mesh.material as THREE.Material).dispose();
     }
     this.particles.length = 0;
+    while (this.bloodStains.length > 0) this.removeBloodStain(0);
     // id 로 캐시된 모형들 — 층이 바뀌면 전부 걷는다. 남겨 두면 새 층에서 같은 id 를
     // 받은 다른 적·통·상자가 앞 층의 외형/자리를 뒤집어쓴다. 빈 배열 동기화가
     // 각 sync 의 제거·해제 경로를 그대로 태운다
@@ -3712,6 +3733,102 @@ export class Stage {
   /** 적 사망 파편 폭발 — 몸통 색 조각들이 튀어 흩어진다. power>1 이면 더 많이·세게 */
   /** 사망 파편. launch 를 주면 (dirX,dirZ) 쪽으로 쏠려 날아간다 —
    *  폭발에 죽은 적은 밀려날 몸이 남지 않으므로(래그돌 없음) 파편이 대신 날아간다 */
+  /** 타격 피 파편 — 맞은 지점(y)에서 공격 방향 원뿔로 튄다. 개수는 피해량 비례,
+   *  헤드샷·강타 배율. 일부 방울은 착지해 바닥 얼룩이 된다.
+   *  죽는 타격은 사망 파편(spawnDeathBurst) 몫 — main 이 살아 있는 적에게만 부른다 */
+  spawnHitBlood(
+    x: number,
+    z: number,
+    y: number,
+    dirX: number,
+    dirZ: number,
+    enemyType: string,
+    hit: { damage: number; headshot?: boolean; heavy?: boolean },
+  ): void {
+    const cfg = balance.hitBlood;
+    const color = bloodColorOf(enemyType);
+    const now = performance.now();
+    let count = cfg.countMin + hit.damage * cfg.countPerDamage;
+    if (hit.headshot) count *= cfg.headshotMul;
+    if (hit.heavy) count *= cfg.heavyMul;
+    const baseAng = Math.atan2(dirZ, dirX);
+    const coneRad = (cfg.coneDeg * Math.PI) / 180;
+    for (let i = 0; i < Math.min(cfg.countMax, Math.round(count)); i++) {
+      const size = cfg.sizeMin + Math.random() * cfg.sizeSpan;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size, size),
+        new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 }),
+      );
+      const ang = baseAng + (Math.random() - 0.5) * coneRad;
+      const speed = cfg.speedMin + Math.random() * cfg.speedSpan;
+      const particle: Particle = {
+        mesh,
+        ox: x,
+        oy: y + (Math.random() - 0.5) * 0.24,
+        oz: z,
+        vx: Math.cos(ang) * speed,
+        vy: cfg.upKickMin + Math.random() * cfg.upKickSpan,
+        vz: Math.sin(ang) * speed,
+        bornMs: now,
+        lifeMs: cfg.lifeMs,
+        restY: size / 2,
+        stainColor: Math.random() < cfg.stain.chance ? color : undefined,
+      };
+      mesh.position.set(particle.ox, particle.oy, particle.oz);
+      mesh.rotation.set(Math.random() * 3, Math.random() * 3, 0);
+      this.particles.push(particle);
+      this.scene.add(mesh);
+    }
+  }
+
+  /** 바닥 핏자국 — 납작한 얼룩이 잠시 남았다 옅어진다. 상한을 넘으면 오래된 것부터 걷는다 */
+  private spawnBloodStain(x: number, z: number, color: number): void {
+    const cfg = balance.hitBlood.stain;
+    while (this.bloodStains.length >= cfg.max) this.removeBloodStain(0);
+    const r = cfg.radiusMin + Math.random() * cfg.radiusSpan;
+    const mesh = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 10),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false, // 바닥 위 겹침에서 z-파이팅을 피한다
+      }),
+    );
+    // Euler XYZ 는 z(제자리 회전)부터 적용된다 — 그다음 x 로 눕힌다
+    mesh.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
+    mesh.scale.x = 0.65 + Math.random() * 0.7; // 찌그러진 얼룩 — 정직한 원은 스티커 같다
+    mesh.position.set(x, 0.012 + Math.random() * 0.004, z);
+    this.scene.add(mesh);
+    this.bloodStains.push({ mesh, bornMs: performance.now() });
+  }
+
+  private removeBloodStain(index: number): void {
+    const s = this.bloodStains[index];
+    if (!s) return;
+    this.scene.remove(s.mesh);
+    s.mesh.geometry.dispose();
+    (s.mesh.material as THREE.Material).dispose();
+    this.bloodStains.splice(index, 1);
+  }
+
+  /** 매 프레임 — 수명이 끝나가는 핏자국을 옅게 하고 걷는다 */
+  private updateBloodStains(): void {
+    if (this.bloodStains.length === 0) return;
+    const cfg = balance.hitBlood.stain;
+    const now = performance.now();
+    for (let i = this.bloodStains.length - 1; i >= 0; i--) {
+      const s = this.bloodStains[i]!;
+      const age = now - s.bornMs;
+      if (age > cfg.lifeMs) {
+        this.removeBloodStain(i);
+        continue;
+      }
+      (s.mesh.material as THREE.MeshBasicMaterial).opacity =
+        0.7 * Math.min(1, (cfg.lifeMs - age) / cfg.fadeMs);
+    }
+  }
+
   spawnDeathBurst(
     x: number,
     z: number,
@@ -3931,6 +4048,7 @@ export class Stage {
         p.landedAtAge = age;
         p.landedX = p.ox + p.vx * age;
         p.landedZ = p.oz + p.vz * age;
+        if (p.stainColor !== undefined) this.spawnBloodStain(p.landedX, p.landedZ, p.stainColor);
       }
       if (p.landedAtAge !== undefined) {
         p.mesh.position.set(p.landedX ?? p.ox, p.restY ?? 0.04, p.landedZ ?? p.oz);
@@ -4211,6 +4329,7 @@ export class Stage {
     this.updateLightningBeam();
     this.updateTracers();
     this.updateParticles();
+    this.updateBloodStains();
     this.updateExplosions();
     this.updateFrostDecals();
     this.updateScorches(performance.now());
