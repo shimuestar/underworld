@@ -1169,7 +1169,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     case 'idle': {
       // 가만히 서 있어도 천천히 좌우를 살핀다 — 사각이 고정되면 한 자리에서
       // 영영 안 들킨다. id 로 위상을 흩어 전원이 같은 방향을 보지 않게 한다
-      if (def.idleWander && !enemy.feigning) {
+      if (def.idleWander && !enemy.feigning && !enemy.wallCling) {
         // 배회(구울) — 생성 지점을 중심으로 어슬렁거린다. 걷는 쪽을 보므로
         // 아래 시야 판정도 걷는 방향 기준이다 (시선 훑기 대신)
         wanderIdle(world, enemy, def, dt);

@@ -2396,7 +2396,8 @@ function render(alpha: number): void {
   const hpFrac = Math.max(0, p.health) / balance.player.healthMax;
   const hpFill = document.getElementById('status-hp-fill')!;
   hpFill.style.width = `${hpFrac * 100}%`;
-  hpFill.style.background = hpFrac > 0.5 ? '#3fae5a' : hpFrac > 0.25 ? '#c9a227' : '#e04444';
+  // 체력은 붉은 계열 — 낮아지면 더 밝은 경고색으로 (2026-08-29 녹색에서 교체)
+  hpFill.style.background = hpFrac > 0.25 ? '#c22e2e' : '#ff4838';
   // 마나 — 중앙 오른쪽. 연쇄 중에는 밝게
   const manaFrac = Math.max(0, Math.min(1, world.mana.value / balance.mana.max));
   const manaFill = document.getElementById('status-mana-fill')!;

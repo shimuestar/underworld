@@ -899,6 +899,21 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(s.x).toBeLessThan(beforeX); // 벽을 탄 채(혹은 도약해) 플레이어(6,6) 쪽으로 접근
   });
 
+  it('벽 매복 거미는 배회하지 않는다 — 붙은 채 가만히 기다린다', () => {
+    world.lantern.on = false; // 랜턴 빔이 깨우지 않게
+    const s = add('spider_small', 24, 6); // 시야(16m) 밖
+    s.wallCling = true;
+    s.wallNX = 0;
+    s.wallNZ = -1;
+    s.jumpY = 1.9;
+    s.prevJumpY = 1.9;
+    const sx = s.x;
+    const sz = s.z;
+    for (let i = 0; i < 300; i++) Enemies.tick(world, DT);
+    expect(s.ai).toBe('idle');
+    expect(Math.hypot(s.x - sx, s.z - sz)).toBeLessThan(0.05); // 매복 — 미동도 없다
+  });
+
   it('벽거미 도약 — 예고 시점 좌표로 몸을 던져, 서 있으면 맞는다', () => {
     const s = add('spider_small', 11, 6); // 5m — 도약 사거리 [3,7] 안
     s.ai = 'chase';
@@ -1185,8 +1200,11 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     const victim = add('spider_small', 14, 6);
     const front = add('spider_large', 18, 6); // 서쪽(희생자 쪽)을 보고 있다
     front.yaw = Math.PI / 2;
-    const back = add('spider_large', 10, 6); // 서쪽을 보고 있다 — 희생자는 등 뒤(동쪽)
-    back.yaw = Math.PI / 2;
+    front.wanderPause = 999; // 배회로 시선이 돌아가지 않게 고정 (거미도 이제 어슬렁거린다)
+    // 옆(+Z 벽)을 보고 있다 — 희생자(동쪽)도 플레이어(서쪽, 4m)도 시야각 밖
+    const back = add('spider_large', 10, 6);
+    back.yaw = Math.PI;
+    back.wanderPause = 999;
     const blindOne = add('slime', 16, 6); // 희생자 쪽을 보지만 눈이 없다
     blindOne.yaw = Math.PI / 2;
     world.lantern.on = false; // 랜턴 빔(+X)이 back 을 비춰 깨우지 않게 — 목격 규칙만 잰다
