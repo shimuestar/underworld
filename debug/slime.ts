@@ -20,6 +20,7 @@ floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
 const SLIME = { radius: 0.55, height: 0.9, color: 0x3fae62 };
+const MOTHER = { radius: 1.1, height: 1.7, color: 0x2e8f52 };
 const SMALL = { radius: 0.34, height: 0.55, color: 0x63c97e };
 
 function specimen(
@@ -58,6 +59,48 @@ function specimen(
   if (pose === 'leap') torso.position.y = 0.9; // 도약 정점 (jumpY 근사)
 }
 
+// 어미 — 젤 속 눈알 (Stage 어미 분기와 동일 좌표·크기 공식)
+{
+  const torso = new THREE.Group();
+  torso.position.x = -5.6;
+  scene.add(torso);
+  const bodyMat = new THREE.MeshLambertMaterial({ color: MOTHER.color });
+  bodyMat.transparent = true;
+  bodyMat.opacity = 0.82;
+  const jelly = new THREE.Mesh(
+    new THREE.CylinderGeometry(MOTHER.radius * 0.8, MOTHER.radius * 1.3, MOTHER.height, 8),
+    bodyMat,
+  );
+  jelly.position.y = MOTHER.height / 2;
+  torso.add(jelly);
+  const core = new THREE.Mesh(
+    new THREE.BoxGeometry(MOTHER.radius * 0.8, MOTHER.height * 0.45, MOTHER.radius * 0.8),
+    new THREE.MeshLambertMaterial({ color: new THREE.Color(MOTHER.color).multiplyScalar(0.28) }),
+  );
+  core.position.y = MOTHER.height * 0.42;
+  torso.add(core);
+  const scleraMat = new THREE.MeshLambertMaterial({ color: 0xe9e6c4 });
+  const pupilMat = new THREE.MeshBasicMaterial({ color: 0x18240f });
+  for (const [ex, ey, es] of [
+    [-0.42, 0.66, 0.2],
+    [0.3, 0.82, 0.27],
+    [0.02, 0.5, 0.15],
+    [-0.14, 0.94, 0.12],
+    [0.52, 0.55, 0.11],
+  ] as const) {
+    const eye = new THREE.Group();
+    const er = MOTHER.radius * es;
+    eye.add(new THREE.Mesh(new THREE.SphereGeometry(er, 10, 8), scleraMat));
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(er * 0.45, 8, 6), pupilMat);
+    pupil.position.z = -er * 0.72;
+    eye.add(pupil);
+    eye.position.set(MOTHER.radius * ex, MOTHER.height * ey, -MOTHER.radius * (1.3 - 0.5 * ey) * 0.8);
+    // 카메라 쪽(-z 뒤쪽에서 본다)으로 살짝 돌린 동공 — 실전의 '따라오는 눈' 근사
+    eye.rotation.y = 0.15;
+    torso.add(eye);
+  }
+}
+
 specimen(-3.2, SLIME, 'rest');
 specimen(-1.1, SLIME, 'windup');
 specimen(1.0, SLIME, 'leap');
@@ -83,7 +126,11 @@ for (const [x, frac] of [
 
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.05, 100);
 const view = new URLSearchParams(location.search).get('view') ?? 'front';
-if (view === 'low') {
+if (view === 'mother') {
+  // 어미 눈 검증 — 표본을 정면 눈높이에서 본다
+  camera.position.set(-5.6, 1.7, -4.2);
+  camera.lookAt(-5.6, 1.0, 0);
+} else if (view === 'low') {
   // 플레이어 눈높이 근사 — 실전에서 보이는 각
   camera.position.set(0, 1.6, -4.6);
   camera.lookAt(0, 0.5, 0);

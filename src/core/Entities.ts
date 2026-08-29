@@ -141,6 +141,11 @@ export interface EnemyDef {
     orbitMax: number;
     jinkTicks: number;
     flapIntervalTicks: number;
+    /** 돌진 타격 높이 — 예고 동안 이 높이로 맞추고, 돌진 내내 유지한다 (해머가 닿는다) */
+    strikeHeight: number;
+    /** 치고 빠지기 — 경직 동안 뒤로 물러나는 속도(m/s)와 틱당 상승량 */
+    retreatSpeed: number;
+    retreatClimbPerTick: number;
     knockdown: {
       damageThreshold: number;
       instantDamage: number;

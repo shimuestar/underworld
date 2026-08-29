@@ -325,6 +325,8 @@ interface EnemyVisual {
    *  방패의 자식이라 방패가 부서지면 화살도 같이 사라진다 (판에 박혀 있었으니까) */
   shieldArrows?: THREE.Mesh[];
   shieldArrowSlot?: number;
+  /** 어미 슬라임 눈알들 — 동공이 플레이어를 따라 도는 눈 그룹 (syncEnemies) */
+  motherEyes?: THREE.Group[];
   /** 다음 화상 불티를 낼 시각 */
   nextEmberMs: number;
   /** 해머 적중 명멸이 끝나는 시각 */
@@ -2310,6 +2312,7 @@ export class Stage {
     flashMaterials.push(bodyMat);
     let headMesh: THREE.Mesh | undefined; // 헤드샷 젖힘용 — 거미는 없다
     let leechMats: { mat: THREE.MeshLambertMaterial; mul: number }[] | undefined; // 거머리 위장용
+    let motherEyes: THREE.Group[] | undefined; // 어미 슬라임 눈알들 (동공이 플레이어를 따라 돈다)
     let legsPair: { left: THREE.Group; right: THREE.Group } | undefined;
     // 안광 — 조명이 아니라 자체 발광 눈. 어둠 속에서 멀리서도 "저기 뭔가 있다"가 읽힌다
     const eyes = makeEyeMaterials();
@@ -2364,6 +2367,36 @@ export class Stage {
       );
       core.position.y = def.height * 0.42;
       torso.add(core);
+      // 어미 — 젤 속에 반쯤 묻힌 눈알들. 핵처럼 떠 있고 크기 제각각, 동공은
+      // syncEnemies 가 매 프레임 플레이어 쪽으로 돌린다 (몸은 무정형인데 눈만 따라온다)
+      if (type === 'slime_mother') {
+        motherEyes = [];
+        const scleraMat = new THREE.MeshLambertMaterial({ color: 0xe9e6c4 });
+        const pupilMat = new THREE.MeshBasicMaterial({ color: 0x18240f });
+        for (const [ex, ey, es] of [
+          [-0.42, 0.66, 0.2],
+          [0.3, 0.82, 0.27],
+          [0.02, 0.5, 0.15],
+          [-0.14, 0.94, 0.12],
+          [0.52, 0.55, 0.11],
+        ] as const) {
+          const eye = new THREE.Group();
+          const er = def.radius * es;
+          const sclera = new THREE.Mesh(new THREE.SphereGeometry(er, 10, 8), scleraMat);
+          eye.add(sclera);
+          const pupil = new THREE.Mesh(new THREE.SphereGeometry(er * 0.45, 8, 6), pupilMat);
+          pupil.position.z = -er * 0.72;
+          eye.add(pupil);
+          // 앞면(-z) 젤 표피에 살짝 파고든 자리 — 젤 반지름은 아래로 갈수록 퍼진다
+          eye.position.set(
+            def.radius * ex,
+            def.height * ey,
+            -def.radius * (1.3 - 0.5 * ey) * 0.8,
+          );
+          torso.add(eye);
+          motherEyes.push(eye);
+        }
+      }
     } else if (SPIDER_TYPES.has(type)) {
       buildSpiderBody(torso, def, bodyMat, eyes, baseColor, flashMaterials);
     } else if (type === 'bat') {
@@ -2458,6 +2491,7 @@ export class Stage {
       head: headMesh,
       legs: legsPair,
       leechMats,
+      motherEyes,
       flashMaterials,
       shieldBaseZ: 0,
       hitFlashUntil: 0,
@@ -3167,6 +3201,15 @@ export class Stage {
         visual.torso.scale.y = (enemy.wallWindupTicks ?? 0) > 0 ? 0.7 : 1;
       }
 
+      // 어미 슬라임 — 젤 속 눈알들이 일제히 플레이어를 따라 돈다 (무정형 몸에 눈만 산 것)
+      if (visual.motherEyes) {
+        const wy = Math.atan2(
+          -(this.camera.position.x - enemy.x),
+          -(this.camera.position.z - enemy.z),
+        );
+        for (const eye of visual.motherEyes) eye.rotation.y = wy - enemy.yaw;
+      }
+
       // 박쥐 — 날개 퍼덕임: 공중은 빠르게, 바닥에 뻗었을 땐(기절) 뒤집혀 늘어진 채 가끔.
       if (enemy.type === 'bat') {
         const wl = visual.torso.getObjectByName('batWingL');
@@ -3175,7 +3218,9 @@ export class Stage {
         if (wl && wr) {
           const flap = downed
             ? 0.9 + Math.sin(now / 260) * 0.3
-            : Math.sin(now / 70 + enemy.id) * 0.55 + 0.12;
+            : enemy.ai === 'windup'
+              ? Math.sin(now / 34 + enemy.id) * 0.8 + 0.1 // 준비자세 — 제자리 맹렬한 펄럭임
+              : Math.sin(now / 70 + enemy.id) * 0.55 + 0.12;
           wl.rotation.z = flap;
           wr.rotation.z = -flap;
         }

@@ -141,6 +141,9 @@
         "orbitMax": 9,
         "jinkTicks": 45,
         "flapIntervalTicks": 34,
+        "strikeHeight": 1.35,
+        "retreatSpeed": 3.2,
+        "retreatClimbPerTick": 0.022,
         "knockdown": {
           "damageThreshold": 25,
           "instantDamage": 18,
@@ -150,8 +153,8 @@
         }
       },
       "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 26, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
-      "_swoopNote": "급강하 — 예고 동안 고도를 잃으며 내려앉다가(BROOD_FALL 감쇠) 도약 돌진으로 스친다. 예고 시점 좌표 고정이라 옆 대시가 정답, 청색이라 패링도 된다. 빗나가면 저공에서 오래 뻗는다",
-      "chargeAttack": { "type": "contact", "arcDeg": 150, "leapHeight": 1.3, "chargeSpeed": 13, "chargeRunTicks": 20, "minRange": 2, "maxRange": 10, "windupTicks": 34, "recoverTicks": 72, "whiffRecoverTicks": 96, "impactRangeMul": 1.2, "playerKnockback": 1.2, "parryable": true, "telegraph": "blue", "cooldownTicks": 160 },
+      "_swoopNote": "몸통 박치기 — 제자리에서 1초(60틱) 맹렬히 펄럭이는 준비자세(청색) 후 얼굴 높이(strikeHeight)로 수평 돌진, 치고 나면 뒤로 빠지며 서서히 고도를 되찾는다. 돌진·후퇴 저공 구간이 해머의 창. 패링 가능",
+      "chargeAttack": { "type": "contact", "arcDeg": 150, "chargeSpeed": 14, "chargeRunTicks": 20, "minRange": 2, "maxRange": 10, "windupTicks": 60, "recoverTicks": 50, "whiffRecoverTicks": 80, "impactRangeMul": 1.2, "playerKnockback": 1.2, "parryable": true, "telegraph": "blue", "cooldownTicks": 160 },
       "counters": { "pistol": "good", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "poor", "magic": "good", "deflect": "best" },
       "drops": []
     },

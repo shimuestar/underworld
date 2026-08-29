@@ -746,20 +746,29 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(b.knockdownGauge ?? 0).toBeLessThan(1);
   });
 
-  it('박쥐 급강하 — 예고(청색)를 걸고 내려앉으며, 끝나면 저공에서 오래 뻗는다', () => {
-    const b = add('bat', 12, 6); // 6m — 급강하 사거리 [2,10]
+  it('박쥐 박치기 — 제자리 준비(1초 펄럭) 후 수평 돌진, 땅까지 내려오지 않는다', () => {
+    const b = add('bat', 12, 6); // 6m — 돌진 사거리 [2,10]
     b.ai = 'chase';
     b.jumpY = 2.4;
     b.prevJumpY = 2.4;
     let swooped = false;
     world.events.on('bat_swoop', () => (swooped = true));
-    let sawLowRecover = false;
-    for (let i = 0; i < 260; i++) {
+    let minY = 99;
+    let sawReachable = false; // 돌진·후퇴 중 해머 높이(2.0) 아래로 내려온 적 있는가
+    for (let i = 0; i < 300; i++) {
       Enemies.tick(world, DT);
-      if ((b.ai as string) === 'recover' && (b.jumpY ?? 0) < 0.5) sawLowRecover = true;
+      minY = Math.min(minY, b.jumpY ?? 99);
+      const ai = b.ai as string;
+      if (
+        (ai === 'charging' || ai === 'recover' || ai === 'impact') &&
+        (b.jumpY ?? 99) < balance.weapons.meleeMaxHitHeight
+      ) {
+        sawReachable = true;
+      }
     }
-    expect(swooped).toBe(true); // 급강하를 시도했다
-    expect(sawLowRecover).toBe(true); // 저공 경직 — 해머의 창
+    expect(swooped).toBe(true); // 박치기를 시도했다
+    expect(sawReachable).toBe(true); // 박치기·후퇴 구간은 해머가 닿는다
+    expect(minY).toBeGreaterThan(0.8); // 땅으로 곤두박질하지 않는다 — 제자리 준비자세
   });
 
   it('닫힌 문은 소리를 막는다 — 문 너머의 적은 총성에도 안 깨고, 열리면 들린다', () => {

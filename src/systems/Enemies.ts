@@ -102,6 +102,7 @@ export function tick(world: World, dt: number): void {
       enemy.ai !== 'charging' &&
       enemy.ai !== 'latched' &&
       !enemy.lurking &&
+      !enemyDef(enemy.type).flying &&
       !enemy.wallCling &&
       (enemy.wallClimbTicks ?? 0) <= 0 &&
       (enemy.wallWindupTicks ?? 0) <= 0 &&
@@ -625,9 +626,32 @@ function tickFlying(
     return true;
   }
 
-  // 공격 상태는 일반 기계가 굴린다 — 예고: 낙하 감쇠가 고도를 깎는다(내려앉음),
-  // 돌진: 도약 포물선이 관리, 경직·스태거: 저공 그대로
-  if (enemy.ai !== 'chase' && enemy.ai !== 'idle') return false;
+  // 공격 상태 — 이동·판정·패링은 일반 기계가 굴리고, 높이와 후퇴만 여기서 만든다
+  if (enemy.ai !== 'chase' && enemy.ai !== 'idle') {
+    if (enemy.ai === 'windup') {
+      // 제자리 준비자세 — 맹렬히 펄럭이며(시각은 Stage) 타격 높이(얼굴께)로 맞춘다
+      const d = fly.strikeHeight - (enemy.jumpY ?? 0);
+      enemy.jumpY = (enemy.jumpY ?? 0) + Math.max(-0.05, Math.min(0.12, d));
+    } else if (enemy.ai === 'recover') {
+      // 치고 빠지기 — 뒤로 물러나며 서서히 순항 고도를 되찾는다.
+      // 고도가 해머 높이(meleeMaxHitHeight)를 넘기 전까지가 근접의 창이다
+      const p2 = world.player;
+      const bx = enemy.x - p2.x;
+      const bz = enemy.z - p2.z;
+      const bd = Math.hypot(bx, bz);
+      if (bd > 0.001) {
+        world.level.slideMove(
+          enemy,
+          def.radius,
+          (bx / bd) * fly.retreatSpeed * dt,
+          (bz / bd) * fly.retreatSpeed * dt,
+        );
+        enemy.yaw = Math.atan2(-(p2.x - enemy.x), -(p2.z - enemy.z)); // 물러나며도 먹이를 본다
+      }
+      enemy.jumpY = Math.min(fly.cruiseHeight, (enemy.jumpY ?? 0) + fly.retreatClimbPerTick);
+    }
+    return false;
+  }
 
   // 순항 고도 — 목표(순항 + 출렁임)로 수렴. 낙하 감쇠(0.1/틱)보다 빨라야 떠 있는다
   const bob =
@@ -1399,7 +1423,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
       // 겨눈 자리에 닿았거나(몸 반경), 플레이어가 그대로 서 있어 이미 사거리거나, 시간이 다하면 친다
       if (tdist <= def.radius || dist <= def.attackRange || enemy.timer <= 0) {
-        enemy.jumpY = 0; // 착지 — 몸통 박치기는 땅에 닿는 순간 들어간다
+        // 착지 — 몸통 박치기는 땅에 닿는 순간 들어간다. 비행체(박쥐)는 공중에서 치므로 유지
+        if (!def.flying) enemy.jumpY = 0;
         if (attack.parryable) {
           enemy.ai = 'active_perfect';
           enemy.timer = balance.reaction.windowPerfectTicks;
