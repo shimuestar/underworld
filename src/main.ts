@@ -991,6 +991,23 @@ function spawnHitBloodOn(
   stage.spawnHitBlood(e.x, e.z, y, dirX, dirZ, e.type, hit);
 }
 
+// 미니맵 전투 추적 — 내가 때린 적은 잠시 실시간으로 보인다 (권총·스킬·해머 공통)
+events.on('enemy_damaged', (payload) => {
+  const id = (payload as { enemyId?: number }).enemyId;
+  if (id !== undefined) minimap.notifyCombat(id);
+});
+// 미니맵 소리 핑 — 시야 밖 적의 소리가 난 자리에 흐릿한 점이 깜빡인다 (공간 음향의 시각 짝)
+for (const noisyEvent of [
+  'ghoul_moan', 'ghoul_rise', 'spider_skitter', 'wall_pounce',
+  'bat_flap', 'bat_scream', 'bat_swoop', 'bat_pack_dive',
+  'leech_drip', 'leech_chitter',
+] as const) {
+  events.on(noisyEvent, (payload) => {
+    const at = payload as { x?: number; z?: number };
+    if (at?.x !== undefined && at?.z !== undefined) minimap.ping(at.x, at.z);
+  });
+}
+
 // 권총 명중 — 관통 방향으로 핏방울. 부위(zone)에 따라 맞은 높이가 다르다.
 // zone 없는 enemy_damaged(주문 피해 등)는 제외 — 마법은 제 이펙트가 담당한다
 events.on('enemy_damaged', (payload) => {
@@ -1008,6 +1025,7 @@ events.on('melee_hit', (payload) => {
   const hit = payload as { enemyId: number; damage?: number; heavy?: boolean };
   audio.play(hit.heavy ? 'heavy_hit' : 'melee_hit');
   stage.flashEnemyHit(hit.enemyId);
+  minimap.notifyCombat(hit.enemyId); // 미니맵 전투 추적
   spawnHitBloodOn(hit.enemyId, { damage: hit.damage ?? 10, heavy: hit.heavy });
   if (hit.heavy) {
     stage.triggerCameraKick(1.2, 300);
@@ -1214,6 +1232,7 @@ events.on('player_damaged', (payload) => {
   if (hit.srcX !== undefined && hit.srcZ !== undefined) {
     addHitMark(hit.srcX, hit.srcZ, hit.srcId);
   }
+  if (hit.srcId !== undefined) minimap.notifyCombat(hit.srcId); // 미니맵 전투 추적 (5초)
   requestAnimationFrame(() => {
     hurtOverlay!.style.transition = 'opacity 450ms ease-out';
     hurtOverlay!.style.opacity = '0';
@@ -2406,7 +2425,7 @@ function render(alpha: number): void {
   }
   stage.setCorruptionStage(Math.floor(world.corruption.applied / 12.5));
   stage.setExitOpen(world.exitOpen);
-  minimap.update(p, world.enemies, alpha, world.exitOpen);
+  minimap.update(p, world.enemies, alpha, world.exitOpen, world.godMode === true);
 
   // 하단 중앙 상태 표시 — HP 바 + 무기 슬롯
   const wpn = world.weapon;

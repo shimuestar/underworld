@@ -57,6 +57,8 @@ const ALTAR_FOOTPRINT = 1.1;
 const SKIN = 1e-3;
 
 export class Level {
+  /** 층 식별자 — 미니맵이 층별 탐사 기억(안개)을 이 키로 나눈다 */
+  readonly id: string;
   readonly cellSize: number;
   readonly ceiling: number;
   readonly grid: string[];
@@ -89,6 +91,7 @@ export class Level {
   readonly cols: number;
 
   constructor(def: LevelDef) {
+    this.id = def.id;
     this.cellSize = def.cellSize;
     this.ceiling = def.ceiling;
     this.grid = def.grid;
