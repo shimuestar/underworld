@@ -10,7 +10,7 @@
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, closedDoorBetween, findWallNormal, playerBlocks, pushEnemy, pushPlayer, type EnemyState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, findWallNormal, noiseField, playerBlocks, pushEnemy, pushPlayer, type EnemyState, type World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -1744,12 +1744,15 @@ function litByLantern(world: World, dist: number, distX: number, distZ: number):
 /** 포효 — 반경 안에서 자고 있던 적을 전부 깨운다. 시야는 보지 않는다(소리로 듣는다).
  *  보스 조우가 곧 방 전체와의 조우가 되게 하는 장치다 */
 function wakeAround(world: World, source: EnemyState, radius: number): void {
+  // 포효도 열린 칸을 따라 흐른다 — 닫힌 문 안쪽 방은 별세계다
+  const cs = world.level.cellSize;
+  const field = noiseField(world.level, source.x, source.z, radius + cs);
   for (const other of world.enemies) {
     if (other === source || !other.alive || other.ai !== 'idle') continue;
     if (other.lurking) continue; // 천장 잠복(거머리) — 포효에도 초연하다 (기습 담당)
     if (Math.hypot(other.x - source.x, other.z - source.z) > radius) continue;
-    // 벽은 뚫는 포효도 닫힌 문은 못 뚫는다 — 문 안쪽 방은 별세계다
-    if (closedDoorBetween(world, source.x, source.z, other.x, other.z)) continue;
+    const pd = field.get(Math.floor(other.z / cs) * 4096 + Math.floor(other.x / cs));
+    if (pd === undefined || pd > radius + cs) continue;
     alertEnemy(other, balance.enemyAi.noticeDelayTicks);
     world.events.emit('enemy_alerted', { enemyId: other.id, enemyType: other.type });
   }

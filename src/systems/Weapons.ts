@@ -6,7 +6,7 @@
 import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, closedDoorBetween, hitBarrel, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, hitBarrel, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type World } from '../core/World';
 
 /** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
  *  활을 넣으면서 실제로 방패·경직·무기 교체 세 곳이 bowDraw 를 안 지워
@@ -568,11 +568,15 @@ function throwGrenade(world: World, chargeFrac: number): void {
 
 /** 소음 전파 — 반경 내 대기(idle) 적들이 추격을 시작한다 */
 function alertNearby(world: World, x: number, z: number, radius: number): void {
+  // 총성도 열린 칸을 따라 흐른다 — 닫힌 문 안쪽 방은 못 듣는다
+  const cs = world.level.cellSize;
+  const field = noiseField(world.level, x, z, radius + cs);
   for (const enemy of world.enemies) {
     if (!enemy.alive || enemy.ai !== 'idle') continue;
     if (enemy.lurking) continue; // 천장 잠복(거머리) — 총성에도 초연하다 (기습 담당)
     if (Math.hypot(enemy.x - x, enemy.z - z) > radius) continue;
-    if (closedDoorBetween(world, x, z, enemy.x, enemy.z)) continue; // 닫힌 문이 총성을 막는다
+    const pd = field.get(Math.floor(enemy.z / cs) * 4096 + Math.floor(enemy.x / cs));
+    if (pd === undefined || pd > radius + cs) continue;
     alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
     world.events.emit('enemy_alerted', {
       enemyId: enemy.id,

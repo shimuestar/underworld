@@ -33,7 +33,7 @@
     "spider_small": {
       "name": "검은 거미",
       "zone": 1, "slice": true,
-      "weight": "light", "xp": 12, "health": 18, "speed": 5.6, "damage": 8,
+      "weight": "light", "xp": 12, "_healthNote": "18 → 23 (2026-08-29, +25%)", "health": 23, "speed": 5.6, "damage": 8,
       "radius": 0.42, "height": 0.7,
       "aggroRange": 16, "attackRange": 1.7,
       "behavior": "swarm",

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { World } from '../core/World';
+import { alertNearbyAt, World, type EnemyState } from '../core/World';
 import { addDoorFrameBlockers, Level } from '../level/GridLoader';
 import * as Door from './Door';
 import * as Lever from './Lever';
@@ -152,6 +152,22 @@ describe('E 채널', () => {
 
     idle(world, 1);
     expect(unlocked).toHaveLength(1);
+  });
+
+  it('닫힌 문은 방을 밀봉한다 — 벽 너머 직선이라도 소리가 못 들어가고, 열리면 들린다', () => {
+    const world = makeWorld();
+    // 동쪽 방(문 너머)의 적 — 직선은 문이 아니라 벽(열 5)을 지나는 자리
+    const enemy = {
+      id: 1, type: 'spider_large', x: 28, z: 6, prevX: 28, prevZ: 6,
+      yaw: 0, homeYaw: 0, health: 75, alive: true, ai: 'idle',
+      timer: 0, noticeTicks: 0, burnTicks: 0, burnDamagePerTick: 0,
+    } as EnemyState;
+    world.enemies.push(enemy);
+    alertNearbyAt(world, 18, 10, 12, 0); // 서쪽 방에서 권총 총성 몫의 소음
+    expect(enemy.ai).toBe('idle'); // 닫힌 문 — 방이 밀봉됐다 (벽도 이제 소리를 막는다)
+    world.level.openCell(5, 2); // 문이 열렸다 (Door 가 미닫이 끝에 하는 일)
+    alertNearbyAt(world, 18, 10, 12, 0);
+    expect(enemy.ai).toBe('chase'); // 열린 문으로 소리가 돌아 들어간다
   });
 
   it('문에서 떨어지면 처음부터 — 진행이 남지 않는다', () => {

@@ -224,28 +224,40 @@ export function breakGhoulHead(world: World, headId: number, stomp: boolean): vo
 
 /** (x,z)에서 난 소음 — 반경 안의 대기(idle) 적을 깨운다. 각도·시야선 무관 (소리다).
  *  noticeTicks 는 부르는 쪽이 준다 (World 는 데이터에 의존하지 않는다 — pushPlayer 규약) */
-/** 두 점 사이에 '닫힌 문'이 있는가 — 닫힌 문은 소리를 막는다 (시야·랜턴은 문 셀이
- *  벽 취급이라 이미 막힌다). 문 셀을 반지름 = 셀 절반의 원판으로 근사해
- *  선분 최단거리로 판정한다. 열린 문(opened)은 소리가 그대로 샌다 */
-export function closedDoorBetween(
-  world: World,
-  ax: number,
-  az: number,
-  bx: number,
-  bz: number,
-): boolean {
-  for (const door of world.doors) {
-    if (door.opened) continue;
-    const dx = bx - ax;
-    const dz = bz - az;
-    const len2 = dx * dx + dz * dz;
-    let t = len2 > 0 ? ((door.x - ax) * dx + (door.z - az) * dz) / len2 : 0;
-    t = Math.max(0, Math.min(1, t));
-    const cx = ax + dx * t - door.x;
-    const cz = az + dz * t - door.z;
-    if (Math.hypot(cx, cz) <= world.level.cellSize * 0.5) return true;
+/** 소음 도달 필드 — 소리는 열린 칸(열린 문 포함)을 따라 흐른다. 벽·닫힌 문에 막히면
+ *  돌아가야 하고, 돌아가는 경로가 예산을 넘으면 못 듣는다. 셀 단위 BFS 라 거칠지만
+ *  소음 반경 자체가 개념적 값이라 충분하다. 한 번 흘려서 여러 적 판정에 재사용한다 */
+export function noiseField(
+  level: { cellSize: number; solidAt(col: number, row: number): boolean },
+  x: number,
+  z: number,
+  budget: number,
+): Map<number, number> {
+  const cs = level.cellSize;
+  const sc = Math.floor(x / cs);
+  const sr = Math.floor(z / cs);
+  const field = new Map<number, number>();
+  field.set(sr * 4096 + sc, 0);
+  const queue: [number, number, number][] = [[sc, sr, 0]];
+  while (queue.length > 0) {
+    const [c, r, d] = queue.shift()!;
+    const nd = d + cs;
+    if (nd > budget) continue;
+    for (const [dc, dr] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const nc = c + dc;
+      const nr = r + dr;
+      const key = nr * 4096 + nc;
+      if (field.has(key) || level.solidAt(nc, nr)) continue;
+      field.set(key, nd);
+      queue.push([nc, nr, nd]);
+    }
   }
-  return false;
+  return field;
 }
 
 export function alertNearbyAt(
@@ -255,14 +267,23 @@ export function alertNearbyAt(
   radius: number,
   noticeTicks: number,
 ): void {
+  // 소리는 열린 칸을 따라 흐른다 — 벽·닫힌 문이 막는다 (문이 열리면 그 길로 샌다).
+  // 예산은 이 소리를 들을 수 있는 가장 밝은 귀(hearingMul 최대) 기준으로 한 번만 흘린다
+  const cs = world.level.cellSize;
+  let maxMul = 1;
+  for (const enemy of world.enemies) {
+    if (enemy.alive && (enemy.hearingMul ?? 1) > maxMul) maxMul = enemy.hearingMul ?? 1;
+  }
+  const field = noiseField(world.level, x, z, radius * maxMul + cs);
   for (const enemy of world.enemies) {
     if (!enemy.alive || enemy.ai !== 'idle') continue;
     // 천장 잠복(거머리)은 소리에 초연하다 — 기습이 역할이라, 밑 통과와 직접 피격만 깨운다
     if (enemy.lurking) continue;
     // 청각 배율 — 슬라임처럼 귀로 사는 적은 같은 소리를 더 멀리서 듣는다
-    if (Math.hypot(enemy.x - x, enemy.z - z) > radius * (enemy.hearingMul ?? 1)) continue;
-    // 닫힌 문은 소리를 막는다 — 문 안쪽 방의 적은 총성에도 모른다
-    if (closedDoorBetween(world, x, z, enemy.x, enemy.z)) continue;
+    const r = radius * (enemy.hearingMul ?? 1);
+    if (Math.hypot(enemy.x - x, enemy.z - z) > r) continue;
+    const pd = field.get(Math.floor(enemy.z / cs) * 4096 + Math.floor(enemy.x / cs));
+    if (pd === undefined || pd > r + cs) continue; // 막혔거나 돌아가는 길이 너무 멀다
     alertEnemy(enemy, noticeTicks);
     world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, noise: true });
   }

@@ -676,7 +676,8 @@ describe('보스 포효 — 주변을 함께 깨운다', () => {
   it('보스가 플레이어를 알아채면 반경 안의 잠든 적이 전부 함께 달려든다', () => {
     const radius = balance.enemyAi.bossAlertRadius;
     const boss = spawnEnemyAt('goblin_chieftain', 6 + 10, 6, 1); // aggroRange(18) 안
-    const near = spawnEnemyAt('goblin_runner', boss.x + radius - 2, boss.z, 2);
+    // 소리는 이제 열린 칸을 따라 흐른다 — near 는 아레나 안(반경 안), far 는 격자 밖(막힘)
+    const near = spawnEnemyAt('goblin_runner', boss.x + 16, boss.z, 2);
     const far = spawnEnemyAt('goblin_runner', boss.x + radius + 5, boss.z, 3);
     // 벽 너머라도 소리는 들린다 — 시야를 막아도 깨어야 한다
     const blind = spawnEnemyAt('goblin_runner', boss.x, boss.z + 6, 4);

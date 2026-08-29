@@ -676,7 +676,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
 
   it('슬라임은 눈이 없다 — 코앞에 서도 못 보고, 소리는 배로 듣는다', () => {
     Enemies.init(world);
-    const slime = add('slime', 6, 8); // 플레이어(6,6) 정면 2m — 보통 적이면 인기척에 깬다
+    const slime = add('slime', 8, 6); // 플레이어(6,6) 정면 2m — 보통 적이면 인기척에 깬다 (복도 축)
     slime.yaw = Math.atan2(-(6 - slime.x), -(6 - slime.z)); // 플레이어를 정면에 둔다
     slime.hearingMul = 2.5; // 스포너가 def 에서 복사하는 값 — 직접 만든 개체라 손으로 준다
     for (let i = 0; i < 60; i++) Enemies.tick(world, DT);
@@ -812,21 +812,6 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(swooped).toBe(true); // 박치기를 시도했다
     expect(sawReachable).toBe(true); // 박치기·후퇴 구간은 해머가 닿는다
     expect(minY).toBeGreaterThan(0.8); // 땅으로 곤두박질하지 않는다 — 제자리 준비자세
-  });
-
-  it('닫힌 문은 소리를 막는다 — 문 너머의 적은 총성에도 안 깨고, 열리면 들린다', () => {
-    const s = add('slime', 14, 6); // 귀 좋은 적 (청각 2.5배)
-    s.hearingMul = 2.5;
-    // 플레이어(6,6)와 적(14,6) 사이 (10,6)에 닫힌 문을 세운다
-    world.doors.push({
-      row: 1, col: 2, x: 10, z: 6, dirX: 1, dirZ: 0, byLever: false,
-      progress: 0, slide: 0, prevSlide: 0, opened: false,
-    });
-    alertNearbyAt(world, world.player.x, world.player.z, 12, 0); // 총성 몫의 소음
-    expect(s.ai).toBe('idle'); // 닫힌 문이 막았다
-    world.doors[world.doors.length - 1]!.opened = true;
-    alertNearbyAt(world, world.player.x, world.player.z, 12, 0);
-    expect(s.ai).toBe('chase'); // 열린 문은 소리가 샌다
   });
 
   it('얼굴 거머리 — 붙어 있는 동안 겹침 밀어내기로 끌려가지 않는다', () => {
