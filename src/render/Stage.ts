@@ -3242,7 +3242,10 @@ export class Stage {
           wl.rotation.z = flap;
           wr.rotation.z = -flap;
         }
-        visual.torso.rotation.x = downed ? Math.PI * 0.92 : 0; // 뒤집혀 뻗는다
+        // 뒤집혀 뻗는다 — 피벗이 발밑이라 그냥 굴리면 몸이 바닥 밑으로 꺼진다.
+        // 몸 높이만큼 들어 올려 등이 바닥에 닿게 눕힌다 (거머리 천장 뒤집기와 같은 트릭)
+        visual.torso.rotation.x = downed ? Math.PI * 0.92 : 0;
+        visual.torso.position.y = downed ? def2.height : 0;
       }
 
       // 거머리 — 매달려 있는 동안 천천히 흔들리고, 천장 돌빛으로 위장한다.

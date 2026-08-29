@@ -74,8 +74,9 @@ wind.position.set(0, 1.1, 0);
 flap(wind, -0.3);
 
 // 바닥 기절 — 뒤집혀 뻗어 퍼덕 (Stage: torso.rotation.x = π*0.92)
+// Stage 와 동일 — 발밑 피벗을 몸 높이만큼 들어 올려 등이 바닥에 닿는다
 const downed = makeBat(0x000000);
-downed.position.set(2.6, 0.15, 0);
+downed.position.set(2.6, def.height, 0);
 downed.rotation.x = Math.PI * 0.92;
 flap(downed, 0.9);
 
