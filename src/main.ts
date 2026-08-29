@@ -338,6 +338,7 @@ for (const name of [
   'weapon_empty',
   'web_caught',
   'web_torn',
+  'web_squeeze',
   'web_broken',
   'stamina_empty',
   'stamina_recovered',
@@ -618,6 +619,11 @@ events.on('web_caught', (payload) => {
   const info = payload as { swings: number };
   audio.play('web_hit');
   showReaction(`거미줄에 걸렸다 — 해머로 ${info.swings}번 걷어내라`, 2400);
+});
+// 거미줄 조임 — 줄이 파고든다 (피해 비네트·소리는 player_damaged 가 함께 낸다)
+events.on('web_squeeze', () => {
+  audio.play('web_hit');
+  stage.triggerCameraKick(0.12, 90);
 });
 events.on('web_torn', (payload) => {
   const info = payload as { left: number; total: number };

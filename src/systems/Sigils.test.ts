@@ -685,6 +685,42 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slime.ai).toBe('chase');
   });
 
+  it('거미줄 조임 — 걷기 3초에 한 방, 질주는 1.5초에 한 방', () => {
+    const p = world.player;
+    p.webSwingsLeft = 3;
+    const cw = balance.web.constrict;
+    const hp = p.health;
+    for (let i = 0; i < cw.moveTicksPerHit; i++) {
+      world.input = { ...Input.emptySnapshot(), moveForward: 1 };
+      PlayerMove.tick(world, DT);
+    }
+    expect(p.health).toBe(hp - cw.damage); // 걷기 3초 = 한 방
+    const hp2 = p.health;
+    for (let i = 0; i < cw.sprintTicksPerHit; i++) {
+      world.input = { ...Input.emptySnapshot(), moveForward: 1, sprint: true };
+      PlayerMove.tick(world, DT);
+    }
+    expect(p.health).toBe(hp2 - cw.damage); // 질주 1.5초 = 한 방
+  });
+
+  it('거미줄 조임 — 가만히 있어도 5초에 한 방, 대시 시도는 즉시 한 방', () => {
+    const p = world.player;
+    p.webSwingsLeft = 3;
+    const cw = balance.web.constrict;
+    const hp = p.health;
+    world.input = Input.emptySnapshot();
+    for (let i = 0; i < cw.idleTicksPerHit; i++) PlayerMove.tick(world, DT);
+    expect(p.health).toBe(hp - cw.damage); // 방치 5초 = 한 방
+    const hp2 = p.health;
+    p.dodgeTicks = 12; // 대시 시도 — dodgeTicks 가 차오르는 순간
+    PlayerMove.tick(world, DT);
+    expect(p.health).toBe(hp2 - cw.damage);
+    p.dodgeTicks = 0;
+    p.webSwingsLeft = 0; // 해머로 다 벗겨냈다 — 게이지도 사라진다
+    PlayerMove.tick(world, DT);
+    expect(p.webStruggle ?? 0).toBe(0);
+  });
+
   it('진동 감각 — 곁에서 움직이면 걷기(무음)라도 발밑 울림으로 알아챈다', () => {
     const slime = add('slime', 8, 6); // 플레이어(6,6)에서 2m — tremorSense(2.5) 안 (복도 축이라 시야선 확보)
     slime.hearingMul = 2.5;

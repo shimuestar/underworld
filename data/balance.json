@@ -87,9 +87,16 @@
   },
 
   "web": {
-    "_comment": "거미줄에 걸리면 느려진다. 시간이 지나도, 아무리 움직여도 안 풀린다 — 해머로 breakSwings 번 걷어내야만 벗겨진다",
+    "_comment": "거미줄에 걸리면 느려진다. 벗기는 건 여전히 해머 breakSwings 번뿐 — 대신 감긴 동안 줄이 조여 온다(constrict)",
     "moveSpeedMul": 0.336,
-    "breakSwings": 3
+    "breakSwings": 3,
+    "_constrictNote": "몸부림칠수록 줄이 파고든다 — 걷기 3초/질주 1.5초/가만히 5초에 한 방, 회피 대시는 시도 즉시 한 방 (2026-08-29)",
+    "constrict": {
+      "damage": 6,
+      "moveTicksPerHit": 180,
+      "sprintTicksPerHit": 90,
+      "idleTicksPerHit": 300
+    }
   },
   "playerKnockback": {
     "_comment": "피격 시 뒤로 밀리는 거리(m). 공격 종류별로 체감이 다르다. 방어 중에는 blockedMul 배",

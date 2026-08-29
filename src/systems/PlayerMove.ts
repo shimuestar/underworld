@@ -23,9 +23,41 @@ export function tick(world: World, dt: number): void {
   // 구울에게 붙잡혔다 — 시선만 자유. 이동·질주·밀림 소화는 몸부림(근접 연타)으로 풀릴 때까지 없다
   if (world.grappleEnemyId !== null) return;
 
-  // 거미줄 — 여기서는 느려지기만 한다. 벗기는 건 해머(Weapons)뿐이라
-  // 시간이 흐르거나 발버둥친다고 풀리지 않는다
+  // 거미줄 — 느려지고(아래 배율), 감긴 동안 줄이 조여 온다. 벗기는 건 여전히 해머뿐.
+  // 조임 속도는 몸부림에 비례한다: 걷기 3초/질주 1.5초/가만히 5초에 한 방,
+  // 회피 대시는 시도하는 순간 한 방으로 친다 — 얌전히 해머만 휘두르는 게 정답이다
   const webbed = (p.webSwingsLeft ?? 0) > 0;
+  if (webbed && !world.dead) {
+    const cw = balance.web.constrict;
+    if (p.dodgeTicks > (p.webLastDodgeTicks ?? 0)) {
+      p.webStruggle = (p.webStruggle ?? 0) + 1; // 대시 한 번 = 한 방
+    } else if (
+      p.dodgeTicks <= 0 &&
+      p.stunTicks <= 0 &&
+      Math.hypot(input.moveForward, input.moveX) > 0.01
+    ) {
+      p.webStruggle =
+        (p.webStruggle ?? 0) + 1 / (input.sprint ? cw.sprintTicksPerHit : cw.moveTicksPerHit);
+    } else {
+      p.webStruggle = (p.webStruggle ?? 0) + 1 / cw.idleTicksPerHit;
+    }
+    p.webLastDodgeTicks = p.dodgeTicks;
+    // 부동소수 누적 오차 — 정확히 N틱째에 차도록 엡실론을 준다
+    if ((p.webStruggle ?? 0) >= 1 - 1e-9) {
+      p.webStruggle = Math.max(0, (p.webStruggle ?? 0) - 1);
+      p.health -= cw.damage;
+      world.events.emit('web_squeeze', { damage: cw.damage, health: p.health });
+      world.events.emit('player_damaged', { amount: cw.damage, health: p.health, source: 'web' });
+      if (p.health <= 0) {
+        p.health = 0;
+        world.dead = true;
+        world.events.emit('player_died', { tick: world.tick });
+      }
+    }
+  } else {
+    p.webStruggle = 0;
+    p.webLastDodgeTicks = 0;
+  }
 
   // 피격 밀림 — 입력·경직과 무관하게 먼저 적용된다. 벽에 막히면 거기서 멈춘다.
   // (감산 전에 기억해 둔다 — 마지막 한 틱도 감속 대상이다)

@@ -46,6 +46,10 @@ export interface PlayerState {
   /** 거미줄 — 벗겨내는 데 남은 해머 타수. 0보다 크면 걸린 상태(느려진다).
    *  시간이나 이동으로는 풀리지 않는다 — 오직 해머만 */
   webSwingsLeft?: number;
+  /** 거미줄 조임 게이지 (0~1) — 차면 한 방 (PlayerMove, balance.web.constrict) */
+  webStruggle?: number;
+  /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */
+  webLastDodgeTicks?: number;
 }
 
 export interface SigilState {
