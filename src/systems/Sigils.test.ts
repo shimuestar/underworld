@@ -8,7 +8,7 @@ import { sigilColor, sigilDef } from '../core/SigilData';
 import { Input } from '../core/Input';
 import { addItem, initInventory, spillInventoryToGrave } from '../core/Inventory';
 import { enemyDef as enemyDef2 } from '../core/Entities';
-import { alertNearbyAt, World, type BarrelState, type EnemyState } from '../core/World';
+import { alertNearbyAt, breakHeadsInRadius, World, type BarrelState, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
@@ -776,6 +776,18 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(packCount).toBe(2); // 둘이 한 번에
     expect(b1.ai).toBe('windup');
     expect(b2.ai).toBe('windup');
+  });
+
+  it('구울 머리 소품 — 폭발(수류탄 반경)에 터진다, 갓 태어난 머리는 무적', () => {
+    world.ghoulHeads = [
+      { id: 990001, x: 10, z: 6, y: 0.24, vy: 0, vx: 0, vz: 0, graceTicks: 0 },
+      { id: 990002, x: 10.5, z: 6, y: 0.24, vy: 0, vx: 0, vz: 0, graceTicks: 30 },
+    ];
+    let broken = 0;
+    world.events.on('ghoul_head_broken', () => broken++);
+    breakHeadsInRadius(world, 10, 6, 3);
+    expect(broken).toBe(1); // 무적(grace) 머리는 살아남는다
+    expect(world.ghoulHeads).toHaveLength(1);
   });
 
   it('박쥐 관통 스침 — 지나치는 몸이 닿으면 그대로 박치기 판정, 한 강하에 한 번만', () => {

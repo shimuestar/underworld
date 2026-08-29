@@ -172,6 +172,17 @@ export function applyFrostOnHit(events: Events, enemy: EnemyState, damage: numbe
   return damage;
 }
 
+/** 반경 안의 구울 머리 소품을 전부 터트린다 — 폭발(수류탄·화염구·폭발통) 공용.
+ *  갓 태어난 머리(graceTicks)는 제 몸을 날린 그 폭발에는 살아남는다 (총·해머와 같은 규약) */
+export function breakHeadsInRadius(world: World, x: number, z: number, radius: number): void {
+  const heads = world.ghoulHeads;
+  if (!heads || heads.length === 0) return;
+  for (const head of [...heads]) {
+    if ((head.graceTicks ?? 0) > 0) continue;
+    if (Math.hypot(head.x - x, head.z - z) <= radius) breakGhoulHead(world, head.id, false);
+  }
+}
+
 /** 벽 법선 탐침 — 네 방위로 probe 만큼 밀어 보고 벽쪽 진행이 가장 막힌 쪽이 벽.
  *  slideMove 는 {x,z,prevX,prevZ} 만 요구하므로 대리자로 잰다. 벽거미(Enemies)와
  *  스포너(벽 매복 배치)가 함께 쓴다. 반환 법선은 벽에서 바깥쪽, 없으면 null */

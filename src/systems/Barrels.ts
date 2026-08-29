@@ -9,7 +9,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef, shieldBlocksProjectile } from '../core/Entities';
-import { alertEnemy, igniteBarrel, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type World } from '../core/World';
+import { alertEnemy, breakHeadsInRadius, igniteBarrel, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   for (const barrel of world.barrels) {
@@ -55,6 +55,8 @@ function explode(world: World, barrel: BarrelState): void {
 
   const damageAt = (dist: number): number =>
     cfg.damage * (1 - (1 - cfg.damageFalloffMin) * Math.min(1, dist / cfg.radius));
+
+  breakHeadsInRadius(world, barrel.x, barrel.z, cfg.radius); // 구울 머리 소품도 터진다
 
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;

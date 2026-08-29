@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type World } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -505,6 +505,20 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
     struck.push(enemy);
     shockEnemy(world, enemy, 1, effects); // 닿아 있는 시간이 기준 — 타(pulse)와 무관하다
   }
+  // 구울 머리 소품 — 빔 폭에 걸리면 지져 터진다 (스폰 직후 잠깐은 총과 같은 규약으로 무적)
+  if (damaging && world.ghoulHeads?.length) {
+    const hcfg = balance.ghoulHead;
+    for (const head of [...world.ghoulHeads]) {
+      if ((head.graceTicks ?? 0) > 0) continue;
+      const rx = head.x - ox;
+      const rz = head.z - oz;
+      const t = rx * hx0 + rz * hz0;
+      if (t < 0 || t > maxT) continue;
+      if (Math.abs(rx * hz0 - rz * hx0) > width + hcfg.radius) continue;
+      breakGhoulHead(world, head.id, false);
+    }
+  }
+
   // 연쇄 — 처음 맞은 대상을 기준으로 옮겨붙는다. 적을 못 맞히고 통에서 멈춘 빔이면
   // 그 통이 시작점이다 (통에 쏴서 주변 적을 지지는 쓰임)
   if (damaging) {
@@ -712,7 +726,8 @@ function moveProjectiles(world: World, dt: number): void {
 
     // 튀는 구울 머리 — 화살이 맞으면 터진다
     let hitHead: number | null = null;
-    if (proj.owner === 'player' && proj.kind === 'arrow' && world.ghoulHeads?.length) {
+    // 플레이어 투사체는 종류를 가리지 않고 머리 소품을 맞힌다 — 화살·화염구·서리 공통
+    if (proj.owner === 'player' && world.ghoulHeads?.length) {
       const hcfg = balance.ghoulHead;
       for (const head of world.ghoulHeads) {
         if ((head.graceTicks ?? 0) > 0) continue; // 갓 날아가는 중
@@ -1215,6 +1230,8 @@ function explodeFireball(
 
   // 자가 피해 — 내가 쏜 화염구도 나를 태운다 (수류탄 자폭과 같은 규칙).
   // 방패로 막히지 않는다: 폭발은 사방에서 온다. 회피 무적 중에는 면제
+  breakHeadsInRadius(world, x, z, radius); // 구울 머리 소품도 폭발에 터진다
+
   const p = world.player;
   const playerDist = Math.hypot(p.x - x, p.z - z);
   if (playerDist <= radius && p.iframeTicks <= 0) {
@@ -1393,6 +1410,8 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
     // 폭풍에 밀린다 — 폭발통과 같은 규칙 (피해 감쇠 × 체급 배율)
     pushFromBlast(enemy, proj.x, proj.z, (grenade.enemyKnockback * damage) / grenade.damage);
   }
+
+  breakHeadsInRadius(world, proj.x, proj.z, grenade.radius); // 구울 머리 소품도 터진다
 
   // 자가 피해 — 가까이서 던지면 나도 다친다
   const p = world.player;
