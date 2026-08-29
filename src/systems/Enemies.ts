@@ -551,6 +551,16 @@ function startDrop(
   });
 }
 
+/** 박치기 개시 — 일반 돌격 기계로 넘긴다 (예고 끝 좌표 고정·패링 가능). 무리 강하가 재사용 */
+function startSwoop(world: World, enemy: EnemyState, ch: EnemyAttackDef): void {
+  const p = world.player;
+  enemy.swoopCooldown = ch.cooldownTicks ?? 160;
+  enemy.attackMode = 'charge';
+  enemy.noticeTicks = 0;
+  enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));
+  startWindup(world, enemy, ch);
+}
+
 /** 비행체(박쥐) 틱 — 순항·추락·기절이 일반 AI 를 덮는다. true 면 이번 틱은 여기서 끝.
  *  급강하는 일반 chargeAttack 기계를 그대로 쓴다(패링·청색 예고·경직 규약 재사용):
  *  예고 동안 낙하 감쇠(BROOD_FALL)가 고도를 자연히 깎아 내려앉고, 도약 포물선과
@@ -667,8 +677,9 @@ function tickFlying(
   const dz = p.z - enemy.z;
   const dist = Math.hypot(dx, dz);
   if ((enemy.swoopCooldown ?? 0) > 0) enemy.swoopCooldown = (enemy.swoopCooldown ?? 0) - 1;
+  if ((enemy.packDiveCooldown ?? 0) > 0) enemy.packDiveCooldown = (enemy.packDiveCooldown ?? 0) - 1;
 
-  // 급강하 개시 — 일반 돌격 기계로 넘긴다 (예고 시점 좌표 고정·패링 가능)
+  // 박치기 개시 — 무리 강하 조건이면 곁의 준비된 박쥐들이 함께 몸을 던진다
   const ch = def.chargeAttack;
   if (
     ch &&
@@ -677,12 +688,55 @@ function tickFlying(
     dist <= (ch.maxRange ?? 99) &&
     world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
   ) {
-    enemy.swoopCooldown = ch.cooldownTicks ?? 160;
-    enemy.attackMode = 'charge';
-    enemy.yaw = Math.atan2(-dx, -dz);
-    startWindup(world, enemy, ch);
-    world.events.emit('bat_swoop', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    // 무리 모으기 — 반경 안에서 강하 준비가 끝난(쿨다운 0·비행 중) 동료들
+    const pack = fly.packDive;
+    let packed: EnemyState[] | null = null;
+    if (pack && (enemy.packDiveCooldown ?? 0) <= 0) {
+      const others = world.enemies.filter(
+        (o) =>
+          o !== enemy &&
+          o.alive &&
+          enemyDef(o.type).flying !== undefined &&
+          (o.ai === 'chase' || o.ai === 'idle') &&
+          (o.swoopCooldown ?? 0) <= 0 &&
+          (o.downTicks ?? 0) <= 0 &&
+          (o.batFallTicks ?? 0) <= 0 &&
+          Math.hypot(o.x - enemy.x, o.z - enemy.z) <= pack.radius &&
+          Math.hypot(p.x - o.x, p.z - o.z) <= (ch.maxRange ?? 99) + 2,
+      );
+      if (others.length + 1 >= pack.minCount) packed = others;
+    }
+    startSwoop(world, enemy, ch);
+    if (packed) {
+      for (const o of packed) {
+        startSwoop(world, o, enemyDef(o.type).chargeAttack ?? ch);
+        o.packDiveCooldown = pack!.cooldownTicks;
+      }
+      enemy.packDiveCooldown = pack!.cooldownTicks;
+      world.events.emit('bat_pack_dive', {
+        count: packed.length + 1, x: enemy.x, z: enemy.z,
+      });
+    } else {
+      world.events.emit('bat_swoop', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    }
     return true;
+  }
+
+  // 초음파 비명 — 몸을 못 던지는 동안(강하 쿨다운) 성가시게 조준을 흔든다
+  const sc = fly.scream;
+  if (sc) {
+    enemy.screamCooldown =
+      (enemy.screamCooldown ?? Math.floor(Math.random() * sc.cooldownTicks)) - 1;
+    if (
+      (enemy.screamCooldown ?? 0) <= 0 &&
+      dist <= sc.radius &&
+      world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
+    ) {
+      enemy.screamCooldown = sc.cooldownTicks;
+      p.aimShakeTicks = Math.max(p.aimShakeTicks ?? 0, sc.shakeTicks);
+      p.aimShakeAmp = sc.shakeAmp;
+      world.events.emit('bat_scream', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+    }
   }
 
   // 선회 — 거리 밴드 유지 + 갈지자. 벽은 slideMove 가 밀어낸다
@@ -1591,6 +1645,11 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           amount: damage, health: p.health, blocked,
           srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id,
         });
+        // 흡혈 박치기(박쥐) — 몸으로 친 만큼 제 피를 채운다. 막히면 못 빤다
+        if (!blocked && def.flying?.slamHeal) {
+          enemy.health = Math.min(def.health, enemy.health + def.flying.slamHeal);
+          world.events.emit('bat_drain', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+        }
         if (p.health <= 0) {
           p.health = 0;
           world.dead = true;

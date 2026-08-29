@@ -41,6 +41,9 @@ export type SoundName =
   | 'ghoul_shriek'
   | 'bat_flap'
   | 'bat_screech'
+  | 'bat_scream'
+  | 'bat_pack_dive'
+  | 'bat_drain'
   | 'spider_skitter'
   | 'spider_pounce'
   | 'slime_windup'
@@ -401,6 +404,25 @@ export class GameAudio {
         // 비명 — 치솟는 쇳소리. 죽은 척이 벌떡 일어날 때
         this.tone(680, 0.3, 'sawtooth', 0.5, 0, 1450);
         this.noise(0.18, 0.3, 2400);
+        break;
+      case 'bat_scream':
+        // 초음파 비명 — 두 고음 톱니가 어긋나 맥놀이(지잉)를 만든다. 조준이 흔들리는 소리
+        this.tone(3200, 0.32, 'sawtooth', 0.5, 0, 2750);
+        this.tone(3350, 0.32, 'sawtooth', 0.42, 0.02, 2900);
+        this.noise(0.26, 0.2, 7200);
+        break;
+      case 'bat_pack_dive':
+        // 무리 동시 강하 — 겹친 비명 셋이 아래로 꺾이고, 낮은 웅웅이 떼의 무게를 깐다.
+        // 단독 박치기(bat_screech)와 확실히 구분되는 전용음
+        this.tone(2400, 0.35, 'sawtooth', 0.7, 0, 700);
+        this.tone(2000, 0.4, 'sawtooth', 0.55, 0.06, 600);
+        this.tone(2800, 0.3, 'sawtooth', 0.5, 0.12, 900);
+        this.tone(90, 0.5, 'square', 0.6, 0, 55);
+        break;
+      case 'bat_drain':
+        // 흡혈 박치기 — 스치며 쭉 빨아가는 짧은 흡입
+        this.tone(320, 0.14, 'sine', 0.6, 0, 90);
+        this.noise(0.1, 0.3, 1400, 0.02);
         break;
       case 'bat_flap':
         // 퍼덕 — 젖은 가죽막이 공기를 친다. 상시 단서라 작게 (위치는 패닝)

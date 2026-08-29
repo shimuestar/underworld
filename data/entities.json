@@ -144,6 +144,12 @@
         "strikeHeight": 1.35,
         "retreatSpeed": 3.2,
         "retreatClimbPerTick": 0.022,
+        "_screamNote": "초음파 비명 — 몸을 못 던지는 동안(쿨다운) 성가시게 조준을 흔든다. 시야선 필요",
+        "scream": { "cooldownTicks": 300, "radius": 8, "shakeTicks": 55, "shakeAmp": 0.012 },
+        "_packNote": "무리 동시 강하 — 곁의 준비된 박쥐들이 함께 몸을 던진다. 전용 사운드(bat_pack_dive)로 단독 박치기와 구분",
+        "packDive": { "radius": 12, "minCount": 2, "cooldownTicks": 600 },
+        "_slamHealNote": "흡혈 박치기 — 몸으로 친 만큼 제 피를 채운다 (막히면 못 빤다)",
+        "slamHeal": 8,
         "knockdown": {
           "damageThreshold": 25,
           "instantDamage": 18,

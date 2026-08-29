@@ -355,6 +355,9 @@ for (const name of [
   'wall_pounce_land',
   'spider_skitter',
   'bat_flap',
+  'bat_scream',
+  'bat_pack_dive',
+  'bat_drain',
   'bat_swoop',
   'bat_knockdown',
   'bat_downed',
@@ -584,6 +587,19 @@ events.on('bat_knockdown', (payload) => {
   showReaction('박쥐가 추락했다 — 지금이다!', 1400);
 });
 events.on('bat_downed', (payload) => audio.play('hit_flesh', panOf(payload)));
+// 초음파 비명 — 조준이 실제로 흔들린다 (PlayerMove 가 yaw·pitch 에 잔떨림을 싣는다)
+events.on('bat_scream', (payload) => {
+  audio.play('bat_scream', panOf(payload));
+  stage.triggerCameraKick(0.1, 90);
+  showReaction('초음파 비명 — 조준이 흔들린다!', 1200);
+});
+// 무리 동시 강하 — 단독 박치기와 다른 전용음. 겹친 비명 + 낮은 웅웅
+events.on('bat_pack_dive', (payload) => {
+  const pd = payload as { count: number };
+  audio.play('bat_pack_dive', panOf(payload));
+  showReaction(`박쥐 ${pd.count}마리가 일제히 덮친다!`, 1600);
+});
+events.on('bat_drain', (payload) => audio.play('bat_drain', panOf(payload)));
 // 구울 머리 소품이 부서졌다 — 밟았으면 발밑 파열, 아니면 살 터지는 소리
 events.on('ghoul_head_broken', (payload) => {
   const hb = payload as { x: number; z: number; stomp: boolean };

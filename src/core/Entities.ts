@@ -146,6 +146,12 @@ export interface EnemyDef {
     /** 치고 빠지기 — 경직 동안 뒤로 물러나는 속도(m/s)와 틱당 상승량 */
     retreatSpeed: number;
     retreatClimbPerTick: number;
+    /** 초음파 비명 — 반경 안 플레이어의 조준을 shakeTicks 동안 흔든다 */
+    scream?: { cooldownTicks: number; radius: number; shakeTicks: number; shakeAmp: number };
+    /** 무리 동시 강하 — 반경 안의 준비된 비행체들이 함께 몸을 던진다 */
+    packDive?: { radius: number; minCount: number; cooldownTicks: number };
+    /** 흡혈 박치기 — 명중(비방어) 시 제 체력 회복량 */
+    slamHeal?: number;
     knockdown: {
       damageThreshold: number;
       instantDamage: number;

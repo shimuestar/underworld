@@ -48,6 +48,9 @@ export interface PlayerState {
   webSwingsLeft?: number;
   /** 거미줄 몸부림 게이지 (0~1) — 차면 한 겹을 찢는다 (balance.web.struggle) */
   webStruggle?: number;
+  /** 초음파 비명 — 남은 조준 흔들림 틱과 진폭 (박쥐 scream, PlayerMove 가 소비) */
+  aimShakeTicks?: number;
+  aimShakeAmp?: number;
   /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */
   webLastDodgeTicks?: number;
 }
@@ -546,6 +549,10 @@ export interface EnemyState {
   swoopCooldown?: number;
   /** 날갯짓 소리 간격 카운터 */
   flapTicks?: number;
+  /** 초음파 비명 재사용 대기 */
+  screamCooldown?: number;
+  /** 무리 동시 강하 재사용 대기 */
+  packDiveCooldown?: number;
   /** 분열을 이미 처리했는가 — 죽은 슬라임을 두 번 가르지 않는다 */
   splitHandled?: boolean;
   /** 다음 점액 방울까지 남은 틱 (슬라임 궤적) */

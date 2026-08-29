@@ -746,6 +746,49 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(b.knockdownGauge ?? 0).toBeLessThan(1);
   });
 
+  it('박쥐 초음파 비명 — 사거리 안이면 조준이 흔들린다 (yaw 가 실제로 밀린다)', () => {
+    const b = add('bat', 12, 6); // 6m — 비명 사거리(8) 안
+    b.ai = 'chase';
+    b.jumpY = 2.4;
+    b.prevJumpY = 2.4;
+    b.swoopCooldown = 99999; // 박치기는 막고 비명만 본다
+    b.screamCooldown = 2;
+    for (let i = 0; i < 4; i++) Enemies.tick(world, DT);
+    expect(world.player.aimShakeTicks ?? 0).toBeGreaterThan(0);
+    const yaw0 = world.player.yaw;
+    world.input = Input.emptySnapshot();
+    PlayerMove.tick(world, DT);
+    expect(world.player.yaw).not.toBe(yaw0); // 입력 없이도 조준이 밀렸다
+  });
+
+  it('박쥐 무리 동시 강하 — 곁의 준비된 박쥐가 함께 몸을 던진다 (전용 이벤트)', () => {
+    const b1 = add('bat', 12, 6);
+    const b2 = add('bat', 13, 6);
+    for (const b of [b1, b2]) {
+      b.ai = 'chase';
+      b.jumpY = 2.4;
+      b.prevJumpY = 2.4;
+    }
+    let packCount = 0;
+    world.events.on('bat_pack_dive', (pl) => (packCount = (pl as { count: number }).count));
+    for (let i = 0; i < 4; i++) Enemies.tick(world, DT);
+    expect(packCount).toBe(2); // 둘이 한 번에
+    expect(b1.ai).toBe('windup');
+    expect(b2.ai).toBe('windup');
+  });
+
+  it('박쥐 흡혈 박치기 — 몸으로 치면 제 피가 찬다', () => {
+    const b = add('bat', 11, 6); // 5m — 돌진 사거리
+    b.ai = 'chase';
+    b.jumpY = 2.4;
+    b.prevJumpY = 2.4;
+    b.health = 20; // 회복이 보이게 깎아 둔다
+    const hp = world.player.health;
+    for (let i = 0; i < 200; i++) Enemies.tick(world, DT);
+    expect(world.player.health).toBeLessThan(hp); // 박치기 명중
+    expect(b.health).toBeGreaterThan(20); // 친 만큼 빨았다
+  });
+
   it('박쥐 박치기 — 제자리 준비(1초 펄럭) 후 수평 돌진, 땅까지 내려오지 않는다', () => {
     const b = add('bat', 12, 6); // 6m — 돌진 사거리 [2,10]
     b.ai = 'chase';

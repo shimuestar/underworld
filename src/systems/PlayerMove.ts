@@ -16,6 +16,17 @@ export function tick(world: World, dt: number): void {
   const pitchMax = (balance.input.pitchMaxDeg * Math.PI) / 180;
   p.pitch = Math.max(-pitchMax, Math.min(pitchMax, p.pitch - input.lookDY * balance.input.mouseSensitivity));
 
+  // 초음파 비명(박쥐) — 조준이 잔떨림에 실려 흔들린다. 시선 입력 뒤에 얹어
+  // 조준 자체를 어긋나게 한다 (연출이 아니라 실제 탄착이 흔들린다)
+  if ((p.aimShakeTicks ?? 0) > 0) {
+    p.aimShakeTicks = (p.aimShakeTicks ?? 0) - 1;
+    const amp = (p.aimShakeAmp ?? 0) * Math.min(1, (p.aimShakeTicks ?? 0) / 12 + 0.4);
+    // 위상은 남은 틱으로 — 끝나갈수록 잦아드는 잔떨림
+    const ph = p.aimShakeTicks ?? 0;
+    p.yaw += Math.sin(ph * 0.9) * amp;
+    p.pitch += Math.sin(ph * 1.3 + 1) * amp * 0.6;
+  }
+
   p.prevX = p.x;
   p.prevY = p.y;
   p.prevZ = p.z;
