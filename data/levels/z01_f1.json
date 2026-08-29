@@ -119,7 +119,9 @@
       "cell": [
         9,
         8
-      ]
+      ],
+      "note": "벽 매복",
+      "wall": true
     },
     {
       "type": "spider_small",
@@ -147,7 +149,9 @@
       "cell": [
         11,
         11
-      ]
+      ],
+      "note": "벽 매복",
+      "wall": true
     },
     {
       "type": "spider_large",
@@ -162,7 +166,9 @@
       "cell": [
         9,
         2
-      ]
+      ],
+      "note": "벽 매복",
+      "wall": true
     },
     {
       "type": "spider_small",
@@ -199,7 +205,8 @@
         9,
         16
       ],
-      "note": "보물 방 파수"
+      "note": "보물 방 파수 — 벽 매복",
+      "wall": true
     },
     {
       "type": "slime",

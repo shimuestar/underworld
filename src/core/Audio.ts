@@ -39,6 +39,8 @@ export type SoundName =
   | 'ghoul_latch'
   | 'struggle_push'
   | 'ghoul_shriek'
+  | 'spider_skitter'
+  | 'spider_pounce'
   | 'slime_windup'
   | 'slime_split'
   | 'footstep_walk'
@@ -397,6 +399,16 @@ export class GameAudio {
         // 비명 — 치솟는 쇳소리. 죽은 척이 벌떡 일어날 때
         this.tone(680, 0.3, 'sawtooth', 0.5, 0, 1450);
         this.noise(0.18, 0.3, 2400);
+        break;
+      case 'spider_skitter':
+        // 사각사각 — 마른 다리끝이 돌벽을 긁는다. 자주 나므로 아주 작게 (위치는 패닝)
+        this.noise(0.03, 0.16, 5200);
+        this.noise(0.025, 0.12, 6500, 0.045);
+        break;
+      case 'spider_pounce':
+        // 벽에서 몸을 던진다 — 낮게 긁히는 도약 + 공기 가르는 쉭
+        this.tone(210, 0.1, 'sawtooth', 0.5, 0, 90);
+        this.noise(0.16, 0.4, 3400);
         break;
       case 'slime_windup':
         // 꿀렁 — 낮은 사인이 미끄러져 내려가고 젖은 노이즈가 낀다 (몸이 부풀어 오르는 소리)

@@ -2697,19 +2697,23 @@ export class Stage {
       // 그 전 windup은 옅은 예고 틴트. 스태거는 처형 가능 표시(황색).
       const def2 = enemyDef(enemy.type);
       const attack = currentAttack(def2, enemy);
-      const telegraphColor =
-        attack.telegraph === 'red'
+      // 벽 도약(벽거미)은 언제나 적색 — 회피 전용 규약
+      const wallWind = (enemy.wallWindupTicks ?? 0) > 0;
+      const telegraphColor = wallWind
+        ? balance.telegraph.colorUnparryable
+        : attack.telegraph === 'red'
           ? balance.telegraph.colorUnparryable
           : attack.telegraph === 'purple'
             ? balance.telegraph.colorProjectile
             : balance.telegraph.colorParryable;
       const flashing =
         (enemy.ai === 'windup' && enemy.timer <= balance.telegraph.visualLeadTicks) ||
+        (wallWind && (enemy.wallWindupTicks ?? 0) <= balance.telegraph.visualLeadTicks) ||
         enemy.ai === 'active_perfect' ||
         enemy.ai === 'active_normal';
       let emissive = 0x000000;
       if (flashing) emissive = new THREE.Color(telegraphColor).getHex();
-      else if (enemy.ai === 'windup') emissive = WINDUP_TINT;
+      else if (enemy.ai === 'windup' || wallWind) emissive = WINDUP_TINT;
       else if (enemy.ai === 'staggered') emissive = STAGGER_COLOR;
       else if (enemy.burnTicks > 0) emissive = BURN_TINT;
       else if ((enemy.freezeTicks ?? 0) > 0) emissive = FREEZE_TINT;
@@ -3093,6 +3097,29 @@ export class Stage {
         visual.chargeOrb.scale.set(s, s, s);
         (visual.chargeOrb.material as THREE.MeshBasicMaterial).opacity = 0.4 + 0.6 * windupProgress;
         if (visual.chargeOrbLight) visual.chargeOrbLight.intensity = 2.2 * windupProgress;
+      }
+
+      // 벽거미 — 벽에 붙으면 몸을 굴려 배를 벽면에 댄다 (벽을 달리는 자세).
+      // 굴림 방향은 진행 방향 기준 벽이 있는 쪽, 각은 높이에 비례해 보간(툭 꺾이지 않게).
+      // 도약 예고 중엔 납작 웅크렸다가 튀어나간다
+      if (SPIDER_TYPES.has(enemy.type) && def2.wallCrawl) {
+        const wallH = def2.wallCrawl.height;
+        const onWall =
+          enemy.wallCling || (enemy.wallClimbTicks ?? 0) > 0 || (enemy.wallWindupTicks ?? 0) > 0;
+        let roll = 0;
+        if (onWall && enemy.wallNX !== undefined && enemy.wallNZ !== undefined) {
+          const fx = -Math.sin(enemy.yaw);
+          const fz = -Math.cos(enemy.yaw);
+          const sideSign = fx * (enemy.wallNZ ?? 0) - fz * (enemy.wallNX ?? 0) >= 0 ? 1 : -1;
+          const lift = Math.min(1, jumpY / (wallH * 0.8));
+          // 부호 반전 — 다리가 벽을 딛고 등이 방을 본다 (debug/wallspider 로 실측)
+          roll = -sideSign * (Math.PI / 2) * lift;
+          // 굴린 몸이 벽면에 닿아 보이게 벽쪽으로 반경만큼 붙인다
+          visual.group.position.x -= (enemy.wallNX ?? 0) * def2.radius * 0.55 * lift;
+          visual.group.position.z -= (enemy.wallNZ ?? 0) * def2.radius * 0.55 * lift;
+        }
+        visual.torso.rotation.z = roll;
+        visual.torso.scale.y = (enemy.wallWindupTicks ?? 0) > 0 ? 0.7 : 1;
       }
 
       // 거머리 — 매달려 있는 동안 천천히 흔들리고, 천장 돌빛으로 위장한다.

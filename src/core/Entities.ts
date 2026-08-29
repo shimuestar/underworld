@@ -131,6 +131,28 @@ export interface EnemyDef {
   /** 죽을 때 흘리는 점액 장판 개수 — 죽은 자리 주변(balance.goo.deathScatter)에 흩어진다.
    *  화상·빙결 중 사망은 예외 (분열과 같은 규칙, Enemies.handleSplit) */
   deathGoo?: number;
+  /** 벽거미 — 벽에 붙어 기어오고 벽에서 도약해 덮친다 (Enemies.tickWallSpider) */
+  wallCrawl?: {
+    /** 붙는 높이 (jumpY) */
+    height: number;
+    speedMul: number;
+    /** 이 거리 안에 벽이 있으면 붙을 수 있다 (탐침 길이) */
+    attachRange: number;
+    climbTicks: number;
+    fallTicks: number;
+    fallStunTicks: number;
+    pounceMinRange: number;
+    pounceMaxRange: number;
+    pounceWindupTicks: number;
+    pounceAirTicks: number;
+    pounceRadius: number;
+    pounceDamage: number;
+    pounceKnockback: number;
+    pounceRecoverTicks: number;
+    pounceWhiffTicks: number;
+    cooldownTicks: number;
+    skitterIntervalTicks: number;
+  };
   /** 죽으면 갈라진다 — 화상·빙결 중 사망이면 갈라지지 않는다 (Enemies.handleSplit) */
   split?: { into: string; count: number; flingDistance?: number };
   /** 기어간 자리에 점액 장판을 남긴다 — 밟으면 느려진다 (balance.goo) */

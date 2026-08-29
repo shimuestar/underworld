@@ -237,7 +237,8 @@
         10,
         21
       ],
-      "note": "밀실 매복"
+      "note": "밀실 벽 매복",
+      "wall": true
     },
     {
       "type": "spider_small",

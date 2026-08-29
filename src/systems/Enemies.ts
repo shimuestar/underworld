@@ -10,7 +10,7 @@
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, playerBlocks, pushEnemy, pushPlayer, type EnemyState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, findWallNormal, playerBlocks, pushEnemy, pushPlayer, type EnemyState, type World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -102,6 +102,10 @@ export function tick(world: World, dt: number): void {
       enemy.ai !== 'charging' &&
       enemy.ai !== 'latched' &&
       !enemy.lurking &&
+      !enemy.wallCling &&
+      (enemy.wallClimbTicks ?? 0) <= 0 &&
+      (enemy.wallWindupTicks ?? 0) <= 0 &&
+      (enemy.wallPounceTicks ?? 0) <= 0 &&
       (enemy.dropTicks ?? 0) <= 0 &&
       (enemy.ascendTicks ?? 0) <= 0 &&
       (enemy.jumpY ?? 0) > 0
@@ -546,6 +550,171 @@ function startDrop(
   });
 }
 
+/** 벽거미 틱 — 붙기·기기·도약이 일반 AI 를 덮는다. true 면 이번 틱은 여기서 끝 */
+function tickWallSpider(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  wc: NonNullable<ReturnType<typeof enemyDef>['wallCrawl']>,
+  dt: number,
+): boolean {
+  const p = world.player;
+  if ((enemy.wallPounceCooldown ?? 0) > 0) {
+    enemy.wallPounceCooldown = (enemy.wallPounceCooldown ?? 0) - 1;
+  }
+
+  // 도약 비행 — 예고 '시점'의 먹이 좌표로 하강 곡선 (옆으로 비키면 헛짚는다)
+  if ((enemy.wallPounceTicks ?? 0) > 0) {
+    enemy.wallPounceTicks = (enemy.wallPounceTicks ?? 0) - 1;
+    const remain = Math.max(1, enemy.wallPounceTicks ?? 0);
+    const stepX = ((enemy.wallPounceTX ?? enemy.x) - enemy.x) / remain;
+    const stepZ = ((enemy.wallPounceTZ ?? enemy.z) - enemy.z) / remain;
+    world.level.slideMove(enemy, def.radius, stepX, stepZ);
+    if (Math.hypot(stepX, stepZ) > 1e-3) enemy.yaw = Math.atan2(-stepX, -stepZ);
+    const t = 1 - (enemy.wallPounceTicks ?? 0) / wc.pounceAirTicks;
+    enemy.jumpY = Math.max(0, (enemy.wallPounceFromY ?? wc.height) * (1 - t * t));
+    if ((enemy.wallPounceTicks ?? 0) > 0) return true;
+    // 착지 — 광역 판정. 회피 무적이면 통째로 헛디딘다
+    enemy.jumpY = 0;
+    const idx = p.x - enemy.x;
+    const idz = p.z - enemy.z;
+    const idist = Math.hypot(idx, idz);
+    const hit = idist <= wc.pounceRadius && p.iframeTicks <= 0 && !world.dead;
+    if (hit) {
+      const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
+      const dmg = blocked ? wc.pounceDamage * balance.block.chipDamageRatio : wc.pounceDamage;
+      p.health -= dmg;
+      pushPlayer(p, idx, idz, wc.pounceKnockback, balance.playerKnockback.ticks);
+      world.events.emit('player_damaged', {
+        amount: dmg, health: p.health, blocked, srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'wall_pounce',
+      });
+      if (p.health <= 0) {
+        p.health = 0;
+        world.dead = true;
+        world.events.emit('player_died', { tick: world.tick });
+      }
+      enemy.ai = 'recover';
+      enemy.timer = wc.pounceRecoverTicks;
+    } else {
+      enemy.ai = 'recover';
+      enemy.timer = wc.pounceWhiffTicks;
+      enemy.whiffed = true; // 허공을 덮치고 뻗었다 — 반격 창
+    }
+    enemy.wallPounceCooldown = wc.cooldownTicks;
+    world.events.emit('wall_pounce_land', { enemyId: enemy.id, x: enemy.x, z: enemy.z, hit });
+    return true;
+  }
+
+  // 도약 예고 — 벽에 붙은 채 웅크린다. 적색 발광은 Stage 가 wallWindupTicks 로 그린다
+  if ((enemy.wallWindupTicks ?? 0) > 0) {
+    enemy.wallWindupTicks = (enemy.wallWindupTicks ?? 0) - 1;
+    if ((enemy.wallWindupTicks ?? 0) > 0) return true;
+    enemy.wallCling = false;
+    enemy.wallPounceTicks = wc.pounceAirTicks;
+    enemy.wallPounceFromY = enemy.jumpY ?? wc.height;
+    world.events.emit('wall_pounce', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    return true;
+  }
+
+  // 오르내리기/추락 전이 — jumpY 를 벽 높이로/바닥으로 보간
+  if ((enemy.wallClimbTicks ?? 0) > 0) {
+    enemy.wallClimbTicks = (enemy.wallClimbTicks ?? 0) - 1;
+    const total = enemy.wallFalling ? wc.fallTicks : wc.climbTicks;
+    const t = 1 - (enemy.wallClimbTicks ?? 0) / total;
+    enemy.jumpY = enemy.wallCling ? wc.height * t : (enemy.wallClimbFromY ?? wc.height) * (1 - t);
+    // 오르는 동안 벽에 몸을 눌러 붙인다 — 전이 전체로 탐침 거리(attachRange)를 닫으므로
+    // 셀 가운데서 시작해도 반드시 벽면에 닿는다 (벽이 먼저 멈춰 세운다)
+    if (enemy.wallCling && enemy.wallNX !== undefined) {
+      const press = wc.attachRange / wc.climbTicks;
+      world.level.slideMove(enemy, def.radius, -(enemy.wallNX ?? 0) * press, -(enemy.wallNZ ?? 0) * press);
+    }
+    if ((enemy.wallClimbTicks ?? 0) > 0) return true;
+    if (!enemy.wallCling) {
+      enemy.jumpY = 0;
+      if (enemy.wallFalling) {
+        // 붙은 채 맞아 떨어졌다 — 뻗는다 (올려친 플레이어의 보상. 매달린 거머리와 같은 규칙)
+        enemy.wallFalling = false;
+        enemy.ai = 'recover';
+        enemy.timer = wc.fallStunTicks;
+        enemy.whiffed = true;
+      }
+    }
+    return true;
+  }
+
+  if (!enemy.wallCling) {
+    // 지상 → 벽 붙기: 추격 중 + 벽이 탐침에 닿음 + 먹이가 도약 최소거리 밖 + 재사용 대기 없음
+    if (enemy.ai !== 'chase' || (enemy.kbTicks ?? 0) > 0 || (enemy.flinchTicks ?? 0) > 0) return false;
+    if ((enemy.wallPounceCooldown ?? 0) > 0) return false;
+    const adx = p.x - enemy.x;
+    const adz = p.z - enemy.z;
+    if (Math.hypot(adx, adz) <= wc.pounceMinRange) return false;
+    const n = findWallNormal(world.level, enemy.x, enemy.z, def.radius, wc.attachRange, 0.75);
+    if (!n) return false;
+    enemy.wallCling = true;
+    enemy.wallNX = n.nx;
+    enemy.wallNZ = n.nz;
+    enemy.wallClimbTicks = wc.climbTicks;
+    world.events.emit('wall_attach', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+    return true;
+  }
+
+  // ── 벽에 붙어 있음 ──
+  // 맞거나 밀리거나 얼면 떨어진다 — 매달린 거머리와 같은 규칙
+  if ((enemy.flinchTicks ?? 0) > 0 || (enemy.kbTicks ?? 0) > 0 || (enemy.freezeTicks ?? 0) > 0) {
+    enemy.wallCling = false;
+    enemy.wallFalling = true;
+    enemy.wallClimbFromY = enemy.jumpY ?? wc.height;
+    enemy.wallClimbTicks = wc.fallTicks;
+    world.events.emit('wall_fall', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+    return true;
+  }
+  // 매복(idle) — 붙은 채 가만히. 시야·소음 판정은 일반 idle 이 그대로 한다
+  if (enemy.ai !== 'chase') return false;
+
+  const dx = p.x - enemy.x;
+  const dz = p.z - enemy.z;
+  const dist = Math.hypot(dx, dz);
+  // 벽 확인(짧은 탐침) — 문·모퉁이에서 벽이 끊겼으면 내려간다
+  const n = findWallNormal(world.level, enemy.x, enemy.z, def.radius, 0.9, 0.6);
+  if (!n || dist < wc.pounceMinRange) {
+    // 벽이 없거나 먹이가 코앞 — 내려와 일반 전투
+    enemy.wallCling = false;
+    enemy.wallClimbFromY = enemy.jumpY ?? wc.height;
+    enemy.wallClimbTicks = wc.climbTicks;
+    return true;
+  }
+  enemy.wallNX = n.nx;
+  enemy.wallNZ = n.nz;
+  // 도약 — 사거리 안 + 시야선. 예고 시점의 먹이 좌표를 기억한다
+  if (
+    dist <= wc.pounceMaxRange &&
+    (enemy.wallPounceCooldown ?? 0) <= 0 &&
+    world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
+  ) {
+    enemy.wallWindupTicks = wc.pounceWindupTicks;
+    enemy.wallPounceTX = p.x;
+    enemy.wallPounceTZ = p.z;
+    enemy.yaw = Math.atan2(-dx, -dz);
+    world.events.emit('enemy_windup', { enemyId: enemy.id, enemyType: enemy.type, telegraph: 'red' });
+    return true;
+  }
+  // 접선 이동 — 법선에 수직인 두 방향 중 먹이에 가까워지는 쪽. 벽쪽으로도 살짝 눌러 붙는다
+  const tx = -n.nz;
+  const tz = n.nx;
+  const side = tx * dx + tz * dz >= 0 ? 1 : -1;
+  const sp = def.speed * wc.speedMul * slowFactor(enemy) * dt;
+  world.level.slideMove(enemy, def.radius, (tx * side - n.nx * 0.6) * sp, (tz * side - n.nz * 0.6) * sp);
+  enemy.yaw = Math.atan2(-tx * side, -tz * side);
+  // 사각사각 — 위치를 흘리는 단서 (구울 흐느낌과 같은 역할, 들리는 거리에서만)
+  enemy.skitterTicks = (enemy.skitterTicks ?? Math.floor(Math.random() * wc.skitterIntervalTicks)) - 1;
+  if ((enemy.skitterTicks ?? 0) <= 0) {
+    enemy.skitterTicks = wc.skitterIntervalTicks;
+    if (dist <= 16) world.events.emit('spider_skitter', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+  }
+  return true;
+}
+
 /** 거머리 지상 체류 — 오래 머물렀고 먹이가 멀면 천장으로 되돌아간다 */
 function tickLeechGround(world: World, enemy: EnemyState): void {
   const def = enemyDef(enemy.type);
@@ -689,6 +858,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     startDrop(world, enemy, lurk, enemy.health < def.health);
     return;
   }
+
+  // ── 벽거미 수직 구간 (wallCrawl) — 붙기·기기·도약이 일반 AI 를 덮는다 ──
+  if (def.wallCrawl && tickWallSpider(world, enemy, def, def.wallCrawl, dt)) return;
 
   // 밀려난 뒤 돌격 — chase 진입을 기다리지 않는다 (공격 도중 밀려나면 그 상태로 남아
   // 영영 돌격하지 못했다). 밀리는 중에는 판단하지 않는다 — 아직 가까워서 취소돼 버린다

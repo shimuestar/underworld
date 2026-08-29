@@ -3,7 +3,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import type { BarrelState, ChestState, EnemyState } from '../core/World';
+import { findWallNormal, type BarrelState, type ChestState, type EnemyState } from '../core/World';
 import type { Level } from './GridLoader';
 
 export interface EntityPlacement {
@@ -138,6 +138,24 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
       spawned.lurking = true;
       spawned.jumpY = level.ceiling - enemyDef(placement.type).height - 0.05;
       spawned.prevJumpY = spawned.jumpY;
+    }
+    // 벽 배치 (벽거미) — 가장 가까운 벽에 눌러 붙인 채 매복한다. 벽이 없으면 지상 스폰
+    if ((placement as { wall?: boolean }).wall && enemyDef(placement.type).wallCrawl) {
+      const wdef = enemyDef(placement.type);
+      const wcfg = wdef.wallCrawl!;
+      const n = findWallNormal(level, spawned.x, spawned.z, wdef.radius, wcfg.attachRange, 0.75);
+      if (n) {
+        level.slideMove(spawned, wdef.radius, -n.nx * wcfg.attachRange, -n.nz * wcfg.attachRange);
+        spawned.prevX = spawned.x;
+        spawned.prevZ = spawned.z;
+        spawned.wallCling = true;
+        spawned.wallNX = n.nx;
+        spawned.wallNZ = n.nz;
+        spawned.jumpY = wcfg.height;
+        spawned.prevJumpY = wcfg.height;
+      } else {
+        console.warn(`[spawn] 벽거미 자리에 벽이 없다 — 지상 스폰 (${placement.cell[0]},${placement.cell[1]})`);
+      }
     }
     enemies.push(spawned);
   }

@@ -349,6 +349,11 @@ for (const name of [
   'slime_ate',
   'ghoul_head_broken',
   'ghoul_head_hop',
+  'wall_attach',
+  'wall_fall',
+  'wall_pounce',
+  'wall_pounce_land',
+  'spider_skitter',
   'ghoul_moan',
   'leech_struggle',
   'leech_face_attach',
@@ -551,6 +556,19 @@ events.on('ghoul_head_hop', (payload) => {
   const h = payload as { x: number; z: number };
   audio.play('head_hop', panAt(h.x, h.z));
 });
+// 벽거미 — 붙기/기기(사각사각), 도약, 착지, 맞아서 추락
+events.on('wall_attach', (payload) => audio.play('spider_skitter', panOf(payload)));
+events.on('spider_skitter', (payload) => audio.play('spider_skitter', panOf(payload)));
+events.on('wall_pounce', (payload) => {
+  audio.play('spider_pounce', panOf(payload));
+  showReaction('거미가 벽에서 덮친다!', 1100);
+});
+events.on('wall_pounce_land', (payload) => {
+  const wl = payload as { x: number; z: number; hit: boolean };
+  audio.play(wl.hit ? 'hit_flesh' : 'hit_wall', panAt(wl.x, wl.z));
+  if (wl.hit) stage.triggerCameraKick(0.3, 150);
+});
+events.on('wall_fall', (payload) => audio.play('hit_flesh', panOf(payload)));
 // 구울 머리 소품이 부서졌다 — 밟았으면 발밑 파열, 아니면 살 터지는 소리
 events.on('ghoul_head_broken', (payload) => {
   const hb = payload as { x: number; z: number; stomp: boolean };

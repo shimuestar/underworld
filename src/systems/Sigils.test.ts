@@ -695,6 +695,48 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slime.ai).toBe('chase'); // 발밑 울림을 느꼈다
   });
 
+  it('벽거미 — 추격 중 벽이 닿으면 붙어 오르고, 벽을 따라 먹이 쪽으로 다가온다', () => {
+    const s = add('spider_small', 14, 6); // 복도(z 4~8) 가운데 — 양쪽 벽이 탐침(2.2m)에 닿는다
+    s.ai = 'chase';
+    const wc = enemyDef2('spider_small').wallCrawl!;
+    for (let i = 0; i < wc.climbTicks + 4; i++) Enemies.tick(world, DT);
+    expect(s.wallCling).toBe(true);
+    expect(s.jumpY ?? 0).toBeCloseTo(wc.height, 1); // 벽 높이까지 올랐다
+    const beforeX = s.x;
+    for (let i = 0; i < 60; i++) Enemies.tick(world, DT);
+    expect(s.x).toBeLessThan(beforeX); // 벽을 탄 채(혹은 도약해) 플레이어(6,6) 쪽으로 접근
+  });
+
+  it('벽거미 도약 — 예고 시점 좌표로 몸을 던져, 서 있으면 맞는다', () => {
+    const s = add('spider_small', 11, 6); // 5m — 도약 사거리 [3,7] 안
+    s.ai = 'chase';
+    const wc = enemyDef2('spider_small').wallCrawl!;
+    const hp = world.player.health;
+    let landedHit = false;
+    world.events.on('wall_pounce_land', (pl) => {
+      landedHit = (pl as { hit: boolean }).hit;
+    });
+    const total = wc.climbTicks + wc.pounceWindupTicks + wc.pounceAirTicks + 10;
+    for (let i = 0; i < total; i++) Enemies.tick(world, DT);
+    expect(landedHit).toBe(true);
+    expect(world.player.health).toBeLessThan(hp);
+    expect(s.ai).toBe('recover'); // 착지 경직
+  });
+
+  it('벽거미 — 붙은 채 맞으면 떨어져 뻗는다 (매달린 거머리와 같은 규칙)', () => {
+    const s = add('spider_small', 14, 6);
+    s.ai = 'chase';
+    const wc = enemyDef2('spider_small').wallCrawl!;
+    for (let i = 0; i < wc.climbTicks + 4; i++) Enemies.tick(world, DT);
+    expect(s.wallCling).toBe(true);
+    s.flinchTicks = 5; // 피탄
+    Enemies.tick(world, DT);
+    expect(s.wallCling).toBe(false);
+    for (let i = 0; i < wc.fallTicks + 2; i++) Enemies.tick(world, DT);
+    expect(s.jumpY ?? 0).toBe(0);
+    expect(s.ai).toBe('recover'); // 떨어져 뻗었다 — 반격 창
+  });
+
   it('진동 감각 — 반경 밖에서는 걸어도 모른다 (몰래 지나가기 유지)', () => {
     const slime = add('slime', 10, 6); // 4m — tremorSense(2.5) 밖
     slime.hearingMul = 2.5;

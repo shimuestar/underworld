@@ -165,6 +165,39 @@ export function applyFrostOnHit(events: Events, enemy: EnemyState, damage: numbe
   return damage;
 }
 
+/** 벽 법선 탐침 — 네 방위로 probe 만큼 밀어 보고 벽쪽 진행이 가장 막힌 쪽이 벽.
+ *  slideMove 는 {x,z,prevX,prevZ} 만 요구하므로 대리자로 잰다. 벽거미(Enemies)와
+ *  스포너(벽 매복 배치)가 함께 쓴다. 반환 법선은 벽에서 바깥쪽, 없으면 null */
+export function findWallNormal(
+  level: {
+    slideMove(e: { x: number; z: number; prevX: number; prevZ: number }, r: number, dx: number, dz: number): void;
+  },
+  x: number,
+  z: number,
+  radius: number,
+  probe: number,
+  thresholdMul: number,
+): { nx: number; nz: number } | null {
+  let best: { nx: number; nz: number } | null = null;
+  let bestMoved = probe * thresholdMul;
+  for (const [dx, dz] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ] as const) {
+    const proxy = { x, z, prevX: x, prevZ: z };
+    level.slideMove(proxy, radius, dx * probe, dz * probe);
+    // 벽쪽 진행분만 잰다 — 미끄러져 옆으로 샌 것은 벽이 아니라 모서리다
+    const moved = (proxy.x - x) * dx + (proxy.z - z) * dz;
+    if (moved < bestMoved) {
+      bestMoved = moved;
+      best = { nx: -dx, nz: -dz };
+    }
+  }
+  return best;
+}
+
 export function alertEnemy(enemy: EnemyState, noticeTicks: number): void {
   enemy.feigning = false; // 죽은 척은 깨는 순간 끝난다
   enemy.ai = 'chase';
@@ -447,6 +480,28 @@ export interface EnemyState {
   barrierBroken?: boolean;
   /** 청각 배율 — 소음 반경이 이 배로 들린다 (World 는 데이터 비의존이라 Spawner 가 def 에서 복사) */
   hearingMul?: number;
+  /** 벽거미 — 벽에 붙어 있다 (jumpY = wallCrawl.height). Stage 가 벽 자세로 굴려 그린다 */
+  wallCling?: boolean;
+  /** 벽 오르내리기/추락 전이 잔여 틱 */
+  wallClimbTicks?: number;
+  /** 내려오기/추락 시작 높이 */
+  wallClimbFromY?: number;
+  /** 참 = 붙은 채 맞아 떨어지는 중 — 착지하면 뻗는다 */
+  wallFalling?: boolean;
+  /** 벽 도약 예고 잔여 틱 (적색 — Stage 섬광이 이 필드를 본다) */
+  wallWindupTicks?: number;
+  /** 벽 도약 비행 잔여 틱 */
+  wallPounceTicks?: number;
+  wallPounceFromY?: number;
+  /** 예고 시점의 먹이 좌표 — 옆으로 비키면 헛짚는다 */
+  wallPounceTX?: number;
+  wallPounceTZ?: number;
+  wallPounceCooldown?: number;
+  /** 붙은 벽의 법선 (벽→바깥) — Stage 굴림 방향 */
+  wallNX?: number;
+  wallNZ?: number;
+  /** 기는 소리(사각사각) 간격 카운터 */
+  skitterTicks?: number;
   /** 분열을 이미 처리했는가 — 죽은 슬라임을 두 번 가르지 않는다 */
   splitHandled?: boolean;
   /** 다음 점액 방울까지 남은 틱 (슬라임 궤적) */

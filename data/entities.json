@@ -40,6 +40,15 @@
       "attack": { "type": "contact", "arcDeg": 150, "windupTicks": 13, "recoverTicks": 18, "whiffRecoverTicks": 42, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
       "_leapNote": "도약 — 26틱 × 15 = 6.5m. 예고 시점 좌표로만 날아가므로 옆으로 비키면 헛짚는다. leapHeight 만큼 공중으로 포물선을 그리며 몸을 던진다 — 바닥을 기어가는 돌진이 아니다",
       "chargeAttack": { "type": "contact", "arcDeg": 150, "leapHeight": 1.9, "chargeSpeed": 15, "chargeRunTicks": 26, "minRange": 3.2, "maxRange": 7, "windupTicks": 20, "recoverTicks": 30, "whiffRecoverTicks": 75, "impactRangeMul": 1.25, "playerKnockback": 0.9, "parryable": true, "telegraph": "blue", "cooldownTicks": 200 },
+      "_wallNote": "벽거미 — 추격 중 벽이 닿으면 붙어 오르고, 벽을 따라 기다가 사거리에 들면 적색 도약으로 덮친다. 예고 시점 좌표로만 날아가 옆 대시가 정답. 붙은 채 맞으면 떨어져 뻗는다. 흰 거미는 지상 유지 (역할 분담)",
+      "wallCrawl": {
+        "height": 1.9, "speedMul": 0.9, "attachRange": 2.2, "climbTicks": 24,
+        "fallTicks": 10, "fallStunTicks": 50,
+        "pounceMinRange": 3, "pounceMaxRange": 7, "pounceWindupTicks": 34, "pounceAirTicks": 18,
+        "pounceRadius": 1.1, "pounceDamage": 10, "pounceKnockback": 1.6,
+        "pounceRecoverTicks": 40, "pounceWhiffTicks": 65,
+        "cooldownTicks": 180, "skitterIntervalTicks": 22
+      },
       "counters": { "pistol": "good", "rifle": "good", "grenade": "best", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
       "drops": []
     },
