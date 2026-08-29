@@ -221,6 +221,30 @@ export function breakGhoulHead(world: World, headId: number, stomp: boolean): vo
 
 /** (x,z)에서 난 소음 — 반경 안의 대기(idle) 적을 깨운다. 각도·시야선 무관 (소리다).
  *  noticeTicks 는 부르는 쪽이 준다 (World 는 데이터에 의존하지 않는다 — pushPlayer 규약) */
+/** 두 점 사이에 '닫힌 문'이 있는가 — 닫힌 문은 소리를 막는다 (시야·랜턴은 문 셀이
+ *  벽 취급이라 이미 막힌다). 문 셀을 반지름 = 셀 절반의 원판으로 근사해
+ *  선분 최단거리로 판정한다. 열린 문(opened)은 소리가 그대로 샌다 */
+export function closedDoorBetween(
+  world: World,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+): boolean {
+  for (const door of world.doors) {
+    if (door.opened) continue;
+    const dx = bx - ax;
+    const dz = bz - az;
+    const len2 = dx * dx + dz * dz;
+    let t = len2 > 0 ? ((door.x - ax) * dx + (door.z - az) * dz) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const cx = ax + dx * t - door.x;
+    const cz = az + dz * t - door.z;
+    if (Math.hypot(cx, cz) <= world.level.cellSize * 0.5) return true;
+  }
+  return false;
+}
+
 export function alertNearbyAt(
   world: World,
   x: number,
@@ -234,6 +258,8 @@ export function alertNearbyAt(
     if (enemy.lurking) continue;
     // 청각 배율 — 슬라임처럼 귀로 사는 적은 같은 소리를 더 멀리서 듣는다
     if (Math.hypot(enemy.x - x, enemy.z - z) > radius * (enemy.hearingMul ?? 1)) continue;
+    // 닫힌 문은 소리를 막는다 — 문 안쪽 방의 적은 총성에도 모른다
+    if (closedDoorBetween(world, x, z, enemy.x, enemy.z)) continue;
     alertEnemy(enemy, noticeTicks);
     world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, noise: true });
   }

@@ -10,7 +10,7 @@
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, findWallNormal, playerBlocks, pushEnemy, pushPlayer, type EnemyState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, closedDoorBetween, findWallNormal, playerBlocks, pushEnemy, pushPlayer, type EnemyState, type World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -1664,6 +1664,8 @@ function wakeAround(world: World, source: EnemyState, radius: number): void {
     if (other === source || !other.alive || other.ai !== 'idle') continue;
     if (other.lurking) continue; // 천장 잠복(거머리) — 포효에도 초연하다 (기습 담당)
     if (Math.hypot(other.x - source.x, other.z - source.z) > radius) continue;
+    // 벽은 뚫는 포효도 닫힌 문은 못 뚫는다 — 문 안쪽 방은 별세계다
+    if (closedDoorBetween(world, source.x, source.z, other.x, other.z)) continue;
     alertEnemy(other, balance.enemyAi.noticeDelayTicks);
     world.events.emit('enemy_alerted', { enemyId: other.id, enemyType: other.type });
   }

@@ -762,6 +762,21 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(sawLowRecover).toBe(true); // 저공 경직 — 해머의 창
   });
 
+  it('닫힌 문은 소리를 막는다 — 문 너머의 적은 총성에도 안 깨고, 열리면 들린다', () => {
+    const s = add('slime', 14, 6); // 귀 좋은 적 (청각 2.5배)
+    s.hearingMul = 2.5;
+    // 플레이어(6,6)와 적(14,6) 사이 (10,6)에 닫힌 문을 세운다
+    world.doors.push({
+      row: 1, col: 2, x: 10, z: 6, dirX: 1, dirZ: 0, byLever: false,
+      progress: 0, slide: 0, prevSlide: 0, opened: false,
+    });
+    alertNearbyAt(world, world.player.x, world.player.z, 12, 0); // 총성 몫의 소음
+    expect(s.ai).toBe('idle'); // 닫힌 문이 막았다
+    world.doors[world.doors.length - 1]!.opened = true;
+    alertNearbyAt(world, world.player.x, world.player.z, 12, 0);
+    expect(s.ai).toBe('chase'); // 열린 문은 소리가 샌다
+  });
+
   it('얼굴 거머리 — 붙어 있는 동안 겹침 밀어내기로 끌려가지 않는다', () => {
     const l = add('leech', 6, 6); // 붙으면 좌표가 플레이어와 겹친 채 따라다닌다
     l.ai = 'latched';
