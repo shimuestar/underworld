@@ -433,20 +433,32 @@
           rgba(190, 10, 10, 0.65) 100%
         );
       }
-      /* 방향 피격 지시 — 화면 중앙 링의 호 하나가 피해가 온 쪽을 가리킨다.
-         시선 기준 회전이라 뒤에서 맞으면 아래쪽 호가 뜬다 (회전각은 main 이 계산) */
-      #dmgdir {
+      /* 월드 고정 피격 마커 — 얇은 쐐기가 가해자의 실제 방위를 가리킨다. 회전은 매 프레임
+         main 이 현재 시선 기준으로 다시 계산하므로, 몸을 돌리면 마커가 미끄러지며 따라오고
+         위 정중앙에 오면 그 적을 정면으로 보고 있다는 뜻이다. 쐐기 크기는 거리(가까울수록 큼) */
+      #hitmarks .mark {
         position: fixed;
         left: 50%;
         top: 50%;
-        width: 34vmin;
-        height: 34vmin;
-        margin: -17vmin 0 0 -17vmin;
-        border: 1vmin solid transparent;
-        border-top-color: rgba(255, 46, 46, 0.9);
-        border-radius: 50%;
+        width: 38vmin;
+        height: 38vmin;
+        margin: -19vmin 0 0 -19vmin;
         opacity: 0;
         pointer-events: none;
+        will-change: transform, opacity;
+      }
+      #hitmarks .mark::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: -1vmin;
+        width: 3.2vmin;
+        height: 4.4vmin;
+        margin-left: -1.6vmin;
+        background: linear-gradient(to bottom, rgba(255, 46, 46, 0.95), rgba(255, 46, 46, 0.12));
+        clip-path: polygon(50% 0, 92% 100%, 50% 74%, 8% 100%);
+        transform: scale(var(--s, 1));
+        transform-origin: 50% 100%;
       }
       /* 구울 몸부림 게이지 — 물린 동안 조준점 아래. 연타가 원형 링을 시계 방향으로 채운다 */
       #grapple {
@@ -581,7 +593,7 @@
     <div id="flash"></div>
     <div id="fade"></div>
     <div id="hurt"></div>
-    <div id="dmgdir"></div>
+    <div id="hitmarks"></div>
     <div id="faceleech">
       <div class="blob b1"></div>
       <div class="blob b2"></div>

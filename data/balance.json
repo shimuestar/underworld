@@ -573,6 +573,24 @@
     "dropIntervalTicks": 14,
     "maxPuddles": 40
   },
+  "_hitMarkerNote": "월드 고정 피격 마커 — 가해자의 실제 좌표를 기억하고 시선을 돌리면 화면 위를 미끄러지며 따라온다. 마커가 위 정중앙에 오면 그 적을 정면으로 보고 있다는 뜻",
+  "hitMarker": {
+    "lifeMs": 1600,
+    "holdMs": 350,
+    "mergeDeg": 18,
+    "max": 4,
+    "minDist": 1.2,
+    "nearDist": 2.5,
+    "farDist": 14,
+    "nearScale": 1.35,
+    "farScale": 0.8
+  },
+  "_spatialAudioNote": "적 소리의 좌우 패닝 + 거리 감쇠 — 시야 밖 위협을 귀가 먼저 안다. minVol 아래로는 안 줄여 예고음이 게임플레이 단서로 항상 들리게 한다",
+  "spatialAudio": {
+    "maxPan": 0.85,
+    "maxDist": 26,
+    "minVol": 0.35
+  },
   "enemyAi": {
     "strafe": {
       "_comment": "캐스터(궁수/주술사)가 아군에 사선이 막혔을 때 옆으로 각을 잡는 동작. giveUpTicks는 교착 방지용 안전장치(10초) — 평소엔 각이 날 때까지 쏘지 않는다",

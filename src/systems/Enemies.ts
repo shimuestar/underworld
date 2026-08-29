@@ -637,7 +637,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       p.health -= dmg;
       pushPlayer(p, idx, idz, 1.6, balance.playerKnockback.ticks);
       world.events.emit('player_damaged', {
-        amount: dmg, health: p.health, blocked, srcX: enemy.x, srcZ: enemy.z, source: 'leech_drop',
+        amount: dmg, health: p.health, blocked, srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'leech_drop',
       });
       if (p.health <= 0) {
         p.health = 0;
@@ -1128,7 +1128,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         p.health -= grip.biteDamage;
         world.events.emit('ghoul_bite', { enemyId: enemy.id });
         world.events.emit('player_damaged', {
-          amount: grip.biteDamage, health: p.health, srcX: enemy.x, srcZ: enemy.z, source: 'ghoul_bite',
+          amount: grip.biteDamage, health: p.health, srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'ghoul_bite',
         });
         if (p.health <= 0) {
           p.health = 0;
@@ -1222,7 +1222,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         }
         world.events.emit('player_damaged', {
           amount: damage, health: p.health, blocked,
-          srcX: enemy.x, srcZ: enemy.z,
+          srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id,
         });
         if (p.health <= 0) {
           p.health = 0;

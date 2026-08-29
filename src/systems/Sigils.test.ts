@@ -871,9 +871,12 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     world.grappleEnemyId = g.id;
     world.grappleMash = 0;
     const hp = world.player.health;
+    const hits: { srcId?: number }[] = [];
+    world.events.on('player_damaged', (payload) => hits.push(payload as { srcId?: number }));
     world.input = Input.emptySnapshot();
     Enemies.tick(world, DT);
     expect(world.player.health).toBe(hp - balance.ghoulGrapple.biteDamage); // 물어뜯겼다
+    expect(hits[0]!.srcId).toBe(g.id); // 가해자 id — 피격 마커가 사망 시 꺼지는 근거
     // 한 키 체계가 상호작용으로 바꿔 보낸 입력도 몸부림이다 (문 앞에서 물렸을 때)
     world.input = { ...Input.emptySnapshot(), interactPressed: true };
     Enemies.tick(world, DT);

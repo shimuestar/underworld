@@ -490,8 +490,9 @@ const audio = new GameAudio();
 app.addEventListener('click', () => audio.unlock());
 events.on('enemy_windup', (payload) => {
   const wind = payload as { telegraph?: string; enemyType?: string };
+  const at = panOf(payload); // 예고음에 방향을 싣는다 — 등 뒤 공격을 귀가 먼저 안다
   // 슬라임 — 몸이 부풀어 오르는 꿀렁임을 텔레그래프 소리에 얹는다
-  if (wind.enemyType?.startsWith('slime')) audio.play('slime_windup');
+  if (wind.enemyType?.startsWith('slime')) audio.play('slime_windup', at);
   const telegraph = wind.telegraph;
   audio.play(
     telegraph === 'red'
@@ -499,6 +500,7 @@ events.on('enemy_windup', (payload) => {
       : telegraph === 'purple'
         ? 'telegraph_purple'
         : 'telegraph_blue',
+    at,
   );
 });
 events.on('parry_attempt', (payload) => {
@@ -552,7 +554,7 @@ events.on('ghoul_head_broken', (payload) => {
     audio.play('head_stomp');
     stage.triggerCameraKick(0.42, 160); // 밟는 반동
   } else {
-    audio.play('head_break'); // 마른 파열 — 총·화살·스윙 공통 타격감
+    audio.play('head_break', panAt(hb.x, hb.z)); // 마른 파열 — 총·화살·스윙 공통 타격감
     stage.triggerCameraKick(0.16, 90);
   }
 });
@@ -743,7 +745,7 @@ events.on('enemy_volley_start', (payload) => {
   audio.play('boss_volley_draw');
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
 });
-events.on('ghoul_moan', () => audio.play('ghoul_moan'));
+events.on('ghoul_moan', (payload) => audio.play('ghoul_moan', panOf(payload)));
 // 거머리 몸부림 — 연타 한 번 = 쥐어뜯기 한 번
 events.on('leech_struggle', () => {
   audio.play('struggle_push');
@@ -773,22 +775,22 @@ events.on('leech_face_detach', () => {
   showReaction('거머리가 배불러 떨어져 나갔다', 1500);
 });
 // 거머리 — 천장 단서(방울·찌륵), 낙하 비명, 착지, 피격 추락
-events.on('leech_drip', () => audio.play('leech_drip'));
-events.on('leech_chitter', () => audio.play('leech_chitter'));
-events.on('leech_drop', () => audio.play('leech_shriek'));
+events.on('leech_drip', (payload) => audio.play('leech_drip', panOf(payload)));
+events.on('leech_chitter', (payload) => audio.play('leech_chitter', panOf(payload)));
+events.on('leech_drop', (payload) => audio.play('leech_shriek', panOf(payload)));
 events.on('leech_fall', (payload) => {
   const lf = payload as { x: number; z: number };
-  audio.play('hit_flesh');
+  audio.play('hit_flesh', panAt(lf.x, lf.z));
   stage.spawnDeathBurst(lf.x, lf.z, 'leech', 0.5);
   showReaction('거머리가 떨어졌다!', 1200);
 });
 events.on('leech_land', (payload) => {
   const ll = payload as { hit: boolean };
-  audio.play(ll.hit ? 'heavy_hit' : 'hit_wall');
+  audio.play(ll.hit ? 'heavy_hit' : 'hit_wall', panOf(payload));
 });
 events.on('leech_splat', (payload) => {
   const ls = payload as { x: number; z: number };
-  audio.play('hit_flesh');
+  audio.play('hit_flesh', panAt(ls.x, ls.z));
   stage.spawnDeathBurst(ls.x, ls.z, 'leech', 0.7);
 });
 // 구울 — 붙잡힘/몸부림/밀쳐내기/기상. 파먹히는 동안 근접 키 연타가 유일한 탈출구다
@@ -810,8 +812,8 @@ events.on('grapple_escape', () => {
   stage.triggerCameraKick(0.42, 200);
   showReaction('밀쳐냈다!', 1000);
 });
-events.on('ghoul_rise', () => {
-  audio.play('ghoul_shriek');
+events.on('ghoul_rise', (payload) => {
+  audio.play('ghoul_shriek', panOf(payload));
   showReaction('시체가 일어난다!', 1600);
 });
 events.on('ghoul_ate_mote', () => audio.play('hit_flesh'));
@@ -820,21 +822,21 @@ events.on('slime_ate', () => audio.play('slime_windup'));
 // 새끼 사출 — 머리에서 한 마리씩 튀어나올 때마다 철퍽
 events.on('brood_pop', (payload) => {
   const bp = payload as { x: number; z: number; enemyType: string };
-  audio.play('slime_split');
+  audio.play('slime_split', panAt(bp.x, bp.z));
   stage.spawnDeathBurst(bp.x, bp.z, bp.enemyType, 0.55);
 });
 // 어미 슬라임 새끼 분리 — 크게 철퍽이며 어미 색 파편이 사방으로 튄다
 events.on('boss_brood', (payload) => {
   const b = payload as { enemyType: string; x: number; z: number };
-  audio.play('slime_split');
-  audio.play('heavy_hit');
+  audio.play('slime_split', panAt(b.x, b.z));
+  audio.play('heavy_hit', panAt(b.x, b.z));
   stage.spawnDeathBurst(b.x, b.z, b.enemyType, 1.8);
   showReaction('어미가 새끼를 떼어냈다!', 1400);
 });
 // 슬라임 분열 — 젖은 파열음 + 부모 색 파편이 갈라지는 자리에서 튄다
 events.on('enemy_split', (payload) => {
   const sp = payload as { parentType: string; x: number; z: number };
-  audio.play('slime_split');
+  audio.play('slime_split', panAt(sp.x, sp.z));
   stage.spawnDeathBurst(sp.x, sp.z, sp.parentType, 0.9);
 });
 events.on('headshot', (payload) => {
@@ -937,8 +939,111 @@ events.on('crack_wall_broken', (payload) => {
   showReaction('균열 벽이 무너져 내렸다!', 3000);
 });
 
+// ---- 월드 고정 피격 마커 — 가해자의 실제 좌표를 기억한다. 시선을 돌리면 마커가 화면 위를
+// 미끄러지며 따라오고, 마커가 위 정중앙에 오면 그 적을 정면으로 보고 있다는 뜻이다 ----
+const hitMarksEl = document.getElementById('hitmarks');
+interface HitMark { x: number; z: number; srcId?: number; bornMs: number; el: HTMLDivElement }
+const hitMarks: HitMark[] = [];
+
+/** 시선 기준 방위각(rad) — 정면 0, 오른쪽 +. 피격 마커와 스테레오 패닝이 같은 축을 쓴다 */
+function bearingTo(x: number, z: number): number {
+  const pl = world.player;
+  const dx = x - pl.x;
+  const dz = z - pl.z;
+  const fx = -Math.sin(pl.yaw);
+  const fz = -Math.cos(pl.yaw);
+  return Math.atan2(-dx * fz + dz * fx, dx * fx + dz * fz);
+}
+
+function addHitMark(x: number, z: number, srcId?: number): void {
+  if (!hitMarksEl) return;
+  const cfg = balance.hitMarker;
+  // 붙잡힌 동안(구울 파먹기·거머리 흡혈)은 생략 — 위협은 이미 붙어 있는 놈이고
+  // 화면은 몸부림 게이지 몫이다. 코앞·바로 위(거머리 낙하)도 방위가 무의미해 건너뛴다
+  if (world.grappleEnemyId !== null || world.faceLeechId !== null) return;
+  const pl = world.player;
+  if (Math.hypot(x - pl.x, z - pl.z) < cfg.minDist) return;
+  const now = performance.now();
+  // 같은 방위의 연타는 갱신으로 합친다 — 구울 떼에게 물릴 때 마커 스팸을 막는다
+  const ang = bearingTo(x, z);
+  for (const m of hitMarks) {
+    let gap = Math.abs(bearingTo(m.x, m.z) - ang);
+    if (gap > Math.PI) gap = Math.PI * 2 - gap;
+    if (gap < (cfg.mergeDeg * Math.PI) / 180) {
+      m.x = x;
+      m.z = z;
+      m.srcId = srcId;
+      m.bornMs = now;
+      return;
+    }
+  }
+  // 상한 — 넘치면 가장 오래된 마커를 밀어낸다
+  while (hitMarks.length >= cfg.max) hitMarks.shift()!.el.remove();
+  const el = document.createElement('div');
+  el.className = 'mark';
+  hitMarksEl.appendChild(el);
+  hitMarks.push({ x, z, srcId, bornMs: now, el });
+}
+
+/** 매 프레임 — 현재 시선 기준으로 회전을 다시 계산한다(월드 고정의 핵심). 수명이 다하거나
+ *  가해자가 죽으면 지운다. 쐐기는 가까울수록 크다 — 등 뒤 근접과 원거리 궁수가 구분된다 */
+function updateHitMarks(): void {
+  if (hitMarks.length === 0) return;
+  const cfg = balance.hitMarker;
+  const now = performance.now();
+  const pl = world.player;
+  for (let i = hitMarks.length - 1; i >= 0; i--) {
+    const m = hitMarks[i]!;
+    const age = now - m.bornMs;
+    const srcDead =
+      m.srcId !== undefined && !world.enemies.some((e) => e.id === m.srcId && e.alive);
+    if (age > cfg.lifeMs || world.dead || srcDead) {
+      m.el.remove();
+      hitMarks.splice(i, 1);
+      continue;
+    }
+    const dist = Math.hypot(m.x - pl.x, m.z - pl.z);
+    const t = Math.min(1, Math.max(0, (dist - cfg.nearDist) / (cfg.farDist - cfg.nearDist)));
+    const scale = cfg.nearScale + (cfg.farScale - cfg.nearScale) * t;
+    m.el.style.transform = `rotate(${bearingTo(m.x, m.z)}rad)`;
+    m.el.style.setProperty('--s', String(scale));
+    m.el.style.opacity = String(
+      age < cfg.holdMs ? 1 : 1 - (age - cfg.holdMs) / (cfg.lifeMs - cfg.holdMs),
+    );
+  }
+}
+
+// ---- 공간 음향 — 적이 낸 소리를 시선 기준 좌우로 패닝하고 거리로 줄인다.
+// 시야 밖(등 뒤) 위협은 HUD 보다 귀가 먼저 안다 ----
+
+/** 월드 좌표의 소리 → { pan, vol }. minVol 아래로는 안 줄여 예고음이 항상 들린다 */
+function panAt(x: number, z: number): { pan: number; vol: number } {
+  const sp = balance.spatialAudio;
+  const pl = world.player;
+  const dist = Math.hypot(x - pl.x, z - pl.z);
+  const pan = dist > 0.001 ? Math.sin(bearingTo(x, z)) * sp.maxPan : 0;
+  const vol = Math.max(sp.minVol, 1 - dist / sp.maxDist);
+  return { pan, vol };
+}
+
+/** 이벤트 페이로드에서 소리 위치를 꺼낸다 — x/z 가 없으면 enemyId 로 찾고, 둘 다 없으면
+ *  undefined(= 기존처럼 가운데서 재생) */
+function panOf(payload: unknown): { pan: number; vol: number } | undefined {
+  const src = payload as { x?: number; z?: number; enemyId?: number } | undefined;
+  let x = src?.x;
+  let z = src?.z;
+  if ((x === undefined || z === undefined) && src?.enemyId !== undefined) {
+    const e = world.enemies.find((en) => en.id === src.enemyId);
+    if (e) {
+      x = e.x;
+      z = e.z;
+    }
+  }
+  if (x === undefined || z === undefined) return undefined;
+  return panAt(x, z);
+}
+
 // ---- 피격 연출 — 붉은 비네트 + 피격음 (방어 성공 시엔 방어음만) ----
-const dmgDir = document.getElementById('dmgdir');
 const grappleEl = document.getElementById('grapple');
 const faceLeechEl = document.getElementById('faceleech');
 const bloodFx = document.getElementById('bloodfx');
@@ -964,30 +1069,14 @@ function spawnBloodSplatter(): void {
 const grappleRing = document.getElementById('grapple-ring');
 const grappleCount = document.getElementById('grapple-count');
 events.on('player_damaged', (payload) => {
-  const hit = payload as { blocked?: boolean; srcX?: number; srcZ?: number };
+  const hit = payload as { blocked?: boolean; srcX?: number; srcZ?: number; srcId?: number };
   if (hit.blocked) return;
   audio.play('player_hurt');
   hurtOverlay!.style.transition = 'none';
   hurtOverlay!.style.opacity = '1';
-  // 방향 피격 지시 — 시선 기준 각도로 링 조각을 돌린다: 정면 = 위, 등 뒤 = 아래 호.
-  // 뒤에서 맞으면 더 진하고 오래 남는다 ("등 뒤!" — 돌아보라는 신호)
-  if (dmgDir && hit.srcX !== undefined && hit.srcZ !== undefined) {
-    const pl = world.player;
-    const dx = hit.srcX - pl.x;
-    const dz = hit.srcZ - pl.z;
-    if (Math.hypot(dx, dz) > 0.001) {
-      const fx = -Math.sin(pl.yaw);
-      const fz = -Math.cos(pl.yaw);
-      const ang = Math.atan2(-dx * fz + dz * fx, dx * fx + dz * fz); // 오른쪽 = +
-      const behind = Math.abs(ang) > (Math.PI * 2) / 3;
-      dmgDir.style.transition = 'none';
-      dmgDir.style.transform = `rotate(${ang}rad)`;
-      dmgDir.style.opacity = behind ? '1' : '0.7';
-      requestAnimationFrame(() => {
-        dmgDir.style.transition = `opacity ${behind ? 850 : 500}ms ease-out`;
-        dmgDir.style.opacity = '0';
-      });
-    }
+  // 월드 고정 마커 — 가해자 좌표를 기억시킨다 (회전 추적은 updateHitMarks 가 매 프레임)
+  if (hit.srcX !== undefined && hit.srcZ !== undefined) {
+    addHitMark(hit.srcX, hit.srcZ, hit.srcId);
   }
   requestAnimationFrame(() => {
     hurtOverlay!.style.transition = 'opacity 450ms ease-out';
@@ -1014,14 +1103,15 @@ events.on('enemy_died', (payload) => {
   };
   // 폭발로 죽었으면 파편이 폭심 반대쪽으로 날아간다 (살아남은 적은 몸이 밀린다)
   const launch = dead.blastX !== undefined ? balance.explosionKnockback.burstLaunch : 0;
+  const deathAt = panAt(dead.x, dead.z);
   if (executedThisFrame) {
     // 처형 — 사망 연출도 해머가 닿는 순간까지 미룬다
     afterMs(executeContactMs, () => {
-      audio.play('enemy_death');
+      audio.play('enemy_death', deathAt);
       stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType, 1.8);
     });
   } else {
-    audio.play('enemy_death');
+    audio.play('enemy_death', deathAt);
     stage.spawnDeathBurst(
       dead.x, dead.z, dead.enemyType, 1, dead.blastX ?? 0, dead.blastZ ?? 0, launch,
     );
@@ -1212,12 +1302,12 @@ events.on('enemy_charge', (payload) => {
   const info = payload as { enemyType: string };
   // 멀리서 달려오는 긴 돌격은 예비동작이 길어 전용 소리를 붙인다 (발로 땅을 긁는 소리)
   const long = enemyDef(info.enemyType).chargeAttack?.chargeRunTicks !== undefined;
-  audio.play(long ? 'charge_ready' : 'telegraph_blue');
+  audio.play(long ? 'charge_ready' : 'telegraph_blue', panOf(payload));
   // 창병만 쓰던 기술이 아니다 — 족장도 중·원거리에서 달려든다
   showReaction(`${enemyDef(info.enemyType).name ?? '적'}이 달려든다!`, 1200);
 });
-events.on('enemy_whiffed', () => {
-  audio.play('enemy_whiff');
+events.on('enemy_whiffed', (payload) => {
+  audio.play('enemy_whiff', panOf(payload));
   showReaction('빗나감 — 반격 기회!', 900);
 });
 events.on('shield_braced', (payload) => {
@@ -2219,6 +2309,8 @@ function render(alpha: number): void {
   // 제단/문 프롬프트 — 상호작용 가능한 것 안내
   const nearDoor = world.doorInView !== null && !world.dead && !world.uiOpen;
   const nearLever = world.leverInView !== null && !world.dead && !world.uiOpen;
+  // 피격 마커 — 시선이 돌면 마커가 따라 미끄러진다 (월드 고정)
+  updateHitMarks();
   // 거머리 얼굴 가림 — 실물 리그(카메라 앞) + 가장자리 비네트(HUD)
   faceLeechEl!.classList.toggle('visible', world.faceLeechId !== null);
   stage.setFaceLeech(world.faceLeechId !== null);

@@ -187,7 +187,30 @@ export class GameAudio {
     for (const node of beam.nodes) node.stop(t0 + 0.1);
   }
 
-  play(name: SoundName): void {
+  /** 공간화 재생 — at 이 있으면 이 한 발만 좌우 패닝·거리 감쇠 체인을 거쳐 나간다.
+   *  tone/noise 는 switch 안에서 동기적으로 연결하므로 out 바꿔치기·복원이 안전하다 */
+  play(name: SoundName, at?: { pan: number; vol: number }): void {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== 'running') return;
+    if (!at) {
+      this.playRouted(name);
+      return;
+    }
+    const prevOut = this.out;
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = Math.max(-1, Math.min(1, at.pan));
+    const g = ctx.createGain();
+    g.gain.value = Math.max(0, Math.min(1, at.vol));
+    panner.connect(g).connect(prevOut ?? ctx.destination);
+    this.out = panner;
+    try {
+      this.playRouted(name);
+    } finally {
+      this.out = prevOut;
+    }
+  }
+
+  private playRouted(name: SoundName): void {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
 
