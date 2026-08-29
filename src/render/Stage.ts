@@ -930,6 +930,16 @@ export class Stage {
   private faceLeechSuckAt = 0;
   /** 바닥 핏자국 — 타격 피 방울이 착지한 자리. 상한·수명은 balance.hitBlood.stain */
   private bloodStains: { mesh: THREE.Mesh; bornMs: number }[] = [];
+  /** 초음파 파문 — 박쥐 입에서 먹이 쪽으로 퍼져 나가는 고리들 */
+  private sonicWaves: {
+    mesh: THREE.Mesh;
+    bornMs: number;
+    dirX: number;
+    dirZ: number;
+    ox: number;
+    oy: number;
+    oz: number;
+  }[] = [];
   private readonly muzzleLight: THREE.PointLight;
   private readonly eyeHeight = balance.player.eyeHeight;
   private readonly enemyVisuals = new Map<number, EnemyVisual>();
@@ -1240,6 +1250,12 @@ export class Stage {
     }
     this.particles.length = 0;
     while (this.bloodStains.length > 0) this.removeBloodStain(0);
+    for (const w of this.sonicWaves) {
+      this.scene.remove(w.mesh);
+      w.mesh.geometry.dispose();
+      (w.mesh.material as THREE.Material).dispose();
+    }
+    this.sonicWaves.length = 0;
     // id 로 캐시된 모형들 — 층이 바뀌면 전부 걷는다. 남겨 두면 새 층에서 같은 id 를
     // 받은 다른 적·통·상자가 앞 층의 외형/자리를 뒤집어쓴다. 빈 배열 동기화가
     // 각 sync 의 제거·해제 경로를 그대로 태운다
@@ -3912,6 +3928,54 @@ export class Stage {
     }
   }
 
+  /** 초음파 비명 파문 — 입에서 고리 셋이 시차를 두고 먹이 쪽으로 밀려 나가며 커지고 옅어진다 */
+  spawnSonicScream(x: number, z: number, y: number, dirX: number, dirZ: number): void {
+    const now = performance.now();
+    const yaw = Math.atan2(dirX, dirZ);
+    for (let i = 0; i < 3; i++) {
+      const mesh = new THREE.Mesh(
+        new THREE.TorusGeometry(0.16, 0.022, 6, 20),
+        new THREE.MeshBasicMaterial({
+          color: 0xbfe8ff,
+          transparent: true,
+          opacity: 0.85,
+          depthWrite: false,
+        }),
+      );
+      mesh.position.set(x, y, z);
+      mesh.rotation.y = yaw; // 고리 면(법선 +Z)이 진행 방향을 본다
+      mesh.visible = false; // bornMs 가 미래인 고리는 그때부터
+      this.scene.add(mesh);
+      this.sonicWaves.push({ mesh, bornMs: now + i * 110, dirX, dirZ, ox: x, oy: y, oz: z });
+    }
+  }
+
+  private updateSonicWaves(now: number): void {
+    const LIFE = 520;
+    for (let i = this.sonicWaves.length - 1; i >= 0; i--) {
+      const w = this.sonicWaves[i]!;
+      const age = now - w.bornMs;
+      if (age < 0) {
+        w.mesh.visible = false;
+        continue;
+      }
+      if (age > LIFE) {
+        this.scene.remove(w.mesh);
+        w.mesh.geometry.dispose();
+        (w.mesh.material as THREE.Material).dispose();
+        this.sonicWaves.splice(i, 1);
+        continue;
+      }
+      w.mesh.visible = true;
+      const t = age / LIFE;
+      const travel = t * 3.4;
+      w.mesh.position.set(w.ox + w.dirX * travel, w.oy, w.oz + w.dirZ * travel);
+      const s = 0.5 + t * 3.2;
+      w.mesh.scale.set(s, s, s);
+      (w.mesh.material as THREE.MeshBasicMaterial).opacity = 0.85 * (1 - t);
+    }
+  }
+
   /** 바닥 핏자국 — 납작한 얼룩이 잠시 남았다 옅어진다. 상한을 넘으면 오래된 것부터 걷는다 */
   private spawnBloodStain(x: number, z: number, color: number): void {
     const cfg = balance.hitBlood.stain;
@@ -4461,6 +4525,7 @@ export class Stage {
     this.updateTracers();
     this.updateParticles();
     this.updateBloodStains();
+    this.updateSonicWaves(performance.now());
     this.updateExplosions();
     this.updateFrostDecals();
     this.updateScorches(performance.now());

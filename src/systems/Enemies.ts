@@ -643,21 +643,16 @@ function tickFlying(
       const d = fly.strikeHeight - (enemy.jumpY ?? 0);
       enemy.jumpY = (enemy.jumpY ?? 0) + Math.max(-0.05, Math.min(0.12, d));
     } else if (enemy.ai === 'recover') {
-      // 치고 빠지기 — 뒤로 물러나며 서서히 순항 고도를 되찾는다.
-      // 고도가 해머 높이(meleeMaxHitHeight)를 넘기 전까지가 근접의 창이다
-      const p2 = world.player;
-      const bx = enemy.x - p2.x;
-      const bz = enemy.z - p2.z;
-      const bd = Math.hypot(bx, bz);
-      if (bd > 0.001) {
-        world.level.slideMove(
-          enemy,
-          def.radius,
-          (bx / bd) * fly.retreatSpeed * dt,
-          (bz / bd) * fly.retreatSpeed * dt,
-        );
-        enemy.yaw = Math.atan2(-(p2.x - enemy.x), -(p2.z - enemy.z)); // 물러나며도 먹이를 본다
-      }
+      // 관통 비행 — 박은 방향 그대로 지나쳐 등 뒤로 빠진다. 플레이어가 몸을 돌려야
+      // 다시 보인다. 고도가 해머 높이를 넘기 전까지가 근접의 창이다
+      const fx2 = -Math.sin(enemy.yaw);
+      const fz2 = -Math.cos(enemy.yaw);
+      world.level.slideMove(
+        enemy,
+        def.radius,
+        fx2 * fly.retreatSpeed * dt,
+        fz2 * fly.retreatSpeed * dt,
+      );
       enemy.jumpY = Math.min(fly.cruiseHeight, (enemy.jumpY ?? 0) + fly.retreatClimbPerTick);
     }
     return false;
@@ -692,17 +687,19 @@ function tickFlying(
     const pack = fly.packDive;
     let packed: EnemyState[] | null = null;
     if (pack && (enemy.packDiveCooldown ?? 0) <= 0) {
+      // 신호를 받은 동료는 제 박치기 쿨다운과 무관하게 합류한다 — 쿨다운을 요구하면
+      // 각자 솔로 박치기로 쿨다운이 어긋나 무리 강하가 영영 안 나온다 (실측 버그).
+      // 무리 참가 자체의 빈도는 packDiveCooldown 이 따로 막는다
       const others = world.enemies.filter(
         (o) =>
           o !== enemy &&
           o.alive &&
           enemyDef(o.type).flying !== undefined &&
           (o.ai === 'chase' || o.ai === 'idle') &&
-          (o.swoopCooldown ?? 0) <= 0 &&
+          (o.packDiveCooldown ?? 0) <= 0 &&
           (o.downTicks ?? 0) <= 0 &&
           (o.batFallTicks ?? 0) <= 0 &&
-          Math.hypot(o.x - enemy.x, o.z - enemy.z) <= pack.radius &&
-          Math.hypot(p.x - o.x, p.z - o.z) <= (ch.maxRange ?? 99) + 2,
+          Math.hypot(o.x - enemy.x, o.z - enemy.z) <= pack.radius,
       );
       if (others.length + 1 >= pack.minCount) packed = others;
     }

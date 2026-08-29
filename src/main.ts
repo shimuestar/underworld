@@ -592,6 +592,21 @@ events.on('bat_scream', (payload) => {
   audio.play('bat_scream', panOf(payload));
   stage.triggerCameraKick(0.1, 90);
   showReaction('초음파 비명 — 조준이 흔들린다!', 1200);
+  // 입에서 먹이 쪽으로 퍼지는 파문 — 어느 놈이 질렀는지 눈으로 보인다
+  const sc = payload as { enemyId: number };
+  const e = world.enemies.find((en) => en.id === sc.enemyId);
+  if (e) {
+    let dx = world.player.x - e.x;
+    let dz = world.player.z - e.z;
+    const d = Math.hypot(dx, dz) || 1;
+    dx /= d;
+    dz /= d;
+    stage.spawnSonicScream(
+      e.x + dx * 0.3, e.z + dz * 0.3,
+      (e.jumpY ?? 0) + enemyDef(e.type).height * 0.45,
+      dx, dz,
+    );
+  }
 });
 // 무리 동시 강하 — 단독 박치기와 다른 전용음. 겹친 비명 + 낮은 웅웅
 events.on('bat_pack_dive', (payload) => {

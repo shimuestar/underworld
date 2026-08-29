@@ -143,6 +143,8 @@ function resolveEnemyOverlap(world: World): void {
     // 얼굴에 붙은 거머리(latched)는 좌표가 플레이어와 겹치게 유지된다 — 장애물이 아니라
     // 몸에 붙은 것이므로 밀어내면 안 된다. 안 그러면 매 틱 한쪽으로 끌려간다 (실측 버그)
     if (enemy.ai === 'latched') continue;
+    // 어깨 위를 나는 몸은 밀지 않는다 — 박쥐 관통 비행·벽/천장의 적 밑 통과
+    if ((enemy.jumpY ?? 0) > balance.flyoverHeight) continue;
     const minDist = balance.player.radius + enemyDef(enemy.type).radius;
     let dx = p.x - enemy.x;
     let dz = p.z - enemy.z;

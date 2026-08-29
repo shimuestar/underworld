@@ -769,6 +769,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
       b.jumpY = 2.4;
       b.prevJumpY = 2.4;
     }
+    b2.swoopCooldown = 120; // 제 박치기는 쿨다운 중 — 그래도 신호를 받으면 합류한다
     let packCount = 0;
     world.events.on('bat_pack_dive', (pl) => (packCount = (pl as { count: number }).count));
     for (let i = 0; i < 4; i++) Enemies.tick(world, DT);
@@ -798,9 +799,11 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     world.events.on('bat_swoop', () => (swooped = true));
     let minY = 99;
     let sawReachable = false; // 돌진·후퇴 중 해머 높이(2.0) 아래로 내려온 적 있는가
+    let crossed = false; // 관통 — 플레이어 등 뒤(-X 쪽)로 넘어간 적 있는가
     for (let i = 0; i < 300; i++) {
       Enemies.tick(world, DT);
       minY = Math.min(minY, b.jumpY ?? 99);
+      if (b.x < world.player.x - 0.3) crossed = true;
       const ai = b.ai as string;
       if (
         (ai === 'charging' || ai === 'recover' || ai === 'impact') &&
@@ -812,6 +815,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(swooped).toBe(true); // 박치기를 시도했다
     expect(sawReachable).toBe(true); // 박치기·후퇴 구간은 해머가 닿는다
     expect(minY).toBeGreaterThan(0.8); // 땅으로 곤두박질하지 않는다 — 제자리 준비자세
+    expect(crossed).toBe(true); // 관통 — 플레이어(6,6)를 지나쳐 등 뒤로 빠졌다
   });
 
   it('얼굴 거머리 — 붙어 있는 동안 겹침 밀어내기로 끌려가지 않는다', () => {
