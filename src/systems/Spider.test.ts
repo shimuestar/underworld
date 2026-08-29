@@ -116,18 +116,21 @@ describe('거미줄', () => {
     expect(world.player.webSwingsLeft).toBe(WEB.breakSwings);
   });
 
-  it('아무리 움직여도, 시간이 지나도 풀리지 않는다', () => {
+  it('몸부림이 겹을 찢는다 — 계속 걸으면 결국 스스로 풀려난다 (2026-08-29 규칙 교체)', () => {
     fireWeb(world);
-    const broken: unknown[] = [];
-    world.events.on('web_broken', (p) => broken.push(p));
+    const broken: { reason: string }[] = [];
+    world.events.on('web_broken', (p) => broken.push(p as { reason: string }));
 
-    for (let i = 0; i < 600; i++) {
+    // 걷기 3초(struggle.moveTicksPerTear)에 한 겹 — 세 겹이면 9초면 풀린다
+    const need = WEB.breakSwings * WEB.struggle.moveTicksPerTear + 10;
+    for (let i = 0; i < need; i++) {
       walk(world, 1);
       world.player.x = 10; // 벽에 안 막히게 제자리로 되돌리며 계속 이동 입력
       world.player.z = 10;
     }
-    expect(world.player.webSwingsLeft).toBe(WEB.breakSwings);
-    expect(broken).toHaveLength(0);
+    expect(world.player.webSwingsLeft).toBe(0);
+    expect(broken).toHaveLength(1);
+    expect(broken[0]!.reason).toBe('struggle');
   });
 
   it('해머로 정확히 breakSwings 번 걷어내야 벗겨진다 — 적을 맞힐 필요는 없다', () => {

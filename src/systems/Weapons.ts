@@ -171,7 +171,7 @@ function startHammerSwing(world: World): void {
   w.meleeCooldown = w.swingImpact;
 
   // 거미줄 — 휘두를 때마다 한 겹씩 걷어낸다 (적을 맞힐 필요는 없다).
-  // 시간·이동으로는 안 풀리므로 이게 유일한 해제 수단이다
+  // 몸부림(PlayerMove.struggle)보다 훨씬 빠른, 제일 확실한 해제 수단이다
   if ((p.webSwingsLeft ?? 0) > 0) {
     p.webSwingsLeft = (p.webSwingsLeft ?? 0) - 1;
     world.events.emit('web_torn', {

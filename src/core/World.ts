@@ -43,10 +43,10 @@ export interface PlayerState {
   kbTicks?: number;
   kbX?: number;
   kbZ?: number;
-  /** 거미줄 — 벗겨내는 데 남은 해머 타수. 0보다 크면 걸린 상태(느려진다).
-   *  시간이나 이동으로는 풀리지 않는다 — 오직 해머만 */
+  /** 거미줄 — 벗겨내는 데 남은 겹 수. 0보다 크면 걸린 상태(느려진다).
+   *  해머 한 스윙 = 한 겹, 몸부림(PlayerMove)도 겹을 찢는다 */
   webSwingsLeft?: number;
-  /** 거미줄 조임 게이지 (0~1) — 차면 한 방 (PlayerMove, balance.web.constrict) */
+  /** 거미줄 몸부림 게이지 (0~1) — 차면 한 겹을 찢는다 (balance.web.struggle) */
   webStruggle?: number;
   /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */
   webLastDodgeTicks?: number;

@@ -87,15 +87,13 @@
   },
 
   "web": {
-    "_comment": "거미줄에 걸리면 느려진다. 벗기는 건 여전히 해머 breakSwings 번뿐 — 대신 감긴 동안 줄이 조여 온다(constrict)",
+    "_comment": "거미줄에 걸리면 느려진다. 해머 한 스윙 = 한 겹, 몸부림도 겹을 찢는다(struggle) — 걷기 3초/질주 1.5초/가만히 5초에 한 겹, 회피 대시는 시도 즉시 한 겹 (2026-08-29: 조임 피해안을 탈출 진행으로 교체)",
     "moveSpeedMul": 0.336,
     "breakSwings": 3,
-    "_constrictNote": "몸부림칠수록 줄이 파고든다 — 걷기 3초/질주 1.5초/가만히 5초에 한 방, 회피 대시는 시도 즉시 한 방 (2026-08-29)",
-    "constrict": {
-      "damage": 6,
-      "moveTicksPerHit": 180,
-      "sprintTicksPerHit": 90,
-      "idleTicksPerHit": 300
+    "struggle": {
+      "moveTicksPerTear": 180,
+      "sprintTicksPerTear": 90,
+      "idleTicksPerTear": 300
     }
   },
   "playerKnockback": {
