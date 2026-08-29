@@ -589,6 +589,8 @@
     "_deathNote": "죽는 순간 피 — deathDamage 를 기준 타격으로 deathMul 배. 사망 파편과 함께 터지고, 죽는 타격에 피가 없던 문제(잘 죽는 잔챙이는 피를 못 봄)를 함께 메운다",
     "deathDamage": 14,
     "deathMul": 2,
+    "_slimeDeathNote": "슬라임 사망 점액 방울 크기 배율 — 죽인 자리가 '밟으면 느려지는 웅덩이'로 크게 읽히게 (실제 판정은 entities.deathGoo 장판)",
+    "slimeDeathSizeMul": 1.8,
     "coneDeg": 55,
     "speedMin": 1.2,
     "speedSpan": 2.6,

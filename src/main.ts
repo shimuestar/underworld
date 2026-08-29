@@ -555,6 +555,7 @@ events.on('ghoul_head_hop', (payload) => {
 events.on('ghoul_head_broken', (payload) => {
   const hb = payload as { x: number; z: number; stomp: boolean };
   stage.spawnDeathBurst(hb.x, hb.z, 'ghoul', hb.stomp ? 1.1 : 0.7);
+  audio.play('ghoul_shriek', panAt(hb.x, hb.z)); // 머리가 마지막 괴성을 지른다
   // 머리도 피가 든 살덩이다 — 파편 위에 검붉은 피 + 바닥 얼룩 (밟으면 크게)
   {
     const pl = world.player;
@@ -1188,7 +1189,12 @@ events.on('enemy_died', (payload) => {
     }
     stage.spawnHitBlood(
       dead.x, dead.z, enemyDef(dead.enemyType).height * 0.5, bdx, bdz, dead.enemyType,
-      { damage: balance.hitBlood.deathDamage, death: true },
+      {
+        damage: balance.hitBlood.deathDamage,
+        death: true,
+        // 슬라임은 방울을 굵게 — 죽인 자리가 '느려지는 웅덩이'(deathGoo)로 크게 읽히게
+        sizeMul: dead.enemyType.startsWith('slime') ? balance.hitBlood.slimeDeathSizeMul : 1,
+      },
     );
   };
   if (executedThisFrame) {

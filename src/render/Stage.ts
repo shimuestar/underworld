@@ -3741,7 +3741,7 @@ export class Stage {
     dirX: number,
     dirZ: number,
     enemyType: string,
-    hit: { damage: number; headshot?: boolean; heavy?: boolean; death?: boolean },
+    hit: { damage: number; headshot?: boolean; heavy?: boolean; death?: boolean; sizeMul?: number },
   ): void {
     const cfg = balance.hitBlood;
     const color = bloodColorOf(enemyType);
@@ -3753,7 +3753,7 @@ export class Stage {
     const baseAng = Math.atan2(dirZ, dirX);
     const coneRad = (cfg.coneDeg * Math.PI) / 180;
     for (let i = 0; i < Math.min(cfg.countMax, Math.round(count)); i++) {
-      const size = cfg.sizeMin + Math.random() * cfg.sizeSpan;
+      const size = (cfg.sizeMin + Math.random() * cfg.sizeSpan) * (hit.sizeMul ?? 1);
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(size, size, size),
         new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 }),
