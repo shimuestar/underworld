@@ -762,6 +762,18 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(sawLowRecover).toBe(true); // 저공 경직 — 해머의 창
   });
 
+  it('얼굴 거머리 — 붙어 있는 동안 겹침 밀어내기로 끌려가지 않는다', () => {
+    const l = add('leech', 6, 6); // 붙으면 좌표가 플레이어와 겹친 채 따라다닌다
+    l.ai = 'latched';
+    world.faceLeechId = l.id;
+    const px = world.player.x;
+    const pz = world.player.z;
+    world.input = Input.emptySnapshot();
+    for (let i = 0; i < 30; i++) PlayerMove.tick(world, DT);
+    expect(world.player.x).toBe(px); // 제자리 — 한쪽으로 밀려나지 않는다
+    expect(world.player.z).toBe(pz);
+  });
+
   it('거미줄 몸부림 — 걷기 3초·질주 1.5초에 한 겹씩 찢긴다 (아프지 않다)', () => {
     const p = world.player;
     p.webSwingsLeft = 3;
