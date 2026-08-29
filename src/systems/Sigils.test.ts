@@ -671,6 +671,24 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slime.ai).toBe('chase');
   });
 
+  it('진동 감각 — 곁에서 움직이면 걷기(무음)라도 발밑 울림으로 알아챈다', () => {
+    const slime = add('slime', 8, 6); // 플레이어(6,6)에서 2m — tremorSense(2.5) 안 (복도 축이라 시야선 확보)
+    slime.hearingMul = 2.5;
+    for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+    expect(slime.ai).toBe('idle'); // 가만히 서 있으면 코앞이라도 모른다
+    world.player.prevX = world.player.x - 0.05; // 이번 틱에 걸었다 (PlayerMove 가 남기는 흔적)
+    Enemies.tick(world, DT);
+    expect(slime.ai).toBe('chase'); // 발밑 울림을 느꼈다
+  });
+
+  it('진동 감각 — 반경 밖에서는 걸어도 모른다 (몰래 지나가기 유지)', () => {
+    const slime = add('slime', 10, 6); // 4m — tremorSense(2.5) 밖
+    slime.hearingMul = 2.5;
+    world.player.prevX = world.player.x - 0.05;
+    for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+    expect(slime.ai).toBe('idle');
+  });
+
   it('구울은 대기 중 생성 지점 반경을 벗어나지 않고 어슬렁거린다', () => {
     world.lantern.on = false; // 랜턴 빔이 깨우지 않게 — 배회만 잰다
     // 배회 반경(3m)만큼 다가와도 시야(17m) 밖이도록 21m 에 둔다 (최소 거리 18m)

@@ -805,11 +805,18 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
       const behind = dist > 0.001 && (facingX * distX + facingZ * distZ) / dist <= 0;
       // 장님(슬라임)은 시야·인기척·랜턴 어느 것으로도 못 알아챈다 — 소리(alertNearbyAt)와
-      // 피격만이 깨운다. 걸어서(무음) 지나가면 코앞이라도 무해하다
+      // 피격, 그리고 진동 감각(tremorSense)만이 깨운다
       const blind = def.blind ?? false;
       const lit = !behind && !blind && litByLantern(world, dist, distX, distZ);
+      // 진동 감각 — 반경 안에서 '움직이는' 플레이어는 걷기(무음)라도 발밑 울림으로 느낀다.
+      // 가만히 서 있으면 여전히 모른다 — 몰래 지나가기는 반경 밖으로 돌면 유지된다
+      const tremor =
+        blind &&
+        def.tremorSense !== undefined &&
+        dist <= def.tremorSense &&
+        Math.hypot(p.x - p.prevX, p.z - p.prevZ) > 1e-4;
       if (
-        (lit || (dist <= def.aggroRange && !blind && seesPlayer(enemy, dist, distX, distZ))) &&
+        (lit || tremor || (dist <= def.aggroRange && !blind && seesPlayer(enemy, dist, distX, distZ))) &&
         world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
       ) {
         alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
