@@ -2507,7 +2507,7 @@ function render(alpha: number): void {
     altarPrompt!.textContent = world.doorInView!.byLever
       ? '관문 — 손으로는 안 열린다. 어딘가의 레버를 찾아야 한다'
       : frac > 0
-        ? `잠금을 푸는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%\n문에서 떨어지면 처음부터`
+        ? `잠금을 푸는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%`
         : `${IK} — 문을 연다 (누른 채 기다릴 필요 없이 문 앞에 서 있으면 된다)`;
   } else if (onExit) {
     // 마지막 층에서만 "나간다" 다 — 그 앞은 아래층으로 내려가는 계단이다
