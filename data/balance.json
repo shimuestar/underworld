@@ -550,6 +550,8 @@
   "_ghoulHeadNote": "구울 머리 소품 — 사라지지 않고 통통 튀며 돌아다닌다. 총·활·해머로 부수고, stompRange 안 해머는 밟아 터트리기다",
   "ghoulHead": {
     "radius": 0.24,
+    "_breakBloodNote": "머리 파괴 시 피 분사량 — hitBlood 의 피해량 축으로 들어간다 (밟으면 heavy 배율까지)",
+    "breakBlood": 16,
     "_hopNote": "착지하면 잠깐 쉬었다 다시 뛴다 — 쉼 없이 튀면 방정맞다 (통통 주기 절반)",
     "hopVyMin": 1.6,
     "hopVySpan": 1.2,

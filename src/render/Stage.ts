@@ -41,8 +41,8 @@ const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
 const BLOOD_RED = 0x7d1014;
 const BLOOD_COLORS: Record<string, number> = {
   ghoul: 0x5c0d10, // 시체의 검은 피
-  spider_small: 0xb9b184, // 창백한 진물
-  spider_large: 0xb9b184,
+  spider_small: 0x3e9b2c, // 녹색 체액 — 흰 몸·돌바닥과 대비
+  spider_large: 0x3e9b2c,
   leech: 0x4a1030, // 검자줏빛
 };
 export function bloodColorOf(enemyType: string): number {
