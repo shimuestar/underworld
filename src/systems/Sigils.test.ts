@@ -660,6 +660,20 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.enemies.filter((e) => e.type === 'slime_small')).toHaveLength(2); // 그대로
   });
 
+  it('슬라임 사망 점액 — 죽은 자리에 느려지는 장판을 흘린다 (화상 사망은 말라붙어 없음)', () => {
+    const s1 = add('slime', 12, 6);
+    s1.health = 0;
+    s1.alive = false;
+    Enemies.tick(world, DT);
+    expect(world.gooPuddles?.length ?? 0).toBe(enemyDef2('slime').deathGoo);
+    const before = world.gooPuddles?.length ?? 0;
+    const s2 = add('slime', 20, 6);
+    s2.burnTicks = 10;
+    s2.alive = false;
+    Enemies.tick(world, DT);
+    expect(world.gooPuddles?.length ?? 0).toBe(before); // 말라붙어 장판 없음
+  });
+
   it('슬라임은 눈이 없다 — 코앞에 서도 못 보고, 소리는 배로 듣는다', () => {
     Enemies.init(world);
     const slime = add('slime', 6, 8); // 플레이어(6,6) 정면 2m — 보통 적이면 인기척에 깬다

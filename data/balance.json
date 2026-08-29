@@ -569,10 +569,13 @@
   },
   "_gooNote": "슬라임 점액 장판 — 기어간 자리에 남아 밟으면 느려진다. 마르면(수명) 사라진다",
   "goo": {
-    "radius": 1.1,
+    "_radiusNote": "1.1 → 0.66 (2026-08-29, -40%) — 장판이 통로를 다 덮어 피할 수 없었다",
+    "radius": 0.66,
     "playerSlowMul": 0.55,
     "lifeTicks": 300,
     "dropIntervalTicks": 14,
+    "_deathScatterNote": "사망 점액(entities.deathGoo) 이 죽은 자리 주변에 흩어지는 반경",
+    "deathScatter": 0.9,
     "maxPuddles": 40
   },
   "_hitBloodNote": "플레이어 공격이 적을 맞힐 때 튀는 피 파편 — 개수는 피해량 비례, 헤드샷·강타 배율. 죽는 타격은 사망 파편이 담당하므로 생략(main 이 살아 있는 적에게만 부른다). stain 은 착지한 방울이 남기는 바닥 얼룩",

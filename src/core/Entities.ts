@@ -128,6 +128,9 @@ export interface EnemyDef {
   /** 진동 감각(m) — 눈 없는 적이 이 반경 안에서 '움직이는' 플레이어를 발밑 울림으로
    *  느낀다. 가만히 서 있으면 모른다 (Enemies 의 장님 분기) */
   tremorSense?: number;
+  /** 죽을 때 흘리는 점액 장판 개수 — 죽은 자리 주변(balance.goo.deathScatter)에 흩어진다.
+   *  화상·빙결 중 사망은 예외 (분열과 같은 규칙, Enemies.handleSplit) */
+  deathGoo?: number;
   /** 죽으면 갈라진다 — 화상·빙결 중 사망이면 갈라지지 않는다 (Enemies.handleSplit) */
   split?: { into: string; count: number; flingDistance?: number };
   /** 기어간 자리에 점액 장판을 남긴다 — 밟으면 느려진다 (balance.goo) */

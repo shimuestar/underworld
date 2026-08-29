@@ -213,9 +213,28 @@ function handleSplit(world: World, enemy: EnemyState): void {
     world.events.emit('slime_spilled', { count: enemy.eatenItems.length, x: enemy.x, z: enemy.z });
     enemy.eatenItems = undefined;
   }
-  const split = enemyDef(enemy.type).split;
+  // 사망 점액 — 터지며 흘린 체액이 그 자리에 느려지는 장판으로 남는다.
+  // 화상 중 사망(말라붙음)·빙결 중 사망(통째로 깨짐)엔 흘릴 체액이 없다 — 분열과 같은 예외
+  const dying = enemyDef(enemy.type);
+  const dried = enemy.burnTicks > 0 || (enemy.freezeTicks ?? 0) > 0;
+  if ((dying.deathGoo ?? 0) > 0 && !dried) {
+    const goo = balance.goo;
+    const puddles = (world.gooPuddles ??= []);
+    for (let i = 0; i < (dying.deathGoo ?? 0); i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const r = Math.random() * goo.deathScatter;
+      puddles.push({
+        id: nextGooId++,
+        x: enemy.x + Math.sin(ang) * r,
+        z: enemy.z + Math.cos(ang) * r,
+        ticks: goo.lifeTicks,
+      });
+      if (puddles.length > goo.maxPuddles) puddles.shift();
+    }
+  }
+  const split = dying.split;
   if (!split) return;
-  if (enemy.burnTicks > 0 || (enemy.freezeTicks ?? 0) > 0) return;
+  if (dried) return;
   const def = enemyDef(split.into);
   // 흩뿌림 — 쌍둥이 금지: 기준 방향부터 랜덤이고, '가까운 놈/먼 놈' 역할을 갈라 뽑아
   // (누가 먼 쪽인지도 랜덤) 거리·높이·속도를 각자 굴린다. 한 놈은 발치에 철퍽,
