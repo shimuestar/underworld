@@ -39,6 +39,8 @@ export type SoundName =
   | 'ghoul_latch'
   | 'struggle_push'
   | 'ghoul_shriek'
+  | 'bat_flap'
+  | 'bat_screech'
   | 'spider_skitter'
   | 'spider_pounce'
   | 'slime_windup'
@@ -399,6 +401,16 @@ export class GameAudio {
         // 비명 — 치솟는 쇳소리. 죽은 척이 벌떡 일어날 때
         this.tone(680, 0.3, 'sawtooth', 0.5, 0, 1450);
         this.noise(0.18, 0.3, 2400);
+        break;
+      case 'bat_flap':
+        // 퍼덕 — 젖은 가죽막이 공기를 친다. 상시 단서라 작게 (위치는 패닝)
+        this.noise(0.045, 0.2, 900);
+        this.noise(0.04, 0.14, 700, 0.07);
+        break;
+      case 'bat_screech':
+        // 끼이익 — 내리꽂기 직전의 초음파성 비명. 위에서 온다는 신호
+        this.tone(2600, 0.22, 'sawtooth', 0.6, 0, 1200);
+        this.noise(0.12, 0.25, 6000);
         break;
       case 'spider_skitter':
         // 사각사각 — 마른 다리끝이 돌벽을 긁는다. 자주 나므로 아주 작게 (위치는 패닝)

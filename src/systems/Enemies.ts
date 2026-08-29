@@ -550,6 +550,147 @@ function startDrop(
   });
 }
 
+/** 비행체(박쥐) 틱 — 순항·추락·기절이 일반 AI 를 덮는다. true 면 이번 틱은 여기서 끝.
+ *  급강하는 일반 chargeAttack 기계를 그대로 쓴다(패링·청색 예고·경직 규약 재사용):
+ *  예고 동안 낙하 감쇠(BROOD_FALL)가 고도를 자연히 깎아 내려앉고, 도약 포물선과
+ *  저공 경직(recover)이 근접의 창이 된다 */
+function tickFlying(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  fly: NonNullable<ReturnType<typeof enemyDef>['flying']>,
+  dt: number,
+): boolean {
+  const p = world.player;
+  const kd = fly.knockdown;
+
+  // 피해 누적 게이지 — 총·해머·마법·화상 무엇이든 체력 변화로 잡는다
+  const last = enemy.flyLastHealth ?? enemy.health;
+  const taken = last - enemy.health;
+  enemy.flyLastHealth = enemy.health;
+  const grounded = (enemy.downTicks ?? 0) > 0 || (enemy.batFallTicks ?? 0) > 0;
+  if (!grounded) {
+    enemy.knockdownGauge = Math.max(0, (enemy.knockdownGauge ?? 0) - kd.decayPerTick);
+    if (taken > 0) enemy.knockdownGauge = (enemy.knockdownGauge ?? 0) + taken;
+  }
+
+  // 바닥 기절 — 뒤집혀 퍼덕인다. staggered 규약(황색·처형각)을 그대로 쓴다
+  if ((enemy.downTicks ?? 0) > 0) {
+    enemy.downTicks = (enemy.downTicks ?? 0) - 1;
+    enemy.jumpY = 0;
+    if ((enemy.downTicks ?? 0) <= 0) {
+      enemy.knockdownGauge = 0; // 다시 날 기회 — 게이지는 처음부터
+      enemy.ai = 'chase';
+      enemy.timer = 0;
+    }
+    return true;
+  }
+  // 추락 중 — 그 자리에서 곤두박질
+  if ((enemy.batFallTicks ?? 0) > 0) {
+    enemy.batFallTicks = (enemy.batFallTicks ?? 0) - 1;
+    const t = 1 - (enemy.batFallTicks ?? 0) / kd.fallTicks;
+    enemy.jumpY = Math.max(0, (enemy.flyFallFromY ?? fly.cruiseHeight) * (1 - t * t));
+    if ((enemy.batFallTicks ?? 0) <= 0) {
+      enemy.jumpY = 0;
+      enemy.downTicks = kd.stunTicks;
+      enemy.ai = 'staggered';
+      enemy.timer = kd.stunTicks;
+      world.events.emit('bat_downed', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+    }
+    return true;
+  }
+  // 추락 조건 — 누적 게이지 / 큰 한 방 / 공중 스태거(패링)
+  const airborne = (enemy.jumpY ?? 0) > 0.4;
+  if (
+    (enemy.knockdownGauge ?? 0) >= kd.damageThreshold ||
+    taken >= kd.instantDamage ||
+    (enemy.ai === 'staggered' && airborne)
+  ) {
+    enemy.ai = 'chase'; // 진행 중이던 강하·경직은 끊긴다
+    enemy.timer = 0;
+    enemy.attackFreezeTicks = 0;
+    if (airborne) {
+      enemy.batFallTicks = kd.fallTicks;
+      enemy.flyFallFromY = enemy.jumpY ?? fly.cruiseHeight;
+    } else {
+      // 이미 저공 — 그 자리에서 뻗는다
+      enemy.jumpY = 0;
+      enemy.downTicks = kd.stunTicks;
+      enemy.ai = 'staggered';
+      enemy.timer = kd.stunTicks;
+      world.events.emit('bat_downed', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+      return true;
+    }
+    world.events.emit('bat_knockdown', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+    return true;
+  }
+
+  // 공격 상태는 일반 기계가 굴린다 — 예고: 낙하 감쇠가 고도를 깎는다(내려앉음),
+  // 돌진: 도약 포물선이 관리, 경직·스태거: 저공 그대로
+  if (enemy.ai !== 'chase' && enemy.ai !== 'idle') return false;
+
+  // 순항 고도 — 목표(순항 + 출렁임)로 수렴. 낙하 감쇠(0.1/틱)보다 빨라야 떠 있는다
+  const bob =
+    Math.sin(((world.tick + enemy.id * 53) / fly.bobPeriodTicks) * Math.PI * 2) * fly.bobAmp;
+  const targetY = fly.cruiseHeight + bob;
+  const deltaY = targetY - (enemy.jumpY ?? 0);
+  enemy.jumpY =
+    (enemy.jumpY ?? 0) + Math.max(-fly.climbPerTick, Math.min(fly.climbPerTick, deltaY));
+
+  if (enemy.ai === 'idle') return false; // 대기 부유 — 시야·소음 판정은 일반 idle
+
+  const dx = p.x - enemy.x;
+  const dz = p.z - enemy.z;
+  const dist = Math.hypot(dx, dz);
+  if ((enemy.swoopCooldown ?? 0) > 0) enemy.swoopCooldown = (enemy.swoopCooldown ?? 0) - 1;
+
+  // 급강하 개시 — 일반 돌격 기계로 넘긴다 (예고 시점 좌표 고정·패링 가능)
+  const ch = def.chargeAttack;
+  if (
+    ch &&
+    (enemy.swoopCooldown ?? 0) <= 0 &&
+    dist >= (ch.minRange ?? 0) &&
+    dist <= (ch.maxRange ?? 99) &&
+    world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
+  ) {
+    enemy.swoopCooldown = ch.cooldownTicks ?? 160;
+    enemy.attackMode = 'charge';
+    enemy.yaw = Math.atan2(-dx, -dz);
+    startWindup(world, enemy, ch);
+    world.events.emit('bat_swoop', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    return true;
+  }
+
+  // 선회 — 거리 밴드 유지 + 갈지자. 벽은 slideMove 가 밀어낸다
+  enemy.flyJinkTicks = (enemy.flyJinkTicks ?? 0) - 1;
+  if ((enemy.flyJinkTicks ?? 0) <= 0) {
+    enemy.flyJinkTicks = fly.jinkTicks + Math.floor(Math.random() * fly.jinkTicks);
+    enemy.flyOrbitDir = Math.random() < 0.5 ? -1 : 1;
+  }
+  if (dist > 0.001) {
+    const ux = dx / dist;
+    const uz = dz / dist;
+    let radial = 0;
+    if (dist > fly.orbitMax) radial = 1;
+    else if (dist < fly.orbitMin) radial = -1;
+    const tdir = enemy.flyOrbitDir ?? 1;
+    const mx = ux * radial + -uz * tdir * 0.9;
+    const mz = uz * radial + ux * tdir * 0.9;
+    const ml = Math.hypot(mx, mz) || 1;
+    const sp = def.speed * slowFactor(enemy) * dt;
+    world.level.slideMove(enemy, def.radius, (mx / ml) * sp, (mz / ml) * sp);
+    enemy.yaw = Math.atan2(-dx, -dz); // 몸은 날아도 눈은 먹이를 본다
+  }
+  // 날갯짓 — 위치를 흘리는 상시 단서 (들리는 거리에서만, 패닝은 main)
+  enemy.flapTicks =
+    (enemy.flapTicks ?? Math.floor(Math.random() * fly.flapIntervalTicks)) - 1;
+  if ((enemy.flapTicks ?? 0) <= 0) {
+    enemy.flapTicks = fly.flapIntervalTicks;
+    if (dist <= 16) world.events.emit('bat_flap', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+  }
+  return true;
+}
+
 /** 벽거미 틱 — 붙기·기기·도약이 일반 AI 를 덮는다. true 면 이번 틱은 여기서 끝 */
 function tickWallSpider(
   world: World,
@@ -861,6 +1002,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
 
   // ── 벽거미 수직 구간 (wallCrawl) — 붙기·기기·도약이 일반 AI 를 덮는다 ──
   if (def.wallCrawl && tickWallSpider(world, enemy, def, def.wallCrawl, dt)) return;
+
+  // ── 비행체 (flying, 박쥐) — 순항·추락·기절이 일반 AI 를 덮는다 ──
+  if (def.flying && tickFlying(world, enemy, def, def.flying, dt)) return;
 
   // 밀려난 뒤 돌격 — chase 진입을 기다리지 않는다 (공격 도중 밀려나면 그 상태로 남아
   // 영영 돌격하지 못했다). 밀리는 중에는 판단하지 않는다 — 아직 가까워서 취소돼 버린다

@@ -210,6 +210,8 @@
   },
 
   "weapons": {
+    "_meleeMaxHitHeightNote": "이 높이(jumpY)보다 위에 뜬 적은 해머가 닿지 않는다 — 순항 박쥐(2.4)·천장 거머리(3.3)는 못 치고, 벽거미(1.9)·저공은 친다",
+    "meleeMaxHitHeight": 2.0,
     "_headshotKillNote": "헤드샷 처치 연출 — 잠깐의 히트스톱(패링 4틱과 같은 결)과 큰 파편 배율",
     "headshotKillFreezeTicks": 4,
     "headshotKillBurstScale": 2.3,

@@ -506,6 +506,20 @@ export interface EnemyState {
   wallNZ?: number;
   /** 기는 소리(사각사각) 간격 카운터 */
   skitterTicks?: number;
+  /** 비행체(박쥐) — 직전 틱 체력. 모든 피해 경로를 체력 변화로 잡아 추락 게이지에 싣는다 */
+  flyLastHealth?: number;
+  /** 추락 게이지 — 쌓이면 날개가 꺾인다 (entities.flying.knockdown) */
+  knockdownGauge?: number;
+  /** 바닥 기절 잔여 틱 — 뒤집혀 퍼덕이는 처형각 */
+  downTicks?: number;
+  /** 추락 낙하 잔여 틱 */
+  batFallTicks?: number;
+  flyFallFromY?: number;
+  flyJinkTicks?: number;
+  flyOrbitDir?: number;
+  swoopCooldown?: number;
+  /** 날갯짓 소리 간격 카운터 */
+  flapTicks?: number;
   /** 분열을 이미 처리했는가 — 죽은 슬라임을 두 번 가르지 않는다 */
   splitHandled?: boolean;
   /** 다음 점액 방울까지 남은 틱 (슬라임 궤적) */

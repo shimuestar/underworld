@@ -328,6 +328,28 @@
       ]
     },
     {
+      "type": "bat",
+      "cell": [
+        15,
+        10
+      ],
+      "note": "박쥐 무리"
+    },
+    {
+      "type": "bat",
+      "cell": [
+        16,
+        13
+      ]
+    },
+    {
+      "type": "bat",
+      "cell": [
+        15,
+        16
+      ]
+    },
+    {
       "type": "spider_large",
       "cell": [
         12,

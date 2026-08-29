@@ -35,6 +35,7 @@ const IMPLEMENTED = new Set([
   'slime_mother',
   'ghoul',
   'leech',
+  'bat',
 ]);
 
 /** 이 적 타입이 실제로 스폰되는가 — 레벨 검증이 이걸로 스텁 배치를 잡는다 */
@@ -137,6 +138,11 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
     if ((placement as { ceiling?: boolean }).ceiling && enemyDef(placement.type).ceilingLurk) {
       spawned.lurking = true;
       spawned.jumpY = level.ceiling - enemyDef(placement.type).height - 0.05;
+      spawned.prevJumpY = spawned.jumpY;
+    }
+    // 비행체(박쥐) — 공중에서 시작한다
+    if (enemyDef(placement.type).flying) {
+      spawned.jumpY = enemyDef(placement.type).flying!.cruiseHeight;
       spawned.prevJumpY = spawned.jumpY;
     }
     // 벽 배치 (벽거미) — 가장 가까운 벽에 눌러 붙인 채 매복한다. 벽이 없으면 지상 스폰

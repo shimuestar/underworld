@@ -131,6 +131,24 @@ export interface EnemyDef {
   /** 죽을 때 흘리는 점액 장판 개수 — 죽은 자리 주변(balance.goo.deathScatter)에 흩어진다.
    *  화상·빙결 중 사망은 예외 (분열과 같은 규칙, Enemies.handleSplit) */
   deathGoo?: number;
+  /** 비행체(박쥐) — 순항 고도·선회와 추락 규칙 (Enemies.tickFlying) */
+  flying?: {
+    cruiseHeight: number;
+    bobAmp: number;
+    bobPeriodTicks: number;
+    climbPerTick: number;
+    orbitMin: number;
+    orbitMax: number;
+    jinkTicks: number;
+    flapIntervalTicks: number;
+    knockdown: {
+      damageThreshold: number;
+      instantDamage: number;
+      decayPerTick: number;
+      fallTicks: number;
+      stunTicks: number;
+    };
+  };
   /** 벽거미 — 벽에 붙어 기어오고 벽에서 도약해 덮친다 (Enemies.tickWallSpider) */
   wallCrawl?: {
     /** 붙는 높이 (jumpY) */

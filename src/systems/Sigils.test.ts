@@ -685,6 +685,83 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slime.ai).toBe('chase');
   });
 
+  it('박쥐 — 순항 고도로 떠오르고, 공중엔 해머가 닿지 않는다', () => {
+    const b = add('bat', 8, 6); // 정면 2m — 해머 사거리 안
+    b.ai = 'chase';
+    b.swoopCooldown = 99999; // 순항만 본다
+    const fly = enemyDef2('bat').flying!;
+    for (let i = 0; i < 40; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect(b.jumpY ?? 0).toBeGreaterThan(1.6); // 순항 고도(2.4 부근)
+    // 순항하며 선회 밴드(5~9m)로 날아갔다 — 스윙 검증을 위해 코앞으로 되돌린다
+    b.x = 7.4;
+    b.z = 6;
+    b.prevX = 7.4;
+    b.prevZ = 6;
+    b.jumpY = 2.4;
+    b.prevJumpY = 2.4;
+    // 공중 — 해머가 닿지 않는다
+    const hp = b.health;
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    for (let i = 0; i < 30; i++) {
+      world.input = Input.emptySnapshot();
+      Weapons.tick(world, DT);
+    }
+    expect(b.health).toBe(hp); // 무상
+    // 저공 — 닿는다
+    b.jumpY = 0.3;
+    b.prevJumpY = 0.3;
+    for (let i = 0; i < 60; i++) {
+      world.input = Input.emptySnapshot();
+      Weapons.tick(world, DT); // 쿨다운 소진
+    }
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    for (let i = 0; i < 30; i++) {
+      world.input = Input.emptySnapshot();
+      Weapons.tick(world, DT);
+    }
+    expect(b.health).toBeLessThan(hp);
+    expect(fly.cruiseHeight).toBeGreaterThan(balance.weapons.meleeMaxHitHeight); // 규약 자체 검증
+  });
+
+  it('박쥐 — 피해가 쌓이면 날개가 꺾여 추락하고, 바닥에서 뻗는다 (처형각)', () => {
+    const b = add('bat', 16, 6);
+    b.ai = 'chase';
+    b.swoopCooldown = 99999;
+    const fly = enemyDef2('bat').flying!;
+    for (let i = 0; i < 40; i++) Enemies.tick(world, DT);
+    expect(b.jumpY ?? 0).toBeGreaterThan(1.6);
+    b.health -= fly.knockdown.damageThreshold; // 권총 세 발 몫의 누적
+    for (let i = 0; i < fly.knockdown.fallTicks + 3; i++) Enemies.tick(world, DT);
+    expect(b.jumpY ?? 0).toBe(0); // 곤두박질
+    expect(b.ai).toBe('staggered'); // 황색 처형각
+    expect((b.downTicks ?? 0)).toBeGreaterThan(0);
+    // 기절이 끝나면 다시 날아오른다 — 게이지는 초기화
+    for (let i = 0; i < fly.knockdown.stunTicks + 40; i++) Enemies.tick(world, DT);
+    expect(b.jumpY ?? 0).toBeGreaterThan(1.0);
+    expect(b.knockdownGauge ?? 0).toBeLessThan(1);
+  });
+
+  it('박쥐 급강하 — 예고(청색)를 걸고 내려앉으며, 끝나면 저공에서 오래 뻗는다', () => {
+    const b = add('bat', 12, 6); // 6m — 급강하 사거리 [2,10]
+    b.ai = 'chase';
+    b.jumpY = 2.4;
+    b.prevJumpY = 2.4;
+    let swooped = false;
+    world.events.on('bat_swoop', () => (swooped = true));
+    let sawLowRecover = false;
+    for (let i = 0; i < 260; i++) {
+      Enemies.tick(world, DT);
+      if ((b.ai as string) === 'recover' && (b.jumpY ?? 0) < 0.5) sawLowRecover = true;
+    }
+    expect(swooped).toBe(true); // 급강하를 시도했다
+    expect(sawLowRecover).toBe(true); // 저공 경직 — 해머의 창
+  });
+
   it('거미줄 조임 — 걷기 3초에 한 방, 질주는 1.5초에 한 방', () => {
     const p = world.player;
     p.webSwingsLeft = 3;

@@ -74,13 +74,6 @@
     {
       "type": "goblin_runner",
       "cell": [
-        4,
-        13
-      ]
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
         2,
         16
       ]
@@ -141,13 +134,6 @@
       "cell": [
         8,
         18
-      ]
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        1,
-        14
       ]
     },
     {
@@ -241,10 +227,25 @@
       "wall": true
     },
     {
-      "type": "spider_small",
+      "type": "bat",
       "cell": [
-        12,
-        22
+        9,
+        12
+      ],
+      "note": "박쥐 무리"
+    },
+    {
+      "type": "bat",
+      "cell": [
+        11,
+        12
+      ]
+    },
+    {
+      "type": "bat",
+      "cell": [
+        13,
+        15
       ]
     },
     {

@@ -24,6 +24,7 @@ const ENEMY_COLORS: Record<string, number> = {
   goblin_archer: 0x8a8a3a,
   warden: 0x5a4470,
   goblin_chieftain: 0x8f5a30,
+  bat: 0x4a3550,
   spider_small: 0x14141a,
   spider_large: 0xd8d8cf,
   slime: 0x3fae62,
@@ -54,6 +55,48 @@ export function bloodColorOf(enemyType: string): number {
 
 /** 거미 몸 — 낮게 깔린 몸통 + 뒤로 부푼 배 + 사방으로 뻗은 다리 8개.
  *  키(def.height)가 낮아 기둥+머리로 만들면 그냥 통조림처럼 보인다 */
+/** 박쥐 — 작은 몸통 + 피막 날개 둘(batWingL/R — syncEnemies 가 퍼덕인다) + 귀·안광 */
+function buildBatBody(
+  torso: THREE.Group,
+  def: { radius: number; height: number },
+  bodyMat: THREE.MeshLambertMaterial,
+  eyes: EyeKit,
+  baseColor: number,
+  flashMaterials: THREE.MeshLambertMaterial[],
+): void {
+  const r = def.radius;
+  const bodyY = def.height * 0.55;
+  const body = new THREE.Mesh(new THREE.SphereGeometry(r * 0.55, 10, 8), bodyMat);
+  body.scale.set(1, 0.85, 1.2);
+  body.position.y = bodyY;
+  torso.add(body);
+  for (const side of [-1, 1]) {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(r * 0.14, r * 0.5, 5), bodyMat);
+    ear.position.set(side * r * 0.22, bodyY + r * 0.55, -r * 0.1);
+    torso.add(ear);
+  }
+  const eyeR = r * balance.lighting.enemyEyes.radiusMul;
+  for (const side of [-1, 1]) {
+    addGlowEye(torso, side * r * 0.18, bodyY + r * 0.1, -r * 0.55, eyeR, eyes.eyeMat, eyes.haloMat, eyes.halos);
+  }
+  const wingMat = new THREE.MeshLambertMaterial({
+    color: new THREE.Color(baseColor).multiplyScalar(0.75),
+  });
+  flashMaterials.push(wingMat);
+  for (const side of [-1, 1]) {
+    const pivot = new THREE.Group();
+    pivot.name = side < 0 ? 'batWingL' : 'batWingR';
+    pivot.position.set(side * r * 0.4, bodyY + r * 0.15, 0);
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(r * 1.7, r * 0.08, r * 0.9), wingMat);
+    wing.position.x = side * r * 0.95;
+    pivot.add(wing);
+    const tip = new THREE.Mesh(new THREE.BoxGeometry(r * 0.8, r * 0.07, r * 0.6), wingMat);
+    tip.position.set(side * r * 1.75, r * 0.08, 0);
+    pivot.add(tip);
+    torso.add(pivot);
+  }
+}
+
 function buildSpiderBody(
   torso: THREE.Group,
   def: { radius: number; height: number },
@@ -2323,6 +2366,8 @@ export class Stage {
       torso.add(core);
     } else if (SPIDER_TYPES.has(type)) {
       buildSpiderBody(torso, def, bodyMat, eyes, baseColor, flashMaterials);
+    } else if (type === 'bat') {
+      buildBatBody(torso, def, bodyMat, eyes, baseColor, flashMaterials);
     } else {
       // 몸통은 충돌 원과 같은 반경의 8각 기둥 — 박스로 두면 모서리가 반경 밖으로
       // 0.21m 튀어나와(0.5→0.707) 비스듬히 부딪칠 때 뚫고 들어가 보인다
@@ -2608,7 +2653,7 @@ export class Stage {
 
     // 맨팔 — 인간형은 모두 두 팔이다. 무기 팔(오른쪽)이 있으면 왼팔 하나만,
     // 없으면(궁수·주술사) 양팔을 단다. 궁수는 활을 향해 앞으로 들려 있다
-    if (!SPIDER_TYPES.has(type) && !SLIME_TYPES.has(type) && type !== 'leech') {
+    if (!SPIDER_TYPES.has(type) && !SLIME_TYPES.has(type) && type !== 'leech' && type !== 'bat') {
       const armLen = def.height * 0.34;
       const forward = type === 'goblin_archer' ? 0.55 : type === 'ghoul' ? GHOUL_ARMS_FORWARD : 0;
       const makeArm = (side: number): THREE.Group => {
@@ -3122,6 +3167,21 @@ export class Stage {
         visual.torso.scale.y = (enemy.wallWindupTicks ?? 0) > 0 ? 0.7 : 1;
       }
 
+      // 박쥐 — 날개 퍼덕임: 공중은 빠르게, 바닥에 뻗었을 땐(기절) 뒤집혀 늘어진 채 가끔.
+      if (enemy.type === 'bat') {
+        const wl = visual.torso.getObjectByName('batWingL');
+        const wr = visual.torso.getObjectByName('batWingR');
+        const downed = (enemy.downTicks ?? 0) > 0;
+        if (wl && wr) {
+          const flap = downed
+            ? 0.9 + Math.sin(now / 260) * 0.3
+            : Math.sin(now / 70 + enemy.id) * 0.55 + 0.12;
+          wl.rotation.z = flap;
+          wr.rotation.z = -flap;
+        }
+        visual.torso.rotation.x = downed ? Math.PI * 0.92 : 0; // 뒤집혀 뻗는다
+      }
+
       // 거머리 — 매달려 있는 동안 천천히 흔들리고, 천장 돌빛으로 위장한다.
       // 랜턴 빔에 잡히거나 땅에 내려오면 제 색(자줏빛)이 드러난다. 안광은 위장 중에도
       // 남는다 — 올려다보는 플레이어에게 주는 유일한 시각 단서다
@@ -3503,7 +3563,7 @@ export class Stage {
    *  본체 파편(spawnDeathBurst)과 별개로, 그 적의 머리와 같은 크기·색의 상자 하나가
    *  높이 솟았다 떨어진다. 거미는 머리가 따로 없어 제외 */
   spawnHeadPop(enemyType: string, x: number, z: number): void {
-    if (SPIDER_TYPES.has(enemyType) || SLIME_TYPES.has(enemyType) || enemyType === 'leech') return; // 머리가 없다
+    if (SPIDER_TYPES.has(enemyType) || SLIME_TYPES.has(enemyType) || enemyType === 'leech' || enemyType === 'bat') return; // 머리가 없다
     const def = enemyDef(enemyType);
     const headSize = def.radius * 0.9;
     const color = new THREE.Color(ENEMY_COLORS[enemyType] ?? ENEMY_COLOR_FALLBACK).multiplyScalar(

@@ -51,24 +51,10 @@
     {
       "type": "goblin_runner",
       "cell": [
-        15,
-        8
-      ]
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
         3,
         12
       ],
       "note": "복도 순찰"
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
-        2,
-        17
-      ]
     },
     {
       "type": "goblin_spear",
@@ -275,6 +261,28 @@
       "cell": [
         11,
         11
+      ]
+    },
+    {
+      "type": "bat",
+      "cell": [
+        15,
+        8
+      ],
+      "note": "박쥐 무리"
+    },
+    {
+      "type": "bat",
+      "cell": [
+        16,
+        12
+      ]
+    },
+    {
+      "type": "bat",
+      "cell": [
+        16,
+        20
       ]
     },
     {

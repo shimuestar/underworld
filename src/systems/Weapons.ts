@@ -221,6 +221,8 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     const dist = Math.hypot(toX, toZ);
     if (dist > range + def.radius || dist === 0) continue;
     if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
+    // 공중의 적(순항 박쥐·천장 거머리)은 해머가 닿지 않는다 — 내려오는 순간이 근접의 창
+    if ((enemy.jumpY ?? 0) > balance.weapons.meleeMaxHitHeight) continue;
 
     // 정면 방패 — 해머는 피해를 주지 못하고 방패에 막힌다. 대신 방패병은 웅크려
     // 버티느라 아무 행동도 못 하고, 방패는 맞은 만큼 깎인다 (3대 반파 → 6대 완파)

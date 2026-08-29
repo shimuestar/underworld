@@ -355,6 +355,10 @@ for (const name of [
   'wall_pounce',
   'wall_pounce_land',
   'spider_skitter',
+  'bat_flap',
+  'bat_swoop',
+  'bat_knockdown',
+  'bat_downed',
   'ghoul_moan',
   'leech_struggle',
   'leech_face_attach',
@@ -570,6 +574,17 @@ events.on('wall_pounce_land', (payload) => {
   if (wl.hit) stage.triggerCameraKick(0.3, 150);
 });
 events.on('wall_fall', (payload) => audio.play('hit_flesh', panOf(payload)));
+// 박쥐 — 날갯짓(상시 단서), 급강하 비명, 날개 꺾여 추락, 바닥에 곤두박질
+events.on('bat_flap', (payload) => audio.play('bat_flap', panOf(payload)));
+events.on('bat_swoop', (payload) => {
+  audio.play('bat_screech', panOf(payload));
+  showReaction('박쥐가 내리꽂힌다!', 1000);
+});
+events.on('bat_knockdown', (payload) => {
+  audio.play('bat_screech', panOf(payload));
+  showReaction('박쥐가 추락했다 — 지금이다!', 1400);
+});
+events.on('bat_downed', (payload) => audio.play('hit_flesh', panOf(payload)));
 // 구울 머리 소품이 부서졌다 — 밟았으면 발밑 파열, 아니면 살 터지는 소리
 events.on('ghoul_head_broken', (payload) => {
   const hb = payload as { x: number; z: number; stomp: boolean };

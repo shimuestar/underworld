@@ -124,6 +124,37 @@
       "counters": { "pistol": "poor", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "good", "magic": "best", "deflect": "none" },
       "drops": []
     },
+    "bat": {
+      "name": "동굴 박쥐",
+      "zone": 1, "slice": true,
+      "weight": "light", "xp": 10, "health": 35, "speed": 6.5, "damage": 8,
+      "radius": 0.38, "height": 0.5,
+      "aggroRange": 15, "attackRange": 1.2,
+      "behavior": "swarm",
+      "_flyNote": "고도 2.4m 선회 — 공중엔 해머가 안 닿는다(weapons.meleeMaxHitHeight). 급강하(청색·패링 가능)가 끝나면 저공에서 길게 비틀거린다 = 근접의 창. 누적 25 피해(권총 3발)나 큰 한 방(18+)이면 날개가 꺾여 3초 바닥 기절 — 처형각",
+      "flying": {
+        "cruiseHeight": 2.4,
+        "bobAmp": 0.35,
+        "bobPeriodTicks": 90,
+        "climbPerTick": 0.22,
+        "orbitMin": 5,
+        "orbitMax": 9,
+        "jinkTicks": 45,
+        "flapIntervalTicks": 34,
+        "knockdown": {
+          "damageThreshold": 25,
+          "instantDamage": 18,
+          "decayPerTick": 0.09,
+          "fallTicks": 14,
+          "stunTicks": 180
+        }
+      },
+      "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 26, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
+      "_swoopNote": "급강하 — 예고 동안 고도를 잃으며 내려앉다가(BROOD_FALL 감쇠) 도약 돌진으로 스친다. 예고 시점 좌표 고정이라 옆 대시가 정답, 청색이라 패링도 된다. 빗나가면 저공에서 오래 뻗는다",
+      "chargeAttack": { "type": "contact", "arcDeg": 150, "leapHeight": 1.3, "chargeSpeed": 13, "chargeRunTicks": 20, "minRange": 2, "maxRange": 10, "windupTicks": 34, "recoverTicks": 72, "whiffRecoverTicks": 96, "impactRangeMul": 1.2, "playerKnockback": 1.2, "parryable": true, "telegraph": "blue", "cooldownTicks": 160 },
+      "counters": { "pistol": "good", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "poor", "magic": "good", "deflect": "best" },
+      "drops": []
+    },
     "slime": {
       "name": "슬라임",
       "zone": 1, "slice": true,
