@@ -844,6 +844,10 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
       swooped = true;
       aiAtScreech = b.ai;
     });
+    let aiAtHit: string | null = null; // 타격이 든 순간의 상태 — 돌진 중(닿는 즉시)이어야 한다
+    world.events.on('player_damaged', () => {
+      if (aiAtHit === null) aiAtHit = b.ai;
+    });
     let minY = 99;
     let sawReachable = false; // 돌진·후퇴 중 해머 높이(2.0) 아래로 내려온 적 있는가
     let crossed = false; // 관통 — 플레이어 등 뒤(-X 쪽)로 넘어간 적 있는가
@@ -864,6 +868,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(minY).toBeGreaterThan(0.8); // 땅으로 곤두박질하지 않는다 — 제자리 준비자세
     expect(crossed).toBe(true); // 관통 — 플레이어(6,6)를 지나쳐 등 뒤로 빠졌다
     expect(aiAtScreech).toBe('charging'); // 비명(암시)은 돌진과 동시에 난다
+    expect(aiAtHit).toBe('charging'); // 타격은 몸이 닿는 돌진 틱에 즉시 — 번쩍임 대기 없음
   });
 
   it('얼굴 거머리 — 붙어 있는 동안 겹침 밀어내기로 끌려가지 않는다', () => {

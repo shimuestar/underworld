@@ -551,7 +551,39 @@ function startDrop(
   });
 }
 
-/** 박치기 개시 — 일반 돌격 기계로 넘긴다 (예고 끝 좌표 고정·패링 가능). 무리 강하가 재사용 */
+/** 관통 접촉 타격 — 몸이 닿는 그 틱에 즉시 들어간다. 한 번의 강하에 한 번만 */
+function batGraze(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  fly: NonNullable<ReturnType<typeof enemyDef>['flying']>,
+): void {
+  const p = world.player;
+  if (enemy.swoopHitDone || world.dead || p.iframeTicks > 0) return;
+  const gdx = p.x - enemy.x;
+  const gdz = p.z - enemy.z;
+  if (Math.hypot(gdx, gdz) > def.attackRange) return;
+  const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
+  const dmg = blocked ? def.damage * balance.block.chipDamageRatio : def.damage;
+  p.health -= dmg;
+  pushPlayer(p, gdx, gdz, def.chargeAttack?.playerKnockback ?? 1, balance.playerKnockback.ticks);
+  world.events.emit('player_damaged', {
+    amount: dmg, health: p.health, blocked,
+    srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'bat_slam',
+  });
+  if (p.health <= 0) {
+    p.health = 0;
+    world.dead = true;
+    world.events.emit('player_died', { tick: world.tick });
+  }
+  enemy.swoopHitDone = true;
+  if (!blocked && fly.slamHeal) {
+    enemy.health = Math.min(def.health, enemy.health + fly.slamHeal);
+    world.events.emit('bat_drain', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+  }
+}
+
+/** 박치기 개시 — 예고(정지 비행)는 일반 windup 이 굴리고, 돌진은 전용 관통 대시가 잇는다 */
 function startSwoop(world: World, enemy: EnemyState, ch: EnemyAttackDef): void {
   const p = world.player;
   enemy.swoopCooldown = ch.cooldownTicks ?? 160;
@@ -640,11 +672,35 @@ function tickFlying(
 
   // 공격 상태 — 이동·판정·패링은 일반 기계가 굴리고, 높이와 후퇴만 여기서 만든다
   if (enemy.ai !== 'chase' && enemy.ai !== 'idle') {
-    // 발사 비명 — 예고(정지 비행)가 끝나고 돌진이 시작되는 바로 그 순간에 한 번.
-    // "암시와 동시에 박치기" — 소리를 듣고 나서 피할 시간은 짧다 (마지막 섬광이 진짜 신호)
-    if (enemy.ai === 'charging' && !enemy.swoopAnnounced) {
-      enemy.swoopAnnounced = true;
-      world.events.emit('bat_swoop', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    // 관통 대시 — 일반 돌격 기계(판정 창·정지)를 쓰지 않는다. 몸이 닿는 그 틱에
+    // 즉시 타격하고, 멈추지 않고 예고 좌표를 지나 직선으로 계속 나간다
+    if (enemy.ai === 'charging') {
+      if (!enemy.swoopAnnounced) {
+        // 발사 비명 — 예고가 끝나고 돌진이 시작되는 바로 그 순간 ("암시와 동시에 박치기")
+        enemy.swoopAnnounced = true;
+        world.events.emit('bat_swoop', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+        // 진행 방향 — 예고 좌표(chargeTarget)로 고정. 이후 절대 꺾지 않는다 (회피 성립)
+        const tdx = (enemy.chargeTargetX ?? p.x) - enemy.x;
+        const tdz = (enemy.chargeTargetZ ?? p.z) - enemy.z;
+        const td = Math.hypot(tdx, tdz) || 1;
+        enemy.batDashDirX = tdx / td;
+        enemy.batDashDirZ = tdz / td;
+        enemy.yaw = Math.atan2(-(enemy.batDashDirX ?? 0), -(enemy.batDashDirZ ?? 0));
+      }
+      const ch2 = def.chargeAttack!;
+      const sp2 = (ch2.chargeSpeed ?? 20) * slowFactor(enemy) * dt;
+      world.level.slideMove(
+        enemy, def.radius, (enemy.batDashDirX ?? 0) * sp2, (enemy.batDashDirZ ?? 0) * sp2,
+      );
+      enemy.jumpY = fly.strikeHeight; // 얼굴 높이 유지 — 해머가 닿는 관통 구간
+      batGraze(world, enemy, def, fly); // 닿는 순간이 곧 타격이다
+      enemy.timer--;
+      if (enemy.timer <= 0) {
+        enemy.ai = 'recover';
+        enemy.timer = enemy.swoopHitDone ? ch2.recoverTicks : (ch2.whiffRecoverTicks ?? ch2.recoverTicks);
+        if (!enemy.swoopHitDone) enemy.whiffed = true; // 허공을 갈랐다 — 반격 창
+      }
+      return true;
     }
     if (enemy.ai === 'windup') {
       // 제자리 준비자세 — 맹렬히 펄럭이며(시각은 Stage) 타격 높이(얼굴께)로 맞춘다
@@ -662,32 +718,8 @@ function tickFlying(
         fz2 * fly.retreatSpeed * dt,
       );
       enemy.jumpY = Math.min(fly.cruiseHeight, (enemy.jumpY ?? 0) + fly.retreatClimbPerTick);
-      // 관통 스침 — 지나치는 몸이 닿으면 그게 곧 박치기다. 정식 판정(impact)이
-      // 코앞에서 끝나고 몸만 뚫고 지나가 '맞았는데 안 아픈' 그림을 막는다 (한 강하 한 번)
-      if (!enemy.swoopHitDone && !world.dead && p.iframeTicks <= 0) {
-        const gdx = p.x - enemy.x;
-        const gdz = p.z - enemy.z;
-        if (Math.hypot(gdx, gdz) <= def.attackRange) {
-          const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
-          const dmg = blocked ? def.damage * balance.block.chipDamageRatio : def.damage;
-          p.health -= dmg;
-          pushPlayer(p, gdx, gdz, def.chargeAttack?.playerKnockback ?? 1, balance.playerKnockback.ticks);
-          world.events.emit('player_damaged', {
-            amount: dmg, health: p.health, blocked,
-            srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'bat_graze',
-          });
-          if (p.health <= 0) {
-            p.health = 0;
-            world.dead = true;
-            world.events.emit('player_died', { tick: world.tick });
-          }
-          enemy.swoopHitDone = true;
-          if (!blocked && fly.slamHeal) {
-            enemy.health = Math.min(def.health, enemy.health + fly.slamHeal);
-            world.events.emit('bat_drain', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
-          }
-        }
-      }
+      // 빠져나가는 동안에도 몸이 닿으면 그게 곧 박치기다 (한 강하 한 번)
+      batGraze(world, enemy, def, fly);
     }
     return false;
   }

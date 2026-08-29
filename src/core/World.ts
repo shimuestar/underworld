@@ -591,6 +591,9 @@ export interface EnemyState {
   swoopHitDone?: boolean;
   /** 비명 여운 — 파문이 퍼지는 동안 제자리에 떠 있는다 */
   screamHoldTicks?: number;
+  /** 관통 돌진의 고정 진행 방향 — 첫 돌진 틱에 예고 좌표로 정해 끝까지 유지한다 */
+  batDashDirX?: number;
+  batDashDirZ?: number;
   /** 분열을 이미 처리했는가 — 죽은 슬라임을 두 번 가르지 않는다 */
   splitHandled?: boolean;
   /** 다음 점액 방울까지 남은 틱 (슬라임 궤적) */

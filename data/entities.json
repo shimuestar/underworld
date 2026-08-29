@@ -164,8 +164,8 @@
         }
       },
       "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 26, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
-      "_swoopNote": "몸통 박치기 — 제자리에서 1초(60틱) 맹렬히 펄럭이는 준비자세(청색) 후 얼굴 높이(strikeHeight)로 수평 돌진, 치고 나면 뒤로 빠지며 서서히 고도를 되찾는다. 돌진·후퇴 저공 구간이 해머의 창. 패링 가능",
-      "chargeAttack": { "type": "contact", "arcDeg": 150, "chargeSpeed": 14, "chargeRunTicks": 20, "minRange": 2, "maxRange": 10, "windupTicks": 60, "recoverTicks": 50, "whiffRecoverTicks": 80, "impactRangeMul": 1.2, "playerKnockback": 1.2, "parryable": true, "telegraph": "blue", "cooldownTicks": 160 },
+      "_swoopNote": "몸통 박치기 — 1초 조용한 정지 비행 후 적색 섬광·비명과 동시에 20m/s 직선 관통 돌진. 몸이 닿는 그 틱에 즉시 타격(판정 창 없음), 멈추지 않고 목표를 지나 등 뒤로 빠진다. 적색 = 회피 전용 (옆 대시·방어가 답, 패링 불가). 돌진·후퇴 저공 구간이 해머의 창",
+      "chargeAttack": { "type": "contact", "arcDeg": 150, "chargeSpeed": 20, "chargeRunTicks": 40, "minRange": 2, "maxRange": 10, "windupTicks": 60, "recoverTicks": 40, "whiffRecoverTicks": 70, "impactRangeMul": 1.2, "playerKnockback": 1.2, "parryable": false, "telegraph": "red", "cooldownTicks": 160 },
       "counters": { "pistol": "good", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "poor", "magic": "good", "deflect": "best" },
       "drops": []
     },
