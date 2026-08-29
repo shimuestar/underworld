@@ -574,6 +574,12 @@ export interface EnemyState {
   screamCooldown?: number;
   /** 무리 동시 강하 재사용 대기 */
   packDiveCooldown?: number;
+  /** 이번 강하의 발사 비명을 이미 냈는가 — 예고 끝(돌진 시작) 순간 한 번 */
+  swoopAnnounced?: boolean;
+  /** 이번 강하에서 이미 몸이 닿았는가 — 관통 스침 중복 타격 방지 */
+  swoopHitDone?: boolean;
+  /** 비명 여운 — 파문이 퍼지는 동안 제자리에 떠 있는다 */
+  screamHoldTicks?: number;
   /** 분열을 이미 처리했는가 — 죽은 슬라임을 두 번 가르지 않는다 */
   splitHandled?: boolean;
   /** 다음 점액 방울까지 남은 틱 (슬라임 궤적) */

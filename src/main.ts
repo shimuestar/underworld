@@ -502,6 +502,8 @@ const audio = new GameAudio();
 app.addEventListener('click', () => audio.unlock());
 events.on('enemy_windup', (payload) => {
   const wind = payload as { telegraph?: string; enemyType?: string };
+  // 박쥐 박치기는 예고 시작이 '조용한 정지 비행'이다 — 신호는 발사 순간의 비명(bat_swoop)
+  if (wind.enemyType === 'bat') return;
   const at = panOf(payload); // 예고음에 방향을 싣는다 — 등 뒤 공격을 귀가 먼저 안다
   // 슬라임 — 몸이 부풀어 오르는 꿀렁임을 텔레그래프 소리에 얹는다
   if (wind.enemyType?.startsWith('slime')) audio.play('slime_windup', at);

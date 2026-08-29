@@ -3235,7 +3235,9 @@ export class Stage {
           const flap = downed
             ? 0.9 + Math.sin(now / 260) * 0.3
             : enemy.ai === 'windup'
-              ? Math.sin(now / 34 + enemy.id) * 0.8 + 0.1 // 준비자세 — 제자리 맹렬한 펄럭임
+              ? enemy.timer <= balance.telegraph.visualLeadTicks
+                ? Math.sin(now / 30 + enemy.id) * 0.85 + 0.1 // 발사 직전 — 맹렬 (진짜 신호)
+                : Math.sin(now / 150 + enemy.id) * 0.28 + 0.3 // 조용한 정지 비행 (1초)
               : Math.sin(now / 70 + enemy.id) * 0.55 + 0.12;
           wl.rotation.z = flap;
           wr.rotation.z = -flap;

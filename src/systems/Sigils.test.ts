@@ -778,6 +778,37 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(b2.ai).toBe('windup');
   });
 
+  it('박쥐 관통 스침 — 지나치는 몸이 닿으면 그대로 박치기 판정, 한 강하에 한 번만', () => {
+    const b = add('bat', 7, 6); // 1m — 관통 경로가 몸에 닿아 있다
+    b.ai = 'recover';
+    b.timer = 40;
+    b.jumpY = 1.35;
+    b.prevJumpY = 1.35;
+    b.yaw = Math.PI / 2; // 서쪽(-X)으로 빠져나가는 중 — 방향은 스침 판정과 무관
+    const hp = world.player.health;
+    Enemies.tick(world, DT);
+    expect(world.player.health).toBeLessThan(hp); // 스치면 맞는다 — 피격 효과도 이 이벤트로 난다
+    expect(b.swoopHitDone).toBe(true);
+    const hp2 = world.player.health;
+    for (let i = 0; i < 5; i++) Enemies.tick(world, DT);
+    expect(world.player.health).toBe(hp2); // 같은 강하에서 두 번 치지 않는다
+  });
+
+  it('박쥐 비명 여운 — 파문이 퍼지는 동안 제자리에 떠 있는다', () => {
+    const b = add('bat', 12, 6);
+    b.ai = 'chase';
+    b.jumpY = 2.4;
+    b.prevJumpY = 2.4;
+    b.swoopCooldown = 99999;
+    b.screamCooldown = 2;
+    for (let i = 0; i < 4; i++) Enemies.tick(world, DT);
+    expect((b.screamHoldTicks ?? 0)).toBeGreaterThan(0); // 비명 직후 — 여운
+    const bx = b.x;
+    const bz = b.z;
+    for (let i = 0; i < 20; i++) Enemies.tick(world, DT);
+    expect(Math.hypot(b.x - bx, b.z - bz)).toBeLessThan(0.05); // 제자리
+  });
+
   it('박쥐 흡혈 박치기 — 몸으로 치면 제 피가 찬다', () => {
     const b = add('bat', 11, 6); // 5m — 돌진 사거리
     b.ai = 'chase';
@@ -796,7 +827,11 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     b.jumpY = 2.4;
     b.prevJumpY = 2.4;
     let swooped = false;
-    world.events.on('bat_swoop', () => (swooped = true));
+    let aiAtScreech: string | null = null; // 비명이 난 순간의 상태 — 돌진과 동시여야 한다
+    world.events.on('bat_swoop', () => {
+      swooped = true;
+      aiAtScreech = b.ai;
+    });
     let minY = 99;
     let sawReachable = false; // 돌진·후퇴 중 해머 높이(2.0) 아래로 내려온 적 있는가
     let crossed = false; // 관통 — 플레이어 등 뒤(-X 쪽)로 넘어간 적 있는가
@@ -816,6 +851,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(sawReachable).toBe(true); // 박치기·후퇴 구간은 해머가 닿는다
     expect(minY).toBeGreaterThan(0.8); // 땅으로 곤두박질하지 않는다 — 제자리 준비자세
     expect(crossed).toBe(true); // 관통 — 플레이어(6,6)를 지나쳐 등 뒤로 빠졌다
+    expect(aiAtScreech).toBe('charging'); // 비명(암시)은 돌진과 동시에 난다
   });
 
   it('얼굴 거머리 — 붙어 있는 동안 겹침 밀어내기로 끌려가지 않는다', () => {

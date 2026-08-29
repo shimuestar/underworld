@@ -557,6 +557,8 @@ function startSwoop(world: World, enemy: EnemyState, ch: EnemyAttackDef): void {
   enemy.swoopCooldown = ch.cooldownTicks ?? 160;
   enemy.attackMode = 'charge';
   enemy.noticeTicks = 0;
+  enemy.swoopAnnounced = false; // 비명은 발사 순간에 — 예고는 조용한 정지 비행
+  enemy.swoopHitDone = false;
   enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));
   startWindup(world, enemy, ch);
 }
@@ -638,6 +640,12 @@ function tickFlying(
 
   // 공격 상태 — 이동·판정·패링은 일반 기계가 굴리고, 높이와 후퇴만 여기서 만든다
   if (enemy.ai !== 'chase' && enemy.ai !== 'idle') {
+    // 발사 비명 — 예고(정지 비행)가 끝나고 돌진이 시작되는 바로 그 순간에 한 번.
+    // "암시와 동시에 박치기" — 소리를 듣고 나서 피할 시간은 짧다 (마지막 섬광이 진짜 신호)
+    if (enemy.ai === 'charging' && !enemy.swoopAnnounced) {
+      enemy.swoopAnnounced = true;
+      world.events.emit('bat_swoop', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    }
     if (enemy.ai === 'windup') {
       // 제자리 준비자세 — 맹렬히 펄럭이며(시각은 Stage) 타격 높이(얼굴께)로 맞춘다
       const d = fly.strikeHeight - (enemy.jumpY ?? 0);
@@ -654,6 +662,32 @@ function tickFlying(
         fz2 * fly.retreatSpeed * dt,
       );
       enemy.jumpY = Math.min(fly.cruiseHeight, (enemy.jumpY ?? 0) + fly.retreatClimbPerTick);
+      // 관통 스침 — 지나치는 몸이 닿으면 그게 곧 박치기다. 정식 판정(impact)이
+      // 코앞에서 끝나고 몸만 뚫고 지나가 '맞았는데 안 아픈' 그림을 막는다 (한 강하 한 번)
+      if (!enemy.swoopHitDone && !world.dead && p.iframeTicks <= 0) {
+        const gdx = p.x - enemy.x;
+        const gdz = p.z - enemy.z;
+        if (Math.hypot(gdx, gdz) <= def.attackRange) {
+          const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
+          const dmg = blocked ? def.damage * balance.block.chipDamageRatio : def.damage;
+          p.health -= dmg;
+          pushPlayer(p, gdx, gdz, def.chargeAttack?.playerKnockback ?? 1, balance.playerKnockback.ticks);
+          world.events.emit('player_damaged', {
+            amount: dmg, health: p.health, blocked,
+            srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'bat_graze',
+          });
+          if (p.health <= 0) {
+            p.health = 0;
+            world.dead = true;
+            world.events.emit('player_died', { tick: world.tick });
+          }
+          enemy.swoopHitDone = true;
+          if (!blocked && fly.slamHeal) {
+            enemy.health = Math.min(def.health, enemy.health + fly.slamHeal);
+            world.events.emit('bat_drain', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+          }
+        }
+      }
     }
     return false;
   }
@@ -673,6 +707,13 @@ function tickFlying(
   const dist = Math.hypot(dx, dz);
   if ((enemy.swoopCooldown ?? 0) > 0) enemy.swoopCooldown = (enemy.swoopCooldown ?? 0) - 1;
   if ((enemy.packDiveCooldown ?? 0) > 0) enemy.packDiveCooldown = (enemy.packDiveCooldown ?? 0) - 1;
+
+  // 비명 여운 — 파문이 다 퍼질 때까지 제자리에서 먹이를 노려본다 (선회·강하 없음)
+  if ((enemy.screamHoldTicks ?? 0) > 0) {
+    enemy.screamHoldTicks = (enemy.screamHoldTicks ?? 0) - 1;
+    if (dist > 0.001) enemy.yaw = Math.atan2(-dx, -dz);
+    return true;
+  }
 
   // 박치기 개시 — 무리 강하 조건이면 곁의 준비된 박쥐들이 함께 몸을 던진다
   const ch = def.chargeAttack;
@@ -710,11 +751,10 @@ function tickFlying(
         o.packDiveCooldown = pack!.cooldownTicks;
       }
       enemy.packDiveCooldown = pack!.cooldownTicks;
+      // 무리 신호음은 모이는 순간에 — 각자의 발사 비명(bat_swoop)은 돌진 순간에 따로 난다
       world.events.emit('bat_pack_dive', {
         count: packed.length + 1, x: enemy.x, z: enemy.z,
       });
-    } else {
-      world.events.emit('bat_swoop', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
     }
     return true;
   }
@@ -730,6 +770,7 @@ function tickFlying(
       world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
     ) {
       enemy.screamCooldown = sc.cooldownTicks;
+      enemy.screamHoldTicks = sc.shakeTicks; // 파문이 퍼지는 동안 제자리에 떠 있는다
       p.aimShakeTicks = Math.max(p.aimShakeTicks ?? 0, sc.shakeTicks);
       p.aimShakeAmp = sc.shakeAmp;
       world.events.emit('bat_scream', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
@@ -1642,7 +1683,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           amount: damage, health: p.health, blocked,
           srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id,
         });
-        // 흡혈 박치기(박쥐) — 몸으로 친 만큼 제 피를 채운다. 막히면 못 빤다
+        // 흡혈 박치기(박쥐) — 몸으로 친 만큼 제 피를 채운다. 막히면 못 빤다.
+        // 정식 판정이 들어갔으면 관통 스침은 다시 치지 않는다
+        if (def.flying) enemy.swoopHitDone = true;
         if (!blocked && def.flying?.slamHeal) {
           enemy.health = Math.min(def.health, enemy.health + def.flying.slamHeal);
           world.events.emit('bat_drain', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
