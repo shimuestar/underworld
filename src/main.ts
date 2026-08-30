@@ -363,6 +363,7 @@ for (const name of [
   'bat_drain',
   'bat_swoop',
   'bat_knockdown',
+  'bat_parried',
   'bat_downed',
   'ghoul_moan',
   'leech_struggle',
@@ -594,6 +595,12 @@ events.on('bat_flap', (payload) => audio.play('bat_flap', panOf(payload)));
 events.on('bat_swoop', (payload) => {
   audio.play('bat_screech', panOf(payload));
   showReaction('박쥐가 내리꽂힌다!', 1000);
+});
+events.on('bat_parried', (payload) => {
+  audio.play('parry_perfect');
+  stage.triggerCameraKick(0.3, 150);
+  const bp = payload as { x: number; z: number };
+  stage.spawnGuardSparks(bp.x, bp.z, 1.3, 0x9fd8ff, 1.6); // 받아친 불꽃
 });
 events.on('bat_knockdown', (payload) => {
   audio.play('bat_screech', panOf(payload));

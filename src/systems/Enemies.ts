@@ -563,8 +563,23 @@ function batGraze(
   const gdx = p.x - enemy.x;
   const gdz = p.z - enemy.z;
   if (Math.hypot(gdx, gdz) > def.attackRange) return;
+  // 정확한 타이밍 패링 — 닿는 순간(직전 8틱 버퍼 포함) 반응 버튼이면 받아쳐 떨어뜨린다.
+  // 방어(홀드)와 다르다: 누르는 '순간'만 성립 — 붉은 돌진의 유일한 반격 창
+  if (world.input.reactionPressed || (p.parryBufferTicks ?? 0) > 0) {
+    p.parryBufferTicks = 0;
+    enemy.swoopHitDone = true;
+    enemy.ai = 'chase'; // 돌진 취소 — 아래 추락 블록이 이어받는다
+    enemy.timer = 0;
+    enemy.batFallTicks = fly.knockdown.fallTicks;
+    enemy.flyFallFromY = enemy.jumpY ?? fly.strikeHeight;
+    world.events.emit('bat_parried', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+    world.events.emit('bat_knockdown', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+    return;
+  }
   const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
   const dmg = blocked ? def.damage * balance.block.chipDamageRatio : def.damage;
+  // 방패에 챙! — 칩 피해만 남기고 박쥐는 그대로 뚫고 지나간다
+  if (blocked) world.events.emit('block_hit', { amount: dmg, kind: 'bat' });
   p.health -= dmg;
   pushPlayer(p, gdx, gdz, def.chargeAttack?.playerKnockback ?? 1, balance.playerKnockback.ticks);
   world.events.emit('player_damaged', {

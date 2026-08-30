@@ -790,6 +790,43 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.ghoulHeads).toHaveLength(1);
   });
 
+  it('박쥐 패링 — 닿는 순간 반응 버튼이면 무피해로 받아쳐 추락시킨다', () => {
+    const b = add('bat', 7, 6); // 1m — 관통 경로가 몸에 닿아 있다
+    b.ai = 'recover';
+    b.timer = 40;
+    b.jumpY = 1.35;
+    b.prevJumpY = 1.35;
+    world.player.parryBufferTicks = 3; // 직전에 반응 버튼을 눌렀다
+    const hp = world.player.health;
+    const fly = enemyDef2('bat').flying!;
+    Enemies.tick(world, DT);
+    expect(world.player.health).toBe(hp); // 무피해
+    expect((b.batFallTicks ?? 0)).toBeGreaterThan(0); // 날개가 꺾여 추락
+    for (let i = 0; i < fly.knockdown.fallTicks + 2; i++) Enemies.tick(world, DT);
+    expect(b.ai).toBe('staggered'); // 바닥 기절 — 처형각
+  });
+
+  it('박쥐 방패 막기 — 챙! 칩 피해만 남기고 그대로 뚫고 지나간다', () => {
+    const b = add('bat', 7, 6);
+    b.ai = 'recover';
+    b.timer = 40;
+    b.jumpY = 1.35;
+    b.prevJumpY = 1.35;
+    b.yaw = Math.PI / 2; // 서쪽으로 빠져나가는 중
+    const p = world.player;
+    p.blocking = true;
+    p.yaw = -Math.PI / 2; // 박쥐(+X)를 정면으로 — 방패가 받는다
+    let clang = false;
+    world.events.on('block_hit', () => (clang = true));
+    const hp = p.health;
+    Enemies.tick(world, DT);
+    expect(clang).toBe(true); // 방패에 챙
+    expect(p.health).toBeLessThan(hp); // 칩 피해
+    expect(p.health).toBeGreaterThan(hp - enemyDef2('bat').damage); // 정타보다는 훨씬 덜 아프다
+    expect((b.batFallTicks ?? 0)).toBe(0); // 추락 없음 — 그대로 뚫고 지나간다
+    p.blocking = false;
+  });
+
   it('박쥐 관통 스침 — 지나치는 몸이 닿으면 그대로 박치기 판정, 한 강하에 한 번만', () => {
     const b = add('bat', 7, 6); // 1m — 관통 경로가 몸에 닿아 있다
     b.ai = 'recover';
