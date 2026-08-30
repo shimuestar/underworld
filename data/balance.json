@@ -354,7 +354,8 @@
     "kinds": {
       "potion": { "name": "체력 물약", "color": "#e0384a", "icon": "flask", "heal": 25, "restore": 0 },
       "mana": { "name": "마나 물약", "color": "#3a7ce0", "icon": "flask", "heal": 0, "restore": 35 },
-      "food": { "name": "말린 고기", "color": "#9c4a3c", "icon": "meat", "heal": 12.5, "restore": 17.5 }
+      "_foodKindNote": "2026-08-30 개념 변경 — 물약은 응급, 음식은 지속. 먹자마자 heal 만큼만 차고, 30초(1800틱) 동안 HP 가 아주 천천히 총 ~16 차오르며(healPerTick 0.009×1800) 스태미너 회복이 25% 빨라진다. 마나는 더 이상 안 준다",
+      "food": { "name": "말린 고기", "color": "#9c4a3c", "icon": "meat", "heal": 5, "restore": 0, "regen": { "durationTicks": 1800, "healPerTick": 0.009, "staminaRegenMul": 1.25 } }
     }
   },
 
@@ -376,7 +377,7 @@
       "dropChance": 0.16,
       "magnetRadius": 3.2
     },
-    "_foodNote": "음식 — HP·마나를 동시에 채우되 각 포션의 절반씩. 하나로 두 자원을 조금씩 메우는 대신 급할 때는 포션만 못하다",
+    "_foodNote": "음식 — 먹자마자 조금, 이후 30초 지속 회복 + 스태미너 회복 가속 (kinds.food.regen)",
     "food": {
       "dropChance": 0.15,
       "magnetRadius": 3.2

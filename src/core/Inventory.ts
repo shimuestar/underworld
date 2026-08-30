@@ -16,6 +16,8 @@ export interface ItemDef {
   icon: string;
   heal: number;
   restore: number;
+  /** 지속 회복(음식) — 30초 동안 HP 가 아주 천천히 차고 스태미너 회복이 빨라진다 */
+  regen?: { durationTicks: number; healPerTick: number; staminaRegenMul: number };
 }
 
 export function itemDef(kind: ItemKind): ItemDef {
@@ -181,6 +183,7 @@ export function isUseful(world: World, kind: ItemKind): boolean {
   const def = itemDef(kind);
   if (def.heal > 0 && world.player.health < balance.player.healthMax) return true;
   if (def.restore > 0 && world.mana.value < balance.mana.max) return true;
+  if (def.regen && world.foodRegenTicks <= 0) return true; // 지속 회복은 만피여도 값어치가 있다
   return false;
 }
 

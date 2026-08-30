@@ -3,6 +3,7 @@
 // (시스템끼리 부르지 않는다 — World 상태만 공유한다)
 
 import { balance } from '../core/Balance';
+import { itemDef } from '../core/Inventory';
 import type { World } from '../core/World';
 
 /** 시작 시 1회 — 가득 찬 상태로 출발한다 (World는 balance에 의존하지 않으므로 여기서) */
@@ -19,7 +20,9 @@ export function tick(world: World, _dt: number): void {
   if (st.regenDelay > 0) {
     st.regenDelay--;
   } else if (st.value < cfg.max) {
-    const rate = st.exhausted ? cfg.exhaustedRegenPerTick : cfg.regenPerTick;
+    let rate = st.exhausted ? cfg.exhaustedRegenPerTick : cfg.regenPerTick;
+    // 음식 지속 효과 — 씹은 기운으로 숨이 빨리 돌아온다
+    if (world.foodRegenTicks > 0) rate *= itemDef('food').regen?.staminaRegenMul ?? 1;
     st.value = Math.min(cfg.max, st.value + rate);
   }
 

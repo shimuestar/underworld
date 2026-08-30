@@ -1630,6 +1630,7 @@ events.on('item_used', (payload) => {
   const idef = itemDef(info.kind);
   if (idef.heal > 0) flashRestoreBar('status-hp-fill', info.healed <= 0);
   if (idef.restore > 0) flashRestoreBar('status-mana-fill', info.restored <= 0);
+  if (idef.regen) flashRestoreBar('status-stamina-fill', false); // 지속 효과 시작 — 스태미너도
 });
 const DENY_TEXT: Record<string, string> = {
   empty: '빈 퀵슬롯 — Tab 에서 등록한다',

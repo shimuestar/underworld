@@ -13,6 +13,19 @@ import type { ItemKind, World } from '../core/World';
 export function tick(world: World, _dt: number): void {
   if (world.itemCooldown > 0) world.itemCooldown--;
 
+  // 음식 지속 회복 — 30초 동안 HP 가 아주 천천히 찬다 (스태미너 가속은 Stamina 가 읽는다)
+  if (world.foodRegenTicks > 0) {
+    world.foodRegenTicks--;
+    const rg = itemDef('food').regen;
+    if (rg && !world.dead && world.player.health < balance.player.healthMax) {
+      world.player.health = Math.min(
+        balance.player.healthMax,
+        world.player.health + rg.healPerTick,
+      );
+    }
+    if (world.foodRegenTicks === 0) world.events.emit('food_regen_ended', {});
+  }
+
   // 먼저 진행분을 흘린 뒤에 이번 틱 입력을 받는다 —
   // 순서를 뒤집으면 시작한 그 틱이 한 번 더 세어져 channelTicks 보다 한 틱 짧아진다
   advanceChannel(world);
@@ -66,6 +79,7 @@ function drink(world: World, kind: ItemKind, index: number): void {
   if (def.restore > 0) {
     world.mana.value = Math.min(balance.mana.max, world.mana.value + def.restore);
   }
+  if (def.regen) world.foodRegenTicks = def.regen.durationTicks; // 겹치면 갱신 — 중첩 없음
   world.events.emit('item_used', {
     kind,
     index,

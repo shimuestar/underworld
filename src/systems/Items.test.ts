@@ -208,16 +208,28 @@ describe('사용', () => {
     expect(used[0]).toMatchObject({ healed: itemDef('potion').heal, left: 0 });
   });
 
-  it('음식은 HP·마나를 동시에 — 각 물약의 절반', () => {
-    expect(itemDef('food').heal).toBeCloseTo(itemDef('potion').heal / 2, 5);
-    expect(itemDef('food').restore).toBeCloseTo(itemDef('mana').restore / 2, 5);
+  it('음식 — 먹자마자 조금만 차고, 30초 동안 아주 천천히 이어서 찬다', () => {
+    const food = itemDef('food');
+    expect(food.restore).toBe(0); // 마나는 더 이상 안 준다 (2026-08-30 개념 변경)
+    expect(food.regen).toBeTruthy();
+    expect(food.heal).toBeLessThan(itemDef('potion').heal * 0.3); // 초기 회복은 응급이 아니다
 
     addItem(world, 'food');
     world.player.health = 40;
     world.mana.value = 10;
     drink(world, 1);
-    expect(world.player.health).toBeCloseTo(40 + itemDef('food').heal, 5);
-    expect(world.mana.value).toBeCloseTo(10 + itemDef('food').restore, 5);
+    expect(world.player.health).toBeCloseTo(40 + food.heal, 5); // 초기 회복
+    expect(world.mana.value).toBe(10); // 마나 무변
+    expect(world.foodRegenTicks).toBe(food.regen!.durationTicks);
+
+    idle(world, 600); // 10초 — 미세 회복 누적
+    expect(world.player.health).toBeCloseTo(40 + food.heal + 600 * food.regen!.healPerTick, 1);
+
+    idle(world, food.regen!.durationTicks); // 지속시간 소진
+    expect(world.foodRegenTicks).toBe(0);
+    const settled = world.player.health;
+    idle(world, 120);
+    expect(world.player.health).toBe(settled); // 끝나면 더 안 찬다
   });
 
   it('상한을 넘지 않는다', () => {
@@ -238,12 +250,15 @@ describe('사용', () => {
     expect(denied[0]).toMatchObject({ reason: 'full' });
   });
 
-  it('음식은 둘 중 하나만 모자라도 마실 수 있다', () => {
+  it('음식 — 만피여도 지속 효과가 없으면 값어치가 있고, 버프 중엔 낭비라 막힌다', () => {
     addItem(world, 'food');
     world.player.health = balance.player.healthMax;
     world.mana.value = balance.mana.max;
+    expect(isUseful(world, 'food')).toBe(true); // 30초 지속 회복 + 스태미너 가속
+    world.foodRegenTicks = 100; // 이미 씹는 중
     expect(isUseful(world, 'food')).toBe(false);
-    world.mana.value = balance.mana.max - 1;
+    world.foodRegenTicks = 0;
+    world.player.health = 50;
     expect(isUseful(world, 'food')).toBe(true);
   });
 

@@ -75,6 +75,29 @@ beforeEach(() => {
   world = makeWorld();
 });
 
+describe('음식 지속 효과', () => {
+  it('음식 버프 동안 회복 속도가 staminaRegenMul 배로 빨라진다', () => {
+    const world = makeWorld();
+    Stamina.init(world);
+    world.stamina.value = 5;
+    world.stamina.regenDelay = 0;
+    world.stamina.exhausted = false;
+    for (let i = 0; i < 30; i++) Stamina.tick(world, DT);
+    const baseGain = world.stamina.value - 5;
+
+    const world2 = makeWorld();
+    Stamina.init(world2);
+    world2.stamina.value = 5;
+    world2.stamina.regenDelay = 0;
+    world2.stamina.exhausted = false;
+    world2.foodRegenTicks = 9999; // 버프 중
+    for (let i = 0; i < 30; i++) Stamina.tick(world2, DT);
+    const buffGain = world2.stamina.value - 5;
+    const mul = balance.items.kinds.food.regen.staminaRegenMul;
+    expect(buffGain / baseGain).toBeCloseTo(mul, 5);
+  });
+});
+
 describe('질주', () => {
   it('가득 찬 상태로 시작하고, 달리는 동안만 닳는다', () => {
     expect(world.stamina.value).toBe(CFG.max);
