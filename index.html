@@ -204,10 +204,15 @@
       #status-stamina-fill.regen {
         animation: regen-pulse 1.1s ease-in-out infinite;
       }
-      /* 스태미너 가속(음식) — 버프 동안 띠가 따뜻하게 밝아지고 은은히 빛난다 */
+      /* 스태미너 가속(음식) — 4px 띠에서 미묘한 색조 변화는 안 보인다 (실측).
+         띠는 환한 금색으로, 틀 테두리까지 함께 빛나야 비로소 눈에 걸린다 */
+      #status-stamina.boosted {
+        border-color: #e0c352;
+        box-shadow: 0 0 7px rgba(235, 205, 80, 0.55);
+      }
       #status-stamina.boosted #status-stamina-fill {
-        background: #eaf39c;
-        box-shadow: 0 0 6px rgba(222, 236, 120, 0.75);
+        background: #ffdf56;
+        box-shadow: 0 0 8px rgba(255, 220, 90, 0.95);
       }
       /* 회복 깜빡임 — 물약·입자 등으로 게이지가 찰 때 채워진 부분이 깜빡인다.
          이미 가득이면 끝부분만 깜빡여 "찼는데 또 먹었다"를 알린다.
