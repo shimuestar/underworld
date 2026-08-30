@@ -153,6 +153,19 @@ describe('기믹 — 파괴 롤과 판정', () => {
     expect(barrel.alive).toBe(false);
   });
 
+  it('noExplode(작은방 배치) — 폭발 롤이 나와도 심지가 붙지 않는다', () => {
+    Props.init(world);
+    const prop = putProp(world, 'prop_crate', 12, 6);
+    prop.noExplode = true;
+    const cfg = TYPES.prop_crate;
+    const total = cfg.empty + cfg.loot + cfg.ambush + cfg.explode;
+    const orig = Math.random;
+    Math.random = () => (total - 1) / total; // explode 구간 고정
+    breakProp(world, prop);
+    Math.random = orig;
+    expect(prop.fuseTicks).toBe(-1); // 빈손으로 바뀐다 — 좁은 방 폭발은 없다
+  });
+
   it('전리품 롤 — 탄약이 떨어지고, 밟으면 예비 탄약으로 들어간다', () => {
     Props.init(world);
     const prop = putProp(world, 'prop_jar', 8, 6);

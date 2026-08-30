@@ -578,6 +578,14 @@
   },
   "_propsNote": "부술 수 있는 기믹 — 디아블로식 파괴 재미. 겉보기 같아도 결과는 부수는 순간 롤: 빈손/전리품/매복/폭발(심지 0.5초 뒤). 파괴음은 noiseRadius 소음(닫힌 문 차음 적용). 큰 것일수록 빈손이 적고 골드·매복이 크다 (2026-08-30)",
   "props": {
+    "_spawnNote": "배치 타입 prop_any 는 스폰 시 이 가중치로 형태를 굴린다 — 매 판 다르다. noExplode 배치(작은방)는 폭발 롤이 빈손이 된다",
+    "spawnWeights": {
+      "prop_jar": 30,
+      "prop_crate": 25,
+      "prop_bonepile": 20,
+      "prop_minecart": 15,
+      "prop_sarcophagus": 10
+    },
     "noiseRadius": 10,
     "fuseTicks": 30,
     "scatterRadius": 0.9,

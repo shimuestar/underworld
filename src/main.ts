@@ -682,11 +682,11 @@ const PROP_BREAK_SOUND: Record<string, Parameters<typeof audio.play>[0]> = {
   metal: 'prop_break_metal',
 };
 const PROP_DEBRIS_COLOR: Record<string, number> = {
-  ceramic: 0x9a5f38,
-  wood: 0x7a5a34,
+  ceramic: 0x8f5a36,
+  wood: 0x6e5230,
   bone: 0xcfc7b0,
   stone: 0x8a8f96,
-  metal: 0x5f5348,
+  metal: 0x5d4a30, // 광차 — 나무 널판이 주 파편, 쇳소리는 테두리 몫
 };
 events.on('prop_broken', (payload) => {
   const pb = payload as { type: string; x: number; z: number };

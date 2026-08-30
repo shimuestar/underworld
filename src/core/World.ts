@@ -343,6 +343,8 @@ export interface PropState {
   hits: number;
   /** 폭발 당첨 심지 — 0 이 되는 틱에 Props 가 터뜨린다. -1 = 없음 */
   fuseTicks: number;
+  /** 참 = 폭발 롤이 빈손이 된다 — 작은방 배치 기믹 (좁은 방 폭발은 억울하다) */
+  noExplode?: boolean;
   blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
 

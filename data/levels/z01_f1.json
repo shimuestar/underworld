@@ -333,97 +333,113 @@
       ]
     },
     {
-      "type": "prop_jar",
+      "type": "prop_any",
       "cell": [
-        1,
-        6
+        2,
+        25
       ],
-      "note": "대기실 항아리"
+      "note": "소방 E1",
+      "noExplode": true
     },
     {
-      "type": "prop_jar",
+      "type": "prop_any",
       "cell": [
-        1,
-        9
-      ]
+        4,
+        24
+      ],
+      "noExplode": true
     },
     {
-      "type": "prop_jar",
+      "type": "prop_any",
+      "cell": [
+        8,
+        23
+      ],
+      "note": "소방 E2",
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        10,
+        23
+      ],
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        25,
+        5
+      ],
+      "note": "소방 S1",
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        22,
+        8
+      ],
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        22,
+        16
+      ],
+      "note": "소방 S2",
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        24,
+        14
+      ],
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        25,
+        21
+      ],
+      "note": "소방 S3",
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
       "cell": [
         1,
         17
       ],
-      "note": "전투 홀 항아리"
+      "note": "전투 홀"
     },
     {
-      "type": "prop_jar",
-      "cell": [
-        14,
-        25
-      ]
-    },
-    {
-      "type": "prop_crate",
-      "cell": [
-        8,
-        13
-      ],
-      "note": "보물 방 궤짝"
-    },
-    {
-      "type": "prop_crate",
-      "cell": [
-        20,
-        18
-      ]
-    },
-    {
-      "type": "prop_bonepile",
-      "cell": [
-        20,
-        5
-      ],
-      "note": "아레나 뼈 무더기"
-    },
-    {
-      "type": "prop_bonepile",
-      "cell": [
-        24,
-        12
-      ],
-      "note": "소방 S2 — 시체 곁"
-    },
-    {
-      "type": "prop_minecart",
-      "cell": [
-        12,
-        19
-      ],
-      "note": "복도의 버려진 광차"
-    },
-    {
-      "type": "prop_minecart",
+      "type": "prop_any",
       "cell": [
         17,
         20
       ],
-      "note": "진입 홀 광차"
+      "note": "진입 홀"
     },
     {
-      "type": "prop_sarcophagus",
-      "cell": [
-        10,
-        2
-      ],
-      "note": "안치소 석관"
-    },
-    {
-      "type": "prop_sarcophagus",
+      "type": "prop_any",
       "cell": [
         15,
         10
       ],
-      "note": "아레나 석관"
+      "note": "보스 아레나"
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        12,
+        19
+      ],
+      "note": "복도"
     },
     {
       "type": "slime",

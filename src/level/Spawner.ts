@@ -111,13 +111,28 @@ export function spawnBarrels(placements: EntityPlacement[], level: Level): Barre
 
 let nextPropId = 1;
 
-/** 레벨의 prop_* 배치 → 기믹 상태. 몸으로 막게 차단 블록도 함께 등록한다 (통과 동형) */
+/** prop_any — 스폰 가중치로 형태를 굴린다. 매 판 항아리였다 궤짝이었다 한다 */
+function rollPropType(): string {
+  const weights = balance.props.spawnWeights as Record<string, number>;
+  const entries = Object.entries(weights);
+  const total = entries.reduce((sum, [, w]) => sum + w, 0);
+  let r = Math.random() * total;
+  for (const [type, w] of entries) {
+    r -= w;
+    if (r < 0) return type;
+  }
+  return entries[0]![0];
+}
+
+/** 레벨의 prop_* 배치 → 기믹 상태. 몸으로 막게 차단 블록도 함께 등록한다 (통과 동형).
+ *  prop_any 는 형태를 굴리고, noExplode 배치(작은방)는 폭발 롤이 막힌다 */
 export function spawnProps(placements: EntityPlacement[], level: Level): PropState[] {
   const props: PropState[] = [];
   const types = balance.props.types as Record<string, { collisionRadius: number }>;
   for (const placement of placements) {
     if (!placement.type.startsWith('prop_')) continue;
-    const cfg = types[placement.type];
+    const type = placement.type === 'prop_any' ? rollPropType() : placement.type;
+    const cfg = types[type];
     if (!cfg) {
       console.warn(`[Spawner] 미정의 기믹 건너뜀: ${placement.type}`);
       continue;
@@ -131,8 +146,9 @@ export function spawnProps(placements: EntityPlacement[], level: Level): PropSta
     const x = (col + 0.5) * level.cellSize;
     const z = (row + 0.5) * level.cellSize;
     const prop: PropState = {
-      id: nextPropId++, type: placement.type, x, z, alive: true, hits: 0, fuseTicks: -1,
+      id: nextPropId++, type, x, z, alive: true, hits: 0, fuseTicks: -1,
     };
+    if ((placement as { noExplode?: boolean }).noExplode) prop.noExplode = true;
     prop.blocker = level.addBlocker(x, z, cfg.collisionRadius);
     props.push(prop);
   }

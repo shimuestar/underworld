@@ -75,6 +75,8 @@ export function init(world: World): void {
     } else if (outcome === 'ambush') {
       spawnAmbush(world, info.x, info.z, cfg);
     } else if (outcome === 'explode') {
+      // 작은방 배치(noExplode)는 폭발이 빈손으로 바뀐다 — 좁은 방 폭발은 억울하다
+      if (prop.noExplode) return;
       prop.fuseTicks = balance.props.fuseTicks; // 치익 — 도망칠 찰나는 준다
       world.events.emit('prop_fuse_lit', { id: info.id, x: info.x, z: info.z });
     }

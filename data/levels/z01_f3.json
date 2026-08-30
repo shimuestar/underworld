@@ -325,105 +325,112 @@
       ]
     },
     {
-      "type": "prop_jar",
+      "type": "prop_any",
       "cell": [
-        1,
+        8,
+        23
+      ],
+      "note": "소방 E1",
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        11,
+        25
+      ],
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        24,
         6
       ],
-      "note": "첫 홀 항아리"
+      "note": "소방 S1",
+      "noExplode": true
     },
     {
-      "type": "prop_jar",
+      "type": "prop_any",
       "cell": [
-        5,
-        5
-      ]
+        22,
+        10
+      ],
+      "noExplode": true
     },
     {
-      "type": "prop_jar",
+      "type": "prop_any",
+      "cell": [
+        24,
+        9
+      ],
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        22,
+        14
+      ],
+      "note": "소방 S2",
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        24,
+        18
+      ],
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        25,
+        23
+      ],
+      "note": "소방 S3",
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
+      "cell": [
+        22,
+        25
+      ],
+      "noExplode": true
+    },
+    {
+      "type": "prop_any",
       "cell": [
         1,
         16
       ],
-      "note": "로비B 항아리"
+      "note": "로비B"
     },
     {
-      "type": "prop_jar",
-      "cell": [
-        1,
-        22
-      ]
-    },
-    {
-      "type": "prop_jar",
+      "type": "prop_any",
       "cell": [
         16,
         4
       ],
-      "note": "옥좌 홀 서쪽 항아리"
+      "note": "옥좌 홀 서쪽"
     },
     {
-      "type": "prop_crate",
-      "cell": [
-        1,
-        25
-      ],
-      "note": "보물 창고 궤짝"
-    },
-    {
-      "type": "prop_crate",
-      "cell": [
-        4,
-        29
-      ]
-    },
-    {
-      "type": "prop_bonepile",
-      "cell": [
-        18,
-        7
-      ],
-      "note": "시체 더미 곁 뼈"
-    },
-    {
-      "type": "prop_bonepile",
-      "cell": [
-        20,
-        2
-      ],
-      "note": "밀실 뼈"
-    },
-    {
-      "type": "prop_minecart",
-      "cell": [
-        8,
-        20
-      ],
-      "note": "정문 복도의 광차"
-    },
-    {
-      "type": "prop_minecart",
+      "type": "prop_any",
       "cell": [
         15,
         14
       ],
-      "note": "옥좌 홀 광차"
+      "note": "옥좌 홀"
     },
     {
-      "type": "prop_sarcophagus",
+      "type": "prop_any",
       "cell": [
-        11,
-        2
+        8,
+        20
       ],
-      "note": "제단 방 석관"
-    },
-    {
-      "type": "prop_sarcophagus",
-      "cell": [
-        11,
-        14
-      ],
-      "note": "예배당 석관"
+      "note": "정문 복도"
     },
     {
       "type": "warden",
