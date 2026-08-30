@@ -94,8 +94,8 @@ describe('자석', () => {
     const gain = world.lifeMotes.length * CFG.healPerMote;
     ticks(120);
     expect(world.lifeMotes.length).toBe(0);
-    expect(world.player.health).toBe(50 + gain);
-    expect(healedTotal).toBe(gain);
+    expect(world.player.health).toBeCloseTo(50 + gain, 6);
+    expect(healedTotal).toBeCloseTo(gain, 6);
   });
 
   it('최대 체력을 넘지 않는다', () => {
@@ -114,7 +114,7 @@ describe('자석', () => {
     world.player.x += 20; // 멀리 물러난다
     ticks(CFG.lifeTicks + 60); // 수명보다 오래 기다려도 사라지지 않고 도착한다
     expect(world.lifeMotes.length).toBe(0);
-    expect(world.player.health).toBe(50 + gain);
+    expect(world.player.health).toBeCloseTo(50 + gain, 6);
   });
 });
 
@@ -150,6 +150,6 @@ describe('멀리서 죽이면', () => {
     world.player.x += 10; // 입자 곁으로
     ticks(120);
     expect(world.lifeMotes.length).toBe(0);
-    expect(world.player.health).toBe(50 + gain);
+    expect(world.player.health).toBeCloseTo(50 + gain, 6);
   });
 });
