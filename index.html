@@ -341,17 +341,18 @@
       }
       /* 중앙 획득 표시 — 조준선 바로 아래, 먹은 골드·XP 가 잠깐 떠오른다.
          연달아 먹으면 사라지기 전까지 같은 표시에 누적된다 */
+      /* 주의: transform 이 있는 조상(#status 등) 안에 두면 fixed 기준이 그 조상이 된다
+         — 반드시 body 직속. 조준점 바로 위에 뜬다 */
       #gain-center {
         position: fixed;
         left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
+        top: calc(50% - 22px);
+        transform: translate(-50%, -100%);
         text-align: center;
         pointer-events: none;
         opacity: 0;
         transition: opacity var(--gain-fade-ms, 0.25s) linear;
-        font-size: 17px;
-        line-height: 1.35;
+        font: 17px/1.35 monospace;
         text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
       }
       #gain-center-gold {
@@ -701,6 +702,7 @@
     </div>
     <div id="hud"></div>
     <div id="crosshair"></div>
+    <div id="gain-center"><div id="gain-center-gold"></div><div id="gain-center-xp"></div></div>
     <div id="death">
       <div>사망</div>
       <div id="death-hint" style="font-size: 14px">Enter 키로 재시작</div>
@@ -720,7 +722,6 @@
         <div id="status-lantern-track"><div id="status-lantern-fill"></div></div>
         <span id="status-lantern-text">100% 예비 2</span>
       </div>
-      <div id="gain-center"><div id="gain-center-gold"></div><div id="gain-center-xp"></div></div>
       <div id="status-gold"><span id="status-gold-amt">◆ 0</span> &nbsp; <span id="status-xp-amt">XP 0</span></div>
       <div id="status-weapons">
         <span class="weapon-slot active" id="slot-ranged">LMB 권총</span>
