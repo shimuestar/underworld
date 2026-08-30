@@ -86,20 +86,29 @@ export function init(world: World): void {
 function spawnLoot(world: World, x: number, z: number, cfg: PropTypeCfg): void {
   const lt = balance.props.loot;
   const kind = rollLootKind(Math.random);
-  // 잔해 옆에 떨어진다 — 자석 픽업이 걷어 온다 (상자와 같은 흩뿌리기)
-  const ang = Math.random() * Math.PI * 2;
-  const r = balance.props.scatterRadius * (0.3 + Math.random() * 0.7);
+  // 플레이어 '반대쪽' 호로만 떨어진다 — 때리자마자 입에 들어오면 뭘 먹었는지 모른다.
+  // 바닥에 완전히 놓인 뒤(lootNoMagnetTicks)에야 자석·픽업이 문다
+  const p = world.player;
+  const adx = x - p.x;
+  const adz = z - p.z;
+  const away = Math.hypot(adx, adz) > 0.001 ? Math.atan2(adx, adz) : Math.random() * Math.PI * 2;
+  const halfArc = ((balance.props.scatterAwayArcDeg / 2) * Math.PI) / 180;
+  const ang = away + (Math.random() - 0.5) * 2 * halfArc;
+  const r = balance.props.scatterRadius * (0.5 + Math.random() * 0.5);
   const ix = x + Math.sin(ang) * r;
   const iz = z + Math.cos(ang) * r;
+  const noMagnetTicks = balance.props.lootNoMagnetTicks;
   if (kind === 'gold') {
     const amount = Math.round(
       (lt.goldMin + Math.random() * (lt.goldMax - lt.goldMin)) * (cfg.goldMul ?? 1),
     );
-    world.groundItems.push({ id: nextLootId++, kind: 'gold', x: ix, z: iz, amount });
+    world.groundItems.push({ id: nextLootId++, kind: 'gold', x: ix, z: iz, amount, noMagnetTicks });
   } else if (kind === 'ammo') {
-    world.groundItems.push({ id: nextLootId++, kind: 'ammo', x: ix, z: iz, amount: lt.ammoAmount });
+    world.groundItems.push({
+      id: nextLootId++, kind: 'ammo', x: ix, z: iz, amount: lt.ammoAmount, noMagnetTicks,
+    });
   } else {
-    world.groundItems.push({ id: nextLootId++, kind, x: ix, z: iz });
+    world.groundItems.push({ id: nextLootId++, kind, x: ix, z: iz, noMagnetTicks });
   }
   world.events.emit('prop_loot', { kind, x: ix, z: iz });
 }

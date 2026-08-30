@@ -21,34 +21,41 @@ export function init(world: World): void {
 }
 
 /** 처치 드랍 굴림 — 포션은 낮은 확률(보스는 확정), 골드는 자주 */
+/** 낙하점 — 플레이어 반대쪽 호(awayArcDeg)로만. 죽은 자리에서 내 입으로 직행하지 않는다 */
+function dropSpot(world: World, x: number, z: number, r: number): { x: number; z: number } {
+  const p = world.player;
+  const adx = x - p.x;
+  const adz = z - p.z;
+  const away = Math.hypot(adx, adz) > 0.001 ? Math.atan2(adx, adz) : Math.random() * Math.PI * 2;
+  const halfArc = ((balance.pickups.awayArcDeg / 2) * Math.PI) / 180;
+  const ang = away + (Math.random() - 0.5) * 2 * halfArc;
+  return { x: x + Math.sin(ang) * r, z: z + Math.cos(ang) * r };
+}
+
 export function rollDrops(world: World, enemyType: string, x: number, z: number): void {
   const def = enemyDef(enemyType);
   const cfg = balance.pickups;
+  const land = cfg.landNoMagnetTicks; // 바닥에 놓일 때까지 자석·픽업 유예
 
   if (Math.random() < cfg.potion.dropChance || (def.boss && cfg.potion.bossAlways)) {
-    world.groundItems.push({ id: nextPickupId++, kind: 'potion', x, z });
+    const at = dropSpot(world, x, z, 0.4);
+    world.groundItems.push({ id: nextPickupId++, kind: 'potion', x: at.x, z: at.z, noMagnetTicks: land });
     world.events.emit('potion_dropped', { x, z });
   }
 
   if (Math.random() < cfg.manaPotion.dropChance || (def.boss && cfg.potion.bossAlways)) {
-    const angle = Math.random() * Math.PI * 2;
+    const at = dropSpot(world, x, z, 0.45);
     world.groundItems.push({
-      id: nextPickupId++,
-      kind: 'mana',
-      x: x + Math.cos(angle) * 0.45,
-      z: z + Math.sin(angle) * 0.45,
+      id: nextPickupId++, kind: 'mana', x: at.x, z: at.z, noMagnetTicks: land,
     });
     world.events.emit('mana_potion_dropped', { x, z });
   }
 
   // 음식 — HP·마나를 동시에, 대신 각 포션의 절반씩
   if (Math.random() < cfg.food.dropChance) {
-    const angle = Math.random() * Math.PI * 2;
+    const at = dropSpot(world, x, z, 0.45);
     world.groundItems.push({
-      id: nextPickupId++,
-      kind: 'food',
-      x: x + Math.cos(angle) * 0.45,
-      z: z + Math.sin(angle) * 0.45,
+      id: nextPickupId++, kind: 'food', x: at.x, z: at.z, noMagnetTicks: land,
     });
     world.events.emit('food_dropped', { x, z });
   }
@@ -60,13 +67,9 @@ export function rollDrops(world: World, enemyType: string, x: number, z: number)
     let count = drop.min;
     while (count < drop.max && Math.random() < drop.extraChance) count++;
     for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
+      const at = dropSpot(world, x, z, cfg.arrow.scatterRadius);
       world.groundItems.push({
-        id: nextPickupId++,
-        kind: 'arrow',
-        amount: 1,
-        x: x + Math.cos(angle) * cfg.arrow.scatterRadius,
-        z: z + Math.sin(angle) * cfg.arrow.scatterRadius,
+        id: nextPickupId++, kind: 'arrow', amount: 1, x: at.x, z: at.z, noMagnetTicks: land,
       });
     }
     world.events.emit('arrows_dropped', { count, x, z });
@@ -76,14 +79,10 @@ export function rollDrops(world: World, enemyType: string, x: number, z: number)
     const span = cfg.gold.max - cfg.gold.min;
     let amount = cfg.gold.min + Math.round(Math.random() * span);
     if (def.boss) amount *= cfg.gold.bossMul;
-    // 두 드랍이 겹쳐 보이지 않게 살짝 흩뿌린다
-    const angle = Math.random() * Math.PI * 2;
+    // 두 드랍이 겹쳐 보이지 않게 살짝 흩뿌린다 — 역시 플레이어 반대쪽으로
+    const at = dropSpot(world, x, z, 0.5);
     world.groundItems.push({
-      id: nextPickupId++,
-      kind: 'gold',
-      amount,
-      x: x + Math.cos(angle) * 0.5,
-      z: z + Math.sin(angle) * 0.5,
+      id: nextPickupId++, kind: 'gold', amount, x: at.x, z: at.z, noMagnetTicks: land,
     });
     world.events.emit('gold_dropped', { amount, x, z });
   }

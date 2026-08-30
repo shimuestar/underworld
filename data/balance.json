@@ -358,6 +358,9 @@
   },
 
   "pickups": {
+    "_dropRuleNote": "모든 처치 드랍 공통 (2026-08-30): 플레이어 반대쪽 호(awayArcDeg)로만 떨어지고 landNoMagnetTicks 동안 자석·픽업이 안 문다 — 뭘 먹었는지 보이게",
+    "awayArcDeg": 150,
+    "landNoMagnetTicks": 50,
     "_graveNote": "죽음 비석 — 이 반경 안까지 다가가야 유품(가방 소모품)을 회수한다. 자석에 안 걸린다",
     "grave": { "radius": 1.4 },
     "_slimeEatNote": "슬라임 식탐 — 몸 반경 + 이 손길 안의 바닥 아이템을 삼킨다. 죽으면 전부 게워 낸다",
@@ -590,6 +593,9 @@
     "fuseTicks": 30,
     "_sizeNote": "기믹 시각·판정 2배 (2026-08-30 — 너무 작다는 피드백). Stage 는 group.scale 2 로 그린다",
     "scatterRadius": 1.2,
+    "_lootDropNote": "전리품은 플레이어 반대쪽 호(±scatterAwayArcDeg/2)로만 떨어지고, lootNoMagnetTicks 동안은 코앞이라도 못 줍는다 — 때리자마자 입에 들어오면 뭘 먹었는지 모른다 (2026-08-30)",
+    "scatterAwayArcDeg": 150,
+    "lootNoMagnetTicks": 50,
     "_explodeNote": "기믹 폭발 — 통(84/6.5)보다 약한 급",
     "explode": {
       "radius": 5.0,

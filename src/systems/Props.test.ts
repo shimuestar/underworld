@@ -153,6 +153,17 @@ describe('기믹 — 파괴 롤과 판정', () => {
     expect(barrel.alive).toBe(false);
   });
 
+  it('몬스터 드랍도 같은 규칙 — 플레이어 반대쪽 + 착지 유예', () => {
+    const orig = Math.random;
+    Math.random = () => 0; // 물약 드랍 확정 + 호의 한쪽 끝
+    Pickups.rollDrops(world, 'goblin_runner', 10, 6); // 플레이어(6,6)에서 +X 쪽 4m
+    Math.random = orig;
+    const drop = world.groundItems.find((g) => g.kind === 'potion');
+    expect(drop).toBeTruthy();
+    expect(drop!.x).toBeGreaterThan(10); // 반대쪽(+X)으로 밀려 떨어졌다
+    expect(drop!.noMagnetTicks).toBe(balance.pickups.landNoMagnetTicks);
+  });
+
   it('noExplode(작은방 배치) — 폭발 롤이 나와도 심지가 붙지 않는다', () => {
     Props.init(world);
     const prop = putProp(world, 'prop_crate', 12, 6);
@@ -186,12 +197,16 @@ describe('기믹 — 파괴 롤과 판정', () => {
     Math.random = orig;
     const drop = world.groundItems.find((g) => g.kind === 'ammo');
     expect(drop).toBeTruthy();
-    // 밟는다 — 자석 없이 곧장 몸 위로 옮겨 흡수 확인
+    // 플레이어(6,6) 반대쪽으로 떨어졌다 — 기믹(8,6) 기준 +X 쪽
+    expect(drop!.x).toBeGreaterThan(8);
+    // 바닥에 놓이기 전(noMagnetTicks)엔 코앞이라도 못 줍는다
+    expect(drop!.noMagnetTicks).toBe(balance.props.lootNoMagnetTicks);
     const reserve0 = world.weapon.reserve;
     drop!.x = world.player.x;
     drop!.z = world.player.z;
-    drop!.magnet = true;
-    for (let i = 0; i < 60; i++) Pickups.tick(world, DT); // 가슴 높이까지 떠올라 흡수될 시간
-    expect(world.weapon.reserve).toBe(reserve0 + lt.ammoAmount);
+    for (let i = 0; i < 10; i++) Pickups.tick(world, DT);
+    expect(world.weapon.reserve).toBe(reserve0); // 아직 낙하 유예
+    for (let i = 0; i < balance.props.lootNoMagnetTicks + 90; i++) Pickups.tick(world, DT);
+    expect(world.weapon.reserve).toBe(reserve0 + lt.ammoAmount); // 완전히 놓인 뒤에 먹힌다
   });
 });
