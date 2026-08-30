@@ -1106,7 +1106,8 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     const hp = world.player.health;
     world.input = Input.emptySnapshot();
     Enemies.tick(world, DT);
-    expect(world.player.health).toBe(hp - 6); // 빨렸다
+    const suckDmg = (enemyDef2('leech') as unknown as { faceSuck: { damage: number } }).faceSuck.damage;
+    expect(world.player.health).toBe(hp - suckDmg); // 빨렸다
     expect(l.health).toBe(18); // 10 + 8 — 빤 만큼 찼다
     // 누르고 있으면 못 빤다 — 흡혈 타이머가 멈춘다
     l.timer = 1;
@@ -1140,7 +1141,8 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
       Enemies.tick(world, DT);
     }
     expect(world.faceLeechId).toBeNull();
-    expect(world.player.health).toBe(hp - 18); // 정확히 3번만 빨렸다
+    const suckDmg3 = (enemyDef2('leech') as unknown as { faceSuck: { damage: number } }).faceSuck.damage;
+    expect(world.player.health).toBe(hp - suckDmg3 * 3); // 정확히 3번만 빨렸다
     // 사라지지 않는다 — 배불러 무거워진 채 지상에 남는다 (재상승·위장 금지)
     expect(l.gorged).toBe(true);
     for (let i = 0; i < 400; i++) {

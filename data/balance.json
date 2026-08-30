@@ -146,7 +146,8 @@
     "playerKnockbackTicks": 12,
     "collisionRadius": 0.46,
     "height": 1.3,
-    "noiseRadius": 22
+    "_noiseNote": "22 → 15.4 (2026-08-30, -30%) — 한 발에 층 절반이 깨어나 과했다",
+    "noiseRadius": 15.4
   },
   "barrierBreak": {
     "_comment": "수호주술사 마법 방어막 — 실탄만 통하던 것을 해머로도 깰 수 있게. 1·2·3타 구분 없이 hammerHitsToBreak 방이면 깨진다(약 2연결). 깨지기 전까지 해머 피해는 여전히 0이고, 남은 내구가 방어막 투명도로 보인다",
@@ -216,13 +217,13 @@
     "headshotKillFreezeTicks": 4,
     "headshotKillBurstScale": 2.3,
     "hammer": {
-      "_damageNote": "권총(34)의 약 60%",
-      "damage": 20,
+      "_damageNote": "20 → 15 (2026-08-30, -25%) — 권총(34)의 약 44%. 공속도 함께 -25%(cooldownTicks 18→24)",
+      "damage": 15,
       "range": 3.1,
       "arcDeg": 100,
       "_impactNote": "클릭 후 실제로 해머가 닿기까지의 틱 — 뷰모델 애니메이션(감기+베기)과 맞춘 값",
       "impactTicks": 11,
-      "cooldownTicks": 18,
+      "cooldownTicks": 24,
       "whiffExtraCooldownTicks": 20,
       "noiseRadius": 5.0,
       "knockback": 2.4,
@@ -442,10 +443,11 @@
     "_comment": "생명 입자 — 적이 죽으면 그 자리에 흩뿌려지고, 플레이어가 magnetRadius 안에 들어오면 빨려 들어와 HP 를 healPerMote 씩 채운다. 멀리서 죽이면 그 자리에 남았다가 lifeTicks 뒤 사라진다 (마지막 fadeTicks 동안 옅어진다). 한번 자석에 걸리면 물러나도 끝까지 따라온다",
     "_healNote": "2026-08: 입자당 2 → 1, 개수 3/5/8 고정 → 범위 랜덤. 처치당 평균 6/10/16 HP 가 너무 후해서 절반으로 줄였고(평균 3/4/4.5), 종류별 격차도 좁혔다 — 무거운 적을 잡는 보상은 XP·드랍이지 회복이 아니다",
     "_redNote": "2026-08-30: 색 초록→붉은색(피의 정수), 회복 1→0.8 (-20%)", "healPerMote": 0.8,
+    "_countNote": "2026-08-30: 개수 -30% (평균 3/4/4.5 → 2/3/3) — 회복 -20%와 함께 전투 후 공짜 회복을 더 조인다",
     "countByWeight": {
-      "light": { "min": 2, "max": 4 },
-      "medium": { "min": 3, "max": 5 },
-      "heavy": { "min": 3, "max": 6 }
+      "light": { "min": 1, "max": 3 },
+      "medium": { "min": 2, "max": 4 },
+      "heavy": { "min": 2, "max": 4 }
     },
     "scatterRadius": 0.7,
     "hoverHeight": 0.9,
@@ -590,7 +592,8 @@
       "prop_minecart": 15,
       "prop_sarcophagus": 10
     },
-    "noiseRadius": 10,
+    "_noiseNote": "파괴음 10 → 4 (2026-08-30) — 부술 때마다 방 몇 개가 통째로 깨어나 너무 시끄러웠다. 몬스터 하나 때리는 소음(enemyAi.hitNoiseRadius 4)과 같은 급",
+    "noiseRadius": 4,
     "fuseTicks": 30,
     "_sizeNote": "기믹 시각·판정 2배 (2026-08-30 — 너무 작다는 피드백). Stage 는 group.scale 2 로 그린다",
     "scatterRadius": 1.2,
@@ -599,6 +602,8 @@
     "lootNoMagnetTicks": 50,
     "_explodeNote": "기믹 폭발 — 통(84/6.5)보다 약한 급",
     "explode": {
+      "_noiseNote": "폭발 소음 — 파괴음×2(=20) 하드코딩을 분리하며 30% 감소 (2026-08-30)",
+      "noiseRadius": 14,
       "radius": 5.0,
       "damage": 60,
       "damageFalloffMin": 0.25,

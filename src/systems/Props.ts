@@ -140,7 +140,7 @@ export function tick(world: World, _dt: number): void {
       enemyKnockback: ex.enemyKnockback,
       playerKnockback: ex.playerKnockback,
       playerKnockbackTicks: ex.playerKnockbackTicks,
-      noiseRadius: balance.props.noiseRadius * 2, // 폭발음은 파괴음보다 멀리
+      noiseRadius: ex.noiseRadius, // 폭발음은 파괴음보다 멀리 (전용 값)
       fxHeight: (cfg?.height ?? 0.8) * 0.5,
     });
   }

@@ -116,12 +116,12 @@ describe('기믹 — 파괴 롤과 판정', () => {
     Math.random = () => 0;
     const near = putProp(world, 'prop_jar', 10, 6);
     const enemy = {
-      id: 7001, type: 'spider_large', x: 16, z: 6, prevX: 16, prevZ: 6,
+      id: 7001, type: 'spider_large', x: 13, z: 6, prevX: 13, prevZ: 6,
       yaw: 0, homeYaw: 0, health: 75, alive: true, ai: 'idle',
       timer: 0, noticeTicks: 0, burnTicks: 0, burnDamagePerTick: 0,
     } as import('../core/World').EnemyState;
     world.enemies.push(enemy);
-    breakProp(world, near); // 10m 소음 — 6m 거리라 들린다
+    breakProp(world, near); // 4m 소음(hitNoiseRadius 급) — 3m 거리라 들린다
     Math.random = orig;
     expect(enemy.ai).toBe('chase');
   });

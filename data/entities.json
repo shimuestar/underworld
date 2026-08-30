@@ -5,7 +5,7 @@
     "goblin_runner": {
       "name": "고블린 러너",
       "zone": 1, "slice": true,
-      "weight": "light", "xp": 10, "health": 30, "speed": 7.5, "damage": 12,
+      "weight": "light", "xp": 10, "health": 30, "speed": 7.5, "damage": 14,
       "radius": 0.5, "height": 1.6,
       "aggroRange": 16, "attackRange": 2.2,
       "behavior": "charge",
@@ -16,7 +16,7 @@
     "goblin_spear": {
       "name": "고블린 창병",
       "zone": 1, "slice": true,
-      "weight": "medium", "xp": 20, "health": 110, "speed": 3.2, "damage": 22,
+      "weight": "medium", "xp": 20, "health": 110, "speed": 3.2, "damage": 25,
       "radius": 0.62, "height": 1.8,
       "aggroRange": 14, "attackRange": 3.6,
       "behavior": "guard_advance",
@@ -24,7 +24,7 @@
       "_knockbackNote": "찌르기 밀림 — 기본 playerKnockback.thrust(1.6m/8틱)의 2배인 3.2m. 미는 시간도 함께 2배(16틱)로 둬서 속도는 그대로다 (12m/s) — 거리만 늘리고 시간을 두면 순간이동처럼 보인다",
       "_recoverNote": "2026-08-27: 명중 후 후딜 7 → 20 틱. 찌르는 동안 방패가 내려가 있는데(SHIELD_DOWN_STATES) 후딜이 0.12초뿐이라 화살·총으로 그 틈을 노리는 게 사실상 불가능했다. 빗나갔을 때(whiffRecoverTicks 63)만 노릴 수 있던 것을 명중했을 때도 노릴 수 있게 연다 — 방패병을 원거리로 상대하는 유일한 창구다", "_thrustNote": "찌르기 — 창끝이 판정 창(6+12틱) 동안 뒤로 당긴 자리에서 최대 사거리까지 나간다. strikeEase 1.8 = 앞쪽에서 확 뻗고 끝에서 천천히 밀어붙인다(1이면 등속). 등속이던 시절엔 0.3초 내내 스르르 나와 '느리게 찌른다'는 소리를 들었다. 경직(recoverTicks·whiffRecoverTicks)은 2026-08 에 30% 줄였다",
       "attack": { "type": "thrust", "arcDeg": 50, "strikeEase": 1.8, "windupTicks": 10, "recoverTicks": 20, "whiffRecoverTicks": 63, "impactRangeMul": 1.2, "playerKnockback": 3.2, "playerKnockbackTicks": 16, "parryable": true, "telegraph": "blue" },
-      "shieldBash": { "type": "bash", "arcDeg": 110, "damage": 10, "playerKnockback": 3.2, "windupTicks": 9, "recoverTicks": 20, "impactRangeMul": 1.0, "parryable": true, "telegraph": "blue" },
+      "shieldBash": { "type": "bash", "arcDeg": 110, "damage": 12, "playerKnockback": 3.2, "windupTicks": 9, "recoverTicks": 20, "impactRangeMul": 1.0, "parryable": true, "telegraph": "blue" },
       "chargeAttack": { "type": "thrust", "arcDeg": 55, "strikeEase": 1.8, "chargeSpeed": 11.5, "minRange": 4.5, "windupTicks": 11, "recoverTicks": 10, "whiffRecoverTicks": 63, "impactRangeMul": 1.2, "playerKnockback": 3.2, "playerKnockbackTicks": 16, "parryable": true, "telegraph": "blue" },
       "counters": { "pistol": "poor", "rifle": "poor", "grenade": "good", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
       "drops": ["sig_fireball"], "dropsOnDeath": true
@@ -33,7 +33,7 @@
     "spider_small": {
       "name": "검은 거미",
       "zone": 1, "slice": true,
-      "weight": "light", "xp": 12, "_healthNote": "18 → 23 (2026-08-29, +25%)", "health": 23, "speed": 5.6, "damage": 8,
+      "weight": "light", "xp": 12, "_healthNote": "18 → 23 (2026-08-29, +25%)", "health": 23, "speed": 5.6, "damage": 9,
       "radius": 0.42, "height": 0.7,
       "aggroRange": 16, "attackRange": 1.7,
       "behavior": "swarm",
@@ -47,7 +47,7 @@
         "height": 1.9, "speedMul": 0.9, "attachRange": 2.2, "climbTicks": 24,
         "fallTicks": 10, "fallStunTicks": 50,
         "pounceMinRange": 3, "pounceMaxRange": 7, "pounceWindupTicks": 34, "pounceAirTicks": 18,
-        "pounceRadius": 1.1, "pounceDamage": 10, "pounceKnockback": 1.6,
+        "pounceRadius": 1.1, "pounceDamage": 12, "pounceKnockback": 1.6,
         "pounceRecoverTicks": 40, "pounceWhiffTicks": 65,
         "cooldownTicks": 180, "skitterIntervalTicks": 22
       },
@@ -57,7 +57,7 @@
     "spider_large": {
       "name": "흰 거미",
       "zone": 1, "slice": true,
-      "weight": "medium", "xp": 45, "health": 75, "speed": 3.4, "damage": 6,
+      "weight": "medium", "xp": 45, "health": 75, "speed": 3.4, "damage": 7,
       "radius": 0.85, "height": 1.25,
       "aggroRange": 20, "attackRange": 15, "kiteMinRange": 7,
       "behavior": "caster_kite",
@@ -71,19 +71,19 @@
     "leech": {
       "name": "거머리",
       "zone": 1, "slice": true,
-      "weight": "light", "xp": 12, "health": 22, "speed": 5.5, "damage": 8,
+      "weight": "light", "xp": 12, "health": 22, "speed": 5.5, "damage": 9,
       "radius": 0.35, "height": 0.6,
       "aggroRange": 14, "attackRange": 1.5,
       "behavior": "swarm",
       "_ceilingNote": "천장 잠복자 — ceiling:true 로 배치하면 천장에 붙어 시작한다. 단서는 점액 방울(뚝…뚝)과 근접 찌륵거림. 총성·포효 등 어떤 소음에도 초연하다(기습 담당) — 밑(dropRadius) 통과와 직접 피격만 깨운다. 밑을 지나면 그 좌표로 떨어지며 내려찍고(회피 전용), 지상전 몇 초 뒤 플레이어가 멀면 천장으로 되돌아간다. 매달린 채 맞으면 추락해 길게 뻗는다 — 올려다보는 플레이어의 보상",
       "ceilingLurk": {
         "dropRadius": 3.4, "chitterRadius": 6, "dripIntervalTicks": 45,
-        "dropDurTicks": 20, "dropDamage": 14, "dropAoeRadius": 1.6, "dropWhiffTicks": 55,
+        "dropDurTicks": 20, "dropDamage": 16, "dropAoeRadius": 1.6, "dropWhiffTicks": 55,
         "groundTicks": 300, "reascendMinDist": 7, "ascendDurTicks": 18, "fallStunTicks": 90
       },
       "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 24, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue", "latches": true },
       "_faceSuckNote": "낙하가 명중하면 얼굴에 붙어 흡혈한다 — 화면을 가리고, 빨 때마다 제 몸을 채운다. 해머 한 방이면 떼어 걷어차고, maxSucks 번 빨면 배불러 스스로 뛰어내린다",
-      "faceSuck": { "intervalTicks": 55, "damage": 6, "heal": 8, "maxSucks": 3, "mashToEscape": 6, "kickDistance": 5, "kickStunTicks": 50, "selfDetachHop": 3 },
+      "faceSuck": { "intervalTicks": 55, "damage": 7, "heal": 8, "maxSucks": 3, "mashToEscape": 6, "kickDistance": 5, "kickStunTicks": 50, "selfDetachHop": 3 },
       "_leapNote": "지상에서도 4m 밖이면 얼굴로 뛰어든다 — 맞으면 흡혈 부착. 적색(회피 전용), 예고 시점 좌표로만 난다",
       "chargeAttack": { "type": "contact", "arcDeg": 130, "leapHeight": 1.7, "chargeSpeed": 14, "chargeRunTicks": 20, "minRange": 4, "maxRange": 9, "windupTicks": 22, "recoverTicks": 40, "whiffRecoverTicks": 60, "impactRangeMul": 1.2, "playerKnockback": 0.4, "parryable": false, "telegraph": "red", "cooldownTicks": 200, "latches": true },
       "counters": { "pistol": "best", "rifle": "best", "grenade": "poor", "flash": "good", "melee": "good", "magic": "good", "deflect": "none" },
@@ -92,7 +92,7 @@
     "ghoul": {
       "name": "구울",
       "zone": 1, "slice": true,
-      "weight": "medium", "xp": 30, "health": 110, "speed": 6.5, "damage": 13,
+      "weight": "medium", "xp": 30, "health": 110, "speed": 6.5, "damage": 15,
       "radius": 0.42, "height": 1.85,
       "aggroRange": 17, "attackRange": 2.0,
       "behavior": "charge",
@@ -111,7 +111,7 @@
     "slime_mother": {
       "name": "어미 슬라임",
       "zone": 1, "slice": true, "boss": true, "healthBars": 2,
-      "weight": "heavy", "xp": 80, "health": 390, "speed": 2.0, "damage": 20,
+      "weight": "heavy", "xp": 80, "health": 390, "speed": 2.0, "damage": 23,
       "radius": 1.1, "height": 1.7,
       "aggroRange": 18, "attackRange": 2.4,
       "blind": true, "hearingMul": 4, "tremorSense": 4.5,
@@ -131,7 +131,7 @@
     "bat": {
       "name": "동굴 박쥐",
       "zone": 1, "slice": true,
-      "weight": "light", "xp": 10, "health": 35, "speed": 6.5, "damage": 8,
+      "weight": "light", "xp": 10, "health": 35, "speed": 6.5, "damage": 9,
       "radius": 0.38, "height": 0.5,
       "aggroRange": 15, "attackRange": 1.2,
       "behavior": "swarm",
@@ -172,7 +172,7 @@
     "slime": {
       "name": "슬라임",
       "zone": 1, "slice": true,
-      "weight": "medium", "xp": 10, "health": 42, "speed": 2.6, "damage": 14,
+      "weight": "medium", "xp": 10, "health": 42, "speed": 2.6, "damage": 16,
       "radius": 0.55, "height": 0.9,
       "aggroRange": 16, "attackRange": 1.6,
       "_natureNote": "눈이 없다 — 시야·인기척·랜턴으로는 절대 못 알아채고 소리로만 깬다(청각 2.5배). 걸어서(무음) 지나가면 코앞이라도 무해. 총성 한 발에 방의 슬라임이 전부 깬다",
@@ -194,7 +194,7 @@
     "slime_small": {
       "name": "새끼 슬라임",
       "zone": 1, "slice": true,
-      "weight": "light", "xp": 4, "health": 16, "speed": 3.4, "damage": 8,
+      "weight": "light", "xp": 4, "health": 16, "speed": 3.4, "damage": 9,
       "radius": 0.34, "height": 0.55,
       "aggroRange": 16, "attackRange": 1.2,
       "blind": true, "hearingMul": 2.5, "tremorSense": 2.0,
@@ -211,7 +211,7 @@
       "zone": 1, "slice": true,
       "_arrowDropNote": "화살을 지고 다니는 적만 화살통을 떨군다. min 은 확정, 그 위로는 extraChance 로 한 대씩 더 굴린다 — 흔하면 활이 자급자족이 되고, 없으면 활을 주력으로 쓸 수가 없다",
       "arrowDrop": { "min": 1, "max": 2, "extraChance": 0.15 },
-      "weight": "light", "xp": 15, "health": 25, "speed": 3.0, "damage": 15,
+      "weight": "light", "xp": 15, "health": 25, "speed": 3.0, "damage": 17,
       "radius": 0.5, "height": 1.7,
       "aggroRange": 20, "attackRange": 18, "kiteMinRange": 8,
       "behavior": "caster_kite",
@@ -222,14 +222,14 @@
     "warden": {
       "name": "수호주술사",
       "zone": 2, "slice": true,
-      "weight": "medium", "xp": 45, "health": 90, "speed": 2.4, "damage": 26,
+      "weight": "medium", "xp": 45, "health": 90, "speed": 2.4, "damage": 30,
       "radius": 0.6, "height": 2.0,
       "aggroRange": 18, "attackRange": 16, "kiteMinRange": 6,
       "behavior": "caster_kite",
       "magicBarrier": { "blocksMagic": true, "blocksMelee": true, "piercedBy": ["pistol"] },
       "attack": { "type": "projectile", "windupTicks": 46, "recoverTicks": 70, "impactRangeMul": 1, "parryable": false, "deflectable": true, "telegraph": "purple", "projectileSpeed": 14, "projectileRadius": 0.3,
         "_splashNote": "내파 — 화염구(밀어냄)의 정반대. 직격은 뒤로 밀지만 빗나가면 폭심으로 끌려간다. 반사하면 적들이 한곳에 뭉친다",
-        "splash": { "kind": "implode", "radius": 4.8, "damage": 12, "falloffMin": 0.35, "pullDistance": 4.2, "pullTicks": 22 } },
+        "splash": { "kind": "implode", "radius": 4.8, "damage": 14, "falloffMin": 0.35, "pullDistance": 4.2, "pullTicks": 22 } },
       "counters": { "pistol": "best", "rifle": "poor", "grenade": "poor", "flash": "poor", "melee": "none", "magic": "none", "deflect": "good" },
       "_dropsNote": "sig_curse(4구역)는 슬라이스 밖이라 sig_dash로 교체. 왼팔 마법 시스템 구현 시 복원 검토",
       "drops": ["sig_dash"], "dropsOnDeath": true
@@ -237,7 +237,7 @@
     "goblin_chieftain": {
       "name": "고블린 족장",
       "zone": 1, "slice": true, "boss": true,
-      "weight": "heavy", "xp": 250, "health": 966, "healthBars": 2, "speed": 4.0, "damage": 30,
+      "weight": "heavy", "xp": 250, "health": 966, "healthBars": 2, "speed": 4.0, "damage": 35,
       "_healthNote": "health 는 총량이고 healthBars 로 나눠 표시한다 — 483 짜리 두 칸. 첫 칸(×2)을 다 깎으면 색이 바뀌며 두 번째(×1)로 넘어간다",
       "radius": 0.8, "height": 2.4,
       "aggroRange": 18, "attackRange": 3.4,
@@ -248,7 +248,7 @@
       "rangedAttack": { "type": "projectile", "windupTicks": 36, "recoverTicks": 55, "impactRangeMul": 1, "parryable": false, "deflectable": false, "telegraph": "red", "projectileSpeed": 18, "projectileRadius": 0.45, "projectileKind": "rock", "breakable": true, "minRange": 7, "abortRange": 4.5 },
       "_rockNote": "던진 바위는 반사(deflectable)는 안 되지만 breakable 이라 화염구·수류탄으로 공중에서 깰 수 있다. 총알(히트스캔)로는 안 된다 — 그러면 돌 공격이 무력해진다",
       "_volleyNote": "화살 세례 — 0.9초 예고 뒤 0.5초 간격으로 10발. shotIntervalTicks 는 발사 틱을 뺀 대기라 29 = 실제 30틱 간격(0.5초). 쏘는 동안 제자리에 서서 계속 조준하므로 옆으로 계속 움직여야 한다",
-      "volleyAttack": { "type": "projectile", "windupTicks": 54, "recoverTicks": 70, "impactRangeMul": 1, "parryable": false, "deflectable": false, "telegraph": "red", "projectileSpeed": 26, "projectileRadius": 0.15, "damage": 12, "muzzleSideMul": 0.85, "muzzleHeightMul": 0.72, "shots": 10, "shotIntervalTicks": 29, "minRange": 5, "abortRange": 4.5, "cooldownTicks": 600 },
+      "volleyAttack": { "type": "projectile", "windupTicks": 54, "recoverTicks": 70, "impactRangeMul": 1, "parryable": false, "deflectable": false, "telegraph": "red", "projectileSpeed": 26, "projectileRadius": 0.15, "damage": 14, "muzzleSideMul": 0.85, "muzzleHeightMul": 0.72, "shots": 10, "shotIntervalTicks": 29, "minRange": 5, "abortRange": 4.5, "cooldownTicks": 600 },
       "_parryNote": "족장은 완벽 패링만 받는다 — 일반 패링 대역에서 눌러도 성립하지 않고, 무기 끝이 방패에 닿는 순간에만 성립한다. 성립해도 결과는 일반 패링(parryAlwaysNormal). 방패막기로는 공격을 끊을 수 없다. 3연속 패링 → 스태거 → 처형, 그게 전부다 — 장갑 페이즈는 폐지했다",
       "perfectParryOnly": true,
       "parryAlwaysNormal": true,
