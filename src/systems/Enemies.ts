@@ -834,6 +834,8 @@ function tickFlying(
           (o.packDiveCooldown ?? 0) <= 0 &&
           (o.downTicks ?? 0) <= 0 &&
           (o.batFallTicks ?? 0) <= 0 &&
+          (o.batLitTicks ?? 0) <= 0 && // 랜턴 속박 우선 — 빛에 짓눌린 몸은 무리 신호에도 못 뜬다
+
           Math.hypot(o.x - enemy.x, o.z - enemy.z) <= pack.radius,
       );
       if (others.length + 1 >= pack.minCount) packed = others;

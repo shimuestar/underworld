@@ -940,6 +940,32 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.player.health).toBe(hp2); // 같은 강하에서 두 번 치지 않는다
   });
 
+  it('박쥐 랜턴 속박 우선 — 무리 강하 신호가 와도 빛에 잡힌 박쥐는 안 뜬다', () => {
+    world.lantern.on = true;
+    world.player.yaw = -Math.PI / 2; // +X 를 본다 — 빔도 +X
+    const lit = add('bat', 10, 6); // 빔 안 4m — 속박된다
+    lit.ai = 'chase';
+    lit.swoopCooldown = 99999;
+    lit.screamCooldown = 99999;
+    const leader = add('bat', 10, 7.5); // 빔 밖(각도) — 자유롭게 강하한다
+    leader.ai = 'chase';
+    leader.screamCooldown = 99999;
+    const wing = add('bat', 11, 7.5); // 셋째 — 무리 최소 인원(2)을 리더와 채운다
+    wing.ai = 'chase';
+    wing.screamCooldown = 99999;
+    // 속박이 먼저 걸리게 몇 틱 돌린 뒤 리더의 강하를 기다린다
+    let packCount = 0;
+    world.events.on('bat_pack_dive', (pl) => (packCount = (pl as { count: number }).count));
+    for (let i = 0; i < 120 && packCount === 0; i++) {
+      world.input = Input.emptySnapshot();
+      world.tick++;
+      Enemies.tick(world, DT);
+    }
+    expect(packCount).toBeGreaterThanOrEqual(2); // 무리 강하는 일어났다
+    expect((lit.batLitTicks ?? 0)).toBeGreaterThan(0); // 여전히 빛에 잡혀 있다
+    expect(lit.ai).toBe('chase'); // 합류하지 않았다 — windup 이 아니다
+  });
+
   it('박쥐 비명 여운 — 파문이 퍼지는 동안 제자리에 떠 있는다', () => {
     world.lantern.on = false; // 랜턴 속박 배제
     const b = add('bat', 12, 6);
