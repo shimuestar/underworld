@@ -1387,7 +1387,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           if (!blocker) enemy.strafeBlockedTicks = 0; // 각이 났다 (막힌 채면 포기 상태 유지)
           startWindup(world, enemy, attack);
         } else if (dist > 0) {
-          moveAvoiding(world, enemy, def, distX / dist, distZ / dist, moveSpeed(enemy, def) * dt);
+          const ad = approachDir(world, enemy, distX, distZ, dist);
+          if (ad.pursuing) enemy.yaw = Math.atan2(-ad.x, -ad.z);
+          moveAvoiding(world, enemy, def, ad.x, ad.z, moveSpeed(enemy, def) * dt);
         }
         break;
       }
@@ -1497,9 +1499,10 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (dist > 0) {
         // 살금살금 — stalk 이 있으면 달려들기 사정거리 밖에서는 천천히 걸어온다 (구울)
         const stalkMul = def.stalk && dist > def.stalk.untilRange ? def.stalk.speedMul : 1;
-        // 산개 접근 — 고유 편각으로 벌어져 다가온다 (한 줄 종대 방지)
-        const fd = flankDir(enemy, distX / dist, distZ / dist, dist);
-        moveAvoiding(world, enemy, def, fd.x, fd.z, moveSpeed(enemy, def) * stalkMul * dt);
+        // 시야 트임 = 산개 접근, 벽에 막힘 = 흐름장 따라 문·통로로 우회
+        const ad = approachDir(world, enemy, distX, distZ, dist);
+        if (ad.pursuing) enemy.yaw = Math.atan2(-ad.x, -ad.z); // 가는 쪽을 본다
+        moveAvoiding(world, enemy, def, ad.x, ad.z, moveSpeed(enemy, def) * stalkMul * dt);
       }
       break;
     }
@@ -1895,6 +1898,96 @@ function wakeAround(world: World, source: EnemyState, radius: number): void {
 }
 
 const strafeCfg = balance.enemyAi.strafe;
+
+/** 추격 흐름장 캐시 — 플레이어가 칸을 옮기거나 recomputeTicks 가 지나면 다시 판다.
+ *  한 틱에 몇 마리가 묻어도 BFS 는 한 번이다 */
+let pursuitCache: { level: unknown; key: number; tick: number; field: Map<number, number> } | null =
+  null;
+function getPursuitField(world: World): Map<number, number> {
+  const cs = world.level.cellSize;
+  const key = Math.floor(world.player.z / cs) * 4096 + Math.floor(world.player.x / cs);
+  const pc = pursuitCache;
+  if (
+    pc &&
+    pc.level === world.level &&
+    pc.key === key &&
+    Math.abs(world.tick - pc.tick) < balance.enemyAi.pursuit.recomputeTicks
+  ) {
+    return pc.field;
+  }
+  const field = noiseField(world.level, world.player.x, world.player.z, balance.enemyAi.pursuit.range);
+  pursuitCache = { level: world.level, key, tick: world.tick, field };
+  return field;
+}
+
+/** 벽 너머 추격 경유 방향 — 흐름장의 내리막을 따라 문·통로로 돌아간다.
+ *  lookaheadCells 칸 앞까지 내리막을 걷되 시야가 트인 마지막 칸 중심을 겨눈다
+ *  (모서리 끊기 — 칸 중심을 일일이 밟는 지그재그를 편다). 장이 안 닿으면(문 닫힘·
+ *  range 밖) null — 예전처럼 직진해 벽에 붙는 폴백 */
+function pursuitDir(world: World, enemy: EnemyState): { x: number; z: number } | null {
+  const field = getPursuitField(world);
+  const cs = world.level.cellSize;
+  let cx = Math.floor(enemy.x / cs);
+  let cz = Math.floor(enemy.z / cs);
+  let cur = field.get(cz * 4096 + cx);
+  if (cur === undefined) return null;
+  let tx: number | null = null;
+  let tz = 0;
+  for (let step = 0; step < balance.enemyAi.pursuit.lookaheadCells; step++) {
+    let bx = cx;
+    let bz = cz;
+    let best: number = cur;
+    for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const v = field.get((cz + oz) * 4096 + (cx + ox));
+      if (v !== undefined && v < best) {
+        best = v;
+        bx = cx + ox;
+        bz = cz + oz;
+      }
+    }
+    if (bx === cx && bz === cz) break; // 바닥 — 플레이어 칸까지 내려왔다
+    cx = bx;
+    cz = bz;
+    cur = best;
+    const wx = (cx + 0.5) * cs;
+    const wz = (cz + 0.5) * cs;
+    const visible = world.level.hasLineOfSight(enemy.x, enemy.z, wx, wz);
+    if (tx === null) {
+      // 첫 내리막 칸은 무조건 겨눈다 — 이웃 칸이라 슬라이드로 닿는다
+      tx = wx;
+      tz = wz;
+      if (!visible) break;
+    } else if (visible) {
+      tx = wx;
+      tz = wz;
+    } else {
+      break;
+    }
+  }
+  if (tx === null) return null;
+  const dx = tx - enemy.x;
+  const dz = tz - enemy.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 0.05) return null;
+  return { x: dx / d, z: dz / d };
+}
+
+/** 추격 접근 방향 — 시야가 트이면 산개(부채꼴), 벽에 막히면 흐름장으로 돌아간다 */
+function approachDir(
+  world: World,
+  enemy: EnemyState,
+  distX: number,
+  distZ: number,
+  dist: number,
+): { x: number; z: number; pursuing: boolean } {
+  if (world.level.hasLineOfSight(enemy.x, enemy.z, world.player.x, world.player.z)) {
+    const fd = flankDir(enemy, distX / dist, distZ / dist, dist);
+    return { x: fd.x, z: fd.z, pursuing: false };
+  }
+  const pd = pursuitDir(world, enemy);
+  if (pd) return { x: pd.x, z: pd.z, pursuing: true };
+  return { x: distX / dist, z: distZ / dist, pursuing: false };
+}
 
 /** 산개 접근 — id 로 정해지는 고유 편각으로 접근 방향을 튼다. 멀수록 크게 벌어지고
  *  convergeRange 안에서는 정면으로 수렴한다. 무리가 같은 최단 직선을 공유해 한 줄

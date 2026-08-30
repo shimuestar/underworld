@@ -86,6 +86,72 @@ describe('산개 접근 — 부채꼴로 벌어져 다가온다', () => {
   });
 });
 
+describe('벽 너머 추격 — 흐름장을 따라 통로로 돌아온다', () => {
+  function makeMazeWorld(): World {
+    // 세로 벽(col5, 4m 폭)이 방을 둘로 가르고 아래 행만 뚫려 있다 — 1칸 통로
+    const level = new Level({
+      id: 'mazerange',
+      name: 'mazerange',
+      cellSize: 4,
+      ceiling: 4,
+      grid: [
+        '##########',
+        '#S...#...#',
+        '#....#...#',
+        '#....#...#',
+        '#........#',
+        '##########',
+      ],
+      lighting: { ambient: 0.04, torches: [] },
+    });
+    const w = makeWorld();
+    // makeWorld 의 방 대신 미로 레벨로 교체 — 플레이어 (6,6)
+    return new World(w.events, {
+      input: Input.emptySnapshot(),
+      player: { ...w.player, x: 6, z: 6, prevX: 6, prevZ: 6 },
+      lantern: w.lantern,
+      weapon: w.weapon,
+      mana: w.mana,
+      sigils: w.sigils,
+      modifiers: w.modifiers,
+      corruption: w.corruption,
+      enemies: [],
+      level,
+    });
+  }
+
+  it('시야가 벽에 막힌 적이 아래 통로로 돌아 플레이어에게 닿는다', () => {
+    world = makeMazeWorld();
+    world.player.health = 100000;
+    const e = add('goblin_runner', 30, 6, 7); // 벽 반대편 — 직선은 col5 벽에 막힌다
+    expect(world.level.hasLineOfSight(e.x, e.z, 6, 6)).toBe(false);
+    let reached = false;
+    for (let i = 0; i < 900 && !reached; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+      if (Math.hypot(e.x - world.player.x, e.z - world.player.z) < 3) reached = true;
+    }
+    expect(reached).toBe(true); // 벽에 갈리지 않고 통로(4행)로 돌아왔다
+  });
+
+  it('흐름장이 안 닿는 곳(닫힌 성역 밖)은 예전처럼 직진 폴백 — 오류 없이 벽에 붙는다', () => {
+    world = makeMazeWorld();
+    const e = add('goblin_runner', 30, 6, 8);
+    // 흐름장 범위를 임시로 0 으로 — 장이 비어 폴백 경로를 탄다
+    const saved = balance.enemyAi.pursuit.range;
+    (balance.enemyAi.pursuit as { range: number }).range = 0;
+    try {
+      for (let i = 0; i < 60; i++) {
+        world.input = Input.emptySnapshot();
+        Enemies.tick(world, DT);
+      }
+    } finally {
+      (balance.enemyAi.pursuit as { range: number }).range = saved;
+    }
+    expect(e.x).toBeLessThan(30); // 직진으로 벽 쪽까지는 갔다 (끼임은 예전과 같음)
+  });
+});
+
 describe('교대 공격 — 동시 예고 상한과 옆걸음 포위', () => {
   it('셋이 사거리 안이라도 동시에 예고에 드는 건 최대 인원뿐, 남은 하나는 돈다', () => {
     world.player.health = 100000; // 얻어맞으며 재는 테스트 — 죽음 배제

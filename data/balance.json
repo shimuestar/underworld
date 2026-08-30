@@ -718,6 +718,12 @@
       "convergeRange": 3.5,
       "fullRange": 9
     },
+    "_pursuitNote": "벽 너머 추격 — 시야가 막히면 플레이어 칸 기준 흐름장(noiseField 재사용, 닫힌 문은 벽)을 따라 문·통로로 돌아간다. range(m) 밖이나 문 닫힌 방은 장이 안 닿아 예전처럼 직진 폴백. lookaheadCells 는 모서리 끊기(시야 트인 마지막 경유 칸)로 지그재그를 편다 (2026-08-30, 문틀에 끼는 문제)",
+    "pursuit": {
+      "range": 60,
+      "recomputeTicks": 30,
+      "lookaheadCells": 6
+    },
     "_engageNote": "교대 공격 — 플레이어 곁(countRadius)에서 동시에 공격 동작(windup·charging)에 들어갈 수 있는 적은 maxSimultaneous 명. 자리가 없으면 옆걸음(circleSpeedMul)으로 돌며 차례를 기다린다 — 한 점 다구리 대신 포위. 보스는 기다리지 않는다 (2026-08-30)",
     "engage": {
       "maxSimultaneous": 2,
