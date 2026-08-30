@@ -724,6 +724,13 @@
       "recomputeTicks": 30,
       "lookaheadCells": 6
     },
+    "_unstickNote": "끼임 탈출 — 추격 접근이 checkTicks 동안 기대 이동의 minProgress 비율도 못 가면(문설주·모서리에 갈림) ticks 동안 흐름장 우회를 강제하고 분리력을 sepMul 로 줄인다. 문 개구부가 2.1m 뿐이라 몸 중심이 문 중앙선 근처여야 통과한다 — 흐름장은 칸 중심(=문 중앙)을 겨눈다 (2026-08-30, 슬라임 문 끼임)",
+    "unstick": {
+      "checkTicks": 30,
+      "minProgress": 0.3,
+      "ticks": 60,
+      "sepMul": 0.25
+    },
     "_engageNote": "교대 공격 — 플레이어 곁(countRadius)에서 동시에 공격 동작(windup·charging)에 들어갈 수 있는 적은 maxSimultaneous 명. 자리가 없으면 옆걸음(circleSpeedMul)으로 돌며 차례를 기다린다 — 한 점 다구리 대신 포위. 보스는 기다리지 않는다 (2026-08-30)",
     "engage": {
       "maxSimultaneous": 2,

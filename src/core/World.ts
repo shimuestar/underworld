@@ -763,6 +763,12 @@ export interface EnemyState {
   /** 캐스터 재배치 — 사선이 아군에 막힌 누적 틱 / 현재 횡이동 방향(+1·-1) */
   strafeBlockedTicks?: number;
   strafeDir?: number;
+  /** 끼임 감지 — 최근 창(checkTicks)의 실제/기대 이동 누적과 카운터 */
+  stuckAccum?: number;
+  stuckExpect?: number;
+  stuckCount?: number;
+  /** 끼임 탈출 모드 잔여 틱 — 흐름장 우회 강제 + 분리력 축소 */
+  unstickTicks?: number;
   /** 넉백 잔여 틱 + 틱당 밀림량 (해머 등) */
   kbTicks?: number;
   kbX?: number;

@@ -1499,10 +1499,42 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (dist > 0) {
         // 살금살금 — stalk 이 있으면 달려들기 사정거리 밖에서는 천천히 걸어온다 (구울)
         const stalkMul = def.stalk && dist > def.stalk.untilRange ? def.stalk.speedMul : 1;
-        // 시야 트임 = 산개 접근, 벽에 막힘 = 흐름장 따라 문·통로로 우회
-        const ad = approachDir(world, enemy, distX, distZ, dist);
+        const un = balance.enemyAi.unstick;
+        let ad: { x: number; z: number; pursuing: boolean };
+        if ((enemy.unstickTicks ?? 0) > 0) {
+          // 끼임 탈출 — 시야와 무관하게 흐름장을 따라가되 지름길(lookahead) 없이
+          // 바로 다음 칸 중심만 겨눈다. 모서리 끊기는 레이 기준이라 문설주에
+          // 몸이 걸리는 대각선을 골라 제자리에 얼어붙는다 (실측: 슬라임 문 끼임)
+          enemy.unstickTicks = (enemy.unstickTicks ?? 0) - 1;
+          const pd = pursuitDir(world, enemy, 1);
+          ad = pd
+            ? { x: pd.x, z: pd.z, pursuing: true }
+            : { x: distX / dist, z: distZ / dist, pursuing: false };
+        } else {
+          // 시야 트임 = 산개 접근, 벽에 막힘 = 흐름장 따라 문·통로로 우회
+          ad = approachDir(world, enemy, distX, distZ, dist);
+        }
         if (ad.pursuing) enemy.yaw = Math.atan2(-ad.x, -ad.z); // 가는 쪽을 본다
-        moveAvoiding(world, enemy, def, ad.x, ad.z, moveSpeed(enemy, def) * stalkMul * dt);
+        const step = moveSpeed(enemy, def) * stalkMul * dt;
+        const bx = enemy.x;
+        const bz = enemy.z;
+        moveAvoiding(world, enemy, def, ad.x, ad.z, step, (enemy.unstickTicks ?? 0) > 0 ? un.sepMul : 1);
+        // 끼임 감지 — 최근 창에서 기대 이동 대비 실제 이동이 바닥이면 탈출 모드로.
+        // 문설주(개구부 2.1m)나 모서리에 몸을 갈며 제자리걸음하는 것을 잡는다
+        enemy.stuckAccum = (enemy.stuckAccum ?? 0) + Math.hypot(enemy.x - bx, enemy.z - bz);
+        enemy.stuckExpect = (enemy.stuckExpect ?? 0) + step;
+        enemy.stuckCount = (enemy.stuckCount ?? 0) + 1;
+        if ((enemy.stuckCount ?? 0) >= un.checkTicks) {
+          if (
+            (enemy.unstickTicks ?? 0) <= 0 &&
+            (enemy.stuckAccum ?? 0) < (enemy.stuckExpect ?? 0) * un.minProgress
+          ) {
+            enemy.unstickTicks = un.ticks;
+          }
+          enemy.stuckAccum = 0;
+          enemy.stuckExpect = 0;
+          enemy.stuckCount = 0;
+        }
       }
       break;
     }
@@ -1924,7 +1956,11 @@ function getPursuitField(world: World): Map<number, number> {
  *  lookaheadCells 칸 앞까지 내리막을 걷되 시야가 트인 마지막 칸 중심을 겨눈다
  *  (모서리 끊기 — 칸 중심을 일일이 밟는 지그재그를 편다). 장이 안 닿으면(문 닫힘·
  *  range 밖) null — 예전처럼 직진해 벽에 붙는 폴백 */
-function pursuitDir(world: World, enemy: EnemyState): { x: number; z: number } | null {
+function pursuitDir(
+  world: World,
+  enemy: EnemyState,
+  lookahead = balance.enemyAi.pursuit.lookaheadCells,
+): { x: number; z: number } | null {
   const field = getPursuitField(world);
   const cs = world.level.cellSize;
   let cx = Math.floor(enemy.x / cs);
@@ -1933,7 +1969,7 @@ function pursuitDir(world: World, enemy: EnemyState): { x: number; z: number } |
   if (cur === undefined) return null;
   let tx: number | null = null;
   let tz = 0;
-  for (let step = 0; step < balance.enemyAi.pursuit.lookaheadCells; step++) {
+  for (let step = 0; step < lookahead; step++) {
     let bx = cx;
     let bz = cz;
     let best: number = cur;
@@ -1982,6 +2018,14 @@ function approachDir(
 ): { x: number; z: number; pursuing: boolean } {
   if (world.level.hasLineOfSight(enemy.x, enemy.z, world.player.x, world.player.z)) {
     const fd = flankDir(enemy, distX / dist, distZ / dist, dist);
+    // 편각이 한 발 앞 벽 칸을 향하면 접는다 — 문 옆 벽에 몸을 갈며 낭비하는 그림 방지
+    const cs = world.level.cellSize;
+    const probe = 1.2 + (enemyDef(enemy.type).radius ?? 0.5);
+    const px = enemy.x + fd.x * probe;
+    const pz = enemy.z + fd.z * probe;
+    if (world.level.solidAt(Math.floor(px / cs), Math.floor(pz / cs))) {
+      return { x: distX / dist, z: distZ / dist, pursuing: false };
+    }
     return { x: fd.x, z: fd.z, pursuing: false };
   }
   const pd = pursuitDir(world, enemy);
@@ -2089,10 +2133,11 @@ function moveAvoiding(
   dirX: number,
   dirZ: number,
   step: number,
+  sepMul = 1, // 좁은 문을 줄지어 지날 때(끼임 탈출)는 서로 밀어내는 힘을 줄인다
 ): void {
   if ((enemy.flinchTicks ?? 0) > 0) return; // 총에 맞아 움찔 — 이번 틱은 못 움직인다
   const sep = separation(world, enemy);
-  const strength = balance.enemyAi.separation.strength;
+  const strength = balance.enemyAi.separation.strength * sepMul;
   let mx = dirX + sep.x * strength;
   let mz = dirZ + sep.z * strength;
   const len = Math.hypot(mx, mz);

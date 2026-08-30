@@ -5,7 +5,7 @@ import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
-import { Level } from '../level/GridLoader';
+import { addDoorFrameBlockers, Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
 import * as Sigils from './Sigils';
@@ -149,6 +149,72 @@ describe('벽 너머 추격 — 흐름장을 따라 통로로 돌아온다', () 
       (balance.enemyAi.pursuit as { range: number }).range = saved;
     }
     expect(e.x).toBeLessThan(30); // 직진으로 벽 쪽까지는 갔다 (끼임은 예전과 같음)
+  });
+});
+
+describe('문 통과 — 문설주(개구부 2.1m)에 끼지 않고 빠져나온다', () => {
+  function makeDoorWorld(): World {
+    // 세로 벽(col5) 가운데(row2)만 뚫리고, 실제 문처럼 문설주 블로커를 세운다
+    const level = new Level({
+      id: 'doorrange',
+      name: 'doorrange',
+      cellSize: 4,
+      ceiling: 4,
+      grid: [
+        '##########',
+        '#....#...#',
+        '#S.......#',
+        '#....#...#',
+        '##########',
+      ],
+      lighting: { ambient: 0.04, torches: [] },
+    });
+    addDoorFrameBlockers(level, 5, 2); // 개구부 z 8.95~11.05 (2.1m)
+    const w = makeWorld();
+    return new World(w.events, {
+      input: Input.emptySnapshot(),
+      player: { ...w.player, x: 6, z: 10, prevX: 6, prevZ: 10 },
+      lantern: w.lantern,
+      weapon: w.weapon,
+      mana: w.mana,
+      sigils: w.sigils,
+      modifiers: w.modifiers,
+      corruption: w.corruption,
+      enemies: [],
+      level,
+    });
+  }
+
+  it('중앙선에서 벗어난 채 와도 문설주에 갈리다 끼임 탈출로 통과한다', () => {
+    world = makeDoorWorld();
+    world.player.health = 100000;
+    const e = add('goblin_runner', 30, 10.6, 3); // id 3 — 강한 편각(+0.97)이 벽을 향한다
+    let reached = false;
+    for (let i = 0; i < 600 && !reached; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+      if (Math.hypot(e.x - world.player.x, e.z - world.player.z) < 3) reached = true;
+    }
+    expect(reached).toBe(true);
+  });
+
+  it('슬라임 셋이 몰려와도 서로 밀치다 전원이 문을 빠져나온다', () => {
+    world = makeDoorWorld();
+    world.player.health = 100000;
+    const pack = [
+      add('slime', 28, 10, 31),
+      add('slime', 30, 11.4, 32),
+      add('slime', 29, 8.8, 33),
+    ];
+    const reached = [false, false, false];
+    for (let i = 0; i < 2400 && !reached.every(Boolean); i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+      pack.forEach((e, k) => {
+        if (Math.hypot(e.x - world.player.x, e.z - world.player.z) < 4.5) reached[k] = true;
+      });
+    }
+    expect(reached).toEqual([true, true, true]);
   });
 });
 
