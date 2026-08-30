@@ -1454,6 +1454,48 @@ events.on('item_picked', (payload) => {
   rootStyle.setProperty('--restore-cycle', `${rf.cycleMs}ms`);
   rootStyle.setProperty('--restore-blinks', String(rf.blinks));
   rootStyle.setProperty('--restore-tip-w', `${rf.tipWidthPx}px`);
+  rootStyle.setProperty('--stat-pop-scale', String(balance.hud.statPop.scaleMul));
+  rootStyle.setProperty('--stat-pop-ms', `${balance.hud.statPop.durationMs}ms`);
+  rootStyle.setProperty('--gain-fade-ms', `${balance.hud.centerGain.fadeMs}ms`);
+}
+const statPopTimers = new Map<string, number>();
+/** 획득 팝 — HUD 숫자가 잠깐 커졌다 제자리로 (연달아 먹으면 다시 처음부터) */
+function popStat(elId: string): void {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.classList.remove('pop');
+  void el.offsetWidth; // 리플로우 — 애니메이션 재시작
+  el.classList.add('pop');
+  const prev = statPopTimers.get(elId);
+  if (prev !== undefined) window.clearTimeout(prev);
+  statPopTimers.set(
+    elId,
+    window.setTimeout(() => el.classList.remove('pop'), balance.hud.statPop.durationMs + 40),
+  );
+}
+// 중앙 획득 표시 — 조준선 아래 +골드/+XP. 떠 있는 동안 또 먹으면 같은 표시에 누적
+let gainGoldAcc = 0;
+let gainXpAcc = 0;
+let gainFadeTimer: number | undefined;
+let gainClearTimer: number | undefined;
+function showCenterGain(gold: number, xp: number): void {
+  const cg = balance.hud.centerGain;
+  if (gainFadeTimer !== undefined) window.clearTimeout(gainFadeTimer);
+  if (gainClearTimer !== undefined) window.clearTimeout(gainClearTimer);
+  gainGoldAcc += gold;
+  gainXpAcc += xp;
+  const box = document.getElementById('gain-center')!;
+  document.getElementById('gain-center-gold')!.textContent =
+    gainGoldAcc > 0 ? `+${gainGoldAcc} ◆` : '';
+  document.getElementById('gain-center-xp')!.textContent = gainXpAcc > 0 ? `+${gainXpAcc} XP` : '';
+  box.style.opacity = '1';
+  gainFadeTimer = window.setTimeout(() => {
+    box.style.opacity = '0';
+    gainClearTimer = window.setTimeout(() => {
+      gainGoldAcc = 0;
+      gainXpAcc = 0;
+    }, cg.fadeMs);
+  }, cg.holdMs);
 }
 const restoreFlashTimers = new Map<string, number>();
 /** 회복 깜빡임 — 게이지가 찰 때 채워진 부분을, 이미 가득이면 끝부분만 깜빡인다 */
@@ -1520,7 +1562,15 @@ events.on('inventory_full', () => {
   bagFullUntil = performance.now() + 2500;
   showReaction(`가방이 가득 찼다 — ${keyLabel('I', 'inventory')} 에서 쓰거나 버려야 한다`, 2000);
 });
-events.on('gold_picked', () => audio.play('pickup_gold'));
+events.on('gold_picked', (payload) => {
+  audio.play('pickup_gold');
+  popStat('status-gold-amt');
+  showCenterGain((payload as { amount: number }).amount, 0);
+});
+events.on('xp_gained', (payload) => {
+  popStat('status-xp-amt');
+  showCenterGain(0, (payload as { amount: number }).amount);
+});
 // ---- 활 ----
 events.on('bow_draw_started', () => audio.play('reload_start'));
 events.on('bow_draw_released', (payload) => {
@@ -2582,7 +2632,8 @@ function render(alpha: number): void {
   lanternText.textContent = `${battPct}% 예비 ${world.lantern.spares}`;
   lanternRow.className =
     (battPct <= 20 ? 'low' : '') + (world.lantern.on ? '' : ' off');
-  document.getElementById('status-gold')!.textContent = `◆ ${world.gold}   XP ${world.xp}`;
+  document.getElementById('status-gold-amt')!.textContent = `◆ ${world.gold}`;
+  document.getElementById('status-xp-amt')!.textContent = `XP ${world.xp}`;
   syncQuickslots();
   syncSkillSlots();
   // 원거리(좌클릭) / 근접(우클릭) 두 슬롯. 원거리는 휠로 교체

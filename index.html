@@ -317,6 +317,49 @@
         margin-bottom: 4px;
         text-shadow: 0 0 6px rgba(255, 204, 58, 0.5);
       }
+      /* 획득 팝 — 골드·XP 를 먹는 순간 숫자가 잠깐 커졌다 제자리로.
+         배율·시간은 main 이 balance.hud.statPop 을 CSS 변수로 주입한다 */
+      #status-gold-amt,
+      #status-xp-amt {
+        display: inline-block;
+      }
+      #status-xp-amt {
+        color: #cfd8c9;
+        text-shadow: none;
+      }
+      @keyframes stat-pop {
+        0% {
+          transform: scale(var(--stat-pop-scale, 1.6));
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      #status-gold-amt.pop,
+      #status-xp-amt.pop {
+        animation: stat-pop var(--stat-pop-ms, 0.35s) cubic-bezier(0.2, 0.8, 0.3, 1);
+      }
+      /* 중앙 획득 표시 — 조준선 바로 아래, 먹은 골드·XP 가 잠깐 떠오른다.
+         연달아 먹으면 사라지기 전까지 같은 표시에 누적된다 */
+      #gain-center {
+        position: fixed;
+        left: 50%;
+        top: 57%;
+        transform: translateX(-50%);
+        text-align: center;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity var(--gain-fade-ms, 0.25s) linear;
+        font-size: 17px;
+        line-height: 1.35;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+      }
+      #gain-center-gold {
+        color: #ffcc3a;
+      }
+      #gain-center-xp {
+        color: #cfd8c9;
+      }
       #status-weapons {
         display: flex;
         gap: 6px;
@@ -677,7 +720,8 @@
         <div id="status-lantern-track"><div id="status-lantern-fill"></div></div>
         <span id="status-lantern-text">100% 예비 2</span>
       </div>
-      <div id="status-gold">◆ 0</div>
+      <div id="gain-center"><div id="gain-center-gold"></div><div id="gain-center-xp"></div></div>
+      <div id="status-gold"><span id="status-gold-amt">◆ 0</span> &nbsp; <span id="status-xp-amt">XP 0</span></div>
       <div id="status-weapons">
         <span class="weapon-slot active" id="slot-ranged">LMB 권총</span>
         <span class="weapon-slot active" id="slot-melee">RMB 해머</span>
