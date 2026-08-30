@@ -47,7 +47,7 @@
         "height": 1.9, "speedMul": 0.9, "attachRange": 2.2, "climbTicks": 24,
         "fallTicks": 10, "fallStunTicks": 50, "_reattachNote": "벽에서 내려온 뒤 다시 붙기까지의 지연 — 문 앞에서 붙기/내리기를 반복하는 맴돌이 방지 (2026-08-30)", "reattachDelayTicks": 90,
         "pounceMinRange": 3, "pounceMaxRange": 7, "pounceWindupTicks": 34, "pounceAirTicks": 18,
-        "pounceRadius": 1.1, "pounceDamage": 12, "pounceKnockback": 1.6,
+        "pounceRadius": 1.1, "_contactNote": "비행 중 몸이 스치면 그 순간 타격 (2026-08-30 — 관통 노딜 체감 수정). 착지 광역(pounceRadius)과 별개인 몸통 접촉 반경", "pounceContactRadius": 0.8, "pounceDamage": 12, "pounceKnockback": 1.6,
         "pounceRecoverTicks": 40, "pounceWhiffTicks": 65,
         "cooldownTicks": 180, "skitterIntervalTicks": 22
       },

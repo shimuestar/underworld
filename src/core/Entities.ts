@@ -166,6 +166,8 @@ export interface EnemyDef {
   };
   /** 벽거미 — 벽에 붙어 기어오고 벽에서 도약해 덮친다 (Enemies.tickWallSpider) */
   wallCrawl?: {
+    /** 도약 비행 중 몸통 접촉 판정 반경 — 닿는 순간이 곧 타격이다 */
+    pounceContactRadius?: number;
     /** 벽에서 내려온 뒤 다시 붙기까지의 지연 틱 — 문 앞 맴돌이 방지 */
     reattachDelayTicks?: number;
     /** 붙는 높이 (jumpY) */

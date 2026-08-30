@@ -894,6 +894,31 @@ function tickFlying(
 }
 
 /** 벽거미 틱 — 붙기·기기·도약이 일반 AI 를 덮는다. true 면 이번 틱은 여기서 끝 */
+/** 도약 타격 — 비행 접촉·착지 광역이 공유한다. 막으면 칩 피해만 (붉은 예고라 패링 불가) */
+function pounceStrike(
+  world: World,
+  enemy: EnemyState,
+  wc: NonNullable<ReturnType<typeof enemyDef>['wallCrawl']>,
+): void {
+  const p = world.player;
+  const idx = p.x - enemy.x;
+  const idz = p.z - enemy.z;
+  const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
+  const dmg = blocked ? wc.pounceDamage * balance.block.chipDamageRatio : wc.pounceDamage;
+  if (blocked) world.events.emit('block_hit', { amount: dmg, kind: 'wall_pounce' });
+  p.health -= dmg;
+  pushPlayer(p, idx, idz, wc.pounceKnockback, balance.playerKnockback.ticks);
+  world.events.emit('player_damaged', {
+    amount: dmg, health: p.health, blocked, srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'wall_pounce',
+  });
+  if (p.health <= 0) {
+    p.health = 0;
+    world.dead = true;
+    world.events.emit('player_died', { tick: world.tick });
+  }
+  enemy.wallPounceHitDone = true;
+}
+
 function tickWallSpider(
   world: World,
   enemy: EnemyState,
@@ -919,26 +944,28 @@ function tickWallSpider(
     if (Math.hypot(stepX, stepZ) > 1e-3) enemy.yaw = Math.atan2(-stepX, -stepZ);
     const t = 1 - (enemy.wallPounceTicks ?? 0) / wc.pounceAirTicks;
     enemy.jumpY = Math.max(0, (enemy.wallPounceFromY ?? wc.height) * (1 - t * t));
+    // 관통 접촉 — 내리꽂는 몸이 스치면 그 순간이 곧 타격이다. 착지까지 기다리면
+    // 몸을 뚫고 지나가고도 노딜이 된다 (실측 체감 버그). 머리 위를 넘는 초반
+    // 고공 구간(jumpY > 키)은 닿은 게 아니다
+    if (
+      !(enemy.wallPounceHitDone ?? false) &&
+      !world.dead &&
+      p.iframeTicks <= 0 &&
+      (enemy.jumpY ?? 0) <= balance.player.height &&
+      Math.hypot(p.x - enemy.x, p.z - enemy.z) <= (wc.pounceContactRadius ?? 0) + balance.player.radius
+    ) {
+      pounceStrike(world, enemy, wc);
+    }
     if ((enemy.wallPounceTicks ?? 0) > 0) return true;
-    // 착지 — 광역 판정. 회피 무적이면 통째로 헛디딘다
+    // 착지 — 광역 판정 (비행에서 이미 맞혔으면 중복 타격 없이 명중 착지로 처리).
+    // 회피 무적이면 통째로 헛디딘다
     enemy.jumpY = 0;
-    const idx = p.x - enemy.x;
-    const idz = p.z - enemy.z;
-    const idist = Math.hypot(idx, idz);
-    const hit = idist <= wc.pounceRadius && p.iframeTicks <= 0 && !world.dead;
+    const idist = Math.hypot(p.x - enemy.x, p.z - enemy.z);
+    const hit =
+      (enemy.wallPounceHitDone ?? false) ||
+      (idist <= wc.pounceRadius && p.iframeTicks <= 0 && !world.dead);
     if (hit) {
-      const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
-      const dmg = blocked ? wc.pounceDamage * balance.block.chipDamageRatio : wc.pounceDamage;
-      p.health -= dmg;
-      pushPlayer(p, idx, idz, wc.pounceKnockback, balance.playerKnockback.ticks);
-      world.events.emit('player_damaged', {
-        amount: dmg, health: p.health, blocked, srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'wall_pounce',
-      });
-      if (p.health <= 0) {
-        p.health = 0;
-        world.dead = true;
-        world.events.emit('player_died', { tick: world.tick });
-      }
+      if (!(enemy.wallPounceHitDone ?? false)) pounceStrike(world, enemy, wc);
       enemy.ai = 'recover';
       enemy.timer = wc.pounceRecoverTicks;
     } else {
@@ -958,6 +985,7 @@ function tickWallSpider(
     enemy.wallCling = false;
     enemy.wallPounceTicks = wc.pounceAirTicks;
     enemy.wallPounceFromY = enemy.jumpY ?? wc.height;
+    enemy.wallPounceHitDone = false;
     world.events.emit('wall_pounce', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
     return true;
   }

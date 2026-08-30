@@ -623,6 +623,8 @@ export interface EnemyState {
   /** 벽 도약 비행 잔여 틱 */
   wallPounceTicks?: number;
   wallPounceFromY?: number;
+  /** 이번 도약에서 이미 타격했나 — 비행 접촉과 착지 광역의 중복 타격 방지 */
+  wallPounceHitDone?: boolean;
   /** 예고 시점의 먹이 좌표 — 옆으로 비키면 헛짚는다 */
   wallPounceTX?: number;
   wallPounceTZ?: number;

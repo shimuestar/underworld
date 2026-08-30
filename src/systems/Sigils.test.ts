@@ -1087,6 +1087,34 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(s.ai).toBe('recover'); // 착지 경직
   });
 
+  it('벽거미 도약 관통 — 비행 중 몸이 스치면 그 순간 타격, 착지 중복 없음', () => {
+    const wc = enemyDef2('spider_small').wallCrawl!;
+    const s = add('spider_small', 8, 6); // 플레이어(6,6) 앞 2m
+    s.ai = 'chase';
+    // 예고 없이 곧장 비행 — 목표를 플레이어 '너머'(4,6)로 두면 몸이 관통해 지나간다
+    s.wallPounceTicks = wc.pounceAirTicks;
+    s.wallPounceFromY = wc.height;
+    s.wallPounceTX = 4;
+    s.wallPounceTZ = 6;
+    s.wallPounceHitDone = false;
+    s.jumpY = wc.height;
+    const hp = world.player.health;
+    let hitTick = -1;
+    for (let i = 0; i < wc.pounceAirTicks; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+      if (hitTick < 0 && world.player.health < hp) hitTick = i;
+    }
+    expect(hitTick).toBeGreaterThanOrEqual(0); // 착지 전, 스치는 순간 맞았다
+    expect(hitTick).toBeLessThan(wc.pounceAirTicks - 1);
+    // 착지가 지나도 같은 도약으로 두 번 맞지 않는다
+    expect(world.player.health).toBe(hp - wc.pounceDamage);
+    for (let i = 0; i < 10; i++) Enemies.tick(world, DT);
+    expect(world.player.health).toBe(hp - wc.pounceDamage);
+    expect(s.ai).toBe('recover'); // 명중 착지 — 헛디딤(whiff) 아님
+    expect(s.whiffed ?? false).toBe(false);
+  });
+
   it('벽거미 — 붙은 채 맞으면 떨어져 뻗는다 (매달린 거머리와 같은 규칙)', () => {
     const s = add('spider_small', 14, 6);
     s.ai = 'chase';
