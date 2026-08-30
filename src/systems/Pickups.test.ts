@@ -177,9 +177,10 @@ describe('자석 흡수', () => {
     expect(countOf(world, 'potion')).toBe(0);
   });
 
-  it('골드 — 날아와 누적되고, 한 번 걸리면 멀어져도 따라온다', () => {
-    world.groundItems.push({ id: 1, kind: 'gold', amount: 7, x: 13, z: 10 });
-    world.groundItems.push({ id: 2, kind: 'gold', amount: 3, x: 10, z: 13 });
+  it('골드 — 다가가야 걸리고(반경 1.2m), 한 번 걸리면 멀어져도 따라온다', () => {
+    // 2026-08-30: 자석 반경 4.5→1.2 — 멀리서 자동으로 빨려 오지 않고 밟아 먹는 방식
+    world.groundItems.push({ id: 1, kind: 'gold', amount: 7, x: 11, z: 10 });
+    world.groundItems.push({ id: 2, kind: 'gold', amount: 3, x: 10, z: 11 });
     Pickups.tick(world, DT);
     expect(world.groundItems.every((i) => i.magnet)).toBe(true);
 
