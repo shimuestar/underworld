@@ -640,6 +640,8 @@ export interface EnemyState {
   downTicks?: number;
   /** 추락 낙하 잔여 틱 */
   batFallTicks?: number;
+  /** 랜턴 속박 잔여 틱 — 빛기둥에 잡혀 있는 동안 매 틱 갱신된다 (0 = 자유) */
+  batLitTicks?: number;
   flyFallFromY?: number;
   flyJinkTicks?: number;
   flyOrbitDir?: number;

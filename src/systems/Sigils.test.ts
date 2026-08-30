@@ -750,6 +750,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
   });
 
   it('박쥐 초음파 비명 — 사거리 안이면 조준이 흔들린다 (yaw 가 실제로 밀린다)', () => {
+    world.lantern.on = false; // 랜턴 속박이 비명을 막지 않게 — 비명만 잰다
     const b = add('bat', 12, 6); // 6m — 비명 사거리(8) 안
     b.ai = 'chase';
     b.jumpY = 2.4;
@@ -765,6 +766,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
   });
 
   it('박쥐 무리 동시 강하 — 곁의 준비된 박쥐가 함께 몸을 던진다 (전용 이벤트)', () => {
+    world.lantern.on = false; // 랜턴 속박 배제 — 무리 강하만 잰다
     const b1 = add('bat', 12, 6);
     const b2 = add('bat', 13, 6);
     for (const b of [b1, b2]) {
@@ -830,6 +832,76 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     p.blocking = false;
   });
 
+  it('박쥐 돌격 반동 — 방패에 막히면 제 몸이 상하고, 패링이면 더 크게 상한다', () => {
+    const fly = enemyDef2('bat').flying!;
+    const rec = fly.chargeRecoil!;
+    // 방패 막기 — blocked 만큼 깎인다
+    const b1 = add('bat', 7, 6);
+    b1.ai = 'recover';
+    b1.timer = 40;
+    b1.jumpY = 1.35;
+    b1.prevJumpY = 1.35;
+    const p = world.player;
+    p.blocking = true;
+    p.yaw = -Math.PI / 2;
+    const hp1 = b1.health;
+    Enemies.tick(world, DT);
+    expect(b1.health).toBe(hp1 - rec.blocked);
+    expect(b1.alive).toBe(true);
+    p.blocking = false;
+    b1.alive = false;
+    // 패링 — parried 만큼 깎이고 추락까지 한다
+    const b2 = add('bat', 7, 6);
+    b2.ai = 'recover';
+    b2.timer = 40;
+    b2.jumpY = 1.35;
+    b2.prevJumpY = 1.35;
+    p.parryBufferTicks = 3;
+    const hp2 = b2.health;
+    Enemies.tick(world, DT);
+    expect(b2.health).toBe(hp2 - rec.parried);
+    expect((b2.batFallTicks ?? 0)).toBeGreaterThan(0); // 반동을 먹고도 추락은 그대로
+    b2.alive = false;
+    // 만신창이 박쥐가 방패에 부딪히면 그 자리에서 죽는다 — enemy_died 가 난다
+    const b3 = add('bat', 7, 6);
+    b3.ai = 'recover';
+    b3.timer = 40;
+    b3.jumpY = 1.35;
+    b3.prevJumpY = 1.35;
+    b3.health = rec.blocked - 1;
+    p.blocking = true;
+    p.yaw = -Math.PI / 2;
+    let died = false;
+    world.events.on('enemy_died', () => (died = true));
+    Enemies.tick(world, DT);
+    expect(b3.alive).toBe(false);
+    expect(died).toBe(true);
+    p.blocking = false;
+  });
+
+  it('박쥐 랜턴 속박 — 빛기둥에 잡히면 그 자리에 얼어붙고, 빔이 떠나면 풀린다', () => {
+    const b = add('bat', 10, 6); // 정면(+X) 4m — 랜턴 각(15도)·거리(20m) 안
+    b.ai = 'chase';
+    b.swoopCooldown = 99999; // 속박이 아니라 쿨다운으로 안 움직이는 것과 구분
+    b.screamCooldown = 99999;
+    let transfixed = 0;
+    world.events.on('bat_transfixed', () => transfixed++);
+    for (let i = 0; i < 40; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect(transfixed).toBe(1); // 잡히는 순간 한 번만
+    expect((b.batLitTicks ?? 0)).toBeGreaterThan(0);
+    expect(Math.hypot(b.x - 10, b.z - 6)).toBeLessThan(0.05); // 그 자리 그대로
+    world.lantern.on = false; // 빔이 꺼지면
+    for (let i = 0; i < 60; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect(Math.hypot(b.x - 10, b.z - 6)).toBeGreaterThan(0.5); // 다시 움직인다 (선회·접근)
+    world.lantern.on = true; // 뒷정리
+  });
+
   it('박쥐 관통 스침 — 지나치는 몸이 닿으면 그대로 박치기 판정, 한 강하에 한 번만', () => {
     const b = add('bat', 7, 6); // 1m — 관통 경로가 몸에 닿아 있다
     b.ai = 'recover';
@@ -847,6 +919,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
   });
 
   it('박쥐 비명 여운 — 파문이 퍼지는 동안 제자리에 떠 있는다', () => {
+    world.lantern.on = false; // 랜턴 속박 배제
     const b = add('bat', 12, 6);
     b.ai = 'chase';
     b.jumpY = 2.4;
@@ -862,6 +935,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
   });
 
   it('박쥐 흡혈 박치기 — 몸으로 치면 제 피가 찬다', () => {
+    world.lantern.on = false; // 랜턴 속박 배제 — 박치기가 나와야 흡혈을 잰다
     const b = add('bat', 11, 6); // 5m — 돌진 사거리
     b.ai = 'chase';
     b.jumpY = 2.4;
@@ -874,6 +948,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
   });
 
   it('박쥐 박치기 — 제자리 준비(1초 펄럭) 후 수평 돌진, 땅까지 내려오지 않는다', () => {
+    world.lantern.on = false; // 랜턴 속박 배제 — 돌진 그 자체를 잰다
     const b = add('bat', 12, 6); // 6m — 돌진 사거리 [2,10]
     b.ai = 'chase';
     b.jumpY = 2.4;

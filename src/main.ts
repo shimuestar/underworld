@@ -607,6 +607,18 @@ events.on('bat_knockdown', (payload) => {
   showReaction('박쥐가 추락했다 — 지금이다!', 1400);
 });
 events.on('bat_downed', (payload) => audio.play('hit_flesh', panOf(payload)));
+// 돌격 반동 — 방패·패링에 부딪힌 박쥐가 제 피를 흘린다 (막기가 곧 반격)
+events.on('bat_recoil', (payload) => {
+  const r = payload as { enemyId: number; x: number; z: number; amount: number };
+  spawnHitBloodOn(r.enemyId, { damage: r.amount, towardPlayer: true });
+  audio.play('bat_screech', panOf(r));
+  minimap.notifyCombat(r.enemyId);
+});
+// 랜턴 속박 — 빛기둥에 잡힌 박쥐 (비추는 동안 쏘면 된다)
+events.on('bat_transfixed', (payload) => {
+  audio.play('bat_screech', panOf(payload));
+  showReaction('박쥐가 빛에 얼어붙었다!', 1200);
+});
 // 초음파 비명 — 조준이 실제로 흔들린다 (PlayerMove 가 yaw·pitch 에 잔떨림을 싣는다)
 events.on('bat_scream', (payload) => {
   audio.play('bat_scream', panOf(payload));

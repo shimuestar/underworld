@@ -152,6 +152,10 @@ export interface EnemyDef {
     packDive?: { radius: number; minCount: number; cooldownTicks: number };
     /** 흡혈 박치기 — 명중(비방어) 시 제 체력 회복량 */
     slamHeal?: number;
+    /** 돌격 반동 — 방패 막기/정확한 패링에 부딪히면 제 몸이 받는 피해 */
+    chargeRecoil?: { blocked: number; parried: number };
+    /** 랜턴 속박 — 빛기둥에 잡히면 그 자리에 얼어붙는다 (비추는 동안 쏘는 설계) */
+    lanternFreeze?: boolean;
     knockdown: {
       damageThreshold: number;
       instantDamage: number;

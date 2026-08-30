@@ -556,6 +556,16 @@ function startDrop(
 }
 
 /** 관통 접촉 타격 — 몸이 닿는 그 틱에 즉시 들어간다. 한 번의 강하에 한 번만 */
+/** 돌격 반동 — 방패·패링에 부딪힌 박쥐는 제 몸도 상한다. true 면 그 자리에서 즉사 */
+function batRecoilDamage(world: World, enemy: EnemyState, amount: number): boolean {
+  enemy.health -= amount;
+  world.events.emit('bat_recoil', { enemyId: enemy.id, x: enemy.x, z: enemy.z, amount });
+  if (enemy.health > 0) return false;
+  enemy.alive = false;
+  world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+  return true;
+}
+
 function batGraze(
   world: World,
   enemy: EnemyState,
@@ -572,11 +582,14 @@ function batGraze(
   if (world.input.reactionPressed || (p.parryBufferTicks ?? 0) > 0) {
     p.parryBufferTicks = 0;
     enemy.swoopHitDone = true;
+    world.events.emit('bat_parried', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+    // 반동 — 정확히 받아친 몸통에 박쥐도 상한다. 여기서 죽으면 추락할 몸도 없다
+    const recP = fly.chargeRecoil?.parried ?? 0;
+    if (recP > 0 && batRecoilDamage(world, enemy, recP)) return;
     enemy.ai = 'chase'; // 돌진 취소 — 아래 추락 블록이 이어받는다
     enemy.timer = 0;
     enemy.batFallTicks = fly.knockdown.fallTicks;
     enemy.flyFallFromY = enemy.jumpY ?? fly.strikeHeight;
-    world.events.emit('bat_parried', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
     world.events.emit('bat_knockdown', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
     return;
   }
@@ -596,6 +609,11 @@ function batGraze(
     world.events.emit('player_died', { tick: world.tick });
   }
   enemy.swoopHitDone = true;
+  // 방패 반동 — 챙 소리와 함께 박쥐 몸도 상한다 (막기가 곧 반격이다)
+  if (blocked) {
+    const recB = fly.chargeRecoil?.blocked ?? 0;
+    if (recB > 0 && batRecoilDamage(world, enemy, recB)) return;
+  }
   if (!blocked && fly.slamHeal) {
     enemy.health = Math.min(def.health, enemy.health + fly.slamHeal);
     world.events.emit('bat_drain', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
@@ -758,6 +776,23 @@ function tickFlying(
   const dist = Math.hypot(dx, dz);
   if ((enemy.swoopCooldown ?? 0) > 0) enemy.swoopCooldown = (enemy.swoopCooldown ?? 0) - 1;
   if ((enemy.packDiveCooldown ?? 0) > 0) enemy.packDiveCooldown = (enemy.packDiveCooldown ?? 0) - 1;
+
+  // 랜턴 속박 — 빛기둥에 잡힌 박쥐는 눈이 멀어 그 자리에 얼어붙는다.
+  // 비추는 동안 총으로 잡으라는 설계 — 빔이 벗어나면 즉시 풀리고,
+  // 쿨다운은 속박 중에도 돌아 랜턴을 끄는 순간 반격이 온다
+  if (
+    fly.lanternFreeze &&
+    litByLantern(world, dist, dx, dz) &&
+    world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
+  ) {
+    if ((enemy.batLitTicks ?? 0) <= 0) {
+      world.events.emit('bat_transfixed', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+    }
+    enemy.batLitTicks = 2; // 비추는 동안 매 틱 갱신 — 빔이 떠나면 곧 풀린다
+    if (dist > 0.001) enemy.yaw = Math.atan2(-dx, -dz);
+    return true;
+  }
+  if ((enemy.batLitTicks ?? 0) > 0) enemy.batLitTicks = (enemy.batLitTicks ?? 0) - 1;
 
   // 비명 여운 — 파문이 다 퍼질 때까지 제자리에서 먹이를 노려본다 (선회·강하 없음)
   if ((enemy.screamHoldTicks ?? 0) > 0) {
