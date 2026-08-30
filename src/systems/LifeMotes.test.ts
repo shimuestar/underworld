@@ -99,7 +99,8 @@ describe('자석', () => {
   });
 
   it('최대 체력을 넘지 않는다', () => {
-    world.player.health = balance.player.healthMax - 1;
+    // 부족분(0.5)을 healPerMote(0.8)보다 작게 — 개수 랜덤이 1개여도 상한에 닿는다
+    world.player.health = balance.player.healthMax - 0.5;
     LifeMotes.spawn(world, 'goblin_runner', world.player.x + 1.5, world.player.z);
     ticks(120);
     expect(world.player.health).toBe(balance.player.healthMax);
