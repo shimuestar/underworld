@@ -161,7 +161,7 @@
    "_recoilNote": "돌격 반동 — 방패에 막히면 10, 정확한 패링이면 15 를 제 몸으로 받는다 (hp 35: 막기 4번 / 패링 3번, 패링은 추락 덤). 2026-08-30",
    "chargeRecoil": { "blocked": 10, "parried": 15 },
    "_lanternNote": "랜턴 빛기둥(balance.lantern angleDeg/noticeRange)에 잡히면 그 자리에 얼어붙는다 — 비추는 동안 총으로 잡는 설계. 빔이 벗어나면 즉시 풀린다. 2026-08-30",
-   "lanternFreeze": true, "_freezeBobNote": "속박 중 출렁임 축소 — 얼어붙었는데 크게 펄럭이면 안 잡힌 것처럼 보인다 (2026-08-30)", "lanternFreezeBobMul": 0.25,
+   "lanternFreeze": true, "_freezeTrembleNote": "속박 중엔 순항 출렁임 대신 덜덜 떤다 — 작은 폭(amp)·빠른 주기(periodTicks). 빛에 짓눌린 공포 (2026-08-30)", "lanternFreezeTremble": { "amp": 0.05, "periodTicks": 7 },
         "knockdown": {
           "damageThreshold": 25,
           "instantDamage": 18,

@@ -893,17 +893,28 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(transfixed).toBe(1); // 잡히는 순간 한 번만
     expect((b.batLitTicks ?? 0)).toBeGreaterThan(0);
     expect(Math.hypot(b.x - 10, b.z - 6)).toBeLessThan(0.05); // 그 자리 그대로
-    // 속박 중 출렁임 축소 — 한 주기(90틱) 동안 위아래 폭이 평소(±0.35)보다 훨씬 작다
+    // 속박 중엔 덜덜 — 위아래 폭은 작고(amp) 방향 전환은 잦다(빠른 주기)
     const fly2 = enemyDef2('bat').flying!;
+    const tr = fly2.lanternFreezeTremble!;
     let lo = Infinity;
     let hi = -Infinity;
+    let flips = 0;
+    let prevY = b.jumpY ?? 0;
+    let prevDir = 0;
     for (let i = 0; i < fly2.bobPeriodTicks; i++) {
       world.input = Input.emptySnapshot();
+      world.tick++; // 진동 위상은 world.tick — 게임에선 Loop 가 올린다
       Enemies.tick(world, DT);
-      lo = Math.min(lo, b.jumpY ?? 0);
-      hi = Math.max(hi, b.jumpY ?? 0);
+      const y = b.jumpY ?? 0;
+      lo = Math.min(lo, y);
+      hi = Math.max(hi, y);
+      const dir = Math.sign(y - prevY);
+      if (dir !== 0 && prevDir !== 0 && dir !== prevDir) flips++;
+      if (dir !== 0) prevDir = dir;
+      prevY = y;
     }
-    expect(hi - lo).toBeLessThan(fly2.bobAmp * (fly2.lanternFreezeBobMul ?? 1) * 2 + 0.06);
+    expect(hi - lo).toBeLessThan(tr.amp * 2 + 0.06); // 폭이 작다
+    expect(flips).toBeGreaterThanOrEqual(6); // 90틱에 주기 7 — 자주 뒤집힌다 (덜덜)
     world.lantern.on = false; // 빔이 꺼지면
     for (let i = 0; i < 60; i++) {
       world.input = Input.emptySnapshot();
