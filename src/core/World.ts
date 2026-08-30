@@ -360,11 +360,12 @@ export function breakProp(world: World, prop: PropState): void {
   world.events.emit('prop_broken', { id: prop.id, type: prop.type, x: prop.x, z: prop.z });
 }
 
-/** 기믹 타격 — hp 만큼 맞으면 부서진다 (석관 2방). 남으면 prop_hit(금 가는 피드백)만.
+/** 기믹 타격 — 누적 타격량이 hp 에 닿으면 부서진다. amount 는 무기 몫:
+ *  총알 1점(일반 기믹 2발), 해머·화살 2점(한 방). 남으면 prop_hit(금 가는 피드백)만.
  *  hp 는 호출부가 balance 에서 읽어 넘긴다 — World 는 데이터에 의존하지 않는다 */
-export function damageProp(world: World, prop: PropState, hp: number): void {
+export function damageProp(world: World, prop: PropState, hp: number, amount = 1): void {
   if (!prop.alive) return;
-  prop.hits++;
+  prop.hits += amount;
   if (prop.hits >= hp) breakProp(world, prop);
   else world.events.emit('prop_hit', { id: prop.id, type: prop.type, x: prop.x, z: prop.z });
 }

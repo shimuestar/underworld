@@ -4625,28 +4625,32 @@ export class Stage {
     }
   }
 
-  /** 기믹 파편 — 재질색 조각이 흩어진다 (사망 파편과 같은 물리) */
+  /** 기믹 파편 — 재질색 조각이 와장창 쏟아진다 (사망 파편과 같은 물리).
+   *  타격감은 파편 양이 만든다 — 22조각, 큰 놈 몇 개는 높이 치솟는다 */
   spawnPropDebris(x: number, z: number, color: number, height: number): void {
     const now = performance.now();
-    for (let i = 0; i < 10; i++) {
-      const size = 0.05 + Math.random() * 0.09;
+    for (let i = 0; i < 22; i++) {
+      const big = i < 5; // 큰 조각 몇 개가 높이 치솟아야 '와장창'이 보인다
+      const size = big ? 0.13 + Math.random() * 0.12 : 0.05 + Math.random() * 0.1;
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(size, size, size),
         new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 }),
       );
       const ang = Math.random() * Math.PI * 2;
-      const speed = 1.2 + Math.random() * 2.2;
+      const speed = (big ? 1.6 : 1.4) + Math.random() * 3.0;
       const particle: Particle = {
         mesh,
         ox: x,
-        oy: height * (0.2 + Math.random() * 0.7),
+        oy: height * (0.2 + Math.random() * 0.8),
         oz: z,
         vx: Math.cos(ang) * speed,
-        vy: 1.5 + Math.random() * 2.5,
+        vy: (big ? 3.0 : 1.6) + Math.random() * 3.0,
         vz: Math.sin(ang) * speed,
         bornMs: now,
-        lifeMs: 700,
+        lifeMs: big ? 1000 : 750,
         restY: size / 2,
+        spinX: Math.random() * 8 - 4,
+        spinZ: Math.random() * 8 - 4,
       };
       mesh.position.set(particle.ox, particle.oy, particle.oz);
       mesh.rotation.set(Math.random() * 3, Math.random() * 3, 0);

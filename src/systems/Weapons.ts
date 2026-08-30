@@ -431,7 +431,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     const dist = Math.hypot(toX, toZ);
     if (dist > range + pcfg.collisionRadius || dist === 0) continue;
     if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
-    damageProp(world, prop, pcfg.hp);
+    damageProp(world, prop, pcfg.hp, 2); // 해머는 한 방 몫(2점) — 일반 기믹이 한 방에 깨진다
     hitAny = true; // 기믹을 깬 것도 헛스윙은 아니다
   }
 

@@ -617,13 +617,13 @@
       "grenade": 3,
       "battery": 2
     },
-    "_typeNote": "empty/loot/ambush/explode 는 파괴 롤 가중치. 석관·뼈는 폭발 없음(돌·뼈)",
+    "_typeNote": "empty/loot/ambush/explode 는 파괴 롤 가중치 (석관은 폭발 없음). hp 는 타격량: 총알 1점·해머/화살 2점 — 일반 기믹 hp 2 = 총 2발·해머 1방, 석관 hp 4 (2026-08-30)",
     "types": {
-      "prop_jar": { "hp": 1, "collisionRadius": 0.6, "height": 1.8, "material": "ceramic", "empty": 52, "loot": 33, "ambush": 10, "explode": 5, "ambushTypes": ["spider_small"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
-      "prop_crate": { "hp": 1, "collisionRadius": 0.8, "height": 1.7, "material": "wood", "empty": 50, "loot": 34, "ambush": 10, "explode": 6, "ambushTypes": ["bat"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
-      "prop_keg": { "hp": 1, "collisionRadius": 0.65, "height": 1.5, "material": "wood", "empty": 48, "loot": 34, "ambush": 10, "explode": 8, "ambushTypes": ["spider_small"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
-      "prop_sarcophagus": { "hp": 2, "collisionRadius": 1.2, "height": 2.0, "material": "stone", "empty": 30, "loot": 42, "ambush": 28, "explode": 0, "ambushTypes": ["ghoul", "leech"], "ambushMin": 1, "ambushMax": 1, "goldMul": 2 },
-      "prop_minecart": { "hp": 1, "collisionRadius": 0.95, "height": 1.6, "material": "metal", "empty": 44, "loot": 36, "ambush": 12, "explode": 8, "ambushTypes": ["leech"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1.5 }
+      "prop_jar": { "hp": 2, "collisionRadius": 0.6, "height": 1.8, "material": "ceramic", "empty": 52, "loot": 33, "ambush": 10, "explode": 5, "ambushTypes": ["spider_small"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
+      "prop_crate": { "hp": 2, "collisionRadius": 0.8, "height": 1.7, "material": "wood", "empty": 50, "loot": 34, "ambush": 10, "explode": 6, "ambushTypes": ["bat"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
+      "prop_keg": { "hp": 2, "collisionRadius": 0.65, "height": 1.5, "material": "wood", "empty": 48, "loot": 34, "ambush": 10, "explode": 8, "ambushTypes": ["spider_small"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
+      "prop_sarcophagus": { "hp": 4, "collisionRadius": 1.2, "height": 2.0, "material": "stone", "empty": 10, "loot": 52, "ambush": 38, "explode": 0, "ambushTypes": ["ghoul", "leech"], "ambushMin": 1, "ambushMax": 1, "goldMul": 2 },
+      "prop_minecart": { "hp": 2, "collisionRadius": 0.95, "height": 1.6, "material": "metal", "empty": 44, "loot": 36, "ambush": 12, "explode": 8, "ambushTypes": ["leech"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1.5 }
     }
   },
   "_gooNote": "슬라임 점액 장판 — 기어간 자리에 남아 밟으면 느려진다. 마르면(수명) 사라진다",

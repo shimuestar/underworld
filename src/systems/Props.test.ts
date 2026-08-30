@@ -77,15 +77,23 @@ describe('기믹 — 파괴 롤과 판정', () => {
     expect(TYPES.prop_sarcophagus.explode).toBe(0);
   });
 
-  it('석관은 2방 — 첫 방은 금(prop_hit), 둘째 방에 부서진다(prop_broken)', () => {
-    const prop = putProp(world, 'prop_sarcophagus', 10, 6);
+  it('타격량 — 일반 기믹은 총알 2발·해머 1방, 석관은 해머 2방', () => {
+    const jar = putProp(world, 'prop_jar', 10, 6);
+    damageProp(world, jar, TYPES.prop_jar.hp, 1); // 총알 1점
+    expect(jar.alive).toBe(true); // 첫 발엔 금만 간다
+    damageProp(world, jar, TYPES.prop_jar.hp, 1);
+    expect(jar.alive).toBe(false); // 총알 2발
+    const jar2 = putProp(world, 'prop_jar', 12, 6);
+    damageProp(world, jar2, TYPES.prop_jar.hp, 2); // 해머 한 방 몫
+    expect(jar2.alive).toBe(false);
+    const sar = putProp(world, 'prop_sarcophagus', 14, 6);
     const evs: string[] = [];
     world.events.on('prop_hit', () => evs.push('hit'));
     world.events.on('prop_broken', () => evs.push('broken'));
-    damageProp(world, prop, TYPES.prop_sarcophagus.hp);
-    expect(prop.alive).toBe(true);
-    damageProp(world, prop, TYPES.prop_sarcophagus.hp);
-    expect(prop.alive).toBe(false);
+    damageProp(world, sar, TYPES.prop_sarcophagus.hp, 2);
+    expect(sar.alive).toBe(true);
+    damageProp(world, sar, TYPES.prop_sarcophagus.hp, 2);
+    expect(sar.alive).toBe(false);
     expect(evs).toEqual(['hit', 'broken']);
   });
 
