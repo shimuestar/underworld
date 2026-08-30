@@ -57,52 +57,10 @@
     {
       "type": "goblin_runner",
       "cell": [
-        9,
-        12
-      ]
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
-        14,
-        18
-      ]
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
-        2,
-        10
-      ]
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
-        2,
-        16
-      ]
-    },
-    {
-      "type": "goblin_runner",
-      "cell": [
         2,
         25
       ],
       "note": "상자 방 파수"
-    },
-    {
-      "type": "goblin_spear",
-      "cell": [
-        12,
-        17
-      ]
-    },
-    {
-      "type": "goblin_spear",
-      "cell": [
-        11,
-        13
-      ]
     },
     {
       "type": "goblin_spear",
@@ -130,21 +88,7 @@
       "type": "goblin_archer",
       "cell": [
         8,
-        12
-      ]
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        8,
         18
-      ]
-    },
-    {
-      "type": "goblin_archer",
-      "cell": [
-        1,
-        19
       ]
     },
     {
@@ -205,21 +149,6 @@
         19
       ],
       "note": "거미 묘실 주인"
-    },
-    {
-      "type": "spider_large",
-      "cell": [
-        19,
-        17
-      ]
-    },
-    {
-      "type": "spider_large",
-      "cell": [
-        17,
-        11
-      ],
-      "note": "제단 방 파수"
     },
     {
       "type": "spider_small",
@@ -479,19 +408,12 @@
       ]
     },
     {
-      "type": "spider_large",
-      "cell": [
-        24,
-        19
-      ],
-      "note": "소방 S2 주인"
-    },
-    {
       "type": "spider_small",
       "cell": [
         23,
         19
-      ]
+      ],
+      "note": "소방 S2"
     }
   ],
   "triggers": [

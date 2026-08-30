@@ -297,14 +297,6 @@
       "feign": true
     },
     {
-      "type": "spider_large",
-      "cell": [
-        16,
-        20
-      ],
-      "note": "보스 방 호위"
-    },
-    {
       "type": "spider_small",
       "cell": [
         19,
@@ -353,14 +345,6 @@
         15,
         16
       ]
-    },
-    {
-      "type": "spider_large",
-      "cell": [
-        12,
-        19
-      ],
-      "note": "복도 사냥꾼"
     },
     {
       "type": "slime_mother",
@@ -423,19 +407,12 @@
       ]
     },
     {
-      "type": "spider_large",
-      "cell": [
-        10,
-        23
-      ],
-      "note": "소방 E2 주인"
-    },
-    {
       "type": "spider_small",
       "cell": [
         9,
         23
-      ]
+      ],
+      "note": "소방 E2"
     },
     {
       "type": "slime",
