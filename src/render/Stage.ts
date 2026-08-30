@@ -4601,6 +4601,7 @@ export class Stage {
       }
       group.rotation.y = (id % 9) * 0.7; // 버려진 방향 제각각
     }
+    group.scale.setScalar(2); // 기믹 2배 — balance 의 판정 크기와 함께 간다
     return group;
   }
 

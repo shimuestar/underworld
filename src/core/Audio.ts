@@ -625,34 +625,43 @@ export class GameAudio {
         this.noise(0.45, 0.3, 3600, 0.06);
         break;
       case 'prop_break_ceramic':
-        // 항아리 — 쨍그랑, 사금파리가 흩어진다
-        this.noise(0.08, 0.9, 5200);
-        this.tone(2200, 0.1, 'triangle', 0.5, 0, 900);
-        this.noise(0.22, 0.4, 3200, 0.04);
+        // 항아리 와장창 — 큰 파열 + 사금파리가 두 박자로 쏟아진다
+        this.noise(0.1, 1.5, 5200);
+        this.tone(2400, 0.12, 'triangle', 0.9, 0, 800);
+        this.noise(0.28, 1.1, 3400, 0.05);
+        this.noise(0.2, 0.6, 4400, 0.16);
+        this.tone(90, 0.16, 'square', 0.7, 0, 50); // 바닥에 떨어지는 무게
         break;
       case 'prop_break_wood':
-        // 궤짝 — 빠직 부러지는 나무
-        this.noise(0.1, 0.9, 1100);
-        this.tone(240, 0.1, 'square', 0.5, 0, 90);
-        this.noise(0.16, 0.35, 700, 0.05);
+        // 궤짝 와장창 — 널판이 쪼개지며 두세 조각이 잇달아 떨어진다
+        this.noise(0.12, 1.5, 1300);
+        this.tone(210, 0.14, 'square', 0.9, 0, 70);
+        this.noise(0.2, 0.9, 900, 0.07);
+        this.noise(0.16, 0.6, 700, 0.18);
+        this.tone(140, 0.12, 'square', 0.5, 0.16, 60);
         break;
       case 'prop_break_bone':
-        // 뼈 무더기 — 마른 뼈가 우두둑 흩어진다
-        this.noise(0.06, 0.7, 2400);
-        this.noise(0.06, 0.55, 2000, 0.07);
-        this.noise(0.08, 0.4, 1600, 0.13);
+        // 뼈 무더기 와장창 — 마른 뼈가 우수수 쏟아져 구른다
+        this.noise(0.09, 1.3, 2600);
+        this.noise(0.08, 1.0, 2100, 0.07);
+        this.noise(0.09, 0.8, 1700, 0.15);
+        this.noise(0.12, 0.5, 1400, 0.24);
+        this.tone(320, 0.06, 'triangle', 0.5, 0.02, 240);
         break;
       case 'prop_break_stone':
-        // 석관 — 무거운 돌 파열
-        this.tone(90, 0.28, 'square', 0.9, 0, 45);
-        this.noise(0.3, 0.9, 800);
-        this.noise(0.2, 0.4, 2600, 0.06);
+        // 석관 와장창 — 돌판이 깨져 무너져 내린다 (제일 무겁다)
+        this.tone(70, 0.4, 'square', 1.3, 0, 38);
+        this.noise(0.34, 1.5, 700);
+        this.noise(0.26, 0.9, 2400, 0.06);
+        this.noise(0.3, 0.6, 500, 0.2); // 잔해가 구르는 꼬리
         break;
       case 'prop_break_metal':
-        // 광차 — 쇠가 캉 울린다
-        this.tone(700, 0.22, 'triangle', 0.8, 0, 500);
-        this.tone(1400, 0.16, 'triangle', 0.5, 0.02, 950);
-        this.noise(0.14, 0.5, 3000);
+        // 광차 와장창 — 쇠 테두리가 캉캉 울리며 널판이 무너진다
+        this.tone(720, 0.26, 'triangle', 1.1, 0, 480);
+        this.tone(1500, 0.2, 'triangle', 0.7, 0.03, 900);
+        this.noise(0.16, 1.2, 2800);
+        this.noise(0.2, 0.7, 1000, 0.12);
+        this.tone(95, 0.2, 'square', 0.7, 0.05, 45);
         break;
       case 'prop_fuse':
         // 치익 — 숨은 폭발물의 심지. 이 소리가 나면 도망쳐라

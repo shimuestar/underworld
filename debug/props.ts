@@ -147,6 +147,7 @@ function makeProp(type: string, id: number): THREE.Group {
     }
     group.rotation.y = (id % 9) * 0.7; // 버려진 방향 제각각
   }
+  group.scale.setScalar(2); // Stage 와 동일 — 기믹 2배
   return group;
 }
 
