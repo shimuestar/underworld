@@ -1393,6 +1393,12 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
 
       if (dist <= def.attackRange) {
+        // 교대 공격 — 예고 자리가 꽉 찼으면 파고들지 않고 옆걸음으로 포위한다.
+        // 동시 예고는 패링할 수 없고, 한 점에 뭉친 무리는 광역 한 방에 다 쓸린다
+        if (!def.boss && engagedCount(world, enemy) >= balance.enemyAi.engage.maxSimultaneous) {
+          circleAround(world, enemy, def, distX, distZ, dist, dt);
+          break;
+        }
         enemy.attackMode = 'melee';
         startWindup(world, enemy, currentAttack(def, enemy));
         break;
@@ -1491,7 +1497,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (dist > 0) {
         // 살금살금 — stalk 이 있으면 달려들기 사정거리 밖에서는 천천히 걸어온다 (구울)
         const stalkMul = def.stalk && dist > def.stalk.untilRange ? def.stalk.speedMul : 1;
-        moveAvoiding(world, enemy, def, distX / dist, distZ / dist, moveSpeed(enemy, def) * stalkMul * dt);
+        // 산개 접근 — 고유 편각으로 벌어져 다가온다 (한 줄 종대 방지)
+        const fd = flankDir(enemy, distX / dist, distZ / dist, dist);
+        moveAvoiding(world, enemy, def, fd.x, fd.z, moveSpeed(enemy, def) * stalkMul * dt);
       }
       break;
     }
@@ -1887,6 +1895,63 @@ function wakeAround(world: World, source: EnemyState, radius: number): void {
 }
 
 const strafeCfg = balance.enemyAi.strafe;
+
+/** 산개 접근 — id 로 정해지는 고유 편각으로 접근 방향을 튼다. 멀수록 크게 벌어지고
+ *  convergeRange 안에서는 정면으로 수렴한다. 무리가 같은 최단 직선을 공유해 한 줄
+ *  종대가 되는 것을 막는 값싼 우회다 — 경로탐색이 아니라서 통로에선 벽을 타고 만다 */
+function flankDir(
+  enemy: EnemyState,
+  dirX: number,
+  dirZ: number,
+  dist: number,
+): { x: number; z: number } {
+  const fl = balance.enemyAi.flank;
+  const t = Math.min(1, Math.max(0, (dist - fl.convergeRange) / (fl.fullRange - fl.convergeRange)));
+  if (t <= 0) return { x: dirX, z: dirZ };
+  // id 해시 → [-1, 1) 고정 편향 — 같은 무리라도 제각각 다른 각으로 벌어진다
+  const h = (((enemy.id * 2654435761) >>> 0) % 1000) / 500 - 1;
+  const ang = h * ((fl.maxOffsetDeg * Math.PI) / 180) * t;
+  const c = Math.cos(ang);
+  const s = Math.sin(ang);
+  return { x: dirX * c - dirZ * s, z: dirX * s + dirZ * c };
+}
+
+/** 플레이어 곁에서 공격 동작(예고·돌진) 중인 적 수 — 교대 공격의 자리 계산 */
+function engagedCount(world: World, self: EnemyState): number {
+  const eg = balance.enemyAi.engage;
+  const p = world.player;
+  let n = 0;
+  for (const other of world.enemies) {
+    if (other === self || !other.alive) continue;
+    if (other.ai !== 'windup' && other.ai !== 'charging') continue;
+    if (Math.hypot(other.x - p.x, other.z - p.z) > eg.countRadius) continue;
+    n++;
+  }
+  return n;
+}
+
+/** 차례 기다리기 — 사거리 언저리에서 플레이어를 중심으로 옆걸음 포위. 붙박이로 서면
+ *  한 점에 뭉치고 그 뭉치가 광역 한 방에 쓸린다 — 도는 동안 등·옆으로 번져 나간다 */
+function circleAround(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  distX: number,
+  distZ: number,
+  dist: number,
+  dt: number,
+): void {
+  if (dist <= 0) return;
+  if (enemy.strafeDir === undefined) enemy.strafeDir = enemy.id % 2 === 0 ? 1 : -1;
+  const perpX = -distZ / dist;
+  const perpZ = distX / dist;
+  const step = moveSpeed(enemy, def) * balance.enemyAi.engage.circleSpeedMul * dt;
+  const bx = enemy.x;
+  const bz = enemy.z;
+  moveAvoiding(world, enemy, def, perpX * enemy.strafeDir, perpZ * enemy.strafeDir, step);
+  // 벽·아군에 막혀 제자리면 반대쪽으로 돈다
+  if (Math.hypot(enemy.x - bx, enemy.z - bz) < step * 0.3) enemy.strafeDir = -enemy.strafeDir;
+}
 
 /** 주변 아군에게서 밀려나는 방향 — 일렬로 겹쳐 서지 않게 한다 (반환값은 정규화 전) */
 function separation(world: World, enemy: EnemyState): { x: number; z: number } {

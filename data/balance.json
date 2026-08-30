@@ -708,10 +708,22 @@
       "flipAfterTicks": 200,
       "giveUpTicks": 600
     },
+    "_flankNote": "산개 접근 — 추격 시 적마다 id 로 정해지는 고유 편각(±maxOffsetDeg 부채꼴)으로 접근 방향을 튼다. fullRange 밖에서 최대로 벌어지고 convergeRange 안에서는 정면 수렴 — 한 줄 종대로 몰려오는 그림을 막는다. 경로탐색이 아니라 방향 회전이라 통로에서는 벽을 타고 자연히 한 줄이 된다 (2026-08-30)",
+    "flank": {
+      "maxOffsetDeg": 40,
+      "convergeRange": 3.5,
+      "fullRange": 9
+    },
+    "_engageNote": "교대 공격 — 플레이어 곁(countRadius)에서 동시에 공격 동작(windup·charging)에 들어갈 수 있는 적은 maxSimultaneous 명. 자리가 없으면 옆걸음(circleSpeedMul)으로 돌며 차례를 기다린다 — 한 점 다구리 대신 포위. 보스는 기다리지 않는다 (2026-08-30)",
+    "engage": {
+      "maxSimultaneous": 2,
+      "countRadius": 4,
+      "circleSpeedMul": 0.55
+    },
     "separation": {
-      "_comment": "추격 중 서로 밀어내는 힘 — 일렬로 겹쳐 서는 것을 막는다",
-      "radius": 2.2,
-      "strength": 0.85,
+      "_comment": "추격 중 서로 밀어내는 힘 — 일렬로 겹쳐 서는 것을 막는다. 2.2/0.85 → 2.6/1.1 (2026-08-30, 몸통 뭉침이 광역 한 방에 다 쓸린다는 피드백)",
+      "radius": 2.6,
+      "strength": 1.1,
       "_pushNote": "겹친 몸통을 실제로 밀어내는 비율. 1이면 한 틱에 완전 분리(통로에서 교착), 낮으면 서서히 비켜선다",
       "pushRatio": 0.55
     },
