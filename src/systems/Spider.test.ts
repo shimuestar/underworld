@@ -205,6 +205,26 @@ describe('검은 거미 (근접·도약)', () => {
     expect(spider.jumpY).toBe(0); // 타격 시점엔 착지해 있다
   });
 
+  it('도약은 슬라임처럼 즉발 접촉 — 부딪는 순간 타격, 착지 후 판정 창 없음', () => {
+    const leap = enemyDef('spider_small').chargeAttack!;
+    expect(leap.parryable).toBe(false); // 적색 = 회피 전용 (슬라임 도약과 같은 규약)
+    expect(leap.telegraph).toBe('red');
+    const mid = ((leap.minRange ?? 0) + leap.maxRange!) / 2;
+    const spider: EnemyState = spawnEnemyAt('spider_small', 10 + mid, 10, 1);
+    spider.ai = 'chase';
+    world.enemies.push(spider);
+    for (let i = 0; i < 300 && (spider.ai as string) !== 'charging'; i++) Enemies.tick(world, DT);
+    const hits: unknown[] = [];
+    const states = new Set<string>();
+    world.events.on('player_damaged', (p) => hits.push(p));
+    for (let i = 0; i < 300 && (spider.ai as string) !== 'recover'; i++) {
+      Enemies.tick(world, DT);
+      states.add(spider.ai as string);
+    }
+    expect(hits.length).toBeGreaterThan(0); // 서 있으면 부딪는 순간 맞는다
+    expect(states.has('active_perfect')).toBe(false); // 패링 판정 창을 거치지 않는다
+  });
+
   it('가벼워서 해머 마무리에 잘 날아간다', () => {
     expect(enemyDef('spider_small').weight).toBe('light');
     expect(balance.weapons.hammer.combo.knockbackByWeight.light).toBe(1);
