@@ -971,7 +971,10 @@ events.on('ghoul_latch', () => {
   stage.triggerCameraKick(0.4, 200);
   showReaction('구울이 물어뜯는다! 근접 공격 연타로 밀쳐내라!', 2600);
 });
-events.on('ghoul_bite', () => stage.triggerCameraKick(0.28, 130));
+events.on('ghoul_bite', () => {
+  stage.triggerCameraKick(0.28, 130);
+  spawnBloodSplatter(); // 파먹히는 동안 화면에 피가 튄다 — 거머리 흡혈과 같은 연출
+});
 events.on('grapple_struggle', () => {
   // 연타 한 번 = 두 손으로 한 번 밀친다 — 게이지는 HUD(#grapple)가 그린다
   audio.play('struggle_push');
