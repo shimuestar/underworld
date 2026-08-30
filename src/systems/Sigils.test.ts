@@ -1071,7 +1071,50 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(Math.hypot(s.x - sx, s.z - sz)).toBeLessThan(0.05); // 매복 — 미동도 없다
   });
 
-  it('벽거미 도약 — 예고 시점 좌표로 몸을 던져, 서 있으면 맞는다', () => {
+  it('벽거미 도약 재조준 — 예고 중 움직여도 발사 순간 위치로 날아와 맞는다', () => {
+    const s = add('spider_small', 11, 6); // 5m — 도약 사거리 [3,7] 안
+    s.ai = 'chase';
+    const wc = enemyDef2('spider_small').wallCrawl!;
+    // 예고가 시작되길 기다렸다가, 예고 도중 옆으로 걸어 옮긴다
+    let launched = false;
+    world.events.on('wall_pounce', () => (launched = true));
+    for (let i = 0; i < wc.climbTicks + 5; i++) Enemies.tick(world, DT);
+    world.player.x = 6.5;
+    world.player.z = 7.4; // 예고 시작 좌표에서 1.5m 이동 — 옛 방식이면 헛디딘다
+    world.player.prevX = 6.5;
+    world.player.prevZ = 7.4;
+    const hp = world.player.health;
+    const total = wc.pounceWindupTicks + wc.pounceAirTicks + 10;
+    for (let i = 0; i < total; i++) Enemies.tick(world, DT);
+    expect(launched).toBe(true);
+    expect(world.player.health).toBeLessThan(hp); // 발사 순간 위치로 재조준 — 명중
+  });
+
+  it('벽거미 도약 — 발사 뒤(비행 중) 크게 비키면 여전히 헛디딘다 (회피 창 유지)', () => {
+    const wc = enemyDef2('spider_small').wallCrawl!;
+    const s = add('spider_small', 8, 6);
+    s.ai = 'chase';
+    s.wallPounceTicks = wc.pounceAirTicks; // 발사 직후 상태
+    s.wallPounceFromY = wc.height;
+    s.wallPounceTX = 6;
+    s.wallPounceTZ = 6;
+    s.wallPounceHitDone = false;
+    s.jumpY = wc.height;
+    world.player.x = 6;
+    world.player.z = 10; // 비행 시작과 동시에 4m 밖 — 대시 회피를 흉내
+    world.player.prevZ = 10;
+    const hp = world.player.health;
+    let landedHit = true;
+    world.events.on('wall_pounce_land', (pl) => {
+      landedHit = (pl as { hit: boolean }).hit;
+    });
+    for (let i = 0; i < wc.pounceAirTicks + 2; i++) Enemies.tick(world, DT);
+    expect(world.player.health).toBe(hp); // 무피해
+    expect(landedHit).toBe(false); // 헛디딤 — 반격 창
+    expect(s.whiffed).toBe(true);
+  });
+
+  it('벽거미 도약 — 예고 좌표로 몸을 던져, 서 있으면 맞는다', () => {
     const s = add('spider_small', 11, 6); // 5m — 도약 사거리 [3,7] 안
     s.ai = 'chase';
     const wc = enemyDef2('spider_small').wallCrawl!;

@@ -986,6 +986,12 @@ function tickWallSpider(
     enemy.wallPounceTicks = wc.pounceAirTicks;
     enemy.wallPounceFromY = enemy.jumpY ?? wc.height;
     enemy.wallPounceHitDone = false;
+    // 발사 순간 재조준 — 예고 '시작' 좌표로 던지면 예고+비행 0.87초 내내 걷기만 해도
+    // 벗어나 거의 늘 헛디뎠다 (점프→착지→일반 예고→공격의 맥빠진 패턴). 이제 회피
+    // 요구는 비행 0.3초 — 발사 비명을 듣고 대시로 비켜야 한다
+    enemy.wallPounceTX = p.x;
+    enemy.wallPounceTZ = p.z;
+    enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));
     world.events.emit('wall_pounce', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
     return true;
   }
