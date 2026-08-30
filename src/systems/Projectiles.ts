@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -724,6 +724,33 @@ function moveProjectiles(world: World, dt: number): void {
       }
     }
 
+    // 기믹 — 플레이어 투사체가 부순다 (통과 같은 규약, 석관은 2방)
+    let hitPropTarget: PropState | null = null;
+    if (proj.owner === 'player') {
+      const ptypes = balance.props.types as Record<
+        string,
+        { hp: number; collisionRadius: number; height: number }
+      >;
+      for (const prop of world.props) {
+        if (!prop.alive) continue;
+        const pcfg = ptypes[prop.type];
+        if (!pcfg) continue;
+        const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
+          minX: prop.x - pcfg.collisionRadius - proj.radius,
+          minY: -proj.radius,
+          minZ: prop.z - pcfg.collisionRadius - proj.radius,
+          maxX: prop.x + pcfg.collisionRadius + proj.radius,
+          maxY: pcfg.height + proj.radius,
+          maxZ: prop.z + pcfg.collisionRadius + proj.radius,
+        });
+        if (t !== null && t < hitT) {
+          hitT = t;
+          hitPropTarget = prop;
+          hitSurface = 'wall';
+        }
+      }
+    }
+
     // 튀는 구울 머리 — 화살이 맞으면 터진다
     let hitHead: number | null = null;
     // 플레이어 투사체는 종류를 가리지 않고 머리 소품을 맞힌다 — 화살·화염구·서리 공통
@@ -850,7 +877,7 @@ function moveProjectiles(world: World, dt: number): void {
         proj.y += dirY * hitT;
         proj.z += dirZ * hitT;
         const bodyHit =
-          hitEnemy !== null || hitPlayer || hitBarrelTarget !== null || hitProjectile !== null || hitHead !== null;
+          hitEnemy !== null || hitPlayer || hitBarrelTarget !== null || hitPropTarget !== null || hitProjectile !== null || hitHead !== null;
         // 금 간 벽(C)에는 튕기지 않고 부딪히는 즉시 터진다 — 튕기는 수류탄으로
         // 균열 벽을 맞히기가 고역이라, 벽 쪽이 받아 준다
         if (!bodyHit && hitSurface === 'wall') {
@@ -878,6 +905,16 @@ function moveProjectiles(world: World, dt: number): void {
       if (hitHead !== null) {
         breakGhoulHead(world, hitHead, false);
         world.events.emit('arrow_impact', {
+          x: proj.x + dirX * hitT, y: proj.y + dirY * hitT, z: proj.z + dirZ * hitT, hitEnemy: true,
+        });
+        world.projectiles.splice(i, 1);
+        continue;
+      }
+
+      if (hitPropTarget) {
+        const ptypes = balance.props.types as Record<string, { hp: number }>;
+        damageProp(world, hitPropTarget, ptypes[hitPropTarget.type]?.hp ?? 1);
+        world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', {
           x: proj.x + dirX * hitT, y: proj.y + dirY * hitT, z: proj.z + dirZ * hitT, hitEnemy: true,
         });
         world.projectiles.splice(i, 1);
@@ -1231,6 +1268,7 @@ function explodeFireball(
   // 자가 피해 — 내가 쏜 화염구도 나를 태운다 (수류탄 자폭과 같은 규칙).
   // 방패로 막히지 않는다: 폭발은 사방에서 온다. 회피 무적 중에는 면제
   breakHeadsInRadius(world, x, z, radius); // 구울 머리 소품도 폭발에 터진다
+  breakPropsInRadius(world, x, z, radius); // 기믹도 부서진다 (각자 롤)
 
   const p = world.player;
   const playerDist = Math.hypot(p.x - x, p.z - z);
@@ -1412,6 +1450,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
   }
 
   breakHeadsInRadius(world, proj.x, proj.z, grenade.radius); // 구울 머리 소품도 터진다
+  breakPropsInRadius(world, proj.x, proj.z, grenade.radius); // 기믹도 부서진다 (각자 롤)
 
   // 자가 피해 — 가까이서 던지면 나도 다친다
   const p = world.player;

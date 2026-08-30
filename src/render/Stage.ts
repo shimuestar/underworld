@@ -958,6 +958,10 @@ export class Stage {
   }[] = [];
   private readonly groundItemVisuals = new Map<number, THREE.Group>();
   private readonly chestVisuals = new Map<number, { group: THREE.Group; lid: THREE.Object3D }>();
+  /** 기믹(파괴물) 시각 — 배열에서 빠지면(파괴) 걷는다 (syncBarrels 와 같은 규약) */
+  private readonly propVisuals = new Map<number, THREE.Group>();
+  /** 심지 불빛 — 폭발 당첨 기믹의 치익 반짝임 */
+  private fuseGlows: { light: THREE.PointLight; bornMs: number; ttlMs: number }[] = [];
   private readonly barrelVisuals = new Map<
     number,
     { group: THREE.Group; band: THREE.MeshLambertMaterial; light: THREE.PointLight }
@@ -4200,6 +4204,34 @@ export class Stage {
 
       group.add(piece);
       group.add(new THREE.PointLight(FOOD_COLOR, 0.45, 3.5, 0));
+    } else if (kind === 'ammo') {
+      // 권총탄 — 놋쇠 상자 두 개
+      const brass = new THREE.MeshLambertMaterial({
+        color: 0xc9a54a, emissive: 0xc9a54a, emissiveIntensity: 0.3,
+      });
+      for (const off of [-0.07, 0.07]) {
+        const box = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.09, 0.2), brass);
+        box.position.set(off, 0.05, off * 0.4);
+        box.rotation.y = off * 6;
+        group.add(box);
+      }
+      group.add(new THREE.PointLight(0xc9a54a, 0.4, 3, 0));
+    } else if (kind === 'grenade') {
+      const shell = new THREE.Mesh(
+        new THREE.SphereGeometry(0.13, 10, 8),
+        new THREE.MeshLambertMaterial({ color: 0x3d4a38, emissive: 0x223022, emissiveIntensity: 0.4 }),
+      );
+      shell.position.y = 0.13;
+      group.add(shell);
+      group.add(new THREE.PointLight(0x86b06a, 0.4, 3, 0));
+    } else if (kind === 'battery') {
+      const cell = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.08, 0.2, 10),
+        new THREE.MeshLambertMaterial({ color: 0xd8c23a, emissive: 0xd8c23a, emissiveIntensity: 0.4 }),
+      );
+      cell.position.y = 0.1;
+      group.add(cell);
+      group.add(new THREE.PointLight(0xd8c23a, 0.4, 3, 0));
     } else if (kind === 'gold') {
       const pile = new THREE.Mesh(
         new THREE.CylinderGeometry(0.02, 0.17, 0.12, 7),
@@ -4338,7 +4370,9 @@ export class Stage {
       // 자석에 걸리면 로직이 계산한 높이(item.y)로 날아간다. 아니면 제자리 부유
       // 골드·화살은 바닥에 놓인 물건이라 떠서 흔들리지 않는다.
       // 화살은 눕혀 둔 것이라 물약처럼 가슴 높이에서 까딱거리면 안 된다
-      const grounded = item.kind === 'gold' || item.kind === 'arrow' || item.kind === 'grave';
+      const grounded =
+        item.kind === 'gold' || item.kind === 'arrow' || item.kind === 'grave' ||
+        item.kind === 'ammo' || item.kind === 'grenade' || item.kind === 'battery';
       const bob =
         item.y ??
         (grounded ? (item.kind === 'gold' ? 0.12 : item.kind === 'grave' ? 0 : GROUND_ARROW_Y)
@@ -4432,6 +4466,159 @@ export class Stage {
 
   /** 폭발통 — 도화선이 돌면 띠가 점점 빠르게 붉게 깜빡인다.
    *  터진 통은 사라진다 (폭발 연출은 explosion 이벤트가 따로 낸다) */
+/** 기믹 프리미티브 — 재질 단색. id 로 크기·기울기에 잔변화를 준다 (군집이 도장이 안 되게) */
+  private makeProp(type: string, id: number): THREE.Group {
+    const group = new THREE.Group();
+    const v = 0.88 + (id % 5) * 0.06; // 개체 변화
+    if (type === 'prop_jar') {
+      const mat = new THREE.MeshLambertMaterial({ color: 0x9a5f38 });
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.62 * v, 9), mat);
+      body.position.y = (0.62 * v) / 2;
+      group.add(body);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.21, 0.24 * v, 9), mat);
+      neck.position.y = 0.62 * v + (0.24 * v) / 2 - 0.02;
+      group.add(neck);
+    } else if (type === 'prop_crate') {
+      const mat = new THREE.MeshLambertMaterial({ color: 0x7a5a34 });
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.5, 0.72), mat);
+      base.position.y = 0.25;
+      base.rotation.y = (id % 7) * 0.09;
+      group.add(base);
+      if (id % 2 === 0) {
+        const top = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.36, 0.5), mat);
+        top.position.set(0.06, 0.5 + 0.18, -0.04);
+        top.rotation.y = 0.4 + (id % 3) * 0.2;
+        group.add(top);
+      }
+    } else if (type === 'prop_bonepile') {
+      const mound = new THREE.Mesh(
+        new THREE.SphereGeometry(0.42, 9, 6),
+        new THREE.MeshLambertMaterial({ color: 0x6a6152 }),
+      );
+      mound.scale.set(1, 0.35, 1);
+      group.add(mound);
+      const boneMat = new THREE.MeshLambertMaterial({ color: 0xcfc7b0 });
+      for (let i = 0; i < 3; i++) {
+        const bone = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.05), boneMat);
+        bone.position.set((i - 1) * 0.12, 0.14 + i * 0.03, (i % 2) * 0.1 - 0.05);
+        bone.rotation.y = i * 1.1 + id;
+        group.add(bone);
+      }
+      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.18), boneMat);
+      skull.position.set(0.12, 0.2, 0.08);
+      group.add(skull);
+    } else if (type === 'prop_sarcophagus') {
+      const stone = new THREE.MeshLambertMaterial({ color: 0x8a8f96 });
+      const base = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.62), stone);
+      base.position.y = 0.35;
+      group.add(base);
+      const lid = new THREE.Mesh(
+        new THREE.BoxGeometry(1.18, 0.16, 0.7),
+        new THREE.MeshLambertMaterial({ color: 0x777c84 }),
+      );
+      lid.position.y = 0.78;
+      lid.rotation.y = 0.03;
+      group.add(lid);
+    } else {
+      // prop_minecart — 녹슨 광차: 통 몸체 + 안쪽 어둠 + 바퀴
+      const hullMat = new THREE.MeshLambertMaterial({ color: 0x5f5348 });
+      const hull = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.5, 0.6), hullMat);
+      hull.position.y = 0.45;
+      group.add(hull);
+      const inner = new THREE.Mesh(
+        new THREE.BoxGeometry(0.78, 0.1, 0.46),
+        new THREE.MeshBasicMaterial({ color: 0x14100d }),
+      );
+      inner.position.y = 0.71;
+      group.add(inner);
+      const wheelMat = new THREE.MeshLambertMaterial({ color: 0x3c3f45 });
+      for (const [wx, wz] of [[-0.3, 0.3], [0.3, 0.3], [-0.3, -0.3], [0.3, -0.3]] as const) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.07, 8), wheelMat);
+        wheel.rotation.x = Math.PI / 2;
+        wheel.position.set(wx, 0.13, wz);
+        group.add(wheel);
+      }
+      group.rotation.y = (id % 9) * 0.7; // 버려진 방향 제각각
+    }
+    return group;
+  }
+
+  /** 기믹 동기화 — 부서지면(alive=false) 걷는다 */
+  syncProps(props: { id: number; type: string; x: number; z: number; alive: boolean }[]): void {
+    const seen = new Set<number>();
+    for (const prop of props) {
+      if (!prop.alive) continue;
+      seen.add(prop.id);
+      if (!this.propVisuals.has(prop.id)) {
+        const group = this.makeProp(prop.type, prop.id);
+        group.position.set(prop.x, 0, prop.z);
+        this.propVisuals.set(prop.id, group);
+        this.scene.add(group);
+      }
+    }
+    for (const [id, group] of this.propVisuals) {
+      if (seen.has(id)) continue;
+      this.scene.remove(group);
+      group.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        if (mesh.material) (mesh.material as THREE.Material).dispose();
+      });
+      this.propVisuals.delete(id);
+    }
+  }
+
+  /** 기믹 파편 — 재질색 조각이 흩어진다 (사망 파편과 같은 물리) */
+  spawnPropDebris(x: number, z: number, color: number, height: number): void {
+    const now = performance.now();
+    for (let i = 0; i < 10; i++) {
+      const size = 0.05 + Math.random() * 0.09;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size, size),
+        new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 }),
+      );
+      const ang = Math.random() * Math.PI * 2;
+      const speed = 1.2 + Math.random() * 2.2;
+      const particle: Particle = {
+        mesh,
+        ox: x,
+        oy: height * (0.2 + Math.random() * 0.7),
+        oz: z,
+        vx: Math.cos(ang) * speed,
+        vy: 1.5 + Math.random() * 2.5,
+        vz: Math.sin(ang) * speed,
+        bornMs: now,
+        lifeMs: 700,
+        restY: size / 2,
+      };
+      mesh.position.set(particle.ox, particle.oy, particle.oz);
+      mesh.rotation.set(Math.random() * 3, Math.random() * 3, 0);
+      this.particles.push(particle);
+      this.scene.add(mesh);
+    }
+  }
+
+  /** 심지 불빛 — 잔해에서 붉게 깜빡인다. 치익 소리의 시각 짝 */
+  spawnFuseGlow(x: number, z: number, ttlMs: number): void {
+    const light = new THREE.PointLight(0xff3820, 2.2, 6, 0);
+    light.position.set(x, 0.35, z);
+    this.scene.add(light);
+    this.fuseGlows.push({ light, bornMs: performance.now(), ttlMs });
+  }
+
+  private updateFuseGlows(now: number): void {
+    for (let i = this.fuseGlows.length - 1; i >= 0; i--) {
+      const g = this.fuseGlows[i]!;
+      const age = now - g.bornMs;
+      if (age > g.ttlMs) {
+        this.scene.remove(g.light);
+        this.fuseGlows.splice(i, 1);
+        continue;
+      }
+      g.light.intensity = 1.4 + Math.sin(age / 30) * 1.2; // 다급한 깜빡임
+    }
+  }
+
   syncBarrels(barrels: BarrelState[]): void {
     const now = performance.now();
     const cfg = balance.barrel;
@@ -4531,6 +4718,7 @@ export class Stage {
     this.updateParticles();
     this.updateBloodStains();
     this.updateSonicWaves(performance.now());
+    this.updateFuseGlows(performance.now());
     this.updateExplosions();
     this.updateFrostDecals();
     this.updateScorches(performance.now());

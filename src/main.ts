@@ -9,7 +9,7 @@ import { World, type ItemKind } from './core/World';
 import { countOf, initInventory, spillInventoryToGrave, itemColor, itemDef } from './core/Inventory';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
-import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt } from './level/Spawner';
+import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt, spawnProps } from './level/Spawner';
 import { Minimap } from './render/Minimap';
 import { PauseMenu } from './render/PauseMenu';
 import { GamepadUI } from './render/GamepadUI';
@@ -31,6 +31,7 @@ import * as Stamina from './systems/Stamina';
 import * as Corruption from './systems/Corruption';
 import * as Altar from './systems/Altar';
 import * as Barrels from './systems/Barrels';
+import * as Props from './systems/Props';
 import * as Chest from './systems/Chest';
 import * as Exit from './systems/Exit';
 import * as Door from './systems/Door';
@@ -63,6 +64,7 @@ interface FloorState {
   level: Level;
   enemies: World['enemies'];
   barrels: World['barrels'];
+  props: World['props'];
   chests: World['chests'];
   doors: World['doors'];
   groundItems: World['groundItems'];
@@ -148,6 +150,7 @@ const world = new World(events, {
   corruption: { applied: 0, pending: 0 },
   enemies: spawnEnemies(levelJson.entities, level),
   barrels: spawnBarrels(levelJson.entities, level),
+  props: spawnProps(levelJson.entities, level),
   chests: spawnChests(levelJson.entities, level),
   level,
 });
@@ -408,6 +411,14 @@ for (const name of [
   'explosion',
   'grenade_bounce',
   'barrel_hit',
+  'prop_broken',
+  'prop_hit',
+  'prop_fuse_lit',
+  'prop_ambush',
+  'prop_loot',
+  'ammo_picked',
+  'grenade_picked',
+  'battery_picked',
   'barrel_exploded',
   'projectile_broken',
   'chest_opened',
@@ -662,6 +673,58 @@ events.on('weapon_empty', (payload) => {
     1100,
   );
 });
+// ---- 기믹(파괴물) — 재질별 파괴음 + 파편, 심지, 매복 연출 ----
+const PROP_BREAK_SOUND: Record<string, Parameters<typeof audio.play>[0]> = {
+  ceramic: 'prop_break_ceramic',
+  wood: 'prop_break_wood',
+  bone: 'prop_break_bone',
+  stone: 'prop_break_stone',
+  metal: 'prop_break_metal',
+};
+const PROP_DEBRIS_COLOR: Record<string, number> = {
+  ceramic: 0x9a5f38,
+  wood: 0x7a5a34,
+  bone: 0xcfc7b0,
+  stone: 0x8a8f96,
+  metal: 0x5f5348,
+};
+events.on('prop_broken', (payload) => {
+  const pb = payload as { type: string; x: number; z: number };
+  const cfg = (balance.props.types as Record<string, { material: string; height: number }>)[pb.type];
+  const mat = cfg?.material ?? 'wood';
+  audio.play(PROP_BREAK_SOUND[mat] ?? 'prop_break_wood', panAt(pb.x, pb.z));
+  stage.spawnPropDebris(pb.x, pb.z, PROP_DEBRIS_COLOR[mat] ?? 0x7a5a34, cfg?.height ?? 0.8);
+});
+events.on('prop_hit', (payload) => {
+  // 석관 첫 방 — 금이 갔다 (돌 부딪는 소리로 '한 방 더'를 알린다)
+  const ph = payload as { x: number; z: number };
+  audio.play('hit_wall', panAt(ph.x, ph.z));
+});
+events.on('prop_fuse_lit', (payload) => {
+  const pf = payload as { x: number; z: number };
+  audio.play('prop_fuse', panAt(pf.x, pf.z));
+  stage.spawnFuseGlow(pf.x, pf.z, (balance.props.fuseTicks / 60) * 1000);
+  showReaction('치익 — 숨은 폭발물이다!', 900);
+});
+events.on('prop_ambush', (payload) => {
+  const pa = payload as { enemyType: string; x: number; z: number };
+  stage.spawnDeathBurst(pa.x, pa.z, pa.enemyType, 0.6); // 튀어나오는 철퍽
+  audio.play('enemy_alert', panAt(pa.x, pa.z));
+  showReaction('안에서 뭔가 튀어나왔다!', 1200);
+});
+events.on('ammo_picked', (payload) => {
+  audio.play('reload_end');
+  showReaction(`권총탄 +${(payload as { amount: number }).amount}`, 900);
+});
+events.on('grenade_picked', () => {
+  audio.play('pickup');
+  showReaction('수류탄 +1', 900);
+});
+events.on('battery_picked', () => {
+  audio.play('pickup');
+  showReaction('랜턴 배터리 +1', 900);
+});
+
 events.on('web_caught', (payload) => {
   const info = payload as { swings: number };
   audio.play('web_hit');
@@ -1626,6 +1689,8 @@ function respawnAtAltar(): void {
   // 폭발통도 되살린다 — 남은 차단 블록을 먼저 걷어내야 유령 벽이 쌓이지 않는다
   for (const barrel of world.barrels) if (barrel.blocker) level.removeBlocker(barrel.blocker);
   world.barrels = spawnBarrels(levelJson.entities, level);
+  for (const prop of world.props) if (prop.blocker) level.removeBlocker(prop.blocker);
+  world.props = spawnProps(levelJson.entities, level);
   for (const chest of world.chests) if (chest.blocker) level.removeBlocker(chest.blocker);
   world.chests = spawnChests(levelJson.entities, level);
   world.chestInView = null;
@@ -1820,6 +1885,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     level,
     enemies: world.enemies,
     barrels: world.barrels,
+    props: world.props,
     chests: world.chests,
     doors: world.doors,
     groundItems: world.groundItems,
@@ -1838,6 +1904,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     world.level = level;
     world.enemies = saved.enemies;
     world.barrels = saved.barrels;
+    world.props = saved.props;
     world.chests = saved.chests;
     world.doors = saved.doors;
     world.groundItems = saved.groundItems;
@@ -1849,6 +1916,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     world.level = level;
     world.enemies = spawnEnemies(levelJson.entities, level);
     world.barrels = spawnBarrels(levelJson.entities, level);
+    world.props = spawnProps(levelJson.entities, level);
     world.chests = spawnChests(levelJson.entities, level);
     world.doors = level.doors.map((d) => ({
       row: d.row, col: d.col, x: d.x, z: d.z, dirX: d.dirX, dirZ: d.dirZ,
@@ -1880,7 +1948,9 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   // 오가도 사슬은 그대로 걸려 있어야 한다 (열쇠도 손에/바닥에 그대로 있다)
   world.exitNeedsKey =
     levelJson.entities.some(
-      (e) => e.type !== 'barrel' && e.type !== 'chest' && enemyDef(e.type).boss,
+      (e) =>
+        e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') &&
+        enemyDef(e.type).boss,
     ) && !unlockedFloors.has(index);
   world.canAscend = index > 0;
   world.onEntrancePad = false;
@@ -2007,6 +2077,7 @@ Stamina.init(world);
 Exit.init(world); // 보스가 죽으면 열쇠를 떨군다
 Enemies.init(world); // 공격 행동 소음 — 시전·휘두름이 코앞의 적을 깨운다
 GhoulHeads.init(world); // 구울 머리 소품 — 목이 날아가면 통통 튀는 머리가 남는다
+Props.init(world); // 기믹 — 부서지는 순간의 결과 롤(전리품·매복·폭발 심지)을 구독한다
 const systems = [
   PlayerMove.tick,
   Enemies.tick,
@@ -2019,6 +2090,7 @@ const systems = [
   Weapons.tick,
   Projectiles.tick,
   Barrels.tick, // 같은 틱에 쏜 화염구·던진 수류탄이 통을 터뜨릴 수 있게 뒤에 둔다
+  Props.tick, // 기믹 심지도 같은 이유로 투사체 뒤
   Mana.tick,
   Altar.tick,
   Door.tick,
@@ -2363,6 +2435,7 @@ function render(alpha: number): void {
   stage.syncGroundItems(world.groundItems);
   stage.syncLifeMotes(world.lifeMotes);
   stage.syncBarrels(world.barrels);
+  stage.syncProps(world.props);
   stage.syncChests(world.chests);
   const chargeFrac =
     world.weapon.ranged === 'grenade' && world.weapon.grenadeCharge > 0

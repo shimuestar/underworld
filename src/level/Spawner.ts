@@ -3,7 +3,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import { findWallNormal, type BarrelState, type ChestState, type EnemyState } from '../core/World';
+import { findWallNormal, type BarrelState, type ChestState, type EnemyState, type PropState } from '../core/World';
 import type { Level } from './GridLoader';
 
 export interface EntityPlacement {
@@ -109,12 +109,43 @@ export function spawnBarrels(placements: EntityPlacement[], level: Level): Barre
   return barrels;
 }
 
+let nextPropId = 1;
+
+/** 레벨의 prop_* 배치 → 기믹 상태. 몸으로 막게 차단 블록도 함께 등록한다 (통과 동형) */
+export function spawnProps(placements: EntityPlacement[], level: Level): PropState[] {
+  const props: PropState[] = [];
+  const types = balance.props.types as Record<string, { collisionRadius: number }>;
+  for (const placement of placements) {
+    if (!placement.type.startsWith('prop_')) continue;
+    const cfg = types[placement.type];
+    if (!cfg) {
+      console.warn(`[Spawner] 미정의 기믹 건너뜀: ${placement.type}`);
+      continue;
+    }
+    const [row, col] = placement.cell;
+    if (row === undefined || col === undefined) continue;
+    if (level.solidAt(col, row)) {
+      console.warn(`[Spawner] 벽 안의 기믹 건너뜀: [${row}, ${col}]`);
+      continue;
+    }
+    const x = (col + 0.5) * level.cellSize;
+    const z = (row + 0.5) * level.cellSize;
+    const prop: PropState = {
+      id: nextPropId++, type: placement.type, x, z, alive: true, hits: 0, fuseTicks: -1,
+    };
+    prop.blocker = level.addBlocker(x, z, cfg.collisionRadius);
+    props.push(prop);
+  }
+  return props;
+}
+
 export function spawnEnemies(placements: EntityPlacement[], level: Level): EnemyState[] {
   const enemies: EnemyState[] = [];
   let skippedNearAltar = 0;
 
   for (const placement of placements) {
     if (placement.group) continue; // 매복 대기조
+    if (placement.type.startsWith('prop_')) continue; // 기믹 — spawnProps 몫 (경고 없이)
     if (!IMPLEMENTED.has(placement.type)) {
       console.warn(`[Spawner] 미구현 적 타입 건너뜀: ${placement.type}`);
       continue;

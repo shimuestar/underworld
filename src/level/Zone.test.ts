@@ -71,7 +71,7 @@ describe('1구역 층 구성', () => {
       // 층 보스는 곡선에서 뺀다 — 보스 체력은 잡몹 로스터의 난이도 곡선과 별개 축이다
       const ents = json.entities.filter(
         (e) =>
-          e.type !== 'barrel' && e.type !== 'chest' && !('group' in e) && !enemyDef(e.type).boss,
+          e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !('group' in e) && !enemyDef(e.type).boss,
       );
       const elites = ents.filter((e) => ELITE.has(e.type)).length;
       const hp = ents.reduce((sum, e) => sum + enemyDef(e.type).health, 0);
@@ -95,7 +95,7 @@ describe('1구역 층 구성', () => {
   it('한 층이 유독 빽빽하지 않다 — 밀도가 층마다 두 배 넘게 뛰지 않는다', () => {
     const density = ZONE.map((json) => {
       const ents = json.entities.filter(
-        (e) => e.type !== 'barrel' && e.type !== 'chest' && !('group' in e),
+        (e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !('group' in e),
       );
       const floors = json.grid.join('').split('').filter((ch) => !SOLID.has(ch)).length;
       return ents.length / floors;
@@ -158,7 +158,7 @@ describe('1구역 층 구성', () => {
 
       it('적 타입이 전부 실제로 스폰되는 것들이다 — 스텁을 놓으면 그 자리가 빈다', () => {
         const stubs = json.entities
-          .filter((e) => e.type !== 'barrel' && e.type !== 'chest')
+          .filter((e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_'))
           .filter((e) => !isSpawnable(e.type))
           .map((e) => e.type);
         expect([...new Set(stubs)]).toEqual([]);
@@ -167,7 +167,7 @@ describe('1구역 층 구성', () => {
       it('제단 안전 반경 안에 적을 두지 않는다 — 스포너가 조용히 지운다', () => {
         const level = new Level(json);
         const dropped = json.entities
-          .filter((e) => e.type !== 'barrel' && e.type !== 'chest')
+          .filter((e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_'))
           .filter((e) => {
             if (!level.altarPos) return false;
             const x = (e.cell[1]! + 0.5) * level.cellSize;
@@ -181,7 +181,7 @@ describe('1구역 층 구성', () => {
       it('스폰 근처에 적이 없다 — 내려오자마자 전투가 붙으면 안 된다', () => {
         const level = new Level(json);
         const near = json.entities
-          .filter((e) => e.type !== 'barrel' && e.type !== 'chest')
+          .filter((e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_'))
           .filter((e) => {
             const x = (e.cell[1]! + 0.5) * level.cellSize;
             const z = (e.cell[0]! + 0.5) * level.cellSize;
@@ -195,7 +195,7 @@ describe('1구역 층 구성', () => {
         const level = new Level(json);
         // 매복 대기조(group)는 트리거로 나오는 것이라 처음부터 안 선다 — 세지 않는다
         const enemies = json.entities.filter(
-          (e) => e.type !== 'barrel' && e.type !== 'chest' && !('group' in e),
+          (e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !('group' in e),
         );
         expect(spawnEnemies(json.entities, level)).toHaveLength(enemies.length);
         expect(spawnBarrels(json.entities, level)).toHaveLength(

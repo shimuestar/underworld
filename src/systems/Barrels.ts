@@ -8,8 +8,8 @@
 // 그 틱에 통을 터뜨릴 수 있어야 "즉발"이 한 프레임도 안 밀린다.
 
 import { balance } from '../core/Balance';
-import { enemyDef, shieldBlocksProjectile } from '../core/Entities';
-import { alertEnemy, breakHeadsInRadius, igniteBarrel, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type World } from '../core/World';
+import { explodeAt } from '../core/Explosion';
+import type { BarrelState, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   for (const barrel of world.barrels) {
@@ -24,18 +24,8 @@ export function tick(world: World, _dt: number): void {
   }
 }
 
-/** 폭심에서 바깥으로 밀어낸다. 체급이 무거울수록 덜 밀린다 —
- *  해머 마무리 타와 같은 규약 (balance.explosionKnockback) */
-function pushFromBlast(enemy: EnemyState, cx: number, cz: number, distance: number): void {
-  const kb = balance.explosionKnockback;
-  const byWeight = kb.byWeight as unknown as Record<string, number>;
-  const weightMul = byWeight[enemyDef(enemy.type).weight] ?? 1;
-  pushEnemy(enemy, enemy.x - cx, enemy.z - cz, distance * weightMul, kb.ticks);
-}
-
-/** 터진다 — 적·플레이어·다른 통을 가리지 않는다. 연쇄는 즉발로 걸어 두고
- *  같은 틱의 뒷 순서(또는 다음 틱)에 터지게 한다. 여기서 재귀로 들어가면
- *  통이 촘촘한 방에서 호출 스택이 그대로 깊어진다 */
+/** 터진다 — 통 고유 처리(상태·차단·barrel_exploded)만 하고 광역은 공용 폭발
+ *  (core/Explosion.explodeAt)에 맡긴다. 기믹 폭발과 같은 규약을 쓰기 위한 추출 */
 function explode(world: World, barrel: BarrelState): void {
   const cfg = balance.barrel;
   barrel.alive = false;
@@ -44,92 +34,15 @@ function explode(world: World, barrel: BarrelState): void {
     world.level.removeBlocker(barrel.blocker);
     barrel.blocker = undefined;
   }
-
   world.events.emit('barrel_exploded', { id: barrel.id, x: barrel.x, z: barrel.z });
-  world.events.emit('explosion', {
-    x: barrel.x,
-    y: cfg.height * 0.5,
-    z: barrel.z,
+  explodeAt(world, barrel.x, barrel.z, {
     radius: cfg.radius,
+    damage: cfg.damage,
+    damageFalloffMin: cfg.damageFalloffMin,
+    enemyKnockback: cfg.enemyKnockback,
+    playerKnockback: cfg.playerKnockback,
+    playerKnockbackTicks: cfg.playerKnockbackTicks,
+    noiseRadius: cfg.noiseRadius,
+    fxHeight: cfg.height * 0.5,
   });
-
-  const damageAt = (dist: number): number =>
-    cfg.damage * (1 - (1 - cfg.damageFalloffMin) * Math.min(1, dist / cfg.radius));
-
-  breakHeadsInRadius(world, barrel.x, barrel.z, cfg.radius); // 구울 머리 소품도 터진다
-
-  for (const enemy of world.enemies) {
-    if (!enemy.alive) continue;
-    const dist = Math.hypot(enemy.x - barrel.x, enemy.z - barrel.z);
-    if (dist > cfg.radius) continue;
-    if (enemy.ai === 'idle') enemy.ai = 'chase';
-
-    // 정면 방패로 폭풍을 받아내면 방패가 부서진다 — 수류탄·화염구와 같은 규칙
-    let damage = damageAt(dist);
-    if (shieldBlocksProjectile(enemyDef(enemy.type), enemy, barrel.x, barrel.z)) {
-      enemy.shieldBroken = true;
-      damage *= balance.shieldBreak.damageRatio;
-      world.events.emit('shield_broken', {
-        enemyId: enemy.id,
-        enemyType: enemy.type,
-        x: enemy.x,
-        z: enemy.z,
-      });
-    }
-
-    enemy.health -= applyFrostOnHit(world.events, enemy, damage);
-    if (enemy.health <= 0) {
-      enemy.alive = false;
-      world.events.emit('weapon_kill', { weapon: 'barrel', enemyType: enemy.type });
-      // 폭심 반대 방향을 함께 실어 보낸다 — 밀려날 몸이 안 남으니 파편이 대신 날아간다
-      world.events.emit('enemy_died', {
-        enemyType: enemy.type,
-        x: enemy.x,
-        z: enemy.z,
-        blastX: enemy.x - barrel.x,
-        blastZ: enemy.z - barrel.z,
-      });
-      continue; // 시체를 밀 수는 없다 (사망 즉시 모형이 사라진다)
-    }
-    // 폭풍에 밀린다 — 피해와 같은 감쇠를 따라 폭심에 가까울수록 멀리 날아간다
-    pushFromBlast(enemy, barrel.x, barrel.z, cfg.enemyKnockback * damageAt(dist) / cfg.damage);
-  }
-
-  // 플레이어도 예외가 아니다 — 이게 이 기믹의 값이다 (엄폐물 뒤에서 쏘라는 뜻)
-  const p = world.player;
-  const playerDist = Math.hypot(p.x - barrel.x, p.z - barrel.z);
-  if (playerDist <= cfg.radius && p.iframeTicks <= 0) {
-    const damage = damageAt(playerDist);
-    p.health -= damage;
-    world.events.emit('player_damaged', { amount: damage, health: p.health, srcX: barrel.x, srcZ: barrel.z });
-    if (playerDist > 0) {
-      pushPlayer(
-        p,
-        (p.x - barrel.x) / playerDist,
-        (p.z - barrel.z) / playerDist,
-        cfg.playerKnockback,
-        cfg.playerKnockbackTicks,
-      );
-    }
-    if (p.health <= 0) {
-      p.health = 0;
-      world.dead = true;
-      world.events.emit('player_died', { tick: world.tick });
-    }
-  }
-
-  // 연쇄 — 반경 안의 다른 통도 즉발로 걸린다
-  for (const other of world.barrels) {
-    if (other === barrel || !other.alive) continue;
-    if (Math.hypot(other.x - barrel.x, other.z - barrel.z) > cfg.radius) continue;
-    igniteBarrel(other);
-  }
-
-  // 소음 — 폭발음은 멀리 퍼진다
-  for (const enemy of world.enemies) {
-    if (!enemy.alive || enemy.ai !== 'idle') continue;
-    if (Math.hypot(enemy.x - barrel.x, enemy.z - barrel.z) > cfg.noiseRadius) continue;
-    alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
-    world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, noise: true });
-  }
 }

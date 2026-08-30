@@ -331,6 +331,50 @@ export interface DoorState {
   opened: boolean;
 }
 
+/** 기믹(파괴물) 하나 — 항아리·궤짝·뼈 무더기·석관·광차. 부수면 결과(전리품/매복/폭발
+ *  심지)는 Props 시스템이 prop_broken 구독으로 굴린다 (겉보기 같아도 매번 다르다) */
+export interface PropState {
+  id: number;
+  /** balance.props.types 의 키 — 'prop_jar' 등 */
+  type: string;
+  x: number;
+  z: number;
+  alive: boolean;
+  hits: number;
+  /** 폭발 당첨 심지 — 0 이 되는 틱에 Props 가 터뜨린다. -1 = 없음 */
+  fuseTicks: number;
+  blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+/** 기믹을 부순다 — 상태·차단 해제만 하고 prop_broken 을 낸다. 전리품·매복·폭발 롤은
+ *  Props 시스템이 이벤트로 잇는다 (시스템 간 직접 참조 금지 규약) */
+export function breakProp(world: World, prop: PropState): void {
+  if (!prop.alive) return;
+  prop.alive = false;
+  if (prop.blocker) {
+    world.level.removeBlocker(prop.blocker);
+    prop.blocker = undefined;
+  }
+  world.events.emit('prop_broken', { id: prop.id, type: prop.type, x: prop.x, z: prop.z });
+}
+
+/** 기믹 타격 — hp 만큼 맞으면 부서진다 (석관 2방). 남으면 prop_hit(금 가는 피드백)만.
+ *  hp 는 호출부가 balance 에서 읽어 넘긴다 — World 는 데이터에 의존하지 않는다 */
+export function damageProp(world: World, prop: PropState, hp: number): void {
+  if (!prop.alive) return;
+  prop.hits++;
+  if (prop.hits >= hp) breakProp(world, prop);
+  else world.events.emit('prop_hit', { id: prop.id, type: prop.type, x: prop.x, z: prop.z });
+}
+
+/** 반경 안 기믹을 전부 부순다 — 폭발(수류탄·화염구·통·기믹 폭발) 공용 */
+export function breakPropsInRadius(world: World, x: number, z: number, radius: number): void {
+  for (const prop of world.props) {
+    if (!prop.alive) continue;
+    if (Math.hypot(prop.x - x, prop.z - z) <= radius) breakProp(world, prop);
+  }
+}
+
 export interface ChestState {
   id: number;
   x: number;
@@ -383,7 +427,7 @@ export interface LifeMoteState {
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
-  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow' | 'key' | 'grave';
+  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow' | 'key' | 'grave' | 'ammo' | 'grenade' | 'battery';
   x: number;
   z: number;
   /** kind==='sigil' 일 때만 */
@@ -797,6 +841,8 @@ export class World {
 
   /** 폭발통 — Barrels 가 도화선을 돌리고 터뜨린다 */
   barrels: BarrelState[] = [];
+  /** 부술 수 있는 기믹들 — 층 전환 시 main 이 갈아 끼운다 */
+  props: PropState[] = [];
 
   /** 소모품 가방 — 빈 칸은 null. 칸 수는 Items.init 이 balance 를 읽어 잡는다
    *  (World 는 데이터에 의존하지 않는다 — pushPlayer 와 같은 규약) */
@@ -929,6 +975,7 @@ export class World {
       enemies: EnemyState[];
       /** 폭발통 — 없는 레벨(테스트 아레나 등)에서는 생략한다 */
       barrels?: BarrelState[];
+      props?: PropState[];
       chests?: ChestState[];
       level: Level;
     },
@@ -943,6 +990,7 @@ export class World {
     this.corruption = init.corruption;
     this.enemies = init.enemies;
     if (init.barrels) this.barrels = init.barrels;
+    if (init.props) this.props = init.props;
     if (init.chests) this.chests = init.chests;
     this.level = init.level;
     this.doors = init.level.doors.map((d) => ({

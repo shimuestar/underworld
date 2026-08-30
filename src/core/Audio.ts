@@ -96,6 +96,12 @@ export type SoundName =
   | 'explosion'
   | 'grenade_bounce'
   | 'barrel_hit'
+  | 'prop_break_ceramic'
+  | 'prop_break_wood'
+  | 'prop_break_bone'
+  | 'prop_break_stone'
+  | 'prop_break_metal'
+  | 'prop_fuse'
   | 'barrel_armed'
   | 'rock_shattered'
   | 'chest_opened'
@@ -617,6 +623,41 @@ export class GameAudio {
         this.tone(140, 0.22, 'square', 0.5, 0, 60);
         this.noise(0.3, 0.7, 1400);
         this.noise(0.45, 0.3, 3600, 0.06);
+        break;
+      case 'prop_break_ceramic':
+        // 항아리 — 쨍그랑, 사금파리가 흩어진다
+        this.noise(0.08, 0.9, 5200);
+        this.tone(2200, 0.1, 'triangle', 0.5, 0, 900);
+        this.noise(0.22, 0.4, 3200, 0.04);
+        break;
+      case 'prop_break_wood':
+        // 궤짝 — 빠직 부러지는 나무
+        this.noise(0.1, 0.9, 1100);
+        this.tone(240, 0.1, 'square', 0.5, 0, 90);
+        this.noise(0.16, 0.35, 700, 0.05);
+        break;
+      case 'prop_break_bone':
+        // 뼈 무더기 — 마른 뼈가 우두둑 흩어진다
+        this.noise(0.06, 0.7, 2400);
+        this.noise(0.06, 0.55, 2000, 0.07);
+        this.noise(0.08, 0.4, 1600, 0.13);
+        break;
+      case 'prop_break_stone':
+        // 석관 — 무거운 돌 파열
+        this.tone(90, 0.28, 'square', 0.9, 0, 45);
+        this.noise(0.3, 0.9, 800);
+        this.noise(0.2, 0.4, 2600, 0.06);
+        break;
+      case 'prop_break_metal':
+        // 광차 — 쇠가 캉 울린다
+        this.tone(700, 0.22, 'triangle', 0.8, 0, 500);
+        this.tone(1400, 0.16, 'triangle', 0.5, 0.02, 950);
+        this.noise(0.14, 0.5, 3000);
+        break;
+      case 'prop_fuse':
+        // 치익 — 숨은 폭발물의 심지. 이 소리가 나면 도망쳐라
+        this.noise(0.5, 0.55, 6200);
+        this.tone(2900, 0.5, 'sawtooth', 0.18, 0, 3300);
         break;
       case 'barrel_hit':
         // 쇠통을 때린 소리 — 속이 빈 둔탁한 울림

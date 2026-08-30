@@ -325,6 +325,107 @@
       ]
     },
     {
+      "type": "prop_jar",
+      "cell": [
+        1,
+        6
+      ],
+      "note": "첫 홀 항아리"
+    },
+    {
+      "type": "prop_jar",
+      "cell": [
+        5,
+        5
+      ]
+    },
+    {
+      "type": "prop_jar",
+      "cell": [
+        1,
+        16
+      ],
+      "note": "로비B 항아리"
+    },
+    {
+      "type": "prop_jar",
+      "cell": [
+        1,
+        22
+      ]
+    },
+    {
+      "type": "prop_jar",
+      "cell": [
+        16,
+        4
+      ],
+      "note": "옥좌 홀 서쪽 항아리"
+    },
+    {
+      "type": "prop_crate",
+      "cell": [
+        1,
+        25
+      ],
+      "note": "보물 창고 궤짝"
+    },
+    {
+      "type": "prop_crate",
+      "cell": [
+        4,
+        29
+      ]
+    },
+    {
+      "type": "prop_bonepile",
+      "cell": [
+        18,
+        7
+      ],
+      "note": "시체 더미 곁 뼈"
+    },
+    {
+      "type": "prop_bonepile",
+      "cell": [
+        20,
+        2
+      ],
+      "note": "밀실 뼈"
+    },
+    {
+      "type": "prop_minecart",
+      "cell": [
+        8,
+        20
+      ],
+      "note": "정문 복도의 광차"
+    },
+    {
+      "type": "prop_minecart",
+      "cell": [
+        15,
+        14
+      ],
+      "note": "옥좌 홀 광차"
+    },
+    {
+      "type": "prop_sarcophagus",
+      "cell": [
+        11,
+        2
+      ],
+      "note": "제단 방 석관"
+    },
+    {
+      "type": "prop_sarcophagus",
+      "cell": [
+        11,
+        14
+      ],
+      "note": "예배당 석관"
+    },
+    {
       "type": "warden",
       "cell": [
         10,

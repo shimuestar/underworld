@@ -576,6 +576,41 @@
     "spawnGraceTicks": 40,
     "max": 6
   },
+  "_propsNote": "부술 수 있는 기믹 — 디아블로식 파괴 재미. 겉보기 같아도 결과는 부수는 순간 롤: 빈손/전리품/매복/폭발(심지 0.5초 뒤). 파괴음은 noiseRadius 소음(닫힌 문 차음 적용). 큰 것일수록 빈손이 적고 골드·매복이 크다 (2026-08-30)",
+  "props": {
+    "noiseRadius": 10,
+    "fuseTicks": 30,
+    "scatterRadius": 0.9,
+    "_explodeNote": "기믹 폭발 — 통(84/6.5)보다 약한 급",
+    "explode": {
+      "radius": 5.0,
+      "damage": 60,
+      "damageFalloffMin": 0.25,
+      "enemyKnockback": 3.2,
+      "playerKnockback": 2.8,
+      "playerKnockbackTicks": 12
+    },
+    "_lootNote": "전리품 가중치 — 골드/체력 물약/마나 물약/권총탄(소량)/수류탄/배터리. goldMul 은 타입별 배수",
+    "loot": {
+      "gold": 46,
+      "goldMin": 4,
+      "goldMax": 14,
+      "potion": 22,
+      "mana": 18,
+      "ammo": 9,
+      "ammoAmount": 4,
+      "grenade": 3,
+      "battery": 2
+    },
+    "_typeNote": "empty/loot/ambush/explode 는 파괴 롤 가중치. 석관·뼈는 폭발 없음(돌·뼈)",
+    "types": {
+      "prop_jar": { "hp": 1, "collisionRadius": 0.34, "height": 0.9, "material": "ceramic", "empty": 52, "loot": 33, "ambush": 10, "explode": 5, "ambushTypes": ["spider_small"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
+      "prop_crate": { "hp": 1, "collisionRadius": 0.42, "height": 0.85, "material": "wood", "empty": 50, "loot": 34, "ambush": 10, "explode": 6, "ambushTypes": ["bat"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
+      "prop_bonepile": { "hp": 1, "collisionRadius": 0.44, "height": 0.4, "material": "bone", "empty": 50, "loot": 30, "ambush": 20, "explode": 0, "ambushTypes": ["spider_small"], "ambushMin": 2, "ambushMax": 3, "goldMul": 1 },
+      "prop_sarcophagus": { "hp": 2, "collisionRadius": 0.65, "height": 1.0, "material": "stone", "empty": 30, "loot": 42, "ambush": 28, "explode": 0, "ambushTypes": ["ghoul", "leech"], "ambushMin": 1, "ambushMax": 1, "goldMul": 2 },
+      "prop_minecart": { "hp": 1, "collisionRadius": 0.5, "height": 0.8, "material": "metal", "empty": 44, "loot": 36, "ambush": 12, "explode": 8, "ambushTypes": ["leech"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1.5 }
+    }
+  },
   "_gooNote": "슬라임 점액 장판 — 기어간 자리에 남아 밟으면 느려진다. 마르면(수명) 사라진다",
   "goo": {
     "_radiusNote": "1.1 → 0.66 (2026-08-29, -40%) — 장판이 통로를 다 덮어 피할 수 없었다",

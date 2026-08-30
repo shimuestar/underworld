@@ -6,7 +6,7 @@
 import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, hitBarrel, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, hitBarrel, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type World } from '../core/World';
 
 /** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
  *  활을 넣으면서 실제로 방패·경직·무기 교체 세 곳이 bowDraw 를 안 지워
@@ -14,6 +14,13 @@ import { alertEnemy, alertNearbyAt, breakGhoulHead, hitBarrel, noiseField, RANGE
 function cancelRangedCharge(w: World['weapon']): void {
   w.grenadeCharge = 0;
   w.bowDraw = 0;
+}
+
+/** 기믹 판정 수치 — balance.props.types 조회 (없는 타입이면 undefined) */
+function propCfg(type: string): { hp: number; collisionRadius: number; height: number } | undefined {
+  return (balance.props.types as Record<string, { hp: number; collisionRadius: number; height: number }>)[
+    type
+  ];
 }
 
 export function tick(world: World, _dt: number): void {
@@ -414,6 +421,20 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     });
   }
 
+  // 기믹 — 해머 부채꼴 안이면 부순다 (석관은 2방). 결과 롤은 Props 가 잇는다
+  for (const prop of world.props) {
+    if (!prop.alive) continue;
+    const pcfg = propCfg(prop.type);
+    if (!pcfg) continue;
+    const toX = prop.x - p.x;
+    const toZ = prop.z - p.z;
+    const dist = Math.hypot(toX, toZ);
+    if (dist > range + pcfg.collisionRadius || dist === 0) continue;
+    if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
+    damageProp(world, prop, pcfg.hp);
+    hitAny = true; // 기믹을 깬 것도 헛스윙은 아니다
+  }
+
   // 3타 모두 적중 집계 — 한 대라도 헛치면 끊긴다
   w.comboHits = damagedAny ? (w.comboHits ?? 0) + 1 : 0;
 
@@ -650,6 +671,22 @@ function fire(world: World): void {
     });
     if (t !== null && t < wallT && (!barrelHit || t < barrelHit.t)) barrelHit = { barrel, t };
   }
+  // 기믹 — 적·통과 같은 규약으로 총알을 대신 받는다
+  let propHit: { prop: PropState; t: number } | null = null;
+  for (const prop of world.props) {
+    if (!prop.alive) continue;
+    const pcfg = propCfg(prop.type);
+    if (!pcfg) continue;
+    const t = rayVsAabb(p.x, oy, p.z, dx, dy, dz, {
+      minX: prop.x - pcfg.collisionRadius,
+      minY: 0,
+      minZ: prop.z - pcfg.collisionRadius,
+      maxX: prop.x + pcfg.collisionRadius,
+      maxY: pcfg.height,
+      maxZ: prop.z + pcfg.collisionRadius,
+    });
+    if (t !== null && t < wallT && (!propHit || t < propHit.t)) propHit = { prop, t };
+  }
   // 튀는 구울 머리 — 총알이 맞으면 터진다 (적·통이 더 앞이면 그쪽이 먼저 받는다)
   const hcfg = balance.ghoulHead;
   let headHit: { id: number; t: number; hx: number; hy: number; hz: number } | null = null;
@@ -667,7 +704,12 @@ function fire(world: World): void {
       headHit = { id: head.id, t, hx: head.x, hy: head.y, hz: head.z };
     }
   }
-  if (headHit && (!hit || headHit.t < hit.t) && (!barrelHit || headHit.t < barrelHit.t)) {
+  if (
+    headHit &&
+    (!hit || headHit.t < hit.t) &&
+    (!barrelHit || headHit.t < barrelHit.t) &&
+    (!propHit || headHit.t < propHit.t)
+  ) {
     breakGhoulHead(world, headHit.id, false);
     alertNearby(world, p.x, p.z, pistol.noiseRadius); // 총성은 그대로 난다
     world.events.emit('shot_fired', {
@@ -679,6 +721,12 @@ function fire(world: World): void {
     return;
   }
 
+  if (propHit && (!hit || propHit.t < hit.t) && (!barrelHit || propHit.t < barrelHit.t)) {
+    hit = null; // 기믹이 제일 앞 — 총알은 여기서 멈춘다
+    barrelHit = null;
+    damageProp(world, propHit.prop, propCfg(propHit.prop.type)?.hp ?? 1);
+    hitT = propHit.t;
+  }
   if (barrelHit && (!hit || barrelHit.t < hit.t)) {
     hit = null; // 통이 적보다 앞 — 총알은 여기서 멈춘다
     hitBarrel(barrelHit.barrel, bcfg.fuseByHits);

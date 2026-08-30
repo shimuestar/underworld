@@ -93,6 +93,7 @@ export function rollDrops(world: World, enemyType: string, x: number, z: number)
 function restHeight(kind: string): number {
   if (kind === 'gold') return 0.12;
   if (kind === 'arrow') return balance.pickups.arrow.restHeight; // 눕혀 놓인 화살
+  if (kind === 'ammo' || kind === 'grenade' || kind === 'battery') return 0.14; // 기믹 전리품
   return 0.55;
 }
 
@@ -102,6 +103,8 @@ function restHeight(kind: string): number {
 function wants(world: World, kind: string): boolean {
   if (kind === 'gold') return true;
   if (kind === 'key') return true; // 열쇠는 가방을 거치지 않는다 — 바로 손에 쥔다
+  // 기믹 전리품 — 가방을 거치지 않고 바로 주머니로 (골드와 같은 빠른 경로)
+  if (kind === 'ammo' || kind === 'grenade' || kind === 'battery') return true;
   // 화살은 가방이 아니라 무기 탄약이다 — 상한이 차면 권총탄처럼 바닥에 남는다
   if (kind === 'arrow') {
     return (world.weapon.arrows ?? 0) < balance.weapons.bow.ammoMax;
@@ -146,7 +149,8 @@ export function tick(world: World, dt: number): void {
     }
     if (!item.magnet) {
       const radius =
-        item.kind === 'gold' || item.kind === 'key'
+        item.kind === 'gold' || item.kind === 'key' ||
+        item.kind === 'ammo' || item.kind === 'grenade' || item.kind === 'battery'
           ? cfg.gold.magnetRadius
           : item.kind === 'arrow'
             ? cfg.arrow.magnetRadius
@@ -209,6 +213,25 @@ export function tick(world: World, dt: number): void {
       world.groundItems.splice(i, 1);
       world.gold += item.amount ?? 0;
       world.events.emit('gold_picked', { amount: item.amount ?? 0, total: world.gold });
+      continue;
+    }
+    // 기믹 전리품 — 탄약·수류탄·배터리는 가방을 거치지 않고 바로 들어간다
+    if (item.kind === 'ammo') {
+      world.groundItems.splice(i, 1);
+      world.weapon.reserve += item.amount ?? 0;
+      world.events.emit('ammo_picked', { amount: item.amount ?? 0, reserve: world.weapon.reserve });
+      continue;
+    }
+    if (item.kind === 'grenade') {
+      world.groundItems.splice(i, 1);
+      world.weapon.grenades += 1;
+      world.events.emit('grenade_picked', { grenades: world.weapon.grenades });
+      continue;
+    }
+    if (item.kind === 'battery') {
+      world.groundItems.splice(i, 1);
+      world.lantern.spares += 1;
+      world.events.emit('battery_picked', { spares: world.lantern.spares });
       continue;
     }
     // 소모품 — 가방으로. 자석에 걸린 뒤에 가방이 차 버렸으면 발밑에 도로 놓는다

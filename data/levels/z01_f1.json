@@ -333,6 +333,99 @@
       ]
     },
     {
+      "type": "prop_jar",
+      "cell": [
+        1,
+        6
+      ],
+      "note": "대기실 항아리"
+    },
+    {
+      "type": "prop_jar",
+      "cell": [
+        1,
+        9
+      ]
+    },
+    {
+      "type": "prop_jar",
+      "cell": [
+        1,
+        17
+      ],
+      "note": "전투 홀 항아리"
+    },
+    {
+      "type": "prop_jar",
+      "cell": [
+        14,
+        25
+      ]
+    },
+    {
+      "type": "prop_crate",
+      "cell": [
+        8,
+        13
+      ],
+      "note": "보물 방 궤짝"
+    },
+    {
+      "type": "prop_crate",
+      "cell": [
+        20,
+        18
+      ]
+    },
+    {
+      "type": "prop_bonepile",
+      "cell": [
+        20,
+        5
+      ],
+      "note": "아레나 뼈 무더기"
+    },
+    {
+      "type": "prop_bonepile",
+      "cell": [
+        24,
+        12
+      ],
+      "note": "소방 S2 — 시체 곁"
+    },
+    {
+      "type": "prop_minecart",
+      "cell": [
+        12,
+        19
+      ],
+      "note": "복도의 버려진 광차"
+    },
+    {
+      "type": "prop_minecart",
+      "cell": [
+        17,
+        20
+      ],
+      "note": "진입 홀 광차"
+    },
+    {
+      "type": "prop_sarcophagus",
+      "cell": [
+        10,
+        2
+      ],
+      "note": "안치소 석관"
+    },
+    {
+      "type": "prop_sarcophagus",
+      "cell": [
+        15,
+        10
+      ],
+      "note": "아레나 석관"
+    },
+    {
       "type": "slime",
       "cell": [
         2,
