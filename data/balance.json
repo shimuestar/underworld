@@ -689,7 +689,7 @@
     "restoreFlash": { "cycleMs": 220, "blinks": 4, "tipWidthPx": 2 },
     "_gainNote": "골드·XP 획득 피드백 — HUD 숫자가 잠깐 커졌다 줄고(statPop), 화면 중앙 조준선 아래에 +획득량이 떠서 holdMs 만큼 머물다 fadeMs 에 걸쳐 사라진다. 연달아 먹으면 같은 표시에 누적된다 (2026-08-30)",
     "statPop": { "scaleMul": 1.6, "durationMs": 350 },
-    "centerGain": { "holdMs": 900, "fadeMs": 250 }
+    "centerGain": { "holdMs": 900, "fadeMs": 350, "risePx": 28 }
   },
   "hitMarker": {
     "lifeMs": 1600,

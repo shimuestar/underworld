@@ -1456,7 +1456,11 @@ events.on('item_picked', (payload) => {
   rootStyle.setProperty('--restore-tip-w', `${rf.tipWidthPx}px`);
   rootStyle.setProperty('--stat-pop-scale', String(balance.hud.statPop.scaleMul));
   rootStyle.setProperty('--stat-pop-ms', `${balance.hud.statPop.durationMs}ms`);
-  rootStyle.setProperty('--gain-fade-ms', `${balance.hud.centerGain.fadeMs}ms`);
+  rootStyle.setProperty(
+    '--gain-total-ms',
+    `${balance.hud.centerGain.holdMs + balance.hud.centerGain.fadeMs}ms`,
+  );
+  rootStyle.setProperty('--gain-rise', `${balance.hud.centerGain.risePx}px`);
 }
 const statPopTimers = new Map<string, number>();
 /** 획득 팝 — HUD 숫자가 잠깐 커졌다 제자리로 (연달아 먹으면 다시 처음부터) */
@@ -1476,11 +1480,9 @@ function popStat(elId: string): void {
 // 중앙 획득 표시 — 조준선 아래 +골드/+XP. 떠 있는 동안 또 먹으면 같은 표시에 누적
 let gainGoldAcc = 0;
 let gainXpAcc = 0;
-let gainFadeTimer: number | undefined;
 let gainClearTimer: number | undefined;
 function showCenterGain(gold: number, xp: number): void {
   const cg = balance.hud.centerGain;
-  if (gainFadeTimer !== undefined) window.clearTimeout(gainFadeTimer);
   if (gainClearTimer !== undefined) window.clearTimeout(gainClearTimer);
   gainGoldAcc += gold;
   gainXpAcc += xp;
@@ -1488,14 +1490,15 @@ function showCenterGain(gold: number, xp: number): void {
   document.getElementById('gain-center-gold')!.textContent =
     gainGoldAcc > 0 ? `+${gainGoldAcc} ◆` : '';
   document.getElementById('gain-center-xp')!.textContent = gainXpAcc > 0 ? `+${gainXpAcc} XP` : '';
-  box.style.opacity = '1';
-  gainFadeTimer = window.setTimeout(() => {
-    box.style.opacity = '0';
-    gainClearTimer = window.setTimeout(() => {
-      gainGoldAcc = 0;
-      gainXpAcc = 0;
-    }, cg.fadeMs);
-  }, cg.holdMs);
+  // 떠오르며 사라지는 애니메이션 — 연달아 먹으면 처음부터 다시 뜬다 (누적 표시 유지)
+  box.classList.remove('show');
+  void box.offsetWidth;
+  box.classList.add('show');
+  gainClearTimer = window.setTimeout(() => {
+    box.classList.remove('show');
+    gainGoldAcc = 0;
+    gainXpAcc = 0;
+  }, cg.holdMs + cg.fadeMs + 40);
 }
 const restoreFlashTimers = new Map<string, number>();
 /** 회복 깜빡임 — 게이지가 찰 때 채워진 부분을, 이미 가득이면 끝부분만 깜빡인다 */
