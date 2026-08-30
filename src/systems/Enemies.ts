@@ -767,8 +767,12 @@ function tickFlying(
   }
 
   // 순항 고도 — 목표(순항 + 출렁임)로 수렴. 낙하 감쇠(0.1/틱)보다 빨라야 떠 있는다
+  // 랜턴 속박 중엔 출렁임을 접는다 — 얼어붙은 몸은 가늘게만 떤다 (조준하기도 쉽다)
+  const bobMul = (enemy.batLitTicks ?? 0) > 0 ? (fly.lanternFreezeBobMul ?? 1) : 1;
   const bob =
-    Math.sin(((world.tick + enemy.id * 53) / fly.bobPeriodTicks) * Math.PI * 2) * fly.bobAmp;
+    Math.sin(((world.tick + enemy.id * 53) / fly.bobPeriodTicks) * Math.PI * 2) *
+    fly.bobAmp *
+    bobMul;
   const targetY = fly.cruiseHeight + bob;
   const deltaY = targetY - (enemy.jumpY ?? 0);
   enemy.jumpY =

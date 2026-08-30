@@ -156,6 +156,8 @@ export interface EnemyDef {
     chargeRecoil?: { blocked: number; parried: number };
     /** 랜턴 속박 — 빛기둥에 잡히면 그 자리에 얼어붙는다 (비추는 동안 쏘는 설계) */
     lanternFreeze?: boolean;
+    /** 속박 중 위아래 출렁임(bobAmp) 배율 — 얼어붙은 몸은 가늘게만 떤다 */
+    lanternFreezeBobMul?: number;
     knockdown: {
       damageThreshold: number;
       instantDamage: number;

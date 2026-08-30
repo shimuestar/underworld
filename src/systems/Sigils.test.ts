@@ -893,6 +893,17 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(transfixed).toBe(1); // 잡히는 순간 한 번만
     expect((b.batLitTicks ?? 0)).toBeGreaterThan(0);
     expect(Math.hypot(b.x - 10, b.z - 6)).toBeLessThan(0.05); // 그 자리 그대로
+    // 속박 중 출렁임 축소 — 한 주기(90틱) 동안 위아래 폭이 평소(±0.35)보다 훨씬 작다
+    const fly2 = enemyDef2('bat').flying!;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i < fly2.bobPeriodTicks; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+      lo = Math.min(lo, b.jumpY ?? 0);
+      hi = Math.max(hi, b.jumpY ?? 0);
+    }
+    expect(hi - lo).toBeLessThan(fly2.bobAmp * (fly2.lanternFreezeBobMul ?? 1) * 2 + 0.06);
     world.lantern.on = false; // 빔이 꺼지면
     for (let i = 0; i < 60; i++) {
       world.input = Input.emptySnapshot();
