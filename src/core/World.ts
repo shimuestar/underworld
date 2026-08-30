@@ -348,6 +348,24 @@ export interface PropState {
   blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
 
+/** 전리품 낙하점 — 플레이어 '반대쪽' 호(±arcDeg/2)로만 떨어진다. 죽인·부순·연 자리에서
+ *  내 입으로 직행하면 뭘 먹었는지 모른다 — 확인하고 줍는 그림을 만든다 (2026-08-30 공통 규칙) */
+export function scatterAwayFromPlayer(
+  world: World,
+  x: number,
+  z: number,
+  r: number,
+  arcDeg: number,
+): { x: number; z: number } {
+  const p = world.player;
+  const adx = x - p.x;
+  const adz = z - p.z;
+  const away = Math.hypot(adx, adz) > 0.001 ? Math.atan2(adx, adz) : Math.random() * Math.PI * 2;
+  const half = ((arcDeg / 2) * Math.PI) / 180;
+  const ang = away + (Math.random() - 0.5) * 2 * half;
+  return { x: x + Math.sin(ang) * r, z: z + Math.cos(ang) * r };
+}
+
 /** 기믹을 부순다 — 상태·차단 해제만 하고 prop_broken 을 낸다. 전리품·매복·폭발 롤은
  *  Props 시스템이 이벤트로 잇는다 (시스템 간 직접 참조 금지 규약) */
 export function breakProp(world: World, prop: PropState): void {

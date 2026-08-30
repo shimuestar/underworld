@@ -5,7 +5,7 @@
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
 import { isActiveSkill, sigilDef, type SigilSlot } from '../core/SigilData';
-import type { Modifiers, World } from '../core/World';
+import { scatterAwayFromPlayer, type Modifiers, type World } from '../core/World';
 
 export function defaultModifiers(): Modifiers {
   return {
@@ -19,7 +19,12 @@ let nextGroundItemId = 1;
 
 function dropAll(world: World, enemyType: string, x: number, z: number): void {
   for (const id of enemyDef(enemyType).drops ?? []) {
-    world.groundItems.push({ id: nextGroundItemId++, kind: 'sigil', sigilId: id, x, z });
+    // 공통 드랍 규칙 — 플레이어 반대쪽으로, 바닥에 놓인 뒤에야 줍힌다
+    const at = scatterAwayFromPlayer(world, x, z, 0.7, balance.pickups.awayArcDeg);
+    world.groundItems.push({
+      id: nextGroundItemId++, kind: 'sigil', sigilId: id, x: at.x, z: at.z,
+      noMagnetTicks: balance.pickups.landNoMagnetTicks,
+    });
     world.events.emit('sigil_dropped', { id });
   }
 }
@@ -55,6 +60,12 @@ export function tick(world: World, _dt: number): void {
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
     const item = world.groundItems[i]!;
     if (item.kind !== 'sigil') continue; // 포션·골드는 Pickups가 줍는다
+    // 착지 유예 — 바닥에 완전히 놓이기 전엔 코앞이라도 못 줍는다 (Pickups 와 같은 규칙.
+    // 각인은 Pickups 가 건너뛰므로 유예 소진도 여기서 한다)
+    if (item.noMagnetTicks && item.noMagnetTicks > 0) {
+      item.noMagnetTicks--;
+      continue;
+    }
     if (Math.hypot(p.x - item.x, p.z - item.z) > balance.sigil.pickupRadius) continue;
     world.groundItems.splice(i, 1);
     acquire(world, item.sigilId!);

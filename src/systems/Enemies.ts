@@ -10,7 +10,7 @@
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, findWallNormal, noiseField, playerBlocks, pushEnemy, pushPlayer, type EnemyState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, findWallNormal, noiseField, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, type EnemyState, type World } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -207,12 +207,16 @@ function handleSplit(world: World, enemy: EnemyState): void {
   if (enemy.eatenItems?.length) {
     for (let i = 0; i < enemy.eatenItems.length; i++) {
       const item = enemy.eatenItems[i]!;
-      const ang = (Math.PI * 2 * i) / enemy.eatenItems.length;
-      item.x = enemy.x + Math.sin(ang) * 0.5;
-      item.z = enemy.z + Math.cos(ang) * 0.5;
+      // 공통 드랍 규칙 — 게워 낸 것도 플레이어 반대쪽으로, 착지 유예 뒤에 줍힌다
+      const at = scatterAwayFromPlayer(
+        world, enemy.x, enemy.z, 0.5 + i * 0.12, balance.pickups.awayArcDeg,
+      );
+      item.x = at.x;
+      item.z = at.z;
       item.magnet = false;
       item.y = undefined;
       item.speed = undefined;
+      item.noMagnetTicks = balance.pickups.landNoMagnetTicks;
       world.groundItems.push(item);
     }
     world.events.emit('slime_spilled', { count: enemy.eatenItems.length, x: enemy.x, z: enemy.z });

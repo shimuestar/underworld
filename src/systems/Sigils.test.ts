@@ -107,9 +107,12 @@ describe('스킬 드랍과 획득', () => {
     Sigils.tick(world, DT);
     expect(world.sigils.inventory).toHaveLength(0);
 
-    // 접근 → 자동 획득. 시전이 구현된 액티브라 곧바로 스킬 퀵슬롯 1(Z)에 올라간다
-    world.player.x = 14 - balance.sigil.pickupRadius + 0.1;
-    Sigils.tick(world, DT);
+    // 접근 → 착지 유예(landNoMagnetTicks)가 지나야 획득된다 (공통 드랍 규칙 2026-08-30).
+    // 드랍이 반대쪽 호로 밀리므로 실제 낙하점 곁으로 간다
+    const drop = world.groundItems[0]!;
+    world.player.x = drop.x - balance.sigil.pickupRadius + 0.1;
+    world.player.z = drop.z;
+    for (let i = 0; i < balance.pickups.landNoMagnetTicks + 2; i++) Sigils.tick(world, DT);
     expect(world.groundItems).toHaveLength(0);
     expect(world.sigils.inventory).toEqual(['sig_fireball']);
     expect(world.skillSlots[0]).toBe('sig_fireball');

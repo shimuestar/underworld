@@ -6,7 +6,7 @@
 
 import { balance } from '../core/Balance';
 import { explodeAt } from '../core/Explosion';
-import { alertNearbyAt, pushEnemy, type World } from '../core/World';
+import { alertNearbyAt, pushEnemy, scatterAwayFromPlayer, type World } from '../core/World';
 import { spawnEnemyAt } from '../level/Spawner';
 
 let nextLootId = 990000; // 비석(960000)·구울 머리(980000) 대역과 구분
@@ -86,17 +86,11 @@ export function init(world: World): void {
 function spawnLoot(world: World, x: number, z: number, cfg: PropTypeCfg): void {
   const lt = balance.props.loot;
   const kind = rollLootKind(Math.random);
-  // 플레이어 '반대쪽' 호로만 떨어진다 — 때리자마자 입에 들어오면 뭘 먹었는지 모른다.
-  // 바닥에 완전히 놓인 뒤(lootNoMagnetTicks)에야 자석·픽업이 문다
-  const p = world.player;
-  const adx = x - p.x;
-  const adz = z - p.z;
-  const away = Math.hypot(adx, adz) > 0.001 ? Math.atan2(adx, adz) : Math.random() * Math.PI * 2;
-  const halfArc = ((balance.props.scatterAwayArcDeg / 2) * Math.PI) / 180;
-  const ang = away + (Math.random() - 0.5) * 2 * halfArc;
+  // 공통 드랍 규칙 — 플레이어 반대쪽으로, 바닥에 놓인 뒤에야 줍힌다
   const r = balance.props.scatterRadius * (0.5 + Math.random() * 0.5);
-  const ix = x + Math.sin(ang) * r;
-  const iz = z + Math.cos(ang) * r;
+  const at = scatterAwayFromPlayer(world, x, z, r, balance.props.scatterAwayArcDeg);
+  const ix = at.x;
+  const iz = at.z;
   const noMagnetTicks = balance.props.lootNoMagnetTicks;
   if (kind === 'gold') {
     const amount = Math.round(

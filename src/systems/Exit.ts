@@ -6,8 +6,9 @@
 // 입구 발판에서 E 를 누르면 위층으로 되돌아간다 (첫 층 제외 — canAscend 는 main 이 준다).
 // 내려가기·올라가기 모두 명시적 E 다 — 밟기만 해서 층이 갈리면 교전 중 사고가 난다.
 
+import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import type { World } from '../core/World';
+import { scatterAwayFromPlayer, type World } from '../core/World';
 
 // 발판 '중심' 기준 판정이라, 계단 입(쇠사슬)에 바짝 붙으면 중심에서 ~2m 라
 // 1.6 으로는 빠져나갔다 — E 가 안 먹던 이유. 이웃 칸 중심(4m)과는 여전히 멀다
@@ -19,7 +20,11 @@ export function init(world: World): void {
   world.events.on('enemy_died', (payload) => {
     const { enemyType, x, z } = payload as { enemyType: string; x: number; z: number };
     if (!enemyDef(enemyType).boss || !world.exitNeedsKey) return;
-    world.groundItems.push({ id: nextKeyId++, kind: 'key', x, z });
+    const at = scatterAwayFromPlayer(world, x, z, 0.8, balance.pickups.awayArcDeg);
+    world.groundItems.push({
+      id: nextKeyId++, kind: 'key', x: at.x, z: at.z,
+      noMagnetTicks: balance.pickups.landNoMagnetTicks,
+    });
     world.events.emit('exit_key_dropped', { x, z });
   });
 }

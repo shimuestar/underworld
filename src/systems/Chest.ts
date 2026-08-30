@@ -8,7 +8,7 @@
 import { balance } from '../core/Balance';
 import { sigilDef } from '../core/SigilData';
 import sigilsJson from '../../data/sigils.json';
-import type { ChestState, World } from '../core/World';
+import { scatterAwayFromPlayer, type ChestState, type World } from '../core/World';
 
 // 다른 드랍과 id 대역을 겹치지 않게 나눈다 (각인 1~ / 픽업 500000~)
 let nextGoldId = 900000;
@@ -53,26 +53,32 @@ export function open(world: World, chest: ChestState): void {
     const amount = i === piles - 1 ? left : Math.round(total / piles);
     left -= amount;
     if (amount <= 0) continue;
-    const angle = (i / piles) * Math.PI * 2 + Math.random() * 0.6;
+    // 플레이어 반대쪽으로 흩어지고, 바닥에 놓인 뒤에야 자석이 문다 (공통 드랍 규칙)
     const r = cfg.scatterRadius * (0.4 + Math.random() * 0.6);
+    const at = scatterAwayFromPlayer(world, chest.x, chest.z, r, balance.pickups.awayArcDeg);
     world.groundItems.push({
       id: nextGoldId++,
       kind: 'gold',
       amount,
-      x: chest.x + Math.cos(angle) * r,
-      z: chest.z + Math.sin(angle) * r,
+      x: at.x,
+      z: at.z,
+      noMagnetTicks: balance.pickups.landNoMagnetTicks,
     });
   }
 
   // 각인 하나 — 아직 없는 것 중에서 뽑는다
   const sigilId = rollSigil(world);
   if (sigilId) {
+    const at = scatterAwayFromPlayer(
+      world, chest.x, chest.z, cfg.scatterRadius * 0.6, balance.pickups.awayArcDeg,
+    );
     world.groundItems.push({
       id: nextSigilId++,
       kind: 'sigil',
       sigilId,
-      x: chest.x,
-      z: chest.z + cfg.scatterRadius * 0.5,
+      x: at.x,
+      z: at.z,
+      noMagnetTicks: balance.pickups.landNoMagnetTicks,
     });
     world.events.emit('sigil_dropped', { id: sigilId });
   }
