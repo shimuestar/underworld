@@ -763,10 +763,14 @@ export interface EnemyState {
   /** 캐스터 재배치 — 사선이 아군에 막힌 누적 틱 / 현재 횡이동 방향(+1·-1) */
   strafeBlockedTicks?: number;
   strafeDir?: number;
-  /** 끼임 감지 — 최근 창(checkTicks)의 실제/기대 이동 누적과 카운터 */
-  stuckAccum?: number;
+  /** 끼임 감지 — 최근 창(checkTicks)의 시작 좌표·기대 이동·카운터.
+   *  순변위로 재야 제자리 진동(매 틱 움직이지만 못 가는 것)까지 잡힌다 */
+  stuckFromX?: number;
+  stuckFromZ?: number;
   stuckExpect?: number;
   stuckCount?: number;
+  /** 벽 재부착 지연 — 벽거미가 내려온 직후 곧장 다시 붙는 맴돌이 방지 */
+  wallAttachCooldown?: number;
   /** 끼임 탈출 모드 잔여 틱 — 흐름장 우회 강제 + 분리력 축소 */
   unstickTicks?: number;
   /** 넉백 잔여 틱 + 틱당 밀림량 (해머 등) */

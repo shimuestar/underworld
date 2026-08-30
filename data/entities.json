@@ -45,7 +45,7 @@
       "_wallNote": "벽거미 — 추격 중 벽이 닿으면 붙어 오르고, 벽을 따라 기다가 사거리에 들면 적색 도약으로 덮친다. 예고 시점 좌표로만 날아가 옆 대시가 정답. 붙은 채 맞으면 떨어져 뻗는다. 흰 거미는 지상 유지 (역할 분담)",
       "wallCrawl": {
         "height": 1.9, "speedMul": 0.9, "attachRange": 2.2, "climbTicks": 24,
-        "fallTicks": 10, "fallStunTicks": 50,
+        "fallTicks": 10, "fallStunTicks": 50, "_reattachNote": "벽에서 내려온 뒤 다시 붙기까지의 지연 — 문 앞에서 붙기/내리기를 반복하는 맴돌이 방지 (2026-08-30)", "reattachDelayTicks": 90,
         "pounceMinRange": 3, "pounceMaxRange": 7, "pounceWindupTicks": 34, "pounceAirTicks": 18,
         "pounceRadius": 1.1, "pounceDamage": 12, "pounceKnockback": 1.6,
         "pounceRecoverTicks": 40, "pounceWhiffTicks": 65,

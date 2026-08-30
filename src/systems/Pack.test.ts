@@ -152,6 +152,7 @@ describe('벽 너머 추격 — 흐름장을 따라 통로로 돌아온다', () 
   });
 });
 
+let makeDoorWorldRef: () => World;
 describe('문 통과 — 문설주(개구부 2.1m)에 끼지 않고 빠져나온다', () => {
   function makeDoorWorld(): World {
     // 세로 벽(col5) 가운데(row2)만 뚫리고, 실제 문처럼 문설주 블로커를 세운다
@@ -185,6 +186,8 @@ describe('문 통과 — 문설주(개구부 2.1m)에 끼지 않고 빠져나온
     });
   }
 
+  makeDoorWorldRef = makeDoorWorld;
+
   it('중앙선에서 벗어난 채 와도 문설주에 갈리다 끼임 탈출로 통과한다', () => {
     world = makeDoorWorld();
     world.player.health = 100000;
@@ -215,6 +218,31 @@ describe('문 통과 — 문설주(개구부 2.1m)에 끼지 않고 빠져나온
       });
     }
     expect(reached).toEqual([true, true, true]);
+  });
+});
+
+describe('벽거미 문 통과 — 벽이 끊기면 내려와 바닥으로 지나간다', () => {
+  it('문 옆 벽에 붙은 거미가 문 앞을 맴돌지 않고 문을 넘어 먹이에 닿는다', () => {
+    world = makeDoorWorldRef();
+    world.player.health = 100000;
+    // 수정 전 실측 재현 조합: 먹이 (16,11.4) — 벽에서 먹이와 최단인 지점(문 옆
+    // x24.4)에서 접선이 매 틱 반전하며 제자리 진동, 영영 매달려 있었다
+    world.player.x = 16;
+    world.player.z = 11.4;
+    world.player.prevX = 16;
+    world.player.prevZ = 11.4;
+    const s = add('spider_small', 25, 13, 41); // 문 옆 세로 벽(col5)의 오른쪽 면
+    s.wallCling = true;
+    s.wallNX = 1;
+    s.wallNZ = 0;
+    s.jumpY = 1.9;
+    let reached = false;
+    for (let i = 0; i < 1500 && !reached; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+      if (Math.hypot(s.x - world.player.x, s.z - world.player.z) < 3.5) reached = true;
+    }
+    expect(reached).toBe(true); // 벽을 포기하고 내려와 바닥 우회로 문을 넘는다
   });
 });
 

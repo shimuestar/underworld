@@ -729,7 +729,9 @@
       "checkTicks": 30,
       "minProgress": 0.3,
       "ticks": 60,
-      "sepMul": 0.25
+      "sepMul": 0.25,
+      "_yieldNote": "외길 양보 — 개구부(2.1m)엔 둘이 나란히 못 들어간다. 탈출 중인 동료가 이 반경 안에서 더 앞서(플레이어에 가까이) 있으면 뒤진 쪽이 반걸음 물러나 줄을 선다",
+      "yieldRadius": 2.2
     },
     "_engageNote": "교대 공격 — 플레이어 곁(countRadius)에서 동시에 공격 동작(windup·charging)에 들어갈 수 있는 적은 maxSimultaneous 명. 자리가 없으면 옆걸음(circleSpeedMul)으로 돌며 차례를 기다린다 — 한 점 다구리 대신 포위. 보스는 기다리지 않는다 (2026-08-30)",
     "engage": {

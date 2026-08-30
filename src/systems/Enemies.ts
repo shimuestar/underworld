@@ -905,6 +905,9 @@ function tickWallSpider(
   if ((enemy.wallPounceCooldown ?? 0) > 0) {
     enemy.wallPounceCooldown = (enemy.wallPounceCooldown ?? 0) - 1;
   }
+  if ((enemy.wallAttachCooldown ?? 0) > 0) {
+    enemy.wallAttachCooldown = (enemy.wallAttachCooldown ?? 0) - 1;
+  }
 
   // 도약 비행 — 예고 '시점'의 먹이 좌표로 하강 곡선 (옆으로 비키면 헛짚는다)
   if ((enemy.wallPounceTicks ?? 0) > 0) {
@@ -989,6 +992,7 @@ function tickWallSpider(
     // 지상 → 벽 붙기: 추격 중 + 벽이 탐침에 닿음 + 먹이가 도약 최소거리 밖 + 재사용 대기 없음
     if (enemy.ai !== 'chase' || (enemy.kbTicks ?? 0) > 0 || (enemy.flinchTicks ?? 0) > 0) return false;
     if ((enemy.wallPounceCooldown ?? 0) > 0) return false;
+    if ((enemy.wallAttachCooldown ?? 0) > 0) return false; // 방금 내려왔다 — 바닥으로 간다
     const adx = p.x - enemy.x;
     const adz = p.z - enemy.z;
     if (Math.hypot(adx, adz) <= wc.pounceMinRange) return false;
@@ -1021,10 +1025,12 @@ function tickWallSpider(
   // 벽 확인(짧은 탐침) — 문·모퉁이에서 벽이 끊겼으면 내려간다
   const n = findWallNormal(world.level, enemy.x, enemy.z, def.radius, 0.9, 0.6);
   if (!n || dist < wc.pounceMinRange) {
-    // 벽이 없거나 먹이가 코앞 — 내려와 일반 전투
+    // 벽이 없거나 먹이가 코앞 — 내려와 일반 전투. 곧장 다시 붙으면 문 앞에서
+    // 오르내리기만 반복하므로 잠시 바닥 우회(흐름장)에게 맡긴다
     enemy.wallCling = false;
     enemy.wallClimbFromY = enemy.jumpY ?? wc.height;
     enemy.wallClimbTicks = wc.climbTicks;
+    enemy.wallAttachCooldown = wc.reattachDelayTicks ?? 0;
     return true;
   }
   enemy.wallNX = n.nx;
@@ -1047,8 +1053,37 @@ function tickWallSpider(
   const tz = n.nx;
   const side = tx * dx + tz * dz >= 0 ? 1 : -1;
   const sp = def.speed * wc.speedMul * slowFactor(enemy) * dt;
+  if ((enemy.stuckCount ?? 0) === 0) {
+    enemy.stuckFromX = enemy.x;
+    enemy.stuckFromZ = enemy.z;
+  }
   world.level.slideMove(enemy, def.radius, (tx * side - n.nx * 0.6) * sp, (tz * side - n.nz * 0.6) * sp);
   enemy.yaw = Math.atan2(-tx * side, -tz * side);
+  // 끼임 감지 — 먹이와 최단인 벽 지점(문 옆)에서 접선이 매 틱 반전하며 제자리
+  // 진동하면 순변위가 바닥난다. 벽을 포기하고 내려가 바닥 우회(흐름장)로 잇는다
+  {
+    const un = balance.enemyAi.unstick;
+    enemy.stuckExpect = (enemy.stuckExpect ?? 0) + sp;
+    enemy.stuckCount = (enemy.stuckCount ?? 0) + 1;
+    if ((enemy.stuckCount ?? 0) >= un.checkTicks) {
+      const net = Math.hypot(
+        enemy.x - (enemy.stuckFromX ?? enemy.x),
+        enemy.z - (enemy.stuckFromZ ?? enemy.z),
+      );
+      const wedged = net < (enemy.stuckExpect ?? 0) * un.minProgress;
+      enemy.stuckExpect = 0;
+      enemy.stuckCount = 0;
+      if (wedged) {
+        enemy.wallCling = false;
+        enemy.wallClimbFromY = enemy.jumpY ?? wc.height;
+        enemy.wallClimbTicks = wc.climbTicks;
+        enemy.wallAttachCooldown = wc.reattachDelayTicks ?? 0;
+        enemy.unstickTicks = un.ticks; // 착지하자마자 흐름장 우회를 시작한다
+        world.events.emit('wall_fall', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
+        return true;
+      }
+    }
+  }
   // 사각사각 — 위치를 흘리는 단서 (구울 흐느낌과 같은 역할, 들리는 거리에서만)
   enemy.skitterTicks = (enemy.skitterTicks ?? Math.floor(Math.random() * wc.skitterIntervalTicks)) - 1;
   if ((enemy.skitterTicks ?? 0) <= 0) {
@@ -1501,37 +1536,48 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         const stalkMul = def.stalk && dist > def.stalk.untilRange ? def.stalk.speedMul : 1;
         const un = balance.enemyAi.unstick;
         let ad: { x: number; z: number; pursuing: boolean };
+        let stepMul = 1;
         if ((enemy.unstickTicks ?? 0) > 0) {
           // 끼임 탈출 — 시야와 무관하게 흐름장을 따라가되 지름길(lookahead) 없이
           // 바로 다음 칸 중심만 겨눈다. 모서리 끊기는 레이 기준이라 문설주에
           // 몸이 걸리는 대각선을 골라 제자리에 얼어붙는다 (실측: 슬라임 문 끼임)
-          enemy.unstickTicks = (enemy.unstickTicks ?? 0) - 1;
           const pd = pursuitDir(world, enemy, 1);
-          ad = pd
-            ? { x: pd.x, z: pd.z, pursuing: true }
-            : { x: distX / dist, z: distZ / dist, pursuing: false };
+          const leader = pd ? unstickLeader(world, enemy) : null;
+          if (pd && leader) {
+            // 외길 양보 — 앞선 동료가 빠져나갈 때까지 반걸음 물러난다 (모드 유지)
+            ad = { x: -pd.x, z: -pd.z, pursuing: false };
+            stepMul = 0.5;
+          } else {
+            enemy.unstickTicks = (enemy.unstickTicks ?? 0) - 1;
+            ad = pd
+              ? { x: pd.x, z: pd.z, pursuing: true }
+              : { x: distX / dist, z: distZ / dist, pursuing: false };
+          }
         } else {
           // 시야 트임 = 산개 접근, 벽에 막힘 = 흐름장 따라 문·통로로 우회
           ad = approachDir(world, enemy, distX, distZ, dist);
         }
         if (ad.pursuing) enemy.yaw = Math.atan2(-ad.x, -ad.z); // 가는 쪽을 본다
-        const step = moveSpeed(enemy, def) * stalkMul * dt;
+        const step = moveSpeed(enemy, def) * stalkMul * dt * stepMul;
         const bx = enemy.x;
         const bz = enemy.z;
         moveAvoiding(world, enemy, def, ad.x, ad.z, step, (enemy.unstickTicks ?? 0) > 0 ? un.sepMul : 1);
-        // 끼임 감지 — 최근 창에서 기대 이동 대비 실제 이동이 바닥이면 탈출 모드로.
-        // 문설주(개구부 2.1m)나 모서리에 몸을 갈며 제자리걸음하는 것을 잡는다
-        enemy.stuckAccum = (enemy.stuckAccum ?? 0) + Math.hypot(enemy.x - bx, enemy.z - bz);
+        // 끼임 감지 — 창(checkTicks) 시작점에서의 순변위가 기대 이동에 크게 못 미치면
+        // 탈출 모드로. 순변위라서 문설주에 갈리는 것도, 제자리 진동도 잡힌다
+        if ((enemy.stuckCount ?? 0) === 0) {
+          enemy.stuckFromX = bx;
+          enemy.stuckFromZ = bz;
+        }
         enemy.stuckExpect = (enemy.stuckExpect ?? 0) + step;
         enemy.stuckCount = (enemy.stuckCount ?? 0) + 1;
         if ((enemy.stuckCount ?? 0) >= un.checkTicks) {
-          if (
-            (enemy.unstickTicks ?? 0) <= 0 &&
-            (enemy.stuckAccum ?? 0) < (enemy.stuckExpect ?? 0) * un.minProgress
-          ) {
+          const net = Math.hypot(
+            enemy.x - (enemy.stuckFromX ?? enemy.x),
+            enemy.z - (enemy.stuckFromZ ?? enemy.z),
+          );
+          if ((enemy.unstickTicks ?? 0) <= 0 && net < (enemy.stuckExpect ?? 0) * un.minProgress) {
             enemy.unstickTicks = un.ticks;
           }
-          enemy.stuckAccum = 0;
           enemy.stuckExpect = 0;
           enemy.stuckCount = 0;
         }
@@ -2006,6 +2052,25 @@ function pursuitDir(
   const d = Math.hypot(dx, dz);
   if (d < 0.05) return null;
   return { x: dx / d, z: dz / d };
+}
+
+/** 외길 양보 상대 — 같이 끼임 탈출 중인 동료 중 더 앞선(플레이어에 가까운) 쪽.
+ *  문 개구부(2.1m)는 둘이 나란히 못 들어가 대칭 압력으로 교착된다(실측: 슬라임 둘이
+ *  각자 문설주에 짓눌려 정지). 뒤진 쪽이 물러나야 풀린다 — 거리, 동률이면 id 순 */
+function unstickLeader(world: World, enemy: EnemyState): EnemyState | null {
+  const un = balance.enemyAi.unstick;
+  const p = world.player;
+  const myDist = Math.hypot(p.x - enemy.x, p.z - enemy.z);
+  for (const other of world.enemies) {
+    if (other === enemy || !other.alive) continue;
+    if ((other.unstickTicks ?? 0) <= 0) continue;
+    if (Math.hypot(other.x - enemy.x, other.z - enemy.z) > un.yieldRadius) continue;
+    const od = Math.hypot(p.x - other.x, p.z - other.z);
+    if (od < myDist - 0.01 || (Math.abs(od - myDist) <= 0.01 && other.id < enemy.id)) {
+      return other;
+    }
+  }
+  return null;
 }
 
 /** 추격 접근 방향 — 시야가 트이면 산개(부채꼴), 벽에 막히면 흐름장으로 돌아간다 */
