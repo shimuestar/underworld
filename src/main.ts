@@ -1461,6 +1461,7 @@ events.on('item_picked', (payload) => {
     `${balance.hud.centerGain.holdMs + balance.hud.centerGain.fadeMs}ms`,
   );
   rootStyle.setProperty('--gain-rise', `${balance.hud.centerGain.risePx}px`);
+  rootStyle.setProperty('--gain-font', `${balance.hud.centerGain.fontPx}px`);
 }
 const statPopTimers = new Map<string, number>();
 /** 획득 팝 — HUD 숫자가 잠깐 커졌다 제자리로 (연달아 먹으면 다시 처음부터) */
