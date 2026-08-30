@@ -194,6 +194,8 @@ export interface EnemyDef {
   feignWakeRadius?: number;
   /** 대기 배회 — 생성 지점 반경 안을 어슬렁거린다 (구울) */
   idleWander?: { radius: number; speedMul: number; pauseTicks: number };
+  /** 살금살금 접근 — 추격 시 untilRange 밖에서는 speedMul 로 걷는다 (구울: 느리게 다가오다 사정거리에서만 달려든다) */
+  stalk?: { speedMul: number; untilRange: number };
   /** 걷는 동안 이 간격으로 흐느낀다 — 들리는 거리(14m)에서만 (구울) */
   moanIntervalTicks?: number;
   /** 얼굴 흡혈 (거머리) — 낙하 명중 시 얼굴에 붙어 피를 빤다 */

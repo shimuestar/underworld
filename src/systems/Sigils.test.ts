@@ -1060,6 +1060,27 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(moans.length).toBeGreaterThan(0); // 걷기 5틱 뒤 첫 흐느낌
   });
 
+  it('구울 살금살금 — 달려들기 사정거리 밖에선 느리게 걷고, 안에선 제 속도로 뛴다', () => {
+    const def = enemyDef2('ghoul');
+    const stalk = (def as unknown as { stalk: { speedMul: number; untilRange: number } }).stalk;
+    // 밖(20m): 살금살금 — speedMul 로 기어온다
+    const far = add('ghoul', 26, 6);
+    far.ai = 'chase';
+    for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+    const farMoved = Math.hypot(far.x - 26, far.z - 6);
+    const slowStep = def.speed * stalk.speedMul * 0.5; // 30틱 = 0.5초
+    expect(farMoved).toBeGreaterThan(slowStep * 0.6);
+    expect(farMoved).toBeLessThan(slowStep * 1.5); // 제 속도(6.5)라면 3.25m — 그 근처도 못 간다
+    far.alive = false;
+    // 안(7m < untilRange 8): 제 속도로 달린다 (돌진은 쿨다운으로 막아 걸음만 잰다)
+    const near = add('ghoul', 13, 6);
+    near.ai = 'chase';
+    near.chargeCooldown = 9999;
+    for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+    const nearMoved = Math.hypot(near.x - 13, near.z - 6);
+    expect(nearMoved).toBeGreaterThan(def.speed * 0.5 * 0.6); // 살금살금(≈1m)과는 확연히 다르다
+  });
+
   it('거머리 낙하 명중이면 얼굴에 들러붙는다 — 흡혈 진입 경로', () => {
     const l = add('leech', 8, 6); // 플레이어(6,6) 2m — dropRadius 안
     l.lurking = true;

@@ -1454,7 +1454,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         break;
       }
       if (dist > 0) {
-        moveAvoiding(world, enemy, def, distX / dist, distZ / dist, moveSpeed(enemy, def) * dt);
+        // 살금살금 — stalk 이 있으면 달려들기 사정거리 밖에서는 천천히 걸어온다 (구울)
+        const stalkMul = def.stalk && dist > def.stalk.untilRange ? def.stalk.speedMul : 1;
+        moveAvoiding(world, enemy, def, distX / dist, distZ / dist, moveSpeed(enemy, def) * stalkMul * dt);
       }
       break;
     }
