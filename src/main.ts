@@ -2447,6 +2447,11 @@ const hpRow = document.getElementById('status-hp')!;
 const manaRow = document.getElementById('status-mana')!;
 const staminaRow = document.getElementById('status-stamina')!;
 const staminaFill = document.getElementById('status-stamina-fill')!;
+// 음식 버프 아이콘 — 고기 아이콘을 한 번 그려 넣고, 매 프레임 남은 시간 덮개만 갱신
+const buffFoodEl = document.getElementById('buff-food')!;
+buffFoodEl.insertAdjacentHTML('afterbegin', itemIconSvg('food', 22));
+const buffFoodCd = buffFoodEl.querySelector<HTMLElement>('.buff-cd')!;
+const buffFoodSec = buffFoodEl.querySelector<HTMLElement>('.buff-sec')!;
 const lanternRow = document.getElementById('status-lantern')!;
 const lanternFill = document.getElementById('status-lantern-fill')!;
 const lanternText = document.getElementById('status-lantern-text')!;
@@ -2731,6 +2736,17 @@ function render(alpha: number): void {
   const stamFrac = Math.max(0, Math.min(1, world.stamina.value / balance.player.stamina.max));
   staminaFill.style.width = `${stamFrac * 100}%`;
   staminaRow.className = world.stamina.exhausted ? 'spent' : '';
+  // 음식 버프 — 남은 시간만큼 밝은 부채꼴이 시계 방향으로 줄어든다 + 남은 초
+  if (world.foodRegenTicks > 0) {
+    buffFoodEl.classList.add('on');
+    const total = itemDef('food').regen?.durationTicks ?? 1;
+    const remainDeg = (world.foodRegenTicks / total) * 360;
+    buffFoodCd.style.background =
+      `conic-gradient(transparent 0deg ${remainDeg}deg, rgba(0, 0, 0, 0.72) ${remainDeg}deg 360deg)`;
+    buffFoodSec.textContent = String(Math.ceil(world.foodRegenTicks / 60));
+  } else {
+    buffFoodEl.classList.remove('on');
+  }
   // 랜턴 — HP·마나 바 아래의 얇은 실선 게이지. 오른쪽에 % 와 예비 전지 개수
   const battFrac = Math.max(0, Math.min(1, world.lantern.battery / balance.lantern.batteryMax));
   const battPct = Math.round(battFrac * 100);

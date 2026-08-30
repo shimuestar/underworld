@@ -254,6 +254,42 @@
             rgba(0, 0, 0, 0) 2deg 22deg
           );
       }
+      /* 버프 아이콘 줄 — 상태 바 위. 남은 시간은 시계 방향으로 줄어드는 밝은 부채꼴
+         (buff-cd 의 conic-gradient 각도를 main 이 매 프레임 갱신) + 남은 초 숫자 */
+      #buffs {
+        display: flex;
+        justify-content: center;
+        gap: 6px;
+        margin-bottom: 5px;
+      }
+      #buff-food {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        padding: 3px;
+        box-sizing: border-box;
+        border: 1px solid #6a5a3a;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.55);
+        display: none;
+      }
+      #buff-food.on {
+        display: block;
+      }
+      #buff-food .buff-cd {
+        position: absolute;
+        inset: 0;
+        border-radius: 5px;
+        pointer-events: none;
+      }
+      #buff-food .buff-sec {
+        position: absolute;
+        right: 1px;
+        bottom: -1px;
+        font: bold 10px/1 monospace;
+        color: #ffe2b0;
+        text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+      }
       /* 스태미너 — HP·마나 바 바로 아래, 같은 너비의 얇은 띠 */
       #status-stamina {
         height: 4px;
@@ -771,6 +807,7 @@
     <div id="sigil-toast"><div class="name"></div><div class="sub"></div></div>
     <div id="web-overlay"></div>
     <div id="status">
+      <div id="buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div></div>
       <div id="status-bars">
         <div id="status-hp"><div id="status-hp-fill"></div></div>
         <div id="status-mana"><div id="status-mana-fill"></div></div>
