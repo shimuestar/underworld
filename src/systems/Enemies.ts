@@ -293,11 +293,15 @@ function handleSplit(world: World, enemy: EnemyState): void {
 function spawnBrood(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
   const brood = attack.brood;
   if (!brood) return;
-  enemy.broodLeft = brood.count;
+  // 총량 상한 — 살아 있는 새끼 수를 빼고 부족분만 낳는다 (3마리 살아 있으면 2마리만)
+  const aliveKids = world.enemies.filter((e) => e.alive && e.type === brood.type).length;
+  const spawnCount = Math.min(brood.count, Math.max(0, brood.maxAlive - aliveKids));
+  if (spawnCount <= 0) return;
+  enemy.broodLeft = spawnCount;
   enemy.broodTicks = 1; // 다음 틱부터 튀어나오기 시작
   enemy.health = Math.max(1, enemy.health - brood.healthCost); // 제 몸을 떼어 준 값
   world.events.emit('boss_brood', {
-    enemyId: enemy.id, enemyType: enemy.type, count: brood.count, x: enemy.x, z: enemy.z,
+    enemyId: enemy.id, enemyType: enemy.type, count: spawnCount, x: enemy.x, z: enemy.z,
   });
 }
 
@@ -342,6 +346,7 @@ function emitBrood(world: World, enemy: EnemyState): void {
   const child: EnemyState = {
     id: nextSplitId++,
     type: brood.type,
+    noLoot: true, // 소환수 — 죽여도 보상 없음 (생명 입자만). 무한 파밍 방지
     x, z, prevX: x, prevZ: z,
     yaw: Math.atan2(-dirX, -dirZ), homeYaw: Math.atan2(-dirX, -dirZ),
     health: def.health, alive: true,
@@ -562,7 +567,7 @@ function batRecoilDamage(world: World, enemy: EnemyState, amount: number): boole
   world.events.emit('bat_recoil', { enemyId: enemy.id, x: enemy.x, z: enemy.z, amount });
   if (enemy.health > 0) return false;
   enemy.alive = false;
-  world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+  world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
   return true;
 }
 

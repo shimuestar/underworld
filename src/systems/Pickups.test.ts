@@ -201,6 +201,22 @@ describe('자석 흡수', () => {
   });
 });
 
+describe('보스 소환수(noLoot)', () => {
+  it('죽어도 드랍·골드·경험치가 없다 — 생명 입자만 나온다', async () => {
+    const LifeMotes = await import('./LifeMotes');
+    Pickups.init(world);
+    Progression.init(world);
+    LifeMotes.init(world);
+    const orig = Math.random;
+    Math.random = () => 0; // 드랍 롤 확정 구간 — 보상이 있었다면 반드시 떨어졌을 값
+    world.events.emit('enemy_died', { enemyType: 'slime_small', x: 30, z: 30, noLoot: true });
+    Math.random = orig;
+    expect(world.groundItems).toHaveLength(0); // 아이템도 골드도 없다
+    expect(world.xp).toBe(0); // 경험치도 없다
+    expect(world.lifeMotes.length).toBeGreaterThan(0); // 회복 입자는 나온다
+  });
+});
+
 describe('경험치', () => {
   it('처치한 적의 xp 만큼 누적되고 xp_gained 를 발행한다', () => {
     Progression.init(world);

@@ -166,7 +166,7 @@ function skillDamage(world: World, enemy: EnemyState, damage: number, source: st
   if (enemy.health <= 0 && enemy.alive) {
     enemy.alive = false;
     world.events.emit('spell_kill', { enemyType: enemy.type, source });
-    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
   }
 }
 
@@ -1207,7 +1207,7 @@ function applyProjectileHit(
       // 동료 오사 — 플레이어 전과가 아니므로 처치 통계·마나 경로에서 제외
       world.events.emit('friendly_fire_kill', { enemyType: enemy.type });
     }
-    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
   }
 }
 
@@ -1261,7 +1261,7 @@ function explodeFireball(
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('spell_kill', { enemyType: enemy.type, splash: true });
-      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     }
   }
 
@@ -1328,7 +1328,7 @@ function implodeBolt(
         proj.owner === 'player' ? 'spell_kill' : 'friendly_fire_kill',
         { enemyType: enemy.type, splash: true },
       );
-      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     }
   }
 
@@ -1440,6 +1440,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
         enemyType: enemy.type,
         x: enemy.x,
         z: enemy.z,
+        noLoot: enemy.noLoot,
         blastX: enemy.x - proj.x,
         blastZ: enemy.z - proj.z,
       });
@@ -1493,7 +1494,7 @@ function applyBurns(world: World): void {
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('spell_kill', { enemyType: enemy.type, burn: true });
-      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     }
   }
 }

@@ -228,7 +228,7 @@ export function tick(world: World, _dt: number): void {
           x: enemy.x,
           z: enemy.z,
         });
-        world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+        world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
       } else {
         // 스태거는 처형 한 번으로 끝난다 — 여기서 바로 후딜로 넘긴다.
         // timer 만 1로 줄이면 "다음 틱"이 오지 않는다: 처형 연출 동안
@@ -253,7 +253,7 @@ export function tick(world: World, _dt: number): void {
       x: enemy.x,
       z: enemy.z,
     });
-    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     return;
   }
 

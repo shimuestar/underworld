@@ -257,7 +257,7 @@ window.addEventListener('keydown', (e) => {
       enemy.alive = false;
       killed++;
       // enemy_died 만 발행한다 — 드랍·경험치·파편은 돌리되 무기 명중률 통계는 더럽히지 않게
-      events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     }
     showReaction(killed > 0 ? `(테스트) 시야 내 ${killed}마리 처치` : '(테스트) 시야에 적 없음');
     console.log('[debug] 시야 내 몰살', killed);
@@ -1645,9 +1645,11 @@ events.on('item_denied', (payload) => {
   if (info.reason === 'cooldown') return; // 연타는 조용히 무시 — 매번 뜨면 시끄럽다
   const name = info.kind ? itemDef(info.kind).name : '';
   const deny =
-    info.reason === 'empty'
-      ? `빈 퀵슬롯 — ${keyLabel('I', 'inventory')} 에서 등록한다`
-      : (DENY_TEXT[info.reason] ?? info.reason);
+    info.kind === 'food' && info.reason === 'full'
+      ? '아직 효과가 도는 중이다' // 음식은 만피여도 먹는다 — 막히는 건 중복뿐
+      : info.reason === 'empty'
+        ? `빈 퀵슬롯 — ${keyLabel('I', 'inventory')} 에서 등록한다`
+        : (DENY_TEXT[info.reason] ?? info.reason);
   showReaction(`${name ? name + ' — ' : ''}${deny}`, 1100);
 });
 events.on('item_channel_started', (payload) => {

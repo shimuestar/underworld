@@ -367,7 +367,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
         x: enemy.x,
         z: enemy.z,
       });
-      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     }
   }
 
@@ -836,6 +836,7 @@ function fire(world: World): void {
       enemyType: hit.enemy.type,
       x: hit.enemy.x,
       z: hit.enemy.z,
+      noLoot: hit.enemy.noLoot,
     });
   } else {
     world.events.emit('enemy_damaged', {

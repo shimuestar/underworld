@@ -7,7 +7,8 @@ import type { World } from '../core/World';
 /** 처치 구독. 시작 시 1회 호출 */
 export function init(world: World): void {
   world.events.on('enemy_died', (payload) => {
-    const { enemyType } = payload as { enemyType: string };
+    const { enemyType, noLoot } = payload as { enemyType: string; noLoot?: boolean };
+    if (noLoot) return; // 보스 소환수 — 경험치 없음
     const amount = enemyDef(enemyType).xp;
     if (!amount) return;
     world.xp += amount;

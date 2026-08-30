@@ -15,7 +15,10 @@ let nextPickupId = 500000; // 각인 아이템 id 대역과 구분
 /** 드랍 구독. 시작 시 1회 호출 */
 export function init(world: World): void {
   world.events.on('enemy_died', (payload) => {
-    const { enemyType, x, z } = payload as { enemyType: string; x: number; z: number };
+    const { enemyType, x, z, noLoot } = payload as {
+      enemyType: string; x: number; z: number; noLoot?: boolean;
+    };
+    if (noLoot) return; // 보스 소환수 — 아이템도 골드도 없다 (생명 입자는 LifeMotes 가 준다)
     rollDrops(world, enemyType, x, z);
   });
 }

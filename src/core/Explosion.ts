@@ -75,6 +75,7 @@ export function explodeAt(world: World, x: number, z: number, cfg: ExplosionSpec
         enemyType: enemy.type,
         x: enemy.x,
         z: enemy.z,
+        noLoot: enemy.noLoot,
         blastX: enemy.x - x,
         blastZ: enemy.z - z,
       });

@@ -642,6 +642,8 @@ export interface EnemyState {
   downTicks?: number;
   /** 추락 낙하 잔여 틱 */
   batFallTicks?: number;
+  /** 참 = 처치 보상 없음(드랍·골드·XP) — 보스가 소환한 새끼. 생명 입자는 나온다 */
+  noLoot?: boolean;
   /** 랜턴 속박 잔여 틱 — 빛기둥에 잡혀 있는 동안 매 틱 갱신된다 (0 = 자유) */
   batLitTicks?: number;
   flyFallFromY?: number;

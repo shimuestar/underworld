@@ -1180,6 +1180,21 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slime.ai).toBe('idle');
   });
 
+  it('어미 슬라임 소환 상한 — 살아 있는 새끼 포함 5, 부족분만 낳고 새끼는 noLoot', () => {
+    world.player.health = 100000;
+    const m = add('slime_mother', 20, 6);
+    m.ai = 'chase';
+    for (let i = 0; i < 3; i++) add('slime_small', 24 + i * 1.5, 6); // 이미 3마리
+    for (let i = 0; i < 250; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    const kids = world.enemies.filter((e) => e.alive && e.type === 'slime_small');
+    expect(kids.length).toBe(5); // 3 + 2 — 상한을 넘지 않는다
+    const summoned = kids.filter((k) => k.noLoot);
+    expect(summoned.length).toBe(2); // 부족분만 낳았다
+  });
+
   it('구울은 대기 중 생성 지점 반경을 벗어나지 않고 어슬렁거린다', () => {
     world.lantern.on = false; // 랜턴 빔이 깨우지 않게 — 배회만 잰다
     // 배회 반경(3m)만큼 다가와도 시야(17m) 밖이도록 21m 에 둔다 (최소 거리 18m)
