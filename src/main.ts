@@ -2717,6 +2717,11 @@ function render(alpha: number): void {
   const hpFrac = Math.max(0, p.health) / balance.player.healthMax;
   const hpFill = document.getElementById('status-hp-fill')!;
   hpFill.style.width = `${hpFrac * 100}%`;
+  // 음식 지속 회복 — 실제로 차오르는 동안만 은은하게 맥동
+  hpFill.classList.toggle(
+    'regen',
+    world.foodRegenTicks > 0 && p.health < balance.player.healthMax && !world.dead,
+  );
   // 체력은 붉은 계열 — 낮아지면 더 밝은 경고색으로 (2026-08-29 녹색에서 교체)
   hpFill.style.background = hpFrac > 0.25 ? '#c22e2e' : '#ff4838';
   // 마나 — 중앙 오른쪽. 연쇄 중에는 밝게
@@ -2735,7 +2740,14 @@ function render(alpha: number): void {
   // 스태미너 — HP·마나 바 바로 아래. 탈진하면 붉게 죽는다
   const stamFrac = Math.max(0, Math.min(1, world.stamina.value / balance.player.stamina.max));
   staminaFill.style.width = `${stamFrac * 100}%`;
-  staminaRow.className = world.stamina.exhausted ? 'spent' : '';
+  staminaRow.className =
+    (world.stamina.exhausted ? 'spent' : '') + (world.foodRegenTicks > 0 ? ' boosted' : '');
+  staminaFill.classList.toggle(
+    'regen',
+    world.foodRegenTicks > 0 &&
+      world.stamina.regenDelay <= 0 &&
+      world.stamina.value < balance.player.stamina.max,
+  );
   // 음식 버프 — 남은 시간만큼 밝은 부채꼴이 시계 방향으로 줄어든다 + 남은 초
   if (world.foodRegenTicks > 0) {
     buffFoodEl.classList.add('on');

@@ -188,6 +188,27 @@
         animation: god-blink 0.9s ease-in-out infinite;
         border-color: #4fc3ff;
       }
+      /* 지속 회복 맥동 — 음식 효과로 실제로 차오르는 동안 채워진 부분이 은은하게
+         숨쉰다 (가득 차거나 효과가 끝나면 멈춘다). 일회성 회복 깜빡임(restore-blink)
+         과 겹치면 뒤에 선언된 쪽이 이기므로 이 블록이 먼저 온다 */
+      @keyframes regen-pulse {
+        0%,
+        100% {
+          filter: brightness(1);
+        }
+        50% {
+          filter: brightness(1.5);
+        }
+      }
+      #status-hp-fill.regen,
+      #status-stamina-fill.regen {
+        animation: regen-pulse 1.1s ease-in-out infinite;
+      }
+      /* 스태미너 가속(음식) — 버프 동안 띠가 따뜻하게 밝아지고 은은히 빛난다 */
+      #status-stamina.boosted #status-stamina-fill {
+        background: #eaf39c;
+        box-shadow: 0 0 6px rgba(222, 236, 120, 0.75);
+      }
       /* 회복 깜빡임 — 물약·입자 등으로 게이지가 찰 때 채워진 부분이 깜빡인다.
          이미 가득이면 끝부분만 깜빡여 "찼는데 또 먹었다"를 알린다.
          주기·횟수·끝 폭은 main 이 balance.hud.restoreFlash 로 CSS 변수에 주입한다 */
