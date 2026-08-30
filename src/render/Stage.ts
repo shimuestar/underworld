@@ -4515,33 +4515,28 @@ export class Stage {
       };
       makeBox(0.68, 0.42, 0.5, 0, (id % 7) * 0.09);
       if (id % 2 === 0) makeBox(0.46, 0.32, 0.36, 0.49, 0.5 + (id % 3) * 0.2);
-    } else if (type === 'prop_bonepile') {
-      // 뼈 무더기 — 긴 뼈들이 어지럽게 겹치고 해골 둘이 굴러다닌다
-      const boneMat = new THREE.MeshLambertMaterial({ color: 0xcfc7b0 });
-      for (let i = 0; i < 5; i++) {
-        const len = 0.34 + (i % 3) * 0.08;
-        const bone = new THREE.Mesh(new THREE.BoxGeometry(len, 0.045, 0.045), boneMat);
-        bone.position.set(
-          Math.sin(i * 2.1 + id) * 0.18,
-          0.035 + i * 0.028,
-          Math.cos(i * 1.7 + id) * 0.16,
-        );
-        bone.rotation.y = i * 1.15 + id * 0.7;
-        bone.rotation.z = (i % 2) * 0.12;
-        group.add(bone);
+    } else if (type === 'prop_keg') {
+      // 나무 드럼통 — 배 부른 널판 통 + 무광 테 두 줄. 폭발통(어두운 갈색·빨간 띠)과
+      // 확실히 다른 밝은 꿀색 나무 — 겉만 봐서는 안에 뭐가 들었는지 모른다
+      const wood = new THREE.MeshLambertMaterial({ color: 0x8a6a3e });
+      const hoop = new THREE.MeshLambertMaterial({ color: 0x4a3a28 });
+      const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.27 * v, 0.21 * v, 0.36, 11), wood);
+      lower.position.y = 0.18;
+      group.add(lower);
+      const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.21 * v, 0.27 * v, 0.36, 11), wood);
+      upper.position.y = 0.54;
+      group.add(upper);
+      for (const hy of [0.2, 0.52]) {
+        const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.275 * v, 0.275 * v, 0.05, 11), hoop);
+        ring.position.y = hy;
+        group.add(ring);
       }
-      const dark = new THREE.MeshLambertMaterial({ color: 0x2a2620 });
-      for (const [sx, sz, ry] of [[0.14, 0.1, 0.6], [-0.16, -0.08, 2.4]] as const) {
-        const skull = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.13, 0.17), boneMat);
-        skull.position.set(sx, 0.09, sz);
-        skull.rotation.y = ry + id;
-        group.add(skull);
-        const eyes = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.035, 0.02), dark);
-        eyes.position.set(sx, 0.11, sz);
-        eyes.rotation.y = ry + id;
-        eyes.translateZ(-0.085);
-        group.add(eyes);
-      }
+      const lid = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2 * v, 0.2 * v, 0.04, 11),
+        new THREE.MeshLambertMaterial({ color: 0x6e5230 }),
+      );
+      lid.position.y = 0.73;
+      group.add(lid);
     } else if (type === 'prop_sarcophagus') {
       // 석관 — 받침단 + 관 몸체 + 밝은 뚜껑 + 뚜껑의 십자 홈
       const plinth = new THREE.Mesh(

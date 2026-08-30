@@ -585,7 +585,7 @@
     "spawnWeights": {
       "prop_jar": 30,
       "prop_crate": 25,
-      "prop_bonepile": 20,
+      "prop_keg": 20,
       "prop_minecart": 15,
       "prop_sarcophagus": 10
     },
@@ -621,7 +621,7 @@
     "types": {
       "prop_jar": { "hp": 1, "collisionRadius": 0.6, "height": 1.8, "material": "ceramic", "empty": 52, "loot": 33, "ambush": 10, "explode": 5, "ambushTypes": ["spider_small"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
       "prop_crate": { "hp": 1, "collisionRadius": 0.8, "height": 1.7, "material": "wood", "empty": 50, "loot": 34, "ambush": 10, "explode": 6, "ambushTypes": ["bat"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
-      "prop_bonepile": { "hp": 1, "collisionRadius": 0.8, "height": 0.8, "material": "bone", "empty": 50, "loot": 30, "ambush": 20, "explode": 0, "ambushTypes": ["spider_small"], "ambushMin": 2, "ambushMax": 3, "goldMul": 1 },
+      "prop_keg": { "hp": 1, "collisionRadius": 0.65, "height": 1.5, "material": "wood", "empty": 48, "loot": 34, "ambush": 10, "explode": 8, "ambushTypes": ["spider_small"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1 },
       "prop_sarcophagus": { "hp": 2, "collisionRadius": 1.2, "height": 2.0, "material": "stone", "empty": 30, "loot": 42, "ambush": 28, "explode": 0, "ambushTypes": ["ghoul", "leech"], "ambushMin": 1, "ambushMax": 1, "goldMul": 2 },
       "prop_minecart": { "hp": 1, "collisionRadius": 0.95, "height": 1.6, "material": "metal", "empty": 44, "loot": 36, "ambush": 12, "explode": 8, "ambushTypes": ["leech"], "ambushMin": 1, "ambushMax": 2, "goldMul": 1.5 }
     }

@@ -73,9 +73,8 @@ describe('기믹 — 파괴 롤과 판정', () => {
     expect(Props.rollOutcome(cfg, () => (cfg.empty + 1) / total)).toBe('loot');
     expect(Props.rollOutcome(cfg, () => (cfg.empty + cfg.loot + 1) / total)).toBe('ambush');
     expect(Props.rollOutcome(cfg, () => (cfg.empty + cfg.loot + cfg.ambush + 1) / total)).toBe('explode');
-    // 석관·뼈는 폭발 없음 — 가중치 0 이 데이터로 보장된다
+    // 석관은 폭발 없음(돌) — 가중치 0 이 데이터로 보장된다
     expect(TYPES.prop_sarcophagus.explode).toBe(0);
-    expect(TYPES.prop_bonepile.explode).toBe(0);
   });
 
   it('석관은 2방 — 첫 방은 금(prop_hit), 둘째 방에 부서진다(prop_broken)', () => {
