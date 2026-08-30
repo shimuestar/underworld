@@ -69,47 +69,18 @@
       ]
     },
     {
-      "type": "spider_small",
-      "cell": [
-        2,
-        18
-      ]
-    },
-    {
       "type": "ghoul",
       "cell": [
         4,
         14
       ],
-      "note": "전투 홀 순찰 3인조 — 생명 입자를 놓고 경쟁한다"
-    },
-    {
-      "type": "ghoul",
-      "cell": [
-        2,
-        14
-      ]
+      "note": "전투 홀 순찰 2인조 — 생명 입자를 놓고 경쟁한다"
     },
     {
       "type": "ghoul",
       "cell": [
         3,
         18
-      ]
-    },
-    {
-      "type": "slime",
-      "cell": [
-        4,
-        18
-      ],
-      "note": "전투 홀"
-    },
-    {
-      "type": "spider_small",
-      "cell": [
-        2,
-        20
       ]
     },
     {
@@ -133,13 +104,6 @@
       "cell": [
         11,
         9
-      ]
-    },
-    {
-      "type": "spider_small",
-      "cell": [
-        9,
-        11
       ]
     },
     {
@@ -190,13 +154,6 @@
       ]
     },
     {
-      "type": "spider_small",
-      "cell": [
-        11,
-        2
-      ]
-    },
-    {
       "type": "spider_large",
       "cell": [
         10,
@@ -237,15 +194,6 @@
         8
       ],
       "note": "대기실 천장",
-      "ceiling": true
-    },
-    {
-      "type": "leech",
-      "cell": [
-        19,
-        16
-      ],
-      "note": "출구 로비 남쪽 천장",
       "ceiling": true
     },
     {
@@ -295,13 +243,6 @@
         6
       ],
       "feign": true
-    },
-    {
-      "type": "spider_small",
-      "cell": [
-        19,
-        22
-      ]
     },
     {
       "type": "spider_small",

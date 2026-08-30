@@ -55,14 +55,6 @@
       "note": "중정 서쪽 — 첫 조우"
     },
     {
-      "type": "goblin_runner",
-      "cell": [
-        2,
-        25
-      ],
-      "note": "상자 방 파수"
-    },
-    {
       "type": "goblin_spear",
       "cell": [
         9,
@@ -119,13 +111,6 @@
       "cell": [
         2,
         11
-      ]
-    },
-    {
-      "type": "spider_small",
-      "cell": [
-        18,
-        18
       ]
     },
     {
@@ -212,20 +197,13 @@
         12,
         14
       ],
-      "note": "중정 순찰 3인조 — 입자를 놓고 경쟁한다"
+      "note": "중정 순찰 2인조 — 입자를 놓고 경쟁한다"
     },
     {
       "type": "ghoul",
       "cell": [
         12,
         15
-      ]
-    },
-    {
-      "type": "ghoul",
-      "cell": [
-        12,
-        16
       ]
     },
     {
@@ -248,27 +226,11 @@
     {
       "type": "leech",
       "cell": [
-        9,
-        17
-      ],
-      "note": "중정 천장",
-      "ceiling": true
-    },
-    {
-      "type": "leech",
-      "cell": [
         21,
         11
       ],
       "note": "제단 방 천장 구석",
       "ceiling": true
-    },
-    {
-      "type": "slime",
-      "cell": [
-        12,
-        18
-      ]
     },
     {
       "type": "slime",
