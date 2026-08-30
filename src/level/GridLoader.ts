@@ -746,9 +746,21 @@ function buildStairwell(
     step.position.set(0, top - depth / 2, front - run * (i + 0.5));
     g.add(step);
   }
+  // 계단 갱도 둘러막기 — 바닥 아래 옆벽·뒷벽. 이게 없으면 비스듬히 볼 때
+  // 계단 옆이 허공(장면 배경)으로 뚫려 보인다 (실측 피드백 2026-08-30)
+  const shaftDepth = rise * steps + 1.6;
+  for (const side of [-1, 1]) {
+    const sideWall = new THREE.Mesh(new THREE.BoxGeometry(0.14, shaftDepth, cs), stone);
+    sideWall.position.set(side * (innerW / 2 + 0.07), -shaftDepth / 2, 0);
+    g.add(sideWall);
+  }
+  const shaftBack = new THREE.Mesh(new THREE.BoxGeometry(innerW + 0.32, shaftDepth, 0.2), stone);
+  shaftBack.position.set(0, -shaftDepth / 2, -cs / 2 + 0.1);
+  g.add(shaftBack);
+
   // 계단이 잠기는 어둠 — 안쪽 끝의 "아래쪽"만 덮는다. 문 전체를 덮으면 문이
   // 검은 판이 돼 계단이 하나도 안 보인다 — 위쪽은 등판(돌벽)이 보여야 한다
-  const darkTop = 0.85; // 사슬 아랫줄보다 낮게 — 사슬 뒤가 뚫려 보이지 않게
+  const darkTop = 0.35; // 첫 단들은 보이고, 깊은 단만 어둠에 잠긴다
   const darkH = darkTop + rise * steps + 1.4;
   const dark = new THREE.Mesh(
     new THREE.BoxGeometry(innerW + 0.08, darkH, 0.06),
@@ -758,7 +770,7 @@ function buildStairwell(
   g.add(dark);
   // 벽감 안 불빛 — 내려가는 첫 단들과 안벽을 은은히 밝힌다.
   // 이게 없으면 게임 조명(환경광 0.04)에서 문 안이 통째로 검다
-  const glow = new THREE.PointLight(0xffb066, 1.0, 5.5, 0);
+  const glow = new THREE.PointLight(0xffb066, 1.7, 6.0, 0);
   glow.position.set(0, 1.3, front - 1.5); // 낮고 깊게 — 디딤판을 비스듬히 훑는다
   g.add(glow);
 
