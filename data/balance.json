@@ -687,9 +687,9 @@
   "_hudRestoreNote": "회복 깜빡임 — 물약·음식·생명 입자로 게이지가 찰 때 채워진 부분이 cycleMs 주기로 blinks 번 깜빡인다. 이미 가득이면 끝(자라는 쪽) tipWidthPx 픽셀만 깜빡여 상한 낭비를 조용히 알린다 (2026-08-30, 18%가 과해서 2px 로)",
   "hud": {
     "restoreFlash": { "cycleMs": 220, "blinks": 4, "tipWidthPx": 2 },
-    "_gainNote": "골드·XP 획득 피드백 — HUD 숫자가 잠깐 커졌다 줄고(statPop), 화면 중앙 조준선 아래에 +획득량이 떠서 holdMs 만큼 머물다 fadeMs 에 걸쳐 사라진다. 연달아 먹으면 같은 표시에 누적된다 (2026-08-30)",
+    "_gainNote": "골드·XP 획득 피드백 — 조준점 위에 +획득량이 떠서 숫자가 굴러 올라가고(roll*), 아이콘이 통통 튀며, 대량(bigGold/bigXp 이상)이면 커지고 밝아진다. holdMs 뒤 HUD 지갑 표기로 빨려 들어가며(absorbMs) 도착 순간 HUD 숫자가 팝(statPop) — 들어갔다는 인과. 연달아 먹으면 같은 표시에 누적 (2026-08-30)",
     "statPop": { "scaleMul": 1.6, "durationMs": 350 },
-    "centerGain": { "holdMs": 900, "fadeMs": 350, "risePx": 28, "fontPx": 21 }
+    "centerGain": { "holdMs": 900, "absorbMs": 380, "risePx": 10, "fontPx": 21, "rollIntervalMs": 30, "rollStepRatio": 0.3, "bigGold": 20, "bigXp": 45, "bigScaleMul": 1.35 }
   },
   "hitMarker": {
     "lifeMs": 1600,

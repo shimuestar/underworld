@@ -364,8 +364,8 @@
       #gain-center-gold {
         filter: drop-shadow(0 0 6px rgba(255, 204, 58, 0.55));
       }
-      /* 머무는 동안(75%)은 살짝만 떠오르고, 마지막 구간에 위로 흘러가며 옅어진다.
-         전체 시간·상승 폭은 main 이 balance.hud.centerGain 을 CSS 변수로 주입한다 */
+      /* 등장 팝 후 머무는 동안 살짝만 떠오른다 — 사라짐은 main 의 HUD 흡수 비행이
+         맡는다 (지갑 표기로 날아가 도착 순간 HUD 숫자가 팝). 시간·폭은 CSS 변수 주입 */
       @keyframes gain-float {
         0% {
           opacity: 1;
@@ -375,17 +375,43 @@
           opacity: 1;
           transform: translate(-50%, -100%) scale(1);
         }
-        75% {
-          opacity: 1;
-          transform: translate(-50%, calc(-100% - var(--gain-rise, 28px) * 0.25));
-        }
         100% {
-          opacity: 0;
-          transform: translate(-50%, calc(-100% - var(--gain-rise, 28px)));
+          opacity: 1;
+          transform: translate(-50%, calc(-100% - var(--gain-rise, 10px)));
         }
       }
       #gain-center.show {
-        animation: gain-float var(--gain-total-ms, 1.25s) ease-out forwards;
+        animation: gain-float var(--gain-hold-ms, 0.9s) ease-out forwards;
+      }
+      /* 아이콘 바운스 — 먹을 때마다 통통 */
+      #gain-center .gc-icon {
+        display: inline-block;
+        margin-right: 7px;
+      }
+      @keyframes gc-bounce {
+        0% {
+          transform: translateY(0) scale(1);
+        }
+        40% {
+          transform: translateY(-7px) scale(1.3);
+        }
+        100% {
+          transform: translateY(0) scale(1);
+        }
+      }
+      #gain-center .gc-icon.bounce {
+        animation: gc-bounce 0.25s ease-out;
+      }
+      /* 대량 획득 — 더 크고 밝게 (임계값은 balance.hud.centerGain.bigGold/bigXp) */
+      #gain-center .big {
+        font-size: calc(var(--gain-font, 21px) * var(--gain-big-mul, 1.35));
+      }
+      #gain-center-gold.big {
+        color: #ffe27a;
+        filter: drop-shadow(0 0 9px rgba(255, 214, 80, 0.8));
+      }
+      #gain-center-xp.big {
+        color: #f2f7ee;
       }
       #gain-center-gold {
         color: #ffcc3a;
@@ -734,7 +760,7 @@
     </div>
     <div id="hud"></div>
     <div id="crosshair"></div>
-    <div id="gain-center"><div id="gain-center-gold"></div><div id="gain-center-xp"></div></div>
+    <div id="gain-center"><div id="gain-center-gold"><span class="gc-icon">◆</span><span class="gc-num"></span></div><div id="gain-center-xp"><span class="gc-icon">✦</span><span class="gc-num"></span></div></div>
     <div id="death">
       <div>사망</div>
       <div id="death-hint" style="font-size: 14px">Enter 키로 재시작</div>

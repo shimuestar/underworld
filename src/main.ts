@@ -1456,12 +1456,10 @@ events.on('item_picked', (payload) => {
   rootStyle.setProperty('--restore-tip-w', `${rf.tipWidthPx}px`);
   rootStyle.setProperty('--stat-pop-scale', String(balance.hud.statPop.scaleMul));
   rootStyle.setProperty('--stat-pop-ms', `${balance.hud.statPop.durationMs}ms`);
-  rootStyle.setProperty(
-    '--gain-total-ms',
-    `${balance.hud.centerGain.holdMs + balance.hud.centerGain.fadeMs}ms`,
-  );
+  rootStyle.setProperty('--gain-hold-ms', `${balance.hud.centerGain.holdMs}ms`);
   rootStyle.setProperty('--gain-rise', `${balance.hud.centerGain.risePx}px`);
   rootStyle.setProperty('--gain-font', `${balance.hud.centerGain.fontPx}px`);
+  rootStyle.setProperty('--gain-big-mul', String(balance.hud.centerGain.bigScaleMul));
 }
 const statPopTimers = new Map<string, number>();
 /** 획득 팝 — HUD 숫자가 잠깐 커졌다 제자리로 (연달아 먹으면 다시 처음부터) */
@@ -1481,25 +1479,126 @@ function popStat(elId: string): void {
 // 중앙 획득 표시 — 조준선 아래 +골드/+XP. 떠 있는 동안 또 먹으면 같은 표시에 누적
 let gainGoldAcc = 0;
 let gainXpAcc = 0;
-let gainClearTimer: number | undefined;
+let gainShownGold = 0; // 화면에 지금 보이는 값 — 목표(acc)로 굴러 올라간다
+let gainShownXp = 0;
+let gainExitTimer: number | undefined;
+let gainRollTimer: number | undefined;
+
+function updateGainText(): void {
+  const cg = balance.hud.centerGain;
+  const goldLine = document.getElementById('gain-center-gold')!;
+  const xpLine = document.getElementById('gain-center-xp')!;
+  goldLine.style.display = gainGoldAcc > 0 ? '' : 'none';
+  xpLine.style.display = gainXpAcc > 0 ? '' : 'none';
+  goldLine.querySelector('.gc-num')!.textContent = `+${gainShownGold}`;
+  xpLine.querySelector('.gc-num')!.textContent = `+${gainShownXp} XP`;
+  // 대량 획득 — 누적이 임계를 넘는 순간 승격 (사이클이 끝나야 풀린다)
+  goldLine.classList.toggle('big', gainGoldAcc >= cg.bigGold);
+  xpLine.classList.toggle('big', gainXpAcc >= cg.bigXp);
+}
+
+/** 카운트업 롤링 — 표시값이 목표로 촤르륵 굴러 올라간다 */
+function rollGainNumbers(): void {
+  const cg = balance.hud.centerGain;
+  if (gainRollTimer !== undefined) return;
+  gainRollTimer = window.setInterval(() => {
+    let done = true;
+    if (gainShownGold !== gainGoldAcc) {
+      const diff = gainGoldAcc - gainShownGold;
+      const step = Math.max(1, Math.round(Math.abs(diff) * cg.rollStepRatio));
+      gainShownGold = Math.abs(diff) <= step ? gainGoldAcc : gainShownGold + step * Math.sign(diff);
+      done = false;
+    }
+    if (gainShownXp !== gainXpAcc) {
+      const diff = gainXpAcc - gainShownXp;
+      const step = Math.max(1, Math.round(Math.abs(diff) * cg.rollStepRatio));
+      gainShownXp = Math.abs(diff) <= step ? gainXpAcc : gainShownXp + step * Math.sign(diff);
+      done = false;
+    }
+    updateGainText();
+    if (done && gainRollTimer !== undefined) {
+      window.clearInterval(gainRollTimer);
+      gainRollTimer = undefined;
+    }
+  }, cg.rollIntervalMs);
+}
+
+/** HUD 흡수 — 중앙 표시가 지갑 표기로 날아가 도착 순간 HUD 숫자가 팝 (들어갔다는 인과) */
+function absorbGainToHud(): void {
+  gainExitTimer = undefined;
+  if (gainRollTimer !== undefined) {
+    window.clearInterval(gainRollTimer);
+    gainRollTimer = undefined;
+  }
+  // 날아가는 텍스트는 최종 수량으로 — 굴러가던 중이었어도 여기서 완성한다
+  gainShownGold = gainGoldAcc;
+  gainShownXp = gainXpAcc;
+  updateGainText();
+  const cg = balance.hud.centerGain;
+  const flights: Array<[number, string, string]> = [
+    [gainGoldAcc, 'gain-center-gold', 'status-gold-amt'],
+    [gainXpAcc, 'gain-center-xp', 'status-xp-amt'],
+  ];
+  for (const [amt, lineId, targetId] of flights) {
+    if (amt <= 0) continue;
+    const line = document.getElementById(lineId)!;
+    const target = document.getElementById(targetId)!;
+    const from = line.getBoundingClientRect();
+    const to = target.getBoundingClientRect();
+    // 복제해서 날린다 — 비행 중 새 획득이 와도 본체는 새 표시를 새로 띄울 수 있다
+    const ghost = line.cloneNode(true) as HTMLElement;
+    const cs = getComputedStyle(line);
+    ghost.style.cssText =
+      `position:fixed;left:${from.left}px;top:${from.top}px;margin:0;z-index:30;` +
+      `pointer-events:none;font:${cs.font};color:${cs.color};` +
+      `letter-spacing:${cs.letterSpacing};text-shadow:${cs.textShadow};`;
+    document.body.appendChild(ghost);
+    const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+    const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+    const anim = ghost.animate(
+      [
+        { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+        { transform: `translate(${dx}px, ${dy}px) scale(0.5)`, opacity: 0.85 },
+      ],
+      { duration: cg.absorbMs, easing: 'cubic-bezier(0.45, -0.15, 0.75, 1)', fill: 'forwards' },
+    );
+    anim.onfinish = () => {
+      ghost.remove();
+      popStat(targetId);
+    };
+  }
+  document.getElementById('gain-center')!.classList.remove('show');
+  gainGoldAcc = 0;
+  gainXpAcc = 0;
+  gainShownGold = 0;
+  gainShownXp = 0;
+}
+
 function showCenterGain(gold: number, xp: number): void {
   const cg = balance.hud.centerGain;
-  if (gainClearTimer !== undefined) window.clearTimeout(gainClearTimer);
+  if (gainExitTimer !== undefined) window.clearTimeout(gainExitTimer);
+  const box = document.getElementById('gain-center')!;
+  if (!box.classList.contains('show')) {
+    gainShownGold = 0; // 새 묶음 — 0에서 굴러 올라간다
+    gainShownXp = 0;
+  }
   gainGoldAcc += gold;
   gainXpAcc += xp;
-  const box = document.getElementById('gain-center')!;
-  document.getElementById('gain-center-gold')!.textContent =
-    gainGoldAcc > 0 ? `+${gainGoldAcc} ◆` : '';
-  document.getElementById('gain-center-xp')!.textContent = gainXpAcc > 0 ? `+${gainXpAcc} XP` : '';
-  // 떠오르며 사라지는 애니메이션 — 연달아 먹으면 처음부터 다시 뜬다 (누적 표시 유지)
-  box.classList.remove('show');
-  void box.offsetWidth;
+  updateGainText();
+  rollGainNumbers();
+  // 아이콘 바운스 — 이번에 먹은 종류만 통통
+  for (const [amt, lineId] of [
+    [gold, 'gain-center-gold'],
+    [xp, 'gain-center-xp'],
+  ] as const) {
+    if (amt <= 0) continue;
+    const icon = document.getElementById(lineId)!.querySelector<HTMLElement>('.gc-icon')!;
+    icon.classList.remove('bounce');
+    void icon.offsetWidth;
+    icon.classList.add('bounce');
+  }
   box.classList.add('show');
-  gainClearTimer = window.setTimeout(() => {
-    box.classList.remove('show');
-    gainGoldAcc = 0;
-    gainXpAcc = 0;
-  }, cg.holdMs + cg.fadeMs + 40);
+  gainExitTimer = window.setTimeout(absorbGainToHud, cg.holdMs);
 }
 const restoreFlashTimers = new Map<string, number>();
 /** 회복 깜빡임 — 게이지가 찰 때 채워진 부분을, 이미 가득이면 끝부분만 깜빡인다 */
@@ -1568,11 +1667,10 @@ events.on('inventory_full', () => {
 });
 events.on('gold_picked', (payload) => {
   audio.play('pickup_gold');
-  popStat('status-gold-amt');
+  // HUD 숫자 팝은 흡수 비행이 도착하는 순간 — 지갑에 들어갔다는 인과
   showCenterGain((payload as { amount: number }).amount, 0);
 });
 events.on('xp_gained', (payload) => {
-  popStat('status-xp-amt');
   showCenterGain(0, (payload as { amount: number }).amount);
 });
 // ---- 활 ----
