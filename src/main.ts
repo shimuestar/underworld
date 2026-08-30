@@ -1453,7 +1453,7 @@ events.on('item_picked', (payload) => {
   const rootStyle = document.documentElement.style;
   rootStyle.setProperty('--restore-cycle', `${rf.cycleMs}ms`);
   rootStyle.setProperty('--restore-blinks', String(rf.blinks));
-  rootStyle.setProperty('--restore-tip-w', `${rf.tipWidthPct}%`);
+  rootStyle.setProperty('--restore-tip-w', `${rf.tipWidthPx}px`);
 }
 const restoreFlashTimers = new Map<string, number>();
 /** 회복 깜빡임 — 게이지가 찰 때 채워진 부분을, 이미 가득이면 끝부분만 깜빡인다 */
