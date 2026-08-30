@@ -684,6 +684,10 @@
     }
   },
   "_hitMarkerNote": "월드 고정 피격 마커 — 가해자의 실제 좌표를 기억하고 시선을 돌리면 화면 위를 미끄러지며 따라온다. 마커가 위 정중앙에 오면 그 적을 정면으로 보고 있다는 뜻",
+  "_hudRestoreNote": "회복 깜빡임 — 물약·음식·생명 입자로 게이지가 찰 때 채워진 부분이 cycleMs 주기로 blinks 번 깜빡인다. 이미 가득이면 끝(자라는 쪽) tipWidthPct 폭만 깜빡여 상한 낭비를 알린다 (2026-08-30)",
+  "hud": {
+    "restoreFlash": { "cycleMs": 220, "blinks": 4, "tipWidthPct": 18 }
+  },
   "hitMarker": {
     "lifeMs": 1600,
     "holdMs": 350,

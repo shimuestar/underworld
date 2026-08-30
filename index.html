@@ -188,6 +188,58 @@
         animation: god-blink 0.9s ease-in-out infinite;
         border-color: #4fc3ff;
       }
+      /* 회복 깜빡임 — 물약·입자 등으로 게이지가 찰 때 채워진 부분이 깜빡인다.
+         이미 가득이면 끝부분만 깜빡여 "찼는데 또 먹었다"를 알린다.
+         주기·횟수·끝 폭은 main 이 balance.hud.restoreFlash 로 CSS 변수에 주입한다 */
+      @keyframes restore-blink {
+        0%,
+        100% {
+          filter: brightness(1);
+        }
+        50% {
+          filter: brightness(2.6);
+        }
+      }
+      @keyframes restore-tip-blink {
+        0%,
+        100% {
+          opacity: 0;
+        }
+        50% {
+          opacity: 0.95;
+        }
+      }
+      #status-hp-fill,
+      #status-mana-fill,
+      #status-stamina-fill {
+        position: relative;
+      }
+      #status-hp-fill.restore-blink,
+      #status-mana-fill.restore-blink,
+      #status-stamina-fill.restore-blink {
+        animation: restore-blink var(--restore-cycle, 0.22s) linear var(--restore-blinks, 4);
+      }
+      #status-hp-fill.restore-tip::after,
+      #status-mana-fill.restore-tip::after,
+      #status-stamina-fill.restore-tip::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: var(--restore-tip-w, 18%);
+        min-width: 6px;
+        background: #fff;
+        opacity: 0;
+        animation: restore-tip-blink var(--restore-cycle, 0.22s) linear var(--restore-blinks, 4);
+      }
+      /* 끝부분 = 자라는 쪽 — HP 는 오른쪽 고정이라 왼쪽으로 자라고, 마나·스태미너는 반대 */
+      #status-hp-fill.restore-tip::after {
+        left: 0;
+      }
+      #status-mana-fill.restore-tip::after,
+      #status-stamina-fill.restore-tip::after {
+        right: 0;
+      }
       /* 거미줄에 걸림 — 화면 가장자리에 끈끈한 흰 막. 끊을수록 옅어진다 */
       #web-overlay {
         position: fixed;

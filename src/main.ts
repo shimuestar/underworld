@@ -1447,6 +1447,30 @@ events.on('item_picked', (payload) => {
     1100,
   );
 });
+// 회복 깜빡임 — 주기·횟수·끝부분 폭은 데이터에서 (CSS 변수로 한 번 주입)
+{
+  const rf = balance.hud.restoreFlash;
+  const rootStyle = document.documentElement.style;
+  rootStyle.setProperty('--restore-cycle', `${rf.cycleMs}ms`);
+  rootStyle.setProperty('--restore-blinks', String(rf.blinks));
+  rootStyle.setProperty('--restore-tip-w', `${rf.tipWidthPct}%`);
+}
+const restoreFlashTimers = new Map<string, number>();
+/** 회복 깜빡임 — 게이지가 찰 때 채워진 부분을, 이미 가득이면 끝부분만 깜빡인다 */
+function flashRestoreBar(fillId: string, wasFull: boolean): void {
+  const el = document.getElementById(fillId);
+  if (!el) return;
+  el.classList.remove('restore-blink', 'restore-tip');
+  void el.offsetWidth; // 리플로우 — 연달아 마셔도 애니메이션이 처음부터 다시 돈다
+  el.classList.add(wasFull ? 'restore-tip' : 'restore-blink');
+  const prev = restoreFlashTimers.get(fillId);
+  if (prev !== undefined) window.clearTimeout(prev);
+  const rf = balance.hud.restoreFlash;
+  restoreFlashTimers.set(
+    fillId,
+    window.setTimeout(() => el.classList.remove('restore-blink', 'restore-tip'), rf.cycleMs * rf.blinks + 60),
+  );
+}
 events.on('item_used', (payload) => {
   const info = payload as { kind: ItemKind; healed: number; restored: number; left: number };
   audio.play(ITEM_SOUND[info.kind] ?? 'pickup_potion');
@@ -1454,6 +1478,10 @@ events.on('item_used', (payload) => {
   if (info.healed > 0) parts.push(`+${Math.round(info.healed)} HP`);
   if (info.restored > 0) parts.push(`+${Math.round(info.restored)} 마나`);
   showReaction(`${parts.join('  ')}   (남은 ${info.left}개)`, 1000);
+  // 이 아이템이 만지는 게이지만 깜빡인다 — 이미 가득했으면 끝부분만
+  const idef = itemDef(info.kind);
+  if (idef.heal > 0) flashRestoreBar('status-hp-fill', info.healed <= 0);
+  if (idef.restore > 0) flashRestoreBar('status-mana-fill', info.restored <= 0);
 });
 const DENY_TEXT: Record<string, string> = {
   empty: '빈 퀵슬롯 — Tab 에서 등록한다',
@@ -1779,7 +1807,11 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---- 제단 ----
-events.on('life_mote_absorbed', () => audio.play('pickup'));
+events.on('life_mote_absorbed', (payload) => {
+  audio.play('pickup');
+  const healed = (payload as { healed: number }).healed;
+  flashRestoreBar('status-hp-fill', healed <= 0);
+});
 
 events.on('altar_entered', () => {
   audio.play('altar_enter');
