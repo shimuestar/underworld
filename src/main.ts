@@ -2836,7 +2836,9 @@ function render(alpha: number): void {
     showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest,
   );
   // 상호작용 키 표기 — 한 키 체계라 근접 키를 안내한다 (E 도 여전히 동작한다)
-  const IK = keyLabel('우클릭', 'melee');
+  // 패드는 상호작용 버튼을 보여 준다 — 근접(RT)도 겸하지만("한 키 체계") 안내는
+  // 전용 키가 정직하다. 키보드는 우클릭(근접 겸용)이 관례라 그대로
+  const IK = keyLabel('우클릭', 'interact');
   // 사망 화면 힌트 — 죽은 뒤에 패드를 집거나 내려놔도 표기가 따라온다
   if (world.dead) {
     const dk = keyLabel('Enter', 'interact');
