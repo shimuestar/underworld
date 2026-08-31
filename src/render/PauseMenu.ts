@@ -76,7 +76,7 @@ export class PauseMenu {
         run: actions.loadSave,
       },
       {
-        label: '4. 패드 키 설정',
+        label: '4. 키 설정 (키보드 · 패드)',
         hint: () => '게임패드 버튼을 기능에 건다',
         enabled: () => true,
         run: actions.openGamepad,

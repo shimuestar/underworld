@@ -4,6 +4,7 @@
 
 import { balance } from './Balance';
 import { GamepadInput } from './Gamepad';
+import { keyBindings } from './KeyBindings';
 
 export interface InputSnapshot {
   /** -1(A) ~ +1(D) */
@@ -59,11 +60,7 @@ export interface InputSnapshot {
   useSlot: number;
 }
 
-/** 퀵슬롯 키 — 순서대로 1~5 번 칸 */
-const DIGIT_CODES = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
-const SKILL_CODES = ['KeyZ', 'KeyX', 'KeyC', 'KeyV'];
-/** 반응(패링·방어) 키 — 좌·우 시프트를 한 키로 본다 */
-const SHIFT_CODES = ['ShiftLeft', 'ShiftRight'];
+// 키 코드는 전부 core/KeyBindings 에서 온다 — 설정 화면에서 바꾸면 즉시 여기 반영된다
 
 export class Input {
   /** 패드 입력 — 키보드·마우스와 같은 스냅샷에 얹는다.
@@ -124,33 +121,37 @@ export class Input {
       if (e.repeat) return;
       this.device = 'kb';
       this.keys.add(e.code);
-      // 질주 — 스페이스. 브라우저 기본 스크롤을 막는다
-      if (e.code === 'Space') {
+      const kb = keyBindings;
+      // 질주 — 기본 스페이스. 브라우저 기본 스크롤을 막는다
+      if (e.code === kb.code('sprint')) {
         e.preventDefault();
         this.sprintPresses++;
       }
-      if (e.code === 'KeyF') this.lanternToggles++;
-      if (e.code === 'KeyB') this.batterySwaps++;
-      if (e.code === 'KeyR') this.reloads++;
-      // 스킬 퀵슬롯 Z·X·C·V — 왼손이 WASD 를 떠나지 않는 자리. 마지막에 누른 것 하나만
-      const skill = SKILL_CODES.indexOf(e.code);
+      if (e.code === kb.code('lantern')) this.lanternToggles++;
+      if (e.code === kb.code('battery')) this.batterySwaps++;
+      if (e.code === kb.code('reload')) this.reloads++;
+      // 스킬 퀵슬롯 (기본 Z·X·C·V) — 마지막에 누른 것 하나만
+      const skill = [kb.code('skill1'), kb.code('skill2'), kb.code('skill3'), kb.code('skill4')].indexOf(e.code);
       if (skill >= 0) this.useSkill = skill + 1;
-      if (e.code === 'KeyQ') this.cycleSkills++; // 스킬 교체 — 선택 칸 회전
-      if (e.code === 'KeyE') this.interacts++;
+      if (e.code === kb.code('cycleSkill')) this.cycleSkills++; // 스킬 교체 — 선택 칸 회전
+      if (e.code === kb.code('interact')) this.interacts++;
       // 퀵슬롯 1~5 — 마지막에 누른 것 하나만 남긴다 (한 틱에 두 개를 쓸 일은 없다)
-      const digit = DIGIT_CODES.indexOf(e.code);
+      const digit = [kb.code('slot1'), kb.code('slot2'), kb.code('slot3'), kb.code('slot4'), kb.code('slot5')].indexOf(e.code);
       if (digit >= 0) this.useSlot = digit + 1;
-      // 반응(패링/방어) — 시프트. 누른 순간과 뗀 순간을 모두 엣지로 잡는다.
-      // 좌·우 시프트를 한 키처럼 다룬다: 왼쪽을 쥔 채 오른쪽을 눌렀다 떼도
-      // "손을 뗐다"가 되면 안 되므로, 둘 다 떨어진 순간에만 릴리즈로 친다
-      if (SHIFT_CODES.includes(e.code) && !this.reactionDown) {
+      // 반응(패링/방어) — 기본 시프트. 누른 순간과 뗀 순간을 모두 엣지로 잡는다.
+      // 시프트에 걸었을 땐 좌·우를 한 키처럼 다룬다 (KeyBindings.codesOf)
+      if (kb.codesOf('reaction').includes(e.code) && !this.reactionDown) {
         this.reactionClicks++;
         this.reactionDown = true;
       }
     });
     window.addEventListener('keyup', (e) => {
       this.keys.delete(e.code);
-      if (SHIFT_CODES.includes(e.code) && this.reactionDown && !this.shiftHeld()) {
+      if (
+        keyBindings.codesOf('reaction').includes(e.code) &&
+        this.reactionDown &&
+        !this.shiftHeld()
+      ) {
         this.reactionDown = false;
         this.reactionReleases++;
       }
@@ -232,7 +233,7 @@ export class Input {
   }
 
   private shiftHeld(): boolean {
-    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    return keyBindings.codesOf('reaction').some((c) => this.keys.has(c));
   }
 
   /** 눌린 상태를 전부 해제 — 일시정지·포커스 상실 시 키가 눌린 채 남지 않게 */
@@ -286,7 +287,13 @@ export class Input {
     else if (pad.held('skill2')) padSkillHeld = 2;
     else if (pad.held('skill3')) padSkillHeld = 3;
     else if (pad.held('skill4')) padSkillHeld = 4;
-    const keySkillHeld = SKILL_CODES.findIndex((code) => this.keys.has(code)) + 1;
+    const keySkillHeld =
+      [
+        keyBindings.code('skill1'),
+        keyBindings.code('skill2'),
+        keyBindings.code('skill3'),
+        keyBindings.code('skill4'),
+      ].findIndex((code) => code !== '' && this.keys.has(code)) + 1;
     let padSlot = 0;
     if (pad.pressed('slot1')) padSlot = 1;
     else if (pad.pressed('slot2')) padSlot = 2;
@@ -295,13 +302,17 @@ export class Input {
 
     // 키보드·마우스와 패드를 OR 로 합친다 — 한쪽만 쓰라고 강요할 이유가 없다.
     // 이동은 키(±1)와 스틱(아날로그) 중 더 크게 민 쪽을 쓴다
-    const keyX = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
-    const keyZ = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
+    const keyX =
+      (this.keys.has(keyBindings.code('right')) ? 1 : 0) -
+      (this.keys.has(keyBindings.code('left')) ? 1 : 0);
+    const keyZ =
+      (this.keys.has(keyBindings.code('forward')) ? 1 : 0) -
+      (this.keys.has(keyBindings.code('back')) ? 1 : 0);
     const snapshot: InputSnapshot = {
       moveX: Math.abs(axes.moveX) > Math.abs(keyX) ? axes.moveX : keyX,
       // 스틱 Y 는 위로 밀 때 음수다 — 전진(+)과 부호가 반대라 뒤집는다
       moveForward: Math.abs(axes.moveY) > Math.abs(keyZ) ? -axes.moveY : keyZ,
-      sprint: this.keys.has('Space') || pad.held('sprint'),
+      sprint: this.keys.has(keyBindings.code('sprint')) || pad.held('sprint'),
       sprintPressed: this.sprintPresses > 0,
       // 회피는 패드에선 버튼 하나 — 연타는 스틱·버튼에 어울리는 입력이 아니다
       dodgePressed: pad.pressed('dodge'),

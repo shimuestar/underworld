@@ -14,6 +14,7 @@ import { Minimap } from './render/Minimap';
 import { PauseMenu } from './render/PauseMenu';
 import { GamepadUI } from './render/GamepadUI';
 import { buttonName, type PadAction } from './core/Gamepad';
+import { KEY_ACTIONS, keyBindings, type KeyAction } from './core/KeyBindings';
 import { Stage } from './render/Stage';
 import { grenadeThrowSpeed } from './systems/Weapons';
 import * as PlayerMove from './systems/PlayerMove';
@@ -92,9 +93,11 @@ const input = new Input(app);
 function padBtn(action: PadAction): string {
   return buttonName(input.gamepad.binding(action));
 }
-/** 안내 문구의 키 표기 — 마지막으로 쓴 장치를 따라간다 */
-function keyLabel(kb: string, action: PadAction): string {
-  return input.usingPad ? padBtn(action) : kb;
+/** 안내 문구의 키 표기 — 마지막으로 쓴 장치를 따라간다. 키보드 쪽은 기능 id 면
+ *  현재 설정을 읽고, 'Enter'·'우클릭' 같은 고정 표기는 그대로 보여 준다 */
+function keyLabel(kb: KeyAction | string, action: PadAction): string {
+  if (input.usingPad) return padBtn(action);
+  return KEY_ACTIONS.some((a) => a.id === kb) ? keyBindings.label(kb as KeyAction) : kb;
 }
 
 const world = new World(events, {
@@ -208,7 +211,7 @@ window.addEventListener('keydown', (e) => {
     }
     setUiOpen(skillUI.toggle());
   }
-  if (e.code === 'KeyI') {
+  if (e.code === keyBindings.code('inventory')) {
     if (shopUI.open || world.dead) return;
     skillUI.hide();
     setUiOpen(inventoryUI.toggle());
@@ -217,7 +220,7 @@ window.addEventListener('keydown', (e) => {
 let restartConfirmUntil = 0;
 
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'KeyM') minimap.toggle();
+  if (e.code === keyBindings.code('map')) minimap.toggle();
   // F3 두 번 — 중간 다시 하기 (제단 등록 시 제단에서, 아니면 처음부터)
   if (e.code === 'F3') {
     e.preventDefault();
@@ -1648,7 +1651,7 @@ events.on('item_denied', (payload) => {
     info.kind === 'food' && info.reason === 'full'
       ? '아직 효과가 도는 중이다' // 음식은 만피여도 먹는다 — 막히는 건 중복뿐
       : info.reason === 'empty'
-        ? `빈 퀵슬롯 — ${keyLabel('I', 'inventory')} 에서 등록한다`
+        ? `빈 퀵슬롯 — ${keyLabel('inventory', 'inventory')} 에서 등록한다`
         : (DENY_TEXT[info.reason] ?? info.reason);
   showReaction(`${name ? name + ' — ' : ''}${deny}`, 1100);
 });
@@ -1669,7 +1672,7 @@ let bagFullUntil = 0;
 events.on('inventory_full', () => {
   if (performance.now() < bagFullUntil) return; // 밟고 서 있으면 매 틱 뜬다
   bagFullUntil = performance.now() + 2500;
-  showReaction(`가방이 가득 찼다 — ${keyLabel('I', 'inventory')} 에서 쓰거나 버려야 한다`, 2000);
+  showReaction(`가방이 가득 찼다 — ${keyLabel('inventory', 'inventory')} 에서 쓰거나 버려야 한다`, 2000);
 });
 events.on('gold_picked', (payload) => {
   audio.play('pickup_gold');
