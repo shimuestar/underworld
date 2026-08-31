@@ -19,20 +19,20 @@ export const PAD_ACTIONS = [
   { id: 'cycleWeapon', label: '원거리 무기 교체' },
   { id: 'interact', label: '상호작용 (문 · 제단 · 상자)' },
   { id: 'reload', label: '재장전 / 시위 내리기' },
-  { id: 'cast', label: '선택한 스킬 사용 (가운데 클릭)' },
-  { id: 'cycleSkill', label: '스킬 교체 — 퀵슬롯 회전 (Q)' },
-  { id: 'skill1', label: '스킬 1 (Z)' },
-  { id: 'skill2', label: '스킬 2 (X)' },
-  { id: 'skill3', label: '스킬 3 (C)' },
-  { id: 'skill4', label: '스킬 4 (V)' },
+  { id: 'skillSelect', label: '스킬 선택 — 누른 채 스킬 버튼으로 시전' },
+  { id: 'skill1', label: '스킬 1 (선택 + 이 버튼)' },
+  { id: 'skill2', label: '스킬 2 (선택 + 이 버튼)' },
+  { id: 'skill3', label: '스킬 3 (선택 + 이 버튼)' },
+  { id: 'skill4', label: '스킬 4 (선택 + 이 버튼)' },
+  { id: 'itemSelect', label: '소모품 선택 — 누른 채 D-패드로 사용' },
   { id: 'lantern', label: '랜턴 켜기 · 끄기 (길게 = 배터리 교체)' },
   { id: 'battery', label: '배터리 교체 (기본은 랜턴 길게)' },
   { id: 'inventory', label: '가방 · 스킬 열기' },
   { id: 'pause', label: '일시정지 (메뉴 · 이 설정 화면)' },
-  { id: 'slot1', label: '퀵슬롯 1' },
-  { id: 'slot2', label: '퀵슬롯 2' },
-  { id: 'slot3', label: '퀵슬롯 3' },
-  { id: 'slot4', label: '퀵슬롯 4' },
+  { id: 'slot1', label: '퀵슬롯 1 (선택 + 이 버튼)' },
+  { id: 'slot2', label: '퀵슬롯 2 (선택 + 이 버튼)' },
+  { id: 'slot3', label: '퀵슬롯 3 (선택 + 이 버튼)' },
+  { id: 'slot4', label: '퀵슬롯 4 (선택 + 이 버튼)' },
 ] as const;
 
 export type PadAction = (typeof PAD_ACTIONS)[number]['id'];
@@ -51,14 +51,16 @@ export function buttonName(index: number): string {
   return BUTTON_NAMES[index] ?? `버튼 ${index}`;
 }
 
-/** 기본 매핑 (Xbox 배치 기준).
+/** 기본 매핑 (Xbox 배치 기준) — 칩(조합) 방식 (2026-08-31 개편).
  *  - 가장 많이 쓰는 발사·근접은 오른쪽 트리거·범퍼로
- *  - 패링은 타이밍이 생명이라 트리거(행정 있음)보다 LB 가 낫지만, 방패를 "당겨 든다"는
- *    감각이 LT 쪽이 강해 LT 로 뒀다. 늦게 들어간다고 느끼면 리매핑에서 LB 로 바꾸면 된다
+ *  - 패링은 방패를 "당겨 든다"는 감각이 강한 LT
  *  - 회피는 소울류 관례대로 B
- *  - 퀵슬롯은 D-패드 ↑→↓ 셋 (소모품이 3종류라 충분하다). 남은 ← 는 스킬 교체
+ *  - 스킬: skillSelect(LB)를 누른 채 Y·X·A·B — 회전 선택 대신 직접 시전.
+ *    조합 레이어 중엔 그 버튼들의 평상시 기능(회피·상호작용 등)이 눌리지 않는다
+ *  - 소모품: itemSelect(Y)를 누른 채 D-패드 ↑→↓← = 퀵슬롯 1~4
+ *  - 평상시 D-패드 ← 는 원거리 무기 교체 (LB 를 스킬 선택에 내준 자리)
  *  - 배터리 교체는 R3 를 길게 — 랜턴 조작 둘을 한 버튼에
- *  - View 는 일시정지에 남겨 둔다 — 패드만 쓰는 사람이 메뉴·이 설정 화면에 오는
+ *  - View 는 일시정지에 남겨 둔다 — 패드만 쓰는 사람이 메뉴·키 설정 화면에 오는
  *    유일한 길이라, 다른 기능을 걸면 스스로를 가둔다 */
 export const DEFAULT_BINDINGS: Record<PadAction, number> = {
   ranged: 7, // RT
@@ -66,27 +68,28 @@ export const DEFAULT_BINDINGS: Record<PadAction, number> = {
   reaction: 6, // LT
   dodge: 1, // B
   sprint: 10, // L3
-  cycleWeapon: 4, // LB
+  cycleWeapon: 14, // D-패드 ← (평상시)
   interact: 0, // A
   reload: 2, // X
-  cast: 3, // Y — 선택한 스킬 칸 사용. 칸 직접 지정(skill2~4)은 버튼이 모자라 비워 뒀다
-  cycleSkill: 14, // D-패드 ← — 스킬 칸 회전. 배터리가 있던 자리다
-  skill1: -1,
-  skill2: -1,
-  skill3: -1,
-  skill4: -1,
+  skillSelect: 4, // LB — 누른 채 스킬 버튼
+  skill1: 3, // 선택 + Y
+  skill2: 2, // 선택 + X
+  skill3: 0, // 선택 + A
+  skill4: 1, // 선택 + B
+  itemSelect: 3, // Y (평상시 단독으론 아무 일도 없다) — 누른 채 D-패드
   lantern: 11, // R3
   battery: -1, // 랜턴(R3) 길게 누르기가 맡는다 — 버튼이 모자라 한 버튼에 둘을 얹었다
   inventory: 9, // Menu
   pause: 8, // View — 이게 없으면 패드만 쓰는 사람은 이 설정 화면에 영영 못 온다
-  slot1: 12, // D-패드 ↑
-  slot2: 15, // D-패드 →
-  slot3: 13, // D-패드 ↓
-  slot4: -1, // 자리가 없다. 슬라이스의 소모품은 3종류라 셋이면 충분하고,
-  //             필요하면 이 화면에서 직접 걸면 된다
+  slot1: 12, // 선택 + D-패드 ↑
+  slot2: 15, // 선택 + D-패드 →
+  slot3: 13, // 선택 + D-패드 ↓
+  slot4: 14, // 선택 + D-패드 ←
 };
 
-const STORAGE_KEY = 'underworld.gamepad.bindings';
+// v2 (2026-08-31): 칩(조합) 개편 — 구 저장본(skill1~4 = -1, cast/cycleSkill)이 새 기본값을
+// 덮어쓰면 스킬 조합이 통째로 죽는다. 키를 올려 새 구조로 새로 시작한다
+const STORAGE_KEY = 'underworld.gamepad.bindings.v2';
 
 /** 축 데드존 + 응답 곡선. 중앙부를 눌러 정밀 조준을 살린다 */
 function curve(value: number, deadzone: number, exponent: number): number {

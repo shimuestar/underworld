@@ -39,16 +39,29 @@ beforeEach(() => {
 describe('기본 매핑', () => {
   it('전투에 필요한 기능은 전부 걸려 있다 — 빈 채로 출발하지 않는다', () => {
     for (const { id } of PAD_ACTIONS) {
-      // 퀵슬롯 4번만 예외다 — 버튼이 모자라고 소모품이 3종류뿐이라 비워 뒀다
-      // 버튼이 모자라 비워 둔 것들: 퀵슬롯 4, 스킬 칸 직접 지정, 배터리(랜턴 길게가 맡는다)
-      if (id === 'slot4' || id.startsWith('skill') || id === 'battery') continue;
+      // 배터리만 예외 — 랜턴(R3) 길게 누르기가 맡는다
+      if (id === 'battery') continue;
       expect(DEFAULT_BINDINGS[id]).toBeGreaterThanOrEqual(0);
     }
   });
 
-  it('한 버튼이 두 기능을 겸하지 않는다', () => {
-    const used = Object.values(DEFAULT_BINDINGS).filter((b) => b >= 0);
-    expect(new Set(used).size).toBe(used.length);
+  it('평상시 버튼끼리, 조합 레이어 버튼끼리 겹치지 않는다', () => {
+    // 칩(조합) 방식: 스킬 1~4 는 skillSelect 를 누른 채, 퀵슬롯 1~4 는 itemSelect 를
+    // 누른 채 눌리는 레이어라 평상시 버튼(회피·상호작용 등)과 겹쳐도 된다.
+    // 겹치면 안 되는 것: 평상시끼리 / 같은 레이어 안끼리 / 대상 버튼과 그 레이어의 선택 버튼
+    const skillIds = ['skill1', 'skill2', 'skill3', 'skill4'] as const;
+    const slotIds = ['slot1', 'slot2', 'slot3', 'slot4'] as const;
+    const chord = new Set<string>([...skillIds, ...slotIds]);
+    const plainUsed = PAD_ACTIONS.filter((a) => !chord.has(a.id))
+      .map((a) => DEFAULT_BINDINGS[a.id])
+      .filter((b) => b >= 0);
+    expect(new Set(plainUsed).size).toBe(plainUsed.length);
+    const skills = skillIds.map((id) => DEFAULT_BINDINGS[id]);
+    expect(new Set(skills).size).toBe(skills.length);
+    expect(skills).not.toContain(DEFAULT_BINDINGS.skillSelect); // 선택 버튼과 대상이 같으면 못 누른다
+    const slots = slotIds.map((id) => DEFAULT_BINDINGS[id]);
+    expect(new Set(slots).size).toBe(slots.length);
+    expect(slots).not.toContain(DEFAULT_BINDINGS.itemSelect);
   });
 
   it('Xbox 배치 안의 버튼만 쓴다 (0~15)', () => {
@@ -166,16 +179,16 @@ describe('리매핑', () => {
   it('같은 버튼을 다른 기능에 걸면 먼저 쓰던 쪽이 비워진다', () => {
     // 안 비우면 한 번 눌러 두 기능이 같이 나가 어느 쪽이 의도인지 알 수 없다
     const before = DEFAULT_BINDINGS.melee;
-    pad.bind('cast', before);
-    expect(pad.binding('cast')).toBe(before);
+    pad.bind('skillSelect', before);
+    expect(pad.binding('skillSelect')).toBe(before);
     expect(pad.binding('melee')).toBe(-1);
   });
 
   it('안 걸린 기능(-1)은 어떤 버튼에도 반응하지 않는다', () => {
-    pad.unbind('cast');
+    pad.unbind('skillSelect');
     fakePad(Array.from({ length: 17 }, (_, i) => i)); // 전부 누른다
     pad.poll();
-    expect(pad.held('cast')).toBe(false);
+    expect(pad.held('skillSelect')).toBe(false);
   });
 
   it('기본값으로 되돌린다', () => {
@@ -185,20 +198,20 @@ describe('리매핑', () => {
   });
 
   it('설정이 저장되고 다음 판에 그대로 돌아온다', () => {
-    pad.bind('cast', 14);
+    pad.bind('skillSelect', 14);
     const reloaded = new GamepadInput();
-    expect(reloaded.binding('cast')).toBe(14);
+    expect(reloaded.binding('skillSelect')).toBe(14);
   });
 
   it('저장본이 깨져 있어도 기본값으로 뜬다', () => {
-    localStorage.setItem('underworld.gamepad.bindings', '{{{');
+    localStorage.setItem('underworld.gamepad.bindings.v2', '{{{');
     expect(new GamepadInput().allBindings()).toEqual(DEFAULT_BINDINGS);
   });
 
   it('저장본에 없는 기능은 기본값을 쓴다 — 기능이 늘어도 설정이 안 깨진다', () => {
-    localStorage.setItem('underworld.gamepad.bindings', JSON.stringify({ cast: 14 }));
+    localStorage.setItem('underworld.gamepad.bindings.v2', JSON.stringify({ skillSelect: 14 }));
     const reloaded = new GamepadInput();
-    expect(reloaded.binding('cast')).toBe(14);
+    expect(reloaded.binding('skillSelect')).toBe(14);
     expect(reloaded.binding('ranged')).toBe(DEFAULT_BINDINGS.ranged);
   });
 

@@ -262,10 +262,18 @@ export class Input {
     const padLookX = (axes.lookX * lookMul) / balance.input.mouseSensitivity;
     const padLookY = (axes.lookY * lookMul) / balance.input.mouseSensitivity;
     /** 퀵슬롯 — 패드는 D-패드 4방향까지만 (5번은 자리가 없다) */
+    // 칩(조합) 레이어 — 스킬 선택을 붙들면 스킬 버튼(기본 Y·X·A·B)이 시전이 되고,
+    // 소모품 선택을 붙들면 D-패드가 퀵슬롯이 된다. 레이어 중엔 그 버튼들의
+    // 평상시 기능(회피·상호작용·재장전 등)이 눌리지 않는다 — 시프트 같은 개념.
+    // 두 선택을 같이 누르면 스킬 쪽이 이긴다
+    const skillLayer = pad.held('skillSelect');
+    const itemLayer = !skillLayer && pad.held('itemSelect');
+    const padPlain = !skillLayer && !itemLayer;
+
     // 패드 랜턴 버튼: 짧게 떼면 켜고 끄기, holdTicks 넘게 붙들면 배터리 교체 (한 번만)
     let padLanternTap = false;
     let padLanternHold = false;
-    if (pad.held('lantern')) {
+    if (padPlain && pad.held('lantern')) {
       this.padLanternHeld++;
       if (this.padLanternHeld === balance.input.gamepad.holdTicks) {
         padLanternHold = true;
@@ -277,16 +285,18 @@ export class Input {
       this.padLanternSwapped = false;
     }
     let padSkill = 0;
-    if (pad.pressed('skill1')) padSkill = 1;
-    else if (pad.pressed('skill2')) padSkill = 2;
-    else if (pad.pressed('skill3')) padSkill = 3;
-    else if (pad.pressed('skill4')) padSkill = 4;
-    // 붙들고 있는 스킬 칸 — 채널형 스킬은 엣지가 아니라 이걸 본다
     let padSkillHeld = 0;
-    if (pad.held('skill1')) padSkillHeld = 1;
-    else if (pad.held('skill2')) padSkillHeld = 2;
-    else if (pad.held('skill3')) padSkillHeld = 3;
-    else if (pad.held('skill4')) padSkillHeld = 4;
+    if (skillLayer) {
+      if (pad.pressed('skill1')) padSkill = 1;
+      else if (pad.pressed('skill2')) padSkill = 2;
+      else if (pad.pressed('skill3')) padSkill = 3;
+      else if (pad.pressed('skill4')) padSkill = 4;
+      // 붙들고 있는 스킬 칸 — 채널형 스킬은 엣지가 아니라 이걸 본다
+      if (pad.held('skill1')) padSkillHeld = 1;
+      else if (pad.held('skill2')) padSkillHeld = 2;
+      else if (pad.held('skill3')) padSkillHeld = 3;
+      else if (pad.held('skill4')) padSkillHeld = 4;
+    }
     const keySkillHeld =
       [
         keyBindings.code('skill1'),
@@ -295,10 +305,12 @@ export class Input {
         keyBindings.code('skill4'),
       ].findIndex((code) => code !== '' && this.keys.has(code)) + 1;
     let padSlot = 0;
-    if (pad.pressed('slot1')) padSlot = 1;
-    else if (pad.pressed('slot2')) padSlot = 2;
-    else if (pad.pressed('slot3')) padSlot = 3;
-    else if (pad.pressed('slot4')) padSlot = 4;
+    if (itemLayer) {
+      if (pad.pressed('slot1')) padSlot = 1;
+      else if (pad.pressed('slot2')) padSlot = 2;
+      else if (pad.pressed('slot3')) padSlot = 3;
+      else if (pad.pressed('slot4')) padSlot = 4;
+    }
 
     // 키보드·마우스와 패드를 OR 로 합친다 — 한쪽만 쓰라고 강요할 이유가 없다.
     // 이동은 키(±1)와 스틱(아날로그) 중 더 크게 민 쪽을 쓴다
@@ -315,27 +327,27 @@ export class Input {
       sprint: this.keys.has(keyBindings.code('sprint')) || pad.held('sprint'),
       sprintPressed: this.sprintPresses > 0,
       // 회피는 패드에선 버튼 하나 — 연타는 스틱·버튼에 어울리는 입력이 아니다
-      dodgePressed: pad.pressed('dodge'),
+      dodgePressed: padPlain && pad.pressed('dodge'),
       lookDX: this.dx + padLookX,
       lookDY: this.dy + padLookY,
       lanternToggle: this.lanternToggles > 0 || padLanternTap,
-      batterySwap: this.batterySwaps > 0 || pad.pressed('battery') || padLanternHold,
-      meleePressed: this.meleeClicks > 0 || pad.pressed('melee'),
-      meleeHeld: this.meleeDown || pad.held('melee'),
-      rangedPressed: this.rangedClicks > 0 || pad.pressed('ranged'),
-      rangedHeld: this.rangedDown || pad.held('ranged'),
-      reload: this.reloads > 0 || pad.pressed('reload'),
-      reactionPressed: this.reactionClicks > 0 || pad.pressed('reaction'),
-      reactionHeld: this.reactionDown || pad.held('reaction'),
-      reactionReleased: this.reactionReleases > 0 || pad.released('reaction'),
-      castPressed: this.useSkill !== 0 || padSkill !== 0 || this.useSelected > 0 || pad.pressed('cast'),
+      batterySwap: this.batterySwaps > 0 || (padPlain && pad.pressed('battery')) || padLanternHold,
+      meleePressed: this.meleeClicks > 0 || (padPlain && pad.pressed('melee')),
+      meleeHeld: this.meleeDown || (padPlain && pad.held('melee')),
+      rangedPressed: this.rangedClicks > 0 || (padPlain && pad.pressed('ranged')),
+      rangedHeld: this.rangedDown || (padPlain && pad.held('ranged')),
+      reload: this.reloads > 0 || (padPlain && pad.pressed('reload')),
+      reactionPressed: this.reactionClicks > 0 || (padPlain && pad.pressed('reaction')),
+      reactionHeld: this.reactionDown || (padPlain && pad.held('reaction')),
+      reactionReleased: this.reactionReleases > 0 || (padPlain && pad.released('reaction')),
+      castPressed: this.useSkill !== 0 || padSkill !== 0 || this.useSelected > 0,
       useSkill: this.useSkill !== 0 ? this.useSkill : padSkill,
       skillHeld: keySkillHeld !== 0 ? keySkillHeld : padSkillHeld,
-      selectedSkillHeld: this.useSelectedDown || pad.held('cast'),
-      cycleSkill: this.cycleSkills > 0 || pad.pressed('cycleSkill'),
-      useSelectedSkill: this.useSelected > 0 || pad.pressed('cast'),
-      interactPressed: this.interacts > 0 || pad.pressed('interact'),
-      cycleRanged: this.cycleRanged !== 0 ? this.cycleRanged : pad.pressed('cycleWeapon') ? 1 : 0,
+      selectedSkillHeld: this.useSelectedDown,
+      cycleSkill: this.cycleSkills > 0,
+      useSelectedSkill: this.useSelected > 0,
+      interactPressed: this.interacts > 0 || (padPlain && pad.pressed('interact')),
+      cycleRanged: this.cycleRanged !== 0 ? this.cycleRanged : padPlain && pad.pressed('cycleWeapon') ? 1 : 0,
       useSlot: this.useSlot !== 0 ? this.useSlot : padSlot,
     };
     this.dx = 0;

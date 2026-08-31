@@ -1816,7 +1816,7 @@ events.on('sigil_acquired', (payload) => {
         ? `패시브 — ${PART[def.slot] ?? def.slot}에 새겨졌다`
         : `패시브 — ${PART[def.slot] ?? def.slot}이 차 있다. Tab 에서 바꾼다`
       : typeof info.slot === 'number' && info.slot >= 0
-        ? `액티브 — ${input.usingPad ? `${padBtn('cycleSkill')} 로 골라 ${padBtn('cast')}` : SKILL_KEYS[info.slot]} 로 쓴다`
+        ? `액티브 — ${input.usingPad ? `${padBtn('skillSelect')} + ${padBtn(`skill${info.slot + 1}` as PadAction)}` : SKILL_KEYS[info.slot]} 로 쓴다`
         : '액티브 — Tab 에서 퀵슬롯에 올린다';
   sigilToast.classList.add('visible');
   sigilToastUntil = performance.now() + SIGIL_TOAST_MS;
@@ -2914,7 +2914,7 @@ function render(alpha: number): void {
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     (input.usingPad
       ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 원거리(${padBtn('cycleWeapon')} 교체)  ${padBtn('melee')} 근접·처형·상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
-        `${padBtn('cycleSkill')} 스킬 교체  ${padBtn('cast')} 스킬 사용  D-패드 소모품  ${padBtn('inventory')} 가방→스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴(길게=배터리)  ${padBtn('pause')} 일시정지·키 설정`
+        `${padBtn('skillSelect')}+${padBtn('skill1')}·${padBtn('skill2')}·${padBtn('skill3')}·${padBtn('skill4')} 스킬  ${padBtn('itemSelect')}+D-패드 소모품  ${padBtn('inventory')} 가방→스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴(길게=배터리)  ${padBtn('pause')} 일시정지·키 설정`
       : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형·상호작용  Shift 짧게=패링·꾹=방어\n' +
         'Z·X·C·V 스킬  Q 스킬 교체·휠클릭 사용  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G/U 테스트(U=스킬 전부)');
 
