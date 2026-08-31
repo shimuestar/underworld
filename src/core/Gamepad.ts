@@ -53,34 +53,31 @@ export function buttonName(index: number): string {
   return BUTTON_NAMES[index] ?? `버튼 ${index}`;
 }
 
-/** 기본 매핑 (Xbox 배치 기준) — 칩(조합) 방식 (2026-08-31 개편).
- *  - 가장 많이 쓰는 발사·근접은 오른쪽 트리거·범퍼로
- *  - 패링은 방패를 "당겨 든다"는 감각이 강한 LT
- *  - 회피는 소울류 관례대로 B
- *  - 스킬: skillSelect(LB)를 누른 채 Y·X·A·B — 회전 선택 대신 직접 시전.
+/** 기본 매핑 (Xbox 배치 기준) — 칩(조합) 방식. 2026-08-31 사용자 실측 배치를 기본으로 승격:
+ *  - 발사 = LT · 근접 = RT (당기는 손맛), 반응 = X, 회피 = A, 상호작용 = B, 재장전 = Y
+ *  - 스킬: skillSelect(RB)를 누른 채 Y·B·A·X = 스킬 1~4 — 회전 선택 대신 직접 시전.
  *    조합 레이어 중엔 그 버튼들의 평상시 기능(회피·상호작용 등)이 눌리지 않는다
- *  - 소모품: itemSelect(Y)를 누른 채 D-패드 ↑→↓← = 퀵슬롯 1~4
- *  - 평상시 D-패드 ← 는 원거리 무기 교체 (LB 를 스킬 선택에 내준 자리)
- *  - 배터리 교체는 R3 를 길게 — 랜턴 조작 둘을 한 버튼에
+ *  - 소모품: itemSelect(LB)를 누른 채 D-패드 ↑→↓← = 퀵슬롯 1~4
+ *  - 평상시 D-패드: ← 원거리 무기 교체, ↓ 배터리 교체 (랜턴 R3 길게로도 가능)
  *  - View 는 일시정지에 남겨 둔다 — 패드만 쓰는 사람이 메뉴·키 설정 화면에 오는
  *    유일한 길이라, 다른 기능을 걸면 스스로를 가둔다 */
 export const DEFAULT_BINDINGS: Record<PadAction, number> = {
-  ranged: 7, // RT
-  melee: 5, // RB
-  reaction: 6, // LT
-  dodge: 1, // B
+  ranged: 6, // LT
+  melee: 7, // RT
+  reaction: 2, // X
+  dodge: 0, // A
   sprint: 10, // L3
   cycleWeapon: 14, // D-패드 ← (평상시)
-  interact: 0, // A
-  reload: 2, // X
-  skillSelect: 4, // LB — 누른 채 스킬 버튼
+  interact: 1, // B
+  reload: 3, // Y
+  skillSelect: 5, // RB — 누른 채 스킬 버튼
   skill1: 3, // 선택 + Y
-  skill2: 2, // 선택 + X
+  skill2: 1, // 선택 + B
   skill3: 0, // 선택 + A
-  skill4: 1, // 선택 + B
-  itemSelect: 3, // Y (평상시 단독으론 아무 일도 없다) — 누른 채 D-패드
+  skill4: 2, // 선택 + X
+  itemSelect: 4, // LB — 누른 채 D-패드
   lantern: 11, // R3
-  battery: -1, // 랜턴(R3) 길게 누르기가 맡는다 — 버튼이 모자라 한 버튼에 둘을 얹었다
+  battery: 13, // D-패드 ↓ (평상시). 랜턴(R3) 길게로도 된다
   inventory: 9, // Menu
   pause: 8, // View — 이게 없으면 패드만 쓰는 사람은 이 설정 화면에 영영 못 온다
   slot1: 12, // 선택 + D-패드 ↑

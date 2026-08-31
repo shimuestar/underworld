@@ -76,10 +76,11 @@ describe('기본 매핑', () => {
     expect(DEFAULT_BINDINGS.pause).toBe(8); // View
   });
 
-  it('가장 많이 쓰는 것이 오른쪽 트리거·범퍼에 있다', () => {
-    expect(DEFAULT_BINDINGS.ranged).toBe(7); // RT
-    expect(DEFAULT_BINDINGS.melee).toBe(5); // RB
-    expect(DEFAULT_BINDINGS.reaction).toBe(6); // LT
+  it('발사·근접이 트리거에, 선택(조합) 버튼이 범퍼에 있다 (2026-08-31 사용자 배치)', () => {
+    expect(DEFAULT_BINDINGS.ranged).toBe(6); // LT
+    expect(DEFAULT_BINDINGS.melee).toBe(7); // RT
+    expect(DEFAULT_BINDINGS.skillSelect).toBe(5); // RB
+    expect(DEFAULT_BINDINGS.itemSelect).toBe(4); // LB
   });
 });
 
@@ -185,11 +186,11 @@ describe('리매핑', () => {
   });
 
   it('단독과 조합은 같은 버튼을 나눠 쓴다 — 서로 뺏지 않는다', () => {
-    // 기본값부터가 그렇다: B = 회피(단독) = 스킬 4(조합)
-    expect(DEFAULT_BINDINGS.dodge).toBe(DEFAULT_BINDINGS.skill4);
+    // 기본값부터가 그렇다: A = 회피(단독) = 스킬 3(조합)
+    expect(DEFAULT_BINDINGS.dodge).toBe(DEFAULT_BINDINGS.skill3);
     pad.bind('skill2', DEFAULT_BINDINGS.dodge); // 회피 버튼에 스킬 2를
     expect(pad.binding('dodge')).toBe(DEFAULT_BINDINGS.dodge); // 단독은 그대로
-    expect(pad.binding('skill4')).toBe(-1); // 같은 레이어(스킬끼리)는 뺏긴다
+    expect(pad.binding('skill3')).toBe(-1); // 같은 레이어(스킬끼리)는 뺏긴다
     pad.bind('slot1', DEFAULT_BINDINGS.melee); // 근접 버튼에 퀵슬롯 1을
     expect(pad.binding('melee')).toBe(DEFAULT_BINDINGS.melee); // 단독은 그대로
   });
@@ -202,9 +203,8 @@ describe('리매핑', () => {
   });
 
   it('소모품 선택은 스킬 대상과 겹쳐도 된다 — 스킬 레이어가 우선이라 성립한다', () => {
-    // 기본값부터가 그렇다: Y = 소모품 선택 = 스킬 1
-    expect(DEFAULT_BINDINGS.itemSelect).toBe(DEFAULT_BINDINGS.skill1);
     pad.bind('itemSelect', DEFAULT_BINDINGS.skill2);
+    expect(pad.binding('itemSelect')).toBe(DEFAULT_BINDINGS.skill2);
     expect(pad.binding('skill2')).toBe(DEFAULT_BINDINGS.skill2); // 안 뺏는다
   });
 
