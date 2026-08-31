@@ -2972,10 +2972,10 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
     input.requestLock();
   },
   restart: () => location.reload(),
-  openGamepad: () => {
+  openBindings: (mode) => {
     // 일시정지는 유지한 채 설정 화면만 덮는다 — 닫으면 다시 메뉴로 돌아온다
     pauseMenu.hide();
-    gamepadUI.show();
+    gamepadUI.show(mode);
   },
   loadSave: () => {
     world.dead = false;

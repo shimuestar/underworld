@@ -1,4 +1,4 @@
-// 키 설정 화면 — 키보드와 패드를 한 표에서 따로 설정한다. 일시정지 메뉴에서 연다.
+// 키 설정 화면 — 키보드 화면과 패드 화면을 따로 연다 (일시정지 메뉴의 두 항목).
 //
 // 조작 규약: 줄을 고르고 "설정"에 들어가면 대기 상태가 되고, 그때 누른
 // 키보드 키(키보드 줄) 또는 패드 버튼(패드 줄)이 그 기능에 걸린다.
@@ -20,19 +20,18 @@ import {
 } from '../core/KeyBindings';
 
 const CELL = 'display:flex;gap:12px;padding:4px 10px;align-items:baseline;border-top:1px solid #23232b;';
-const HEADER = 'margin:10px 0 2px;font-size:13px;letter-spacing:1px;';
 
-/** 한 줄 = 한 기능. 키보드 구역(kb)과 패드 구역(pad)을 한 목록으로 잇는다 */
+/** 한 줄 = 한 기능 — 화면 모드에 따라 키보드 목록 또는 패드 목록만 보여 준다 */
 type Row = { kind: 'kb'; id: KeyAction; label: string } | { kind: 'pad'; id: PadAction; label: string };
+export type BindingsMode = 'kb' | 'pad';
 
-const ROWS: Row[] = [
-  ...KEY_ACTIONS.map((a) => ({ kind: 'kb' as const, id: a.id, label: a.label })),
-  ...PAD_ACTIONS.map((a) => ({ kind: 'pad' as const, id: a.id, label: a.label })),
-];
+const KB_ROWS: Row[] = KEY_ACTIONS.map((a) => ({ kind: 'kb' as const, id: a.id, label: a.label }));
+const PAD_ROWS: Row[] = PAD_ACTIONS.map((a) => ({ kind: 'pad' as const, id: a.id, label: a.label }));
 
 export class GamepadUI {
   private readonly root: HTMLDivElement;
   open = false;
+  private mode: BindingsMode = 'pad';
   private selected = 0;
   /** 입력을 기다리는 중인 줄 (null 이면 대기 아님) */
   private capturing: Row | null = null;
@@ -73,7 +72,7 @@ export class GamepadUI {
         this.beginCapture();
       } else if (e.code === 'Delete' || e.code === 'Backspace') {
         e.preventDefault();
-        const row = ROWS[this.selected]!;
+        const row = this.rows()[this.selected]!;
         if (row.kind === 'kb') keyBindings.unbind(row.id);
         else this.pad.unbind(row.id);
         this.rebuild();
@@ -85,12 +84,17 @@ export class GamepadUI {
     });
   }
 
-  show(): void {
+  show(mode: BindingsMode): void {
     this.open = true;
+    this.mode = mode;
     this.selected = 0;
     this.capturing = null;
     this.root.style.display = 'flex';
     this.rebuild();
+  }
+
+  private rows(): Row[] {
+    return this.mode === 'kb' ? KB_ROWS : PAD_ROWS;
   }
 
   hide(): void {
@@ -120,21 +124,21 @@ export class GamepadUI {
     else if (this.pad.rawPressed(1)) { // B — 닫기
       this.hide();
       this.onClose?.();
-    } else if (this.pad.rawPressed(3)) { // Y — 둘 다 기본값으로
-      this.pad.resetToDefaults();
-      keyBindings.resetToDefaults();
+    } else if (this.pad.rawPressed(3)) { // Y — 이 화면의 장치만 기본값으로
+      if (this.mode === 'pad') this.pad.resetToDefaults();
+      else keyBindings.resetToDefaults();
       this.rebuild();
     }
   }
 
   private move(step: number): void {
-    const n = ROWS.length;
+    const n = this.rows().length;
     this.selected = (this.selected + step + n) % n;
     this.rebuild();
   }
 
   private beginCapture(): void {
-    this.capturing = ROWS[this.selected]!;
+    this.capturing = this.rows()[this.selected]!;
     this.rebuild();
   }
 
@@ -144,31 +148,25 @@ export class GamepadUI {
       'background:#15151b;border:1px solid #3a3a44;padding:18px 26px;min-width:560px;max-height:84vh;overflow:auto;';
 
     const title = document.createElement('div');
-    title.textContent = '키 설정 — 키보드 · 패드';
-    title.style.cssText = 'color:#9fe870;margin-bottom:2px;font-size:15px;';
+    if (this.mode === 'kb') {
+      title.textContent = '키보드 키 설정';
+      title.style.cssText = 'color:#8fb7e0;margin-bottom:2px;font-size:15px;';
+    } else {
+      title.textContent = `패드 키 설정   ${this.pad.connected ? '' : '(패드가 연결되지 않았다)'}`;
+      title.style.cssText = `color:${this.pad.connected ? '#9fe870' : '#a05050'};margin-bottom:2px;font-size:15px;`;
+    }
     panel.appendChild(title);
 
     const sub = document.createElement('div');
     sub.textContent =
-      '마우스(좌=원거리 · 우=근접 · 휠클릭=스킬 · 휠=무기)와 스틱(이동 · 시선)은 고정';
+      this.mode === 'kb'
+        ? '마우스(좌=원거리 · 우=근접 · 휠클릭=스킬 · 휠=무기)는 고정'
+        : '이동 = 왼쪽 스틱 · 시선 = 오른쪽 스틱 (고정)';
     sub.style.cssText = 'color:#6c7280;margin-bottom:8px;font-size:11px;';
     panel.appendChild(sub);
 
     let selectedRowEl: HTMLDivElement | null = null;
-    ROWS.forEach((row, i) => {
-      // 구역 머리글 — 키보드/패드 경계에서
-      if (i === 0) {
-        const h = document.createElement('div');
-        h.textContent = '── 키보드 ──';
-        h.style.cssText = HEADER + 'color:#8fb7e0;';
-        panel.appendChild(h);
-      } else if (row.kind === 'pad' && ROWS[i - 1]!.kind === 'kb') {
-        const h = document.createElement('div');
-        h.textContent = `── 패드 ${this.pad.connected ? '' : '(연결되지 않았다)'} ──`;
-        h.style.cssText = HEADER + `color:${this.pad.connected ? '#8fe0a0' : '#a05050'};`;
-        panel.appendChild(h);
-      }
-
+    this.rows().forEach((row, i) => {
       const here = i === this.selected;
       const waiting = this.capturing === row;
       const el = document.createElement('div');
@@ -219,7 +217,7 @@ export class GamepadUI {
 
     const hint = document.createElement('div');
     hint.textContent =
-      '패드: D-패드 ↑↓ 선택 · A 설정 · Y 전부 기본값 · B 닫기   |   ' +
+      '패드: D-패드 ↑↓ 선택 · A 설정 · Y 기본값 · B 닫기   |   ' +
       '키보드: ↑↓ 선택 · Enter 설정 · Delete 해제 · Esc 닫기';
     hint.style.cssText = 'margin-top:12px;color:#6c7280;font-size:11px;';
     panel.appendChild(hint);

@@ -24,8 +24,8 @@ export interface PauseMenuActions {
   restart(): void;
   /** 저장된 곳(제단 체크포인트)에서 시작 */
   loadSave(): void;
-  /** 패드 키 설정 열기 */
-  openGamepad(): void;
+  /** 키 설정 열기 — 키보드 화면 또는 패드 화면 */
+  openBindings(mode: 'kb' | 'pad'): void;
 }
 
 interface MenuItem {
@@ -76,10 +76,16 @@ export class PauseMenu {
         run: actions.loadSave,
       },
       {
-        label: '4. 키 설정 (키보드 · 패드)',
+        label: '4. 키보드 키 설정',
+        hint: () => '키보드 키를 기능에 건다',
+        enabled: () => true,
+        run: () => actions.openBindings('kb'),
+      },
+      {
+        label: '5. 패드 키 설정',
         hint: () => '게임패드 버튼을 기능에 건다',
         enabled: () => true,
-        run: actions.openGamepad,
+        run: () => actions.openBindings('pad'),
       },
     ];
 
