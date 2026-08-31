@@ -109,6 +109,27 @@ export interface PadAxes {
   lookY: number;
 }
 
+const CHORD_SKILLS: readonly PadAction[] = ['skill1', 'skill2', 'skill3', 'skill4'];
+const CHORD_SLOTS: readonly PadAction[] = ['slot1', 'slot2', 'slot3', 'slot4'];
+
+/** 두 기능이 같은 버튼을 나눠 쓸 수 있는가 — 단독(평상시)과 조합(레이어) 하나씩은 공존한다.
+ *  막는 것: 단독끼리 / 같은 레이어 조합끼리 / 선택 버튼과 그 선택이 무력화하는 대상.
+ *  스킬 레이어가 소모품 레이어보다 우선하므로 skillSelect 는 스킬·퀵슬롯 대상 모두와
+ *  못 겹치고, itemSelect 는 스킬 대상과는 겹쳐도 된다 — 기본값(Y = itemSelect = 스킬 1)이 그 예 */
+export function bindingConflicts(a: PadAction, b: PadAction): boolean {
+  const grp = (x: PadAction): 'skill' | 'slot' | 'plain' =>
+    CHORD_SKILLS.includes(x) ? 'skill' : CHORD_SLOTS.includes(x) ? 'slot' : 'plain';
+  const ga = grp(a);
+  const gb = grp(b);
+  if (ga === 'plain' && gb === 'plain') return true; // 단독끼리
+  if (ga === gb) return true; // 같은 레이어 조합끼리
+  const pair = (m: PadAction, g: 'skill' | 'slot'): boolean =>
+    (a === m && gb === g) || (b === m && ga === g);
+  if (pair('skillSelect', 'skill') || pair('skillSelect', 'slot')) return true;
+  if (pair('itemSelect', 'slot')) return true;
+  return false;
+}
+
 export class GamepadInput {
   private bindings: Record<PadAction, number> = { ...DEFAULT_BINDINGS };
   /** 직전 폴링에서 눌려 있던 버튼 — 엣지 계산용 */
@@ -223,8 +244,11 @@ export class GamepadInput {
   /** 같은 버튼을 두 기능에 걸면 먼저 쓰던 쪽을 비운다 — 눌렀는데 둘이 같이 나가면
    *  어느 쪽이 의도인지 알 수 없다. 비워진 쪽은 -1 (안 걸림) */
   bind(action: PadAction, button: number): void {
+    // 충돌하는 기능만 뺏는다 — 단독(평상시)과 조합(레이어)은 같은 버튼을 나눠 쓴다
     for (const key of Object.keys(this.bindings) as PadAction[]) {
-      if (key !== action && this.bindings[key] === button) this.bindings[key] = -1;
+      if (key !== action && this.bindings[key] === button && bindingConflicts(action, key)) {
+        this.bindings[key] = -1;
+      }
     }
     this.bindings[action] = button;
     this.save();

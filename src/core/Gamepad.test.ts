@@ -176,12 +176,36 @@ describe('리매핑', () => {
     expect(pad.binding('ranged')).toBe(0);
   });
 
-  it('같은 버튼을 다른 기능에 걸면 먼저 쓰던 쪽이 비워진다', () => {
+  it('같은 버튼을 다른 단독 기능에 걸면 먼저 쓰던 쪽이 비워진다', () => {
     // 안 비우면 한 번 눌러 두 기능이 같이 나가 어느 쪽이 의도인지 알 수 없다
     const before = DEFAULT_BINDINGS.melee;
     pad.bind('skillSelect', before);
     expect(pad.binding('skillSelect')).toBe(before);
     expect(pad.binding('melee')).toBe(-1);
+  });
+
+  it('단독과 조합은 같은 버튼을 나눠 쓴다 — 서로 뺏지 않는다', () => {
+    // 기본값부터가 그렇다: B = 회피(단독) = 스킬 4(조합)
+    expect(DEFAULT_BINDINGS.dodge).toBe(DEFAULT_BINDINGS.skill4);
+    pad.bind('skill2', DEFAULT_BINDINGS.dodge); // 회피 버튼에 스킬 2를
+    expect(pad.binding('dodge')).toBe(DEFAULT_BINDINGS.dodge); // 단독은 그대로
+    expect(pad.binding('skill4')).toBe(-1); // 같은 레이어(스킬끼리)는 뺏긴다
+    pad.bind('slot1', DEFAULT_BINDINGS.melee); // 근접 버튼에 퀵슬롯 1을
+    expect(pad.binding('melee')).toBe(DEFAULT_BINDINGS.melee); // 단독은 그대로
+  });
+
+  it('선택 버튼은 제 레이어의 대상과 못 겹친다 — 걸면 대상이 비워진다', () => {
+    pad.bind('skillSelect', DEFAULT_BINDINGS.skill1);
+    expect(pad.binding('skill1')).toBe(-1); // 선택 = 대상이면 그 조합은 못 누른다
+    pad.bind('itemSelect', pad.binding('slot2'));
+    expect(pad.binding('slot2')).toBe(-1);
+  });
+
+  it('소모품 선택은 스킬 대상과 겹쳐도 된다 — 스킬 레이어가 우선이라 성립한다', () => {
+    // 기본값부터가 그렇다: Y = 소모품 선택 = 스킬 1
+    expect(DEFAULT_BINDINGS.itemSelect).toBe(DEFAULT_BINDINGS.skill1);
+    pad.bind('itemSelect', DEFAULT_BINDINGS.skill2);
+    expect(pad.binding('skill2')).toBe(DEFAULT_BINDINGS.skill2); // 안 뺏는다
   });
 
   it('안 걸린 기능(-1)은 어떤 버튼에도 반응하지 않는다', () => {

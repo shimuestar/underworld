@@ -241,7 +241,10 @@ export class GamepadUI {
 
     const note = document.createElement('div');
     note.textContent =
-      '같은 키(버튼)를 다른 기능에 걸면 먼저 쓰던 쪽이 (없음)이 된다. 설정은 이 브라우저에 저장된다.';
+      this.mode === 'kb'
+        ? '같은 키를 다른 기능에 걸면 먼저 쓰던 쪽이 (없음)이 된다. 설정은 이 브라우저에 저장된다.'
+        : '단독 기능과 조합 기능은 같은 버튼을 나눠 쓸 수 있다 (예: B = 회피 · 선택+B = 스킬 4). ' +
+          '단독끼리·같은 조합끼리 겹치면 먼저 쓰던 쪽이 (없음)이 된다. 설정은 이 브라우저에 저장된다.';
     note.style.cssText = 'margin-top:4px;color:#555c66;font-size:11px;';
     panel.appendChild(note);
 
