@@ -2940,8 +2940,11 @@ function render(alpha: number): void {
 let padMenuRepeat = 0;
 function pollPadWhilePaused(): void {
   const pad = input.gamepad;
-  if (!pad.connected) return;
+  // 폴링을 먼저 — 끊겼다 다시 꽂힌 패드는 폴링해야 비로소 잡힌다.
+  // connected 를 먼저 보면(구 코드) 일시정지 중 끊긴 패드를 영영 다시 못 알아본다:
+  // 패드가 빠지면 게임이 멈추고, 멈춘 동안엔 여기 말고는 폴링할 곳이 없다
   pad.poll();
+  if (!pad.connected) return;
   if (gamepadUI.open) {
     gamepadUI.poll();
     return;
