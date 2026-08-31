@@ -81,6 +81,7 @@ const deathHint = document.getElementById('death-hint');
 const flashOverlay = document.getElementById('flash');
 const hurtOverlay = document.getElementById('hurt');
 const altarPrompt = document.getElementById('altar-prompt');
+const interactKeyEl = document.getElementById('interact-key');
 if (!app || !hud || !deathOverlay || !deathHint || !flashOverlay || !hurtOverlay || !altarPrompt)
   throw new Error('index.html에 필요한 오버레이 요소가 없다');
 
@@ -2839,6 +2840,8 @@ function render(alpha: number): void {
   // 패드는 상호작용 버튼을 보여 준다 — 근접(RT)도 겸하지만("한 키 체계") 안내는
   // 전용 키가 정직하다. 키보드는 우클릭(근접 겸용)이 관례라 그대로
   const IK = keyLabel('우클릭', 'interact');
+  // 중앙 키캡 — 이번 프레임에 보여 줄 키 (null = 숨김). 문 같은 단순 대상 전용
+  let centerKeycap: string | null = null;
   // 사망 화면 힌트 — 죽은 뒤에 패드를 집거나 내려놔도 표기가 따라온다
   if (world.dead) {
     const dk = keyLabel('Enter', 'interact');
@@ -2860,11 +2863,14 @@ function render(alpha: number): void {
   } else if (nearDoor) {
     // 진행 게이지를 프롬프트 안에 그려 준다 — 손 동작만으로는 얼마나 남았는지 모른다
     const frac = Door.channelFrac(world);
-    altarPrompt!.textContent = world.doorInView!.byLever
-      ? '관문 — 손으로는 안 열린다. 어딘가의 레버를 찾아야 한다'
-      : frac > 0
-        ? `잠금을 푸는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%`
-        : `${IK} — 문을 연다 (누른 채 기다릴 필요 없이 문 앞에 서 있으면 된다)`;
+    if (world.doorInView!.byLever) {
+      altarPrompt!.textContent = '관문 — 손으로는 안 열린다. 어딘가의 레버를 찾아야 한다';
+    } else if (frac > 0) {
+      altarPrompt!.textContent = `잠금을 푸는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%`;
+    } else {
+      // 단순한 문은 중앙 키캡 하나로 — 긴 설명은 소음이다 (사용자 지시)
+      centerKeycap = IK;
+    }
   } else if (onExit) {
     // 마지막 층에서만 "나간다" 다 — 그 앞은 아래층으로 내려가는 계단이다
     const last = floorIndex + 1 >= ZONE.length;
@@ -2878,6 +2884,11 @@ function render(alpha: number): void {
   } else if (onEntrance) {
     altarPrompt!.textContent = `${IK} — 위층으로 올라간다  (${floorIndex}/${ZONE.length})`;
   }
+  if (centerKeycap !== null) {
+    interactKeyEl!.textContent = centerKeycap;
+    altarPrompt!.classList.remove('visible'); // 하단 안내 대신 중앙 키캡만
+  }
+  interactKeyEl!.classList.toggle('visible', centerKeycap !== null);
 
   const w = world.weapon;
   const aliveCount = world.enemies.filter((e) => e.alive).length;

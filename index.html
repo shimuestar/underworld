@@ -99,6 +99,27 @@
       #altar-prompt.visible {
         display: block;
       }
+      /* 중앙 상호작용 키캡 — 문처럼 단순한 대상은 긴 문장 대신 조준점 아래 키 하나만.
+         (복잡한 안내 — 제단·계단·잠금 게이지 — 는 여전히 하단 altar-prompt) */
+      #interact-key {
+        position: fixed;
+        left: 50%;
+        top: calc(50% + 34px);
+        transform: translateX(-50%);
+        display: none;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid rgba(216, 224, 234, 0.65);
+        border-bottom-width: 3px;
+        border-radius: 6px;
+        color: #e8edf2;
+        font: bold 15px/1 monospace;
+        padding: 6px 12px;
+        pointer-events: none;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+      }
+      #interact-key.visible {
+        display: block;
+      }
       /* 각인 획득 — 화면 가운데 위쪽에 잠깐 뜬다. 각인 색을 그대로 입혀
          "바닥에서 본 그 색"과 이어지게 한다 */
       #sigil-toast {
@@ -830,6 +851,7 @@
     <!-- 내용은 PauseMenu 가 만든다 -->
     <div id="pause"></div>
     <div id="altar-prompt"></div>
+    <div id="interact-key"></div>
     <div id="sigil-toast"><div class="name"></div><div class="sub"></div></div>
     <div id="web-overlay"></div>
     <div id="status">
