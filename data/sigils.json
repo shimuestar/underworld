@@ -28,7 +28,7 @@
 
     { "id": "sig_dash",        "name": "돌진 회피", "desc": "회피 거리 1.8배, 무적 12틱",   "slot": "spine",    "tier": "passive", "zone": 1, "slice": true, "color": "#35e07a",  "effects": { "dodgeDistanceMul": 1.8, "iFrameTicks": 12 } },
     { "id": "sig_moment",      "name": "찰나", "desc": "완벽 패링 순간 시간이 느려진다",        "slot": "spine",    "tier": "passive", "zone": 4, "slice": false, "color": "#d9d2c5", "effects": { "slowMoOnPerfectTicks": 24, "timeScale": 0.35 } },
-    { "id": "sig_shadowstep",  "name": "그림자 이동", "desc": "20m 앞으로 순간이동", "slot": "spine",    "tier": "medium",  "zone": 5, "slice": true, "color": "#6d6d9c", "cast": "blink", "effects": { "manaCost": 20, "cooldownTicks": 90, "iframeTicks": 10,  "range": 20 } },
+    { "id": "sig_shadowstep",  "name": "그림자 이동", "desc": "그림자가 되어 20m 를 내달린다 — 달리는 동안 무적, 적이 보지 못한다", "slot": "spine",    "tier": "medium",  "zone": 5, "slice": true, "color": "#6d6d9c", "cast": "blink", "effects": { "manaCost": 20, "cooldownTicks": 90, "iframeTicks": 10,  "range": 20 } },
     { "id": "sig_unchained",   "name": "연쇄 해방", "desc": "연쇄 상한이 사라지고 단계마다 +40%",   "slot": "spine",    "tier": "passive", "zone": 5, "slice": false, "color": "#ffd166", "effects": { "chainCapRemoved": 1, "perTierBonus": 0.4 } },
     { "id": "sig_nofall",      "name": "낙하 무효", "desc": "낙하 피해를 받지 않는다",   "slot": "spine",    "tier": "passive", "zone": 3, "slice": false, "color": "#6fbf73", "effects": { "fallDamageMul": 0 } }
   ]

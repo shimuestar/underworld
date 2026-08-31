@@ -1404,7 +1404,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       // 죽은 척(구울) — 엎어져서 아무것도 보지 않는다. 코앞 기척만 몸으로 느낀다.
       // 소음(alertNearbyAt)·피격(alertEnemy)은 밖에서 깨운다
       if (enemy.feigning) {
-        if (dist <= (def.feignWakeRadius ?? 0)) {
+        // 그림자 질주 중엔 기척도 없다 — 죽은 척 위를 스쳐 지나가도 안 깬다
+        if (dist <= (def.feignWakeRadius ?? 0) && (p.blinkLeft ?? 0) <= 0) {
           alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
           world.events.emit('ghoul_rise', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
           world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type });
@@ -1432,6 +1433,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         dist <= def.tremorSense &&
         Math.hypot(p.x - p.prevX, p.z - p.prevZ) > 1e-4;
       if (
+        (p.blinkLeft ?? 0) <= 0 && // 그림자 질주 — 달리는 동안은 눈·빛·발밑 어느 것에도 안 걸린다
         (lit || tremor || (dist <= def.aggroRange && !blind && seesPlayer(enemy, dist, distX, distZ))) &&
         world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
       ) {

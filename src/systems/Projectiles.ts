@@ -614,31 +614,17 @@ function frostBurst(world: World, cx: number, cz: number, effects: Record<string
   return scale;
 }
 
-/** 그림자 이동 — 보는 방향으로 range 까지 순간이동. 벽에 막히면 그 앞에서 멈춘다.
- *  잠깐 무적이라 포위를 빠져나가는 용도다 */
+/** 그림자 이동 — 순간이동이 아니라 초고속 질주의 '시작'이다. 실제 이동은 PlayerMove 가
+ *  틱마다 소화한다 (blinkSpeed). 달리는 동안 무적이고 적은 그림자를 보지 못한다 —
+ *  도착하면 blinkTailIframes 만큼 무적 꼬리가 남는다 */
 function castBlink(world: World, effects: Record<string, number>): void {
   const p = world.player;
-  const hx = -Math.sin(p.yaw);
-  const hz = -Math.cos(p.yaw);
-  const range = effects['range'] ?? 10;
-  const step = balance.skills.blinkStep;
-  const fromX = p.x;
-  const fromZ = p.z;
-  let travelled = 0;
-  while (travelled < range) {
-    const len = Math.min(step, range - travelled);
-    const bx = p.x;
-    const bz = p.z;
-    world.level.slideMove(p, balance.player.radius, hx * len, hz * len);
-    const moved = Math.hypot(p.x - bx, p.z - bz);
-    if (moved < len * 0.5) break; // 벽 — 더 못 간다
-    travelled += len;
-  }
-  // 보간 잔상 방지 — 이전 위치도 도착점으로 맞춘다 (렌더가 prev→now 를 섞는다)
-  p.prevX = p.x;
-  p.prevZ = p.z;
-  p.iframeTicks = Math.max(p.iframeTicks, effects['iframeTicks'] ?? 0);
-  world.events.emit('blink', { fromX, fromZ, toX: p.x, toZ: p.z, distance: travelled });
+  p.blinkDirX = -Math.sin(p.yaw);
+  p.blinkDirZ = -Math.cos(p.yaw);
+  p.blinkLeft = effects['range'] ?? 10;
+  p.blinkTailIframes = effects['iframeTicks'] ?? 0;
+  p.iframeTicks = Math.max(p.iframeTicks, 2); // 첫 틱부터 무적 — 갱신은 PlayerMove
+  world.events.emit('blink', { fromX: p.x, fromZ: p.z, range: p.blinkLeft });
 }
 
 /** 부순 적 투사체를 배열에서 뺀다. 자기 자신을 먼저 지운 뒤 호출해야 한다 —

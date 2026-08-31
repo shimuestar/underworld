@@ -34,6 +34,25 @@ export function tick(world: World, dt: number): void {
   // 구울에게 붙잡혔다 — 시선만 자유. 이동·질주·밀림 소화는 몸부림(근접 연타)으로 풀릴 때까지 없다
   if (world.grappleEnemyId !== null) return;
 
+  // 그림자 질주(sig_shadowstep) — 시전 방향으로 아주 빠르게 실제로 달린다.
+  // 달리는 동안 매 틱 무적을 갱신하고(적 인지 차단은 Enemies 가 blinkLeft 를 본다),
+  // 벽에 막히면 거기서 끝난다. 몸은 직진뿐 — 시선(위)은 자유다
+  if ((p.blinkLeft ?? 0) > 0) {
+    const step = Math.min(balance.skills.blinkSpeed * dt, p.blinkLeft ?? 0);
+    const bx = p.x;
+    const bz = p.z;
+    world.level.slideMove(p, balance.player.radius, (p.blinkDirX ?? 0) * step, (p.blinkDirZ ?? 0) * step);
+    const moved = Math.hypot(p.x - bx, p.z - bz);
+    p.blinkLeft = moved < step * 0.5 ? 0 : (p.blinkLeft ?? 0) - step;
+    p.iframeTicks = Math.max(p.iframeTicks, 2);
+    if ((p.blinkLeft ?? 0) <= 0) {
+      p.blinkLeft = 0;
+      p.iframeTicks = Math.max(p.iframeTicks, p.blinkTailIframes ?? 0);
+      world.events.emit('blink_end', { x: p.x, z: p.z });
+    }
+    return;
+  }
+
   // 거미줄 — 느려지고, 몸부림이 겹을 찢는다(해머 한 스윙 = 한 겹과 같은 값어치):
   // 걷기 3초/질주 1.5초에 한 겹, 회피 대시는 시도하는 순간 한 겹, 가만히 있어도
   // 5초에 한 겹은 느슨해진다. 해머(Weapons)가 여전히 가장 빠른 해제 수단이다

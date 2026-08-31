@@ -2338,16 +2338,24 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slowMoved).toBeLessThan(quickMoved * 0.6);
   });
 
-  it('그림자 이동: 보는 방향으로 날아가되 벽 앞에서 멈추고, 잠깐 무적이다', () => {
+  it('그림자 이동: 순간이동이 아니라 질주 — 과정이 보이고, 내내 무적이며, 도착 무적 꼬리', () => {
     Sigils.acquire(world, 'sig_shadowstep');
     world.mana.value = 100;
     const fx = sigilDef('sig_shadowstep').effects;
-    // +x 벽은 x=28. 22m 떨어져 있으니 range(20) 안에서 멈춘다
     castSlot(1);
-    expect(world.player.x).toBeCloseTo(6 + fx['range']!, 5);
+    expect(world.player.x).toBeLessThan(7); // 시전 틱엔 아직 출발점 — 뽕 하고 안 간다
+    expect(world.player.blinkLeft).toBeCloseTo(fx['range']!, 5);
+    let midway = false;
+    for (let i = 0; i < 60 && (world.player.blinkLeft ?? 0) > 0; i++) {
+      world.input = Input.emptySnapshot();
+      PlayerMove.tick(world, DT);
+      expect(world.player.iframeTicks).toBeGreaterThan(0); // 달리는 내내 무적
+      if (world.player.x > 10 && world.player.x < 22) midway = true;
+    }
+    expect(midway).toBe(true); // 중간 지점을 실제로 지나쳤다 — 이동 과정이 존재한다
+    expect(world.player.x).toBeCloseTo(6 + fx['range']!, 3);
     expect(world.player.z).toBeCloseTo(6, 5);
-    expect(world.player.prevX).toBe(world.player.x); // 보간 잔상 없음
-    expect(world.player.iframeTicks).toBeGreaterThanOrEqual(fx['iframeTicks']!);
+    expect(world.player.iframeTicks).toBeGreaterThanOrEqual(fx['iframeTicks']!); // 도착 꼬리
     expect(world.mana.value).toBe(100 - fx['manaCost']!);
   });
 
@@ -2356,8 +2364,38 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     world.mana.value = 100;
     world.player.x = 20; // 벽(28)까지 8m — range 보다 짧다
     castSlot(1);
+    for (let i = 0; i < 60 && (world.player.blinkLeft ?? 0) > 0; i++) {
+      world.input = Input.emptySnapshot();
+      PlayerMove.tick(world, DT);
+    }
     expect(world.player.x).toBeLessThan(28 - balance.player.radius + 0.01);
     expect(world.player.x).toBeGreaterThan(27);
+  });
+
+  it('그림자 이동: 달리는 동안 적이 그림자를 보지 못한다 — 눈앞을 스쳐도 안 깬다', () => {
+    Sigils.acquire(world, 'sig_shadowstep');
+    world.mana.value = 100;
+    const e = add('goblin_runner', 16, 6); // 시야 16m·정면 — 서 있었다면 바로 들킨다
+    e.ai = 'idle';
+    e.yaw = Math.PI / 2; // -X(플레이어 쪽)를 본다
+    e.homeYaw = Math.PI / 2; // 시야 훑기가 homeYaw 기준으로 yaw 를 덮어쓴다
+    castSlot(1);
+    while ((world.player.blinkLeft ?? 0) > 0) {
+      world.input = Input.emptySnapshot();
+      PlayerMove.tick(world, DT);
+      Enemies.tick(world, DT);
+      expect(e.ai).toBe('idle'); // 코앞을 스쳐 지나가도 모른다
+    }
+    // 질주가 끝나면 다시 보인다 — 앞에 세워 두고 확인
+    world.player.x = 12;
+    world.player.z = 6;
+    world.player.prevX = 12;
+    world.player.prevZ = 6;
+    for (let i = 0; i < balance.enemyAi.noticeDelayTicks + 3; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect((e.ai as string)).not.toBe('idle');
   });
 
   it('스킬 교체(Q): 빈 칸을 건너뛰며 돌고, 끝에서 처음으로 온다', () => {

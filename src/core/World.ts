@@ -49,6 +49,11 @@ export interface PlayerState {
   /** 거미줄 몸부림 게이지 (0~1) — 차면 한 겹을 찢는다 (balance.web.struggle) */
   webStruggle?: number;
   /** 초음파 비명 — 남은 조준 흔들림 틱과 진폭 (박쥐 scream, PlayerMove 가 소비) */
+  /** 그림자 질주(sig_shadowstep) — 남은 거리·방향·도착 무적. PlayerMove 가 소화한다 */
+  blinkLeft?: number;
+  blinkDirX?: number;
+  blinkDirZ?: number;
+  blinkTailIframes?: number;
   aimShakeTicks?: number;
   aimShakeAmp?: number;
   /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */
