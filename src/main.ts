@@ -2604,6 +2604,9 @@ function render(alpha: number): void {
   // 그대로 두면 패드만 쓰는 사람은 멈춘 게임을 풀 방법이 없다 (포인터 락도 못 잡는다).
   // 멈춰 있는 동안에는 여기서 대신 폴링해 메뉴를 조작하게 한다
   if (loop.isPaused) pollPadWhilePaused();
+  // 안전망 — 어쩌다(클릭 등) 일시정지가 풀린 채 키 설정 화면이 남아 있어도
+  // 패드 캡처·탐색은 계속 돌아야 한다. 패드 폴링 자체는 simulate 가 한다
+  else if (gamepadUI.open) gamepadUI.poll();
   runDelayedFx(now);
   if (now - tpsWindowStart >= 1000) {
     measuredTps = tpsWindowTicks / ((now - tpsWindowStart) / 1000);
