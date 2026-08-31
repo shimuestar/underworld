@@ -2386,16 +2386,25 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
       Enemies.tick(world, DT);
       expect(e.ai).toBe('idle'); // 코앞을 스쳐 지나가도 모른다
     }
-    // 질주가 끝나면 다시 보인다 — 앞에 세워 두고 확인
+    // 도착 직후엔 여운(shroudTicks) — 눈앞에 서 있어도 0.5초는 못 알아본다
+    const shroud = sigilDef('sig_shadowstep').effects['shroudTicks']!;
+    expect(world.player.blinkShroudTicks).toBe(shroud);
     world.player.x = 12;
     world.player.z = 6;
     world.player.prevX = 12;
     world.player.prevZ = 6;
-    for (let i = 0; i < balance.enemyAi.noticeDelayTicks + 3; i++) {
+    for (let i = 0; i < shroud - 2; i++) {
       world.input = Input.emptySnapshot();
+      PlayerMove.tick(world, DT);
+      Enemies.tick(world, DT);
+      expect(e.ai).toBe('idle'); // 여운 동안은 여전히 그림자
+    }
+    for (let i = 0; i < balance.enemyAi.noticeDelayTicks + 6; i++) {
+      world.input = Input.emptySnapshot();
+      PlayerMove.tick(world, DT);
       Enemies.tick(world, DT);
     }
-    expect((e.ai as string)).not.toBe('idle');
+    expect((e.ai as string)).not.toBe('idle'); // 여운이 걷히면 다시 보인다
   });
 
   it('스킬 교체(Q): 빈 칸을 건너뛰며 돌고, 끝에서 처음으로 온다', () => {

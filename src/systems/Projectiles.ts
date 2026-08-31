@@ -623,6 +623,7 @@ function castBlink(world: World, effects: Record<string, number>): void {
   p.blinkDirZ = -Math.cos(p.yaw);
   p.blinkLeft = effects['range'] ?? 10;
   p.blinkTailIframes = effects['iframeTicks'] ?? 0;
+  p.blinkShroudAfter = effects['shroudTicks'] ?? 0;
   p.iframeTicks = Math.max(p.iframeTicks, 2); // 첫 틱부터 무적 — 갱신은 PlayerMove
   world.events.emit('blink', { fromX: p.x, fromZ: p.z, range: p.blinkLeft });
 }

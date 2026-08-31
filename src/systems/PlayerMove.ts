@@ -48,10 +48,12 @@ export function tick(world: World, dt: number): void {
     if ((p.blinkLeft ?? 0) <= 0) {
       p.blinkLeft = 0;
       p.iframeTicks = Math.max(p.iframeTicks, p.blinkTailIframes ?? 0);
+      p.blinkShroudTicks = p.blinkShroudAfter ?? 0; // 여운 — 도착 직후 재인지 유예
       world.events.emit('blink_end', { x: p.x, z: p.z });
     }
     return;
   }
+  if ((p.blinkShroudTicks ?? 0) > 0) p.blinkShroudTicks = (p.blinkShroudTicks ?? 0) - 1;
 
   // 거미줄 — 느려지고, 몸부림이 겹을 찢는다(해머 한 스윙 = 한 겹과 같은 값어치):
   // 걷기 3초/질주 1.5초에 한 겹, 회피 대시는 시도하는 순간 한 겹, 가만히 있어도

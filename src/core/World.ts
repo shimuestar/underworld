@@ -54,6 +54,9 @@ export interface PlayerState {
   blinkDirX?: number;
   blinkDirZ?: number;
   blinkTailIframes?: number;
+  /** 도착 후 그림자 여운 — 이 틱 동안은 여전히 적이 못 알아본다 (0.5초 재인지 유예) */
+  blinkShroudTicks?: number;
+  blinkShroudAfter?: number;
   aimShakeTicks?: number;
   aimShakeAmp?: number;
   /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */
