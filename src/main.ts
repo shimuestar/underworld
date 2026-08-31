@@ -12,7 +12,7 @@ import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt, spawnProps } from './level/Spawner';
 import { Minimap } from './render/Minimap';
 import { PauseMenu } from './render/PauseMenu';
-import { GamepadUI } from './render/GamepadUI';
+import { GamepadUI, padDiagramSvg } from './render/GamepadUI';
 import { buttonName, type PadAction } from './core/Gamepad';
 import { KEY_ACTIONS, keyBindings, type KeyAction } from './core/KeyBindings';
 import { Stage } from './render/Stage';
@@ -3002,7 +3002,9 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
     setPaused(false);
     input.requestLock();
   },
-});
+},
+// 패드가 연결돼 있으면 메뉴 오른쪽에 현재 매핑 다이어그램을 함께 띄운다
+() => (input.gamepad.connected ? padDiagramSvg((a) => input.gamepad.binding(a), -1) : null));
 
 function setPaused(paused: boolean): void {
   if (loop.isPaused === paused) return;

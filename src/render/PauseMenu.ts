@@ -39,6 +39,8 @@ interface MenuItem {
 
 export class PauseMenu {
   private readonly panel: HTMLDivElement;
+  /** 오른쪽 패드 다이어그램 — 패드가 연결돼 있을 때만 보인다 */
+  private readonly diagramEl: HTMLDivElement;
   private readonly rows: HTMLDivElement[] = [];
   private readonly labels: HTMLSpanElement[] = [];
   private readonly hints: HTMLSpanElement[] = [];
@@ -51,6 +53,8 @@ export class PauseMenu {
     private readonly root: HTMLElement,
     private readonly world: World,
     actions: PauseMenuActions,
+    /** 현재 패드 매핑의 다이어그램 SVG — 패드 미연결이면 null (main 이 공급) */
+    private readonly padDiagram?: () => string | null,
   ) {
     this.items = [
       {
@@ -90,12 +94,21 @@ export class PauseMenu {
     ];
 
     this.root.textContent = '';
+    // 메뉴 + (패드 연결 시) 오른쪽 다이어그램을 가로로 나란히
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:18px;align-items:flex-start;';
+    this.root.appendChild(row);
     this.panel = document.createElement('div');
     this.panel.className = 'menu';
     this.panel.style.cssText =
       'background:#15151b;border:1px solid #3a3a44;padding:22px 30px;min-width:420px;' +
       'font:13px/1.6 monospace;letter-spacing:0;text-align:left;';
-    this.root.appendChild(this.panel);
+    row.appendChild(this.panel);
+    this.diagramEl = document.createElement('div');
+    this.diagramEl.className = 'menu'; // 클릭이 재개로 새지 않게 — 메뉴 패널과 같은 예외
+    this.diagramEl.style.cssText =
+      'background:#15151b;border:1px solid #3a3a44;padding:14px 16px;display:none;';
+    row.appendChild(this.diagramEl);
 
     const title = document.createElement('div');
     title.textContent = '일시정지';
@@ -212,6 +225,14 @@ export class PauseMenu {
   /** 라벨·설명·선택 표시를 지금 상태에 맞춘다 (DOM 은 생성자에서 한 번만 만든다 —
    *  매번 다시 만들면 마우스가 얹힌 줄이 교체돼 mouseenter 가 다시 터진다) */
   private refresh(): void {
+    // 패드가 연결돼 있으면 오른쪽에 현재 매핑 다이어그램 — 설정을 바꾸고 돌아와도 최신
+    const svg = this.padDiagram?.() ?? null;
+    if (svg) {
+      this.diagramEl.innerHTML = svg;
+      this.diagramEl.style.display = 'block';
+    } else {
+      this.diagramEl.style.display = 'none';
+    }
     this.items.forEach((item, i) => {
       const enabled = item.enabled(this.world);
       const here = enabled && i === this.selected;
