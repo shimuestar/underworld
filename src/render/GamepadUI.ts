@@ -36,6 +36,127 @@ export type BindingsMode = 'kb' | 'pad';
 const KB_ROWS: Row[] = KEY_ACTIONS.map((a) => ({ kind: 'kb' as const, id: a.id, label: a.label }));
 const PAD_ROWS: Row[] = PAD_ACTIONS.map((a) => ({ kind: 'pad' as const, id: a.id, label: a.label }));
 
+/** 다이어그램용 짧은 기능 이름 — 콜아웃 한 줄에 여러 개가 붙는다 */
+const SHORT_LABEL: Record<PadAction, string> = {
+  ranged: '원거리', melee: '근접', reaction: '반응', dodge: '회피', sprint: '질주',
+  cycleWeapon: '무기 교체', interact: '상호작용', reload: '재장전', lantern: '랜턴',
+  battery: '배터리', inventory: '가방', pause: '일시정지',
+  skillSelect: '스킬 선택', skill1: '스킬 1', skill2: '스킬 2', skill3: '스킬 3', skill4: '스킬 4',
+  itemSelect: '소모품 선택', slot1: '퀵슬롯 1', slot2: '퀵슬롯 2', slot3: '퀵슬롯 3', slot4: '퀵슬롯 4',
+};
+
+/** 버튼 이름 축약 — 콜아웃 접두사용 ('D-패드 ↑' → '↑') */
+function shortBtn(index: number): string {
+  return buttonName(index).replace('D-패드 ', '');
+}
+
+/** 엑스박스 패드 다이어그램 SVG — 프리미티브만으로 그린다 (에셋 금지 규칙).
+ *  각 버튼 옆 콜아웃에 지금 걸린 기능들을 적는다: 단독 먼저, 조합(선택+대상)은
+ *  선택 버튼 이름을 접두사로. highlight 버튼은 파랗게 테두리를 두른다 */
+export function padDiagramSvg(bindOf: (a: PadAction) => number, highlight: number): string {
+  // 물리 버튼 → 걸린 기능 라벨들
+  const byButton = new Map<number, string[]>();
+  const add = (b: number, label: string): void => {
+    if (b < 0) return;
+    if (!byButton.has(b)) byButton.set(b, []);
+    byButton.get(b)!.push(label);
+  };
+  const skillSel = bindOf('skillSelect');
+  const itemSel = bindOf('itemSelect');
+  for (const { id } of PAD_ACTIONS) {
+    const b = bindOf(id);
+    if (b < 0) continue;
+    if (id.startsWith('skill') && id !== 'skillSelect') {
+      add(b, `${shortBtn(skillSel)}+${SHORT_LABEL[id]}`);
+    } else if (id.startsWith('slot')) {
+      add(b, `${shortBtn(itemSel)}+${SHORT_LABEL[id]}`);
+    } else {
+      // 단독 기능이 조합보다 먼저 읽히게 앞에 끼운다
+      if (!byButton.has(b)) byButton.set(b, []);
+      byButton.get(b)!.unshift(SHORT_LABEL[id]);
+    }
+  }
+
+  const BTN = '#33333c';
+  const EDGE = '#4a4a55';
+  const TXT = '#cfd2da';
+  const LINE = '#55555f';
+  const parts: string[] = [];
+  const esc = (t: string): string => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  // ── 몸통 (실루엣 — 획 없이 면으로만)
+  parts.push('<rect x="198" y="78" width="244" height="140" rx="36" fill="#26262e"/>');
+  parts.push('<circle cx="230" cy="210" r="56" fill="#26262e"/>');
+  parts.push('<circle cx="410" cy="210" r="56" fill="#26262e"/>');
+
+  // 버튼 기하 — [버튼번호, 종류, 좌표…, 표기]
+  type Shape =
+    | { b: number; kind: 'rect'; x: number; y: number; w: number; h: number; t: string }
+    | { b: number; kind: 'circle'; x: number; y: number; r: number; t: string; fill?: string; dark?: boolean };
+  const shapes: Shape[] = [
+    { b: 6, kind: 'rect', x: 180, y: 14, w: 64, h: 22, t: 'LT' },
+    { b: 7, kind: 'rect', x: 396, y: 14, w: 64, h: 22, t: 'RT' },
+    { b: 4, kind: 'rect', x: 170, y: 46, w: 84, h: 20, t: 'LB' },
+    { b: 5, kind: 'rect', x: 386, y: 46, w: 84, h: 20, t: 'RB' },
+    { b: 10, kind: 'circle', x: 245, y: 128, r: 24, t: 'L3' },
+    { b: 11, kind: 'circle', x: 365, y: 200, r: 24, t: 'R3' },
+    { b: 3, kind: 'circle', x: 405, y: 100, r: 13, t: 'Y', fill: '#b9a23f', dark: true },
+    { b: 2, kind: 'circle', x: 377, y: 128, r: 13, t: 'X', fill: '#4f7fc0', dark: true },
+    { b: 1, kind: 'circle', x: 433, y: 128, r: 13, t: 'B', fill: '#c05555', dark: true },
+    { b: 0, kind: 'circle', x: 405, y: 156, r: 13, t: 'A', fill: '#62a852', dark: true },
+    { b: 8, kind: 'circle', x: 304, y: 118, r: 7, t: '' },
+    { b: 9, kind: 'circle', x: 336, y: 118, r: 7, t: '' },
+    { b: 12, kind: 'rect', x: 271, y: 168, w: 24, h: 24, t: '↑' },
+    { b: 14, kind: 'rect', x: 247, y: 192, w: 24, h: 24, t: '←' },
+    { b: 13, kind: 'rect', x: 271, y: 216, w: 24, h: 24, t: '↓' },
+    { b: 15, kind: 'rect', x: 295, y: 192, w: 24, h: 24, t: '→' },
+  ];
+  for (const s of shapes) {
+    const hl = s.b === highlight;
+    const stroke = hl ? '#7fbfff' : EDGE;
+    const sw = hl ? 2.5 : 1;
+    if (s.kind === 'rect') {
+      parts.push(`<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="6" fill="${BTN}" stroke="${stroke}" stroke-width="${sw}"/>`);
+      if (s.t) parts.push(`<text x="${s.x + s.w / 2}" y="${s.y + s.h / 2 + 4}" text-anchor="middle" fill="${TXT}" font-size="11" font-family="monospace">${s.t}</text>`);
+    } else {
+      parts.push(`<circle cx="${s.x}" cy="${s.y}" r="${s.r}" fill="${s.fill ?? BTN}" stroke="${stroke}" stroke-width="${sw}"/>`);
+      if (s.t) parts.push(`<text x="${s.x}" y="${s.y + 4}" text-anchor="middle" fill="${s.dark ? '#101014' : TXT}" font-size="11" font-weight="bold" font-family="monospace">${s.t}</text>`);
+    }
+  }
+  parts.push(`<text x="304" y="137" text-anchor="middle" fill="#8a8f99" font-size="7" font-family="monospace">View</text>`);
+  parts.push(`<text x="336" y="137" text-anchor="middle" fill="#8a8f99" font-size="7" font-family="monospace">Menu</text>`);
+
+  // 콜아웃 — 왼쪽 열(끝 정렬)과 오른쪽 열(시작 정렬). [버튼, 라벨 y, 버튼쪽 선 끝 x·y]
+  const callouts: Array<[number, 'l' | 'r', number, number, number]> = [
+    [6, 'l', 25, 180, 25],
+    [4, 'l', 56, 170, 56],
+    [10, 'l', 128, 221, 128],
+    [12, 'l', 172, 271, 180],
+    [14, 'l', 204, 247, 204],
+    [13, 'l', 236, 271, 228],
+    [15, 'l', 266, 307, 218],
+    [7, 'r', 25, 460, 25],
+    [5, 'r', 56, 470, 56],
+    [3, 'r', 96, 418, 100],
+    [1, 'r', 128, 446, 128],
+    [0, 'r', 158, 418, 156],
+    [2, 'r', 192, 381, 140],
+    [11, 'r', 226, 387, 206],
+    [8, 'r', 258, 306, 126],
+    [9, 'r', 288, 338, 126],
+  ];
+  for (const [b, side, ly, bx, by] of callouts) {
+    const labels = byButton.get(b);
+    if (!labels || labels.length === 0) continue;
+    const tx = side === 'l' ? 145 : 500;
+    const lx = side === 'l' ? 150 : 495;
+    parts.push(`<line x1="${lx}" y1="${ly}" x2="${bx}" y2="${by}" stroke="${LINE}" stroke-width="1"/>`);
+    parts.push(`<text x="${tx}" y="${ly + 3}" text-anchor="${side === 'l' ? 'end' : 'start'}" fill="${TXT}" font-size="10" font-family="monospace">${esc(labels.join(' · '))}</text>`);
+  }
+
+  return `<svg viewBox="0 0 640 340" width="560" style="display:block">${parts.join('')}</svg>`;
+}
+
 export class GamepadUI {
   private readonly root: HTMLDivElement;
   open = false;
@@ -153,7 +274,7 @@ export class GamepadUI {
   private rebuild(): void {
     const panel = document.createElement('div');
     panel.style.cssText =
-      'background:#15151b;border:1px solid #3a3a44;padding:18px 26px;min-width:560px;max-height:84vh;overflow:auto;';
+      'background:#15151b;border:1px solid #3a3a44;padding:18px 26px;min-width:560px;max-height:88vh;overflow:auto;';
 
     const title = document.createElement('div');
     if (this.mode === 'kb') {
@@ -173,6 +294,23 @@ export class GamepadUI {
     sub.style.cssText = 'color:#6c7280;margin-bottom:8px;font-size:11px;';
     panel.appendChild(sub);
 
+    // 패드 모드는 2단 — 왼쪽 목록, 오른쪽 패드 다이어그램 (지금 걸린 키가 그림으로 보인다)
+    let rowsHost: HTMLElement = panel;
+    if (this.mode === 'pad') {
+      const split = document.createElement('div');
+      split.style.cssText = 'display:flex;gap:22px;align-items:flex-start;';
+      rowsHost = document.createElement('div');
+      rowsHost.style.cssText = 'min-width:430px;';
+      const diagram = document.createElement('div');
+      const selRow = this.rows()[this.selected];
+      const hl = selRow && selRow.kind === 'pad' ? this.pad.binding(selRow.id) : -1;
+      diagram.innerHTML = padDiagramSvg((a) => this.pad.binding(a), hl);
+      diagram.style.cssText = 'position:sticky;top:0;';
+      split.appendChild(rowsHost);
+      split.appendChild(diagram);
+      panel.appendChild(split);
+    }
+
     let selectedRowEl: HTMLDivElement | null = null;
     this.rows().forEach((row, i) => {
       if (row.kind === 'pad') {
@@ -181,7 +319,7 @@ export class GamepadUI {
           const h = document.createElement('div');
           h.textContent = headerText;
           h.style.cssText = HEADER;
-          panel.appendChild(h);
+          rowsHost.appendChild(h);
         }
       }
       const here = i === this.selected;
@@ -228,7 +366,7 @@ export class GamepadUI {
       }
       value.style.width = '150px';
       el.appendChild(value);
-      panel.appendChild(el);
+      rowsHost.appendChild(el);
       if (here) selectedRowEl = el;
     });
 
