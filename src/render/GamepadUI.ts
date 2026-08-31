@@ -20,6 +20,14 @@ import {
 } from '../core/KeyBindings';
 
 const CELL = 'display:flex;gap:12px;padding:4px 10px;align-items:baseline;border-top:1px solid #23232b;';
+const HEADER = 'margin:10px 0 2px;font-size:12px;letter-spacing:1px;color:#8fb7e0;';
+
+/** 패드 화면의 그룹 머리글 — 이 기능 줄 앞에 끼워 넣는다 (조합은 묶어서 보여 준다) */
+const PAD_GROUP_HEADERS: Partial<Record<PadAction, string>> = {
+  ranged: '── 기본 ──',
+  skillSelect: '── 스킬 조합 — 선택 버튼 + 스킬 버튼 ──',
+  itemSelect: '── 소모품 조합 — 선택 버튼 + D-패드 ──',
+};
 
 /** 한 줄 = 한 기능 — 화면 모드에 따라 키보드 목록 또는 패드 목록만 보여 준다 */
 type Row = { kind: 'kb'; id: KeyAction; label: string } | { kind: 'pad'; id: PadAction; label: string };
@@ -167,6 +175,15 @@ export class GamepadUI {
 
     let selectedRowEl: HTMLDivElement | null = null;
     this.rows().forEach((row, i) => {
+      if (row.kind === 'pad') {
+        const headerText = PAD_GROUP_HEADERS[row.id];
+        if (headerText) {
+          const h = document.createElement('div');
+          h.textContent = headerText;
+          h.style.cssText = HEADER;
+          panel.appendChild(h);
+        }
+      }
       const here = i === this.selected;
       const waiting = this.capturing === row;
       const el = document.createElement('div');

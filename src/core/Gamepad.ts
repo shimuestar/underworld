@@ -19,20 +19,22 @@ export const PAD_ACTIONS = [
   { id: 'cycleWeapon', label: '원거리 무기 교체' },
   { id: 'interact', label: '상호작용 (문 · 제단 · 상자)' },
   { id: 'reload', label: '재장전 / 시위 내리기' },
-  { id: 'skillSelect', label: '스킬 선택 — 누른 채 스킬 버튼으로 시전' },
-  { id: 'skill1', label: '스킬 1 (선택 + 이 버튼)' },
-  { id: 'skill2', label: '스킬 2 (선택 + 이 버튼)' },
-  { id: 'skill3', label: '스킬 3 (선택 + 이 버튼)' },
-  { id: 'skill4', label: '스킬 4 (선택 + 이 버튼)' },
-  { id: 'itemSelect', label: '소모품 선택 — 누른 채 D-패드로 사용' },
   { id: 'lantern', label: '랜턴 켜기 · 끄기 (길게 = 배터리 교체)' },
   { id: 'battery', label: '배터리 교체 (기본은 랜턴 길게)' },
   { id: 'inventory', label: '가방 · 스킬 열기' },
   { id: 'pause', label: '일시정지 (메뉴 · 이 설정 화면)' },
-  { id: 'slot1', label: '퀵슬롯 1 (선택 + 이 버튼)' },
-  { id: 'slot2', label: '퀵슬롯 2 (선택 + 이 버튼)' },
-  { id: 'slot3', label: '퀵슬롯 3 (선택 + 이 버튼)' },
-  { id: 'slot4', label: '퀵슬롯 4 (선택 + 이 버튼)' },
+  // ── 스킬 조합 — 선택 버튼을 누른 채 대상 버튼 (설정 화면이 이 순서로 묶어 보여 준다)
+  { id: 'skillSelect', label: '스킬 선택 (누른 채 아래 버튼)' },
+  { id: 'skill1', label: '스킬 1 = 선택 + 이 버튼' },
+  { id: 'skill2', label: '스킬 2 = 선택 + 이 버튼' },
+  { id: 'skill3', label: '스킬 3 = 선택 + 이 버튼' },
+  { id: 'skill4', label: '스킬 4 = 선택 + 이 버튼' },
+  // ── 소모품 조합
+  { id: 'itemSelect', label: '소모품 선택 (누른 채 아래 버튼)' },
+  { id: 'slot1', label: '퀵슬롯 1 = 선택 + 이 버튼' },
+  { id: 'slot2', label: '퀵슬롯 2 = 선택 + 이 버튼' },
+  { id: 'slot3', label: '퀵슬롯 3 = 선택 + 이 버튼' },
+  { id: 'slot4', label: '퀵슬롯 4 = 선택 + 이 버튼' },
 ] as const;
 
 export type PadAction = (typeof PAD_ACTIONS)[number]['id'];
