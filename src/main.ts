@@ -2234,22 +2234,18 @@ events.on('boss_staggered', () =>
 // 이제 exit_opened 는 "보스 없는(또는 이미 딴) 층" 의 로드 직후 신호다 — 조용히 안내만
 events.on('exit_opened', () => {
   showReaction('내려가는 계단 — E 로 내려간다', 2200);
+  barsCineArmed = false; // 로드 직후 열림 — 볼 연출이 없다
+  stage.snapBarsUp();
 });
+// 쇠창살 시네마틱 — 주인을 잡는 순간이 아니라 '플레이어가 계단 10m 안에 처음
+// 들어오는 순간' 3초 상승 연출·소리·진동이 시작된다. 멀리서 잡으면 그때는
+// 팡파르만 나오고, 계단에 가 보면 눈앞에서 올라간다 (안 보이던 문제의 답)
+let barsCineArmed = false;
+let barsCineUntil = 0; // 이 시각까지 매 프레임 거리 비례 진동 펄스
 events.on('exit_unlocked', () => {
   unlockedFloors.add(floorIndex); // 오르내려도·부활해도 다시 잠기지 않는다
   showReaction('층의 주인이 쓰러졌다 — 쇠창살이 올라간다', 2600);
-  // 쇠창살 감아올림 — 창살 근처(reach 10m)에서만 들리고 떨린다. 멀면 조용:
-  // 전투가 어디서 끝나든 팡파르(거리 무관)가 처치 자체는 알려 준다
-  const exit = world.level.exitPos;
-  if (!exit) return;
-  const d = Math.hypot(world.player.x - exit.x, world.player.z - exit.z);
-  const cfg = balance.input.gamepad.rumble.barsRise;
-  if (d > cfg.reach) return;
-  const frac = 1 - d / cfg.reach; // 10m 끝은 0 근처 — 겨우 들리고 겨우 떨린다
-  audio.play('bars_rise', { pan: panAt(exit.x, exit.z).pan, vol: Math.max(0.1, frac) });
-  if (input.usingPad && performance.now() >= rumbleHoldUntil) {
-    input.gamepad.rumble(cfg.ms, cfg.strong * frac, cfg.weak * frac);
-  }
+  barsCineArmed = true;
 });
 events.on('exit_locked', (payload) => {
   // E 로 흔들어 봤을 때만 소리를 낸다 — 밟기만 해도 짤그랑거리면 시끄럽다
@@ -2891,9 +2887,18 @@ function render(alpha: number): void {
     world.weapon.ranged === 'bow'
       ? (world.weapon.bowDraw ?? 0) / balance.weapons.bow.maxDrawTicks
       : 0;
-  // 프레임 지속 진동 — 우선순위: (포효 홀드) > 활 당김 > 초음파 떨림 > 저체력 심장박동
+  // 프레임 지속 진동 — 우선순위: (포효 홀드) > 쇠창살 상승 > 활 당김 > 초음파 떨림 > 저체력 심장박동
   if (performance.now() < rumbleHoldUntil) {
     // 포효가 손에 남아 있는 동안은 잔진동이 덮지 않는다
+  } else if (performance.now() < barsCineUntil && !world.paused && input.usingPad) {
+    // 쇠창살이 감겨 올라가는 3초 — 현재 거리에 비례해 손이 떨린다 (다가갈수록 진하게)
+    const exit = world.level.exitPos;
+    const cfg = balance.input.gamepad.rumble.barsRise;
+    if (exit) {
+      const d = Math.hypot(world.player.x - exit.x, world.player.z - exit.z);
+      const frac = Math.max(cfg.minFrac, Math.min(1, 1 - d / cfg.reach));
+      input.gamepad.rumble(cfg.pulseMs, cfg.strong * frac, cfg.weak * frac);
+    }
   } else if (bowDrawFrac > 0 && !world.paused) {
     padRumbleScaled('draw', 0.15 + 0.85 * bowDrawFrac); // 당길수록 굵게
   } else if ((world.player.aimShakeTicks ?? 0) > 0 && !world.paused && !world.dead) {
@@ -2964,6 +2969,22 @@ function render(alpha: number): void {
   }
   stage.setCorruptionStage(Math.floor(world.corruption.applied / 12.5));
   stage.setExitOpen(world.exitOpen);
+  // 쇠창살 시네마틱 트리거 — 무장된 채 계단 reach(10m) 안에 들어오면 시작.
+  // 소리 볼륨은 그 순간의 거리(최소 0.35), 진동은 3초 내내 매 프레임 거리 비례
+  if (barsCineArmed && world.exitOpen) {
+    const exit = world.level.exitPos;
+    if (exit) {
+      const cfg = balance.input.gamepad.rumble.barsRise;
+      const d = Math.hypot(world.player.x - exit.x, world.player.z - exit.z);
+      if (d <= cfg.reach) {
+        barsCineArmed = false;
+        stage.startBarsRise(balance.stairs.barsRiseMs);
+        const frac = Math.max(cfg.minFrac, 1 - d / cfg.reach);
+        audio.play('bars_rise', { pan: panAt(exit.x, exit.z).pan, vol: Math.max(0.35, frac) });
+        barsCineUntil = performance.now() + balance.stairs.barsRiseMs;
+      }
+    }
+  }
   minimap.update(p, world.enemies, alpha, world.exitOpen, world.godMode === true);
 
   stage.setLockOn(world.lockOnId); // 락온 마름모 — 잡힌 적 머리 위

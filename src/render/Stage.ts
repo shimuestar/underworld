@@ -1009,6 +1009,8 @@ export class Stage {
   private levelGroup: THREE.Group | null = null;
   /** 출구 계단을 막은 쇠사슬·자물쇠 — 자물쇠를 따면 사라진다 */
   private exitBars: THREE.Object3D | undefined;
+  private barsAnimStart = 0; // 쇠창살 시네마틱 시작 시각 (0 = 없음)
+  private barsAnimDur = 1;
   /** 쇠창살 상승 진행 0(내려옴)~1(올라감) — 매 프레임 목표로 감긴다 */
   private exitBarsRise = 0;
   /** 내려가는 연출 — 시작 시각(0 이면 안 도는 중) */
@@ -1310,6 +1312,7 @@ export class Stage {
     this.exitLight = group.getObjectByName('exitLight') as THREE.PointLight | undefined;
     this.exitBars = group.getObjectByName('exitBars') ?? undefined;
     this.exitBarsRise = 0;
+    this.barsAnimStart = 0;
     this.exitOpen = null; // 층이 바뀌었다 — 다음 setExitOpen 이 무조건 다시 칠하게
     this.descentStart = 0;
     this.exitOpen = true; // 아래 호출이 실제로 반영되도록 반대값에서 시작
@@ -1381,9 +1384,28 @@ export class Stage {
     });
   }
 
+  /** 쇠창살 시네마틱 — durMs 동안 선형 상승. 이미 다 올라갔으면 아무 일 없다 */
+  startBarsRise(durMs: number): void {
+    if (!this.exitBars || this.exitBarsRise >= 1) return;
+    this.barsAnimStart = performance.now();
+    this.barsAnimDur = Math.max(1, durMs);
+  }
+
+  /** 연출 없이 즉시 올린다 — 보스 없는 층·이미 딴 층의 로드 직후 */
+  snapBarsUp(): void {
+    this.exitBarsRise = 1;
+    this.barsAnimStart = 0;
+    if (this.exitBars) this.exitBars.position.y = 2.55;
+  }
+
   setExitOpen(open: boolean): void {
     if (open === this.exitOpen) return;
     this.exitOpen = open;
+    // 다시 잠긴다(부활 재봉인) — 창살은 즉시 내려온다 (연출은 상승에만 쓴다)
+    if (!open) {
+      this.exitBarsRise = 0;
+      this.barsAnimStart = 0;
+    }
     // 잠김 = 붉게 달아오른 쇠창살, 열림 = 녹색 — '내려갈 수 있다/없다'가 색으로 읽힌다
     const mat = this.exitPad?.material as THREE.MeshLambertMaterial | undefined;
     if (mat) {
@@ -1437,11 +1459,13 @@ export class Stage {
   }
 
   private updateExitLight(now: number): void {
-    // 쇠창살 — 열리면 천천히 감아올리고, 잠기면 내려온다 (부활로 다시 잠길 때).
+    // 쇠창살 — 시네마틱(startBarsRise)이 걸리면 그 시간 동안 선형으로 감아올린다.
     // 다 올라가도 숨기지 않는다 — 상인방(2.9m) 아래로 촉이 매달려 '올라간 쇠창살'로 읽힌다
     if (this.exitBars) {
-      const target = this.exitOpen ? 1 : 0;
-      this.exitBarsRise += (target - this.exitBarsRise) * 0.045;
+      if (this.barsAnimStart > 0) {
+        this.exitBarsRise = Math.min(1, (now - this.barsAnimStart) / this.barsAnimDur);
+        if (this.exitBarsRise >= 1) this.barsAnimStart = 0;
+      }
       this.exitBars.position.y = this.exitBarsRise * 2.55;
     }
     if (!this.exitLight || !this.exitOpen) return;

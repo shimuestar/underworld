@@ -713,16 +713,12 @@ export class GameAudio {
         this.noise(0.2, 0.24, 520, 0.2);
         break;
       case 'bars_rise':
-        // 쇠창살 감아올림 — 윈치 저음이 서서히 조여 오르고, 철컥철컥 걸쇠가 걸린다.
-        // 마지막에 창살이 홈에 안착하는 쿵
-        this.tone(62, 1.5, 'sawtooth', 0.4, 0, 110);
-        this.noise(0.05, 0.55, 2600, 0.0);
-        this.noise(0.05, 0.5, 2400, 0.24);
-        this.noise(0.05, 0.45, 2700, 0.48);
-        this.noise(0.05, 0.4, 2500, 0.72);
-        this.noise(0.05, 0.35, 2300, 0.96);
-        this.tone(130, 0.22, 'square', 0.4, 1.3, 78);
-        this.noise(0.12, 0.5, 800, 1.3);
+        // 쇠창살 감아올림 — 3초 연출(stairs.barsRiseMs)과 길이를 맞춘다.
+        // 윈치 저음이 서서히 조여 오르고 철컥철컥 걸쇠가 8번, 마지막에 안착 쿵
+        this.tone(58, 2.9, 'sawtooth', 0.38, 0, 115);
+        for (let i = 0; i < 8; i++) this.noise(0.05, 0.55 - i * 0.03, 2600 - i * 40, i * 0.34);
+        this.tone(130, 0.25, 'square', 0.45, 2.75, 75);
+        this.noise(0.14, 0.55, 800, 2.75);
         break;
       case 'boss_fanfare':
         // 보스 처치 — 경쾌한 상행 아르페지오 '띠리링' 뒤에 한 음 높이 '딩~'.
