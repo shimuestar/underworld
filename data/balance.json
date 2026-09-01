@@ -37,7 +37,10 @@
         "whiff": { "ms": 40, "strong": 0.08, "weak": 0.22 },
         "interact": { "ms": 55, "strong": 0.2, "weak": 0.35 },
         "hurt": { "ms": 180, "strong": 0.85, "weak": 0.6 },
-        "drain": { "ms": 140, "strong": 0.55, "weak": 0.8 }
+        "drain": { "ms": 140, "strong": 0.55, "weak": 0.8 },
+        "reload": { "ms": 50, "strong": 0.2, "weak": 0.4 },
+        "pickup": { "ms": 35, "strong": 0.08, "weak": 0.3 },
+        "use": { "ms": 90, "strong": 0.2, "weak": 0.45 }
       },
       "_holdNote": "패드 랜턴 버튼을 이만큼 붙들면 배터리 교체다 (짧게는 켜고 끄기). 버튼이 모자라 한 버튼에 둘을 얹었다",
       "holdTicks": 18

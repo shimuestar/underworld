@@ -413,6 +413,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     hitBarrel(barrel, balance.barrel.fuseByHits);
     hitAny = true; // 통을 때린 것도 헛스윙은 아니다
     world.events.emit('barrel_hit', {
+      source: 'melee',
       id: barrel.id,
       hits: barrel.hits,
       fuse: barrel.fuseTicks,

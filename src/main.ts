@@ -98,7 +98,9 @@ function padBtn(action: PadAction): string {
 }
 /** 패드 진동 — 패드로 놀고 있을 때만 (꽂아만 두고 키보드로 노는 사람은 제외) */
 function padRumble(
-  kind: 'hit' | 'heavy' | 'kill' | 'shot' | 'cast' | 'block' | 'parry' | 'whiff' | 'interact' | 'hurt' | 'drain',
+  kind:
+    | 'hit' | 'heavy' | 'kill' | 'shot' | 'cast' | 'block' | 'parry' | 'whiff'
+    | 'interact' | 'hurt' | 'drain' | 'reload' | 'pickup' | 'use',
 ): void {
   if (!input.usingPad) return;
   const r = balance.input.gamepad.rumble[kind];
@@ -759,14 +761,17 @@ events.on('prop_ambush', (payload) => {
   showReaction('안에서 뭔가 튀어나왔다!', 1200);
 });
 events.on('ammo_picked', (payload) => {
+  padRumble('pickup');
   audio.play('reload_end');
   showReaction(`권총탄 +${(payload as { amount: number }).amount}`, 900);
 });
 events.on('grenade_picked', () => {
+  padRumble('pickup');
   audio.play('pickup');
   showReaction('수류탄 +1', 900);
 });
 events.on('battery_picked', () => {
+  padRumble('pickup');
   audio.play('pickup');
   showReaction('랜턴 배터리 +1', 900);
 });
@@ -1194,6 +1199,10 @@ events.on('projectile_broken', (payload) => {
 });
 // 폭발통 — 때리면 통 울리는 소리, 도화선에 불이 붙으면 알려 준다
 events.on('barrel_hit', (payload) => {
+  if ((payload as { source?: string }).source === 'melee') {
+    padRumble('hit'); // 해머로 통을 쳤다 — 기믹과 같은 손맛
+    stage.triggerCameraKick(0.25, 120);
+  }
   const info = payload as { hits: number; fuse: number };
   audio.play('barrel_hit');
   if (info.fuse < 0) return;
@@ -1367,9 +1376,17 @@ events.on('player_damaged', (payload) => {
 });
 events.on('spell_impact', () => audio.play('spell_impact'));
 events.on('sigil_acquired', () => audio.play('pickup'));
+events.on('sigil_acquired', () => padRumble('pickup'));
 events.on('sigil_duplicate', () => audio.play('pickup_gold')); // 각인이 아니라 자원을 먹은 소리
-events.on('reload_started', () => audio.play('reload_start'));
-events.on('reload_finished', () => audio.play('reload_end'));
+events.on('battery_swapped', () => padRumble('reload')); // 전지 갈아 끼우는 철컥
+events.on('reload_started', () => {
+  audio.play('reload_start');
+  padRumble('reload');
+});
+events.on('reload_finished', () => {
+  audio.play('reload_end');
+  padRumble('reload'); // 철컥 — 끝맺음
+});
 let executedThisFrame = false; // 직전 melee_kill 이 처형이었는지 (파편 세기 결정)
 events.on('melee_kill', (payload) => {
   const kill = payload as { execution: boolean; enemyId?: number };
@@ -1483,6 +1500,7 @@ const ITEM_SOUND: Record<string, 'pickup_potion' | 'pickup_mana' | 'pickup_food'
   food: 'pickup_food',
 };
 events.on('item_picked', (payload) => {
+  padRumble('pickup');
   const kind = (payload as { kind: ItemKind }).kind;
   audio.play(ITEM_SOUND[kind] ?? 'pickup_potion');
   const def = itemDef(kind);
@@ -1664,6 +1682,7 @@ function flashRestoreBar(fillId: string, wasFull: boolean): void {
 events.on('item_used', (payload) => {
   const info = payload as { kind: ItemKind; healed: number; restored: number; left: number };
   audio.play(ITEM_SOUND[info.kind] ?? 'pickup_potion');
+  padRumble('use'); // 꿀꺽 — 마시는 손맛
   const parts: string[] = [];
   if (info.healed > 0) parts.push(`+${Math.round(info.healed)} HP`);
   if (info.restored > 0) parts.push(`+${Math.round(info.restored)} 마나`);
@@ -1715,6 +1734,7 @@ events.on('inventory_full', () => {
 });
 events.on('gold_picked', (payload) => {
   audio.play('pickup_gold');
+  padRumble('pickup');
   // HUD 숫자 팝은 흡수 비행이 도착하는 순간 — 지갑에 들어갔다는 인과
   showCenterGain((payload as { amount: number }).amount, 0);
 });
@@ -2011,6 +2031,7 @@ window.addEventListener('keydown', (e) => {
 // ---- 제단 ----
 events.on('life_mote_absorbed', (payload) => {
   audio.play('pickup');
+  padRumble('pickup');
   const healed = (payload as { healed: number }).healed;
   flashRestoreBar('status-hp-fill', healed <= 0);
 });
@@ -2104,7 +2125,10 @@ events.on('exit_locked', (payload) => {
   if ((payload as { tried?: boolean }).tried) audio.play('chain_locked');
 });
 // ---- 잠긴 문 (E 로 직접 연다) ----
-events.on('door_channel_started', () => audio.play('door_touch'));
+events.on('door_channel_started', () => {
+  audio.play('door_touch');
+  padRumble('interact'); // 자물쇠에 손을 댔다
+});
 events.on('door_unlocked', (payload) => {
   const at = payload as { x: number; z: number };
   audio.play('door_slide');
