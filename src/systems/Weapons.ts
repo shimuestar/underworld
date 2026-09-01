@@ -820,6 +820,9 @@ function fire(world: World): void {
   // 피탄 경직 — 잠깐 발이 묶인다. 공격 상태 머신은 그대로 진행되므로
   // 총으로 공격을 끊거나 스턴락할 수는 없다 (패링 게임을 지우지 않는다)
   hit.enemy.flinchTicks = pistol.flinchTicks;
+  // 같은 이유로 총알은 돌진 캔슬(cancelOnHit)도 못 끊는다 — 기준선을 같이 내린다.
+  // 물어뜯기를 끊는 건 활·수류탄·해머·스킬의 몫이다 (2026-09-01 사용자 지시)
+  if (hit.enemy.chargeHealthRef !== undefined) hit.enemy.chargeHealthRef = hit.enemy.health;
   if (hit.enemy.health <= 0) {
     hit.enemy.alive = false;
     // 총기 처치는 마나 0 — 여기서 마나 이벤트를 발행하지 않는다 (하드 룰)

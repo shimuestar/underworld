@@ -1286,6 +1286,22 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(broken).toBe(true);
     expect(g.ai).toBe('recover'); // 고꾸라져 무방비
     expect(g.whiffed).toBe(true); // 반격 창
+    // 총알은 못 끊는다 — Weapons 총격 경로는 피해와 함께 기준선을 내린다 (계약 고정)
+    const g2 = add('ghoul', 13, 6); // 복도 안 — 사거리 [2.6, 8] 안
+    g2.ai = 'chase';
+    let broken2 = false;
+    world.events.on('charge_broken', () => (broken2 = true));
+    for (let i = 0; i < 200 && (g2.ai as string) !== 'windup' && (g2.ai as string) !== 'charging'; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    broken2 = false; // g 죽음 등 다른 이벤트 잡음 제거
+    g2.health -= 5;
+    g2.chargeHealthRef = g2.health; // 총격 경로가 하는 일
+    world.input = Input.emptySnapshot();
+    Enemies.tick(world, DT);
+    expect(broken2).toBe(false); // 총알로는 안 끊긴다
+    expect(g2.attackMode).toBe('charge');
     const hp = world.player.health;
     for (let i = 0; i < 60; i++) {
       world.input = Input.emptySnapshot();
