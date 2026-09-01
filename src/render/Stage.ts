@@ -1187,6 +1187,20 @@ export class Stage {
    *  그 프레임에 알아채는 경우 표시가 통째로 사라진다 (실측으로 확인).
    *  여기 적어 두면 다음 동기화 때 시각 객체가 생기면서 그대로 이어 붙는다 */
   private readonly alertAt = new Map<number, number>();
+  /** 조준(ADS) 줌 진행도 0~1 — setAimZoom 이 매 프레임 목표로 수렴시킨다 */
+  private aimZoomFrac = 0;
+
+  /** 조준 줌 — FOV 를 좁혀 "겨눴다"가 몸에 온다. 떼면 스르르 돌아온다 */
+  setAimZoom(aiming: boolean, fovScale: number, lerp: number): void {
+    const target = aiming ? 1 : 0;
+    this.aimZoomFrac += (target - this.aimZoomFrac) * lerp;
+    if (Math.abs(this.aimZoomFrac - target) < 0.002) this.aimZoomFrac = target;
+    const fov = 75 * (1 - (1 - fovScale) * this.aimZoomFrac);
+    if (Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
+  }
   /** 타겟 락온 — 잡힌 적 id 와 머리 위 마름모 스프라이트 */
   private lockOnTargetId: number | null = null;
   private lockSprite: THREE.Sprite | null = null;

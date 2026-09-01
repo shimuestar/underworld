@@ -38,6 +38,21 @@
         pointer-events: none;
         transition: transform 80ms ease-out, background 80ms linear;
       }
+      /* 조준(LT) — 점 주위로 십자선이 벌어진다. 조준을 풀면 사라진다 */
+      #crosshair .chl {
+        position: absolute;
+        background: rgba(255, 255, 255, 0.85);
+        opacity: 0;
+        transition: opacity 90ms linear;
+        border-radius: 1px;
+      }
+      #crosshair .chl.t { left: 1px; top: -11px; width: 2px; height: 7px; }
+      #crosshair .chl.b { left: 1px; top: 8px; width: 2px; height: 7px; }
+      #crosshair .chl.l { left: -11px; top: 1px; width: 7px; height: 2px; }
+      #crosshair .chl.r { left: 8px; top: 1px; width: 7px; height: 2px; }
+      #crosshair.aim .chl {
+        opacity: 1;
+      }
       /* 패드 에임 어시스트가 표적을 물었다 — 커지고 붉어진다 (걸리는 게 눈에 보인다) */
       #crosshair.lock {
         background: rgba(255, 122, 106, 0.95);
@@ -849,7 +864,7 @@
       <div id="grapple-label">물어뜯긴다! 근접 공격 연타!</div>
     </div>
     <div id="hud"></div>
-    <div id="crosshair"></div>
+    <div id="crosshair"><span class="chl t"></span><span class="chl b"></span><span class="chl l"></span><span class="chl r"></span></div>
     <div id="gain-center"><div id="gain-center-gold"><span class="gc-icon">◆</span><span class="gc-num"></span></div><div id="gain-center-xp"><span class="gc-icon">✦</span><span class="gc-num"></span></div></div>
     <div id="death">
       <div>사망</div>
