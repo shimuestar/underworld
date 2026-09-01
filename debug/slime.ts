@@ -27,6 +27,7 @@ function specimen(
   offsetX: number,
   def: { radius: number; height: number; color: number },
   pose: 'rest' | 'windup' | 'leap',
+  fed = false, // 삼킨 아이템 있음 — 핵이 노랗다 (Stage SLIME_CORE_FULL 과 동일 색)
 ): void {
   const torso = new THREE.Group();
   torso.position.x = offsetX;
@@ -42,13 +43,21 @@ function specimen(
   jelly.position.y = def.height / 2;
   torso.add(jelly);
   const coreMat = new THREE.MeshLambertMaterial({
-    color: new THREE.Color(def.color).multiplyScalar(0.28),
+    color: fed ? new THREE.Color(0xe8c53f) : new THREE.Color(def.color).multiplyScalar(0.28),
   });
+  if (fed) {
+    // Stage 와 동일 — 핵을 젤 위에 덧그린다 (뒤에서 비추면 젤 알파에 녹색으로 먹힌다)
+    coreMat.transparent = true;
+    coreMat.emissive.setHex(0xe8c53f);
+    coreMat.emissiveIntensity = 0.85;
+    bodyMat.depthWrite = false;
+  }
   const core = new THREE.Mesh(
     new THREE.BoxGeometry(def.radius * 0.8, def.height * 0.45, def.radius * 0.8),
     coreMat,
   );
   core.position.y = def.height * 0.42;
+  if (fed) core.renderOrder = 2;
   torso.add(core);
   // ── syncEnemies 꿀렁임 공식과 동일 ──
   const inflate = pose === 'windup' ? 0.3 : pose === 'leap' ? 0.18 : 0;
@@ -105,6 +114,9 @@ specimen(-3.2, SLIME, 'rest');
 specimen(-1.1, SLIME, 'windup');
 specimen(1.0, SLIME, 'leap');
 specimen(2.8, SMALL, 'rest');
+// 배부른 놈 — 핵이 노랗게 빛난다. ?view=fed 가 빈 놈(왼쪽)과 나란히 비춘다
+specimen(5.2, SLIME, 'rest');
+specimen(6.8, SLIME, 'rest', true);
 
 // 점액 장판 — Stage.syncGoo 와 동일 (radius 1.1, 기본 0.28, 마르면 옅어짐)
 for (const [x, frac] of [
@@ -130,6 +142,10 @@ if (view === 'mother') {
   // 어미 눈 검증 — 표본을 정면 눈높이에서 본다
   camera.position.set(-5.6, 1.7, -4.2);
   camera.lookAt(-5.6, 1.0, 0);
+} else if (view === 'fed') {
+  // 식탐 비교 — 빈 배(왼쪽) vs 아이템 삼킨 배(오른쪽, 노란 핵)
+  camera.position.set(6.0, 1.5, -3.4);
+  camera.lookAt(6.0, 0.5, 0);
 } else if (view === 'low') {
   // 플레이어 눈높이 근사 — 실전에서 보이는 각
   camera.position.set(0, 1.6, -4.6);

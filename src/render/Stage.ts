@@ -37,6 +37,9 @@ const ENEMY_COLORS: Record<string, number> = {
 const SPIDER_TYPES = new Set(['spider_small', 'spider_large']);
 /** 슬라임 — 반투명 젤 덩어리. 다리·팔·머리·눈이 없다 (무정형) */
 const SLIME_TYPES = new Set(['slime', 'slime_small', 'slime_mother']);
+// 배부른 슬라임의 핵 — 삼킨 아이템이 있으면 노랗게 비친다 (겉 젤은 그대로 녹색).
+// 죽이면 게워 낸다는 신호라, 플레이어가 '저 놈이 내 물건을 먹었다'를 한눈에 안다
+const SLIME_CORE_FULL = 0xe8c53f;
 const ENEMY_COLOR_FALLBACK = 0x8f3c3c;
 /** 타격 피 색 — 인간형은 검붉게, 특수 체액은 따로. 슬라임류는 몸 색 점액을 그대로 쓴다 */
 const BLOOD_RED = 0x7d1014;
@@ -327,6 +330,13 @@ interface EnemyVisual {
   shieldArrowSlot?: number;
   /** 어미 슬라임 눈알들 — 동공이 플레이어를 따라 도는 눈 그룹 (syncEnemies) */
   motherEyes?: THREE.Group[];
+  /** 슬라임 핵 — 삼킨 게 있으면 syncEnemies 가 노랗게 (핵을 젤 위에 덧그린다) */
+  slimeCore?: {
+    mat: THREE.MeshLambertMaterial;
+    base: number;
+    core: THREE.Mesh;
+    jellyMat: THREE.MeshLambertMaterial;
+  };
   /** 다음 화상 불티를 낼 시각 */
   nextEmberMs: number;
   /** 해머 적중 명멸이 끝나는 시각 */
@@ -2430,6 +2440,7 @@ export class Stage {
     let headMesh: THREE.Mesh | undefined; // 헤드샷 젖힘용 — 거미는 없다
     let leechMats: { mat: THREE.MeshLambertMaterial; mul: number }[] | undefined; // 거머리 위장용
     let motherEyes: THREE.Group[] | undefined; // 어미 슬라임 눈알들 (동공이 플레이어를 따라 돈다)
+    let slimeCore: EnemyVisual['slimeCore'];
     let legsPair: { left: THREE.Group; right: THREE.Group } | undefined;
     // 안광 — 조명이 아니라 자체 발광 눈. 어둠 속에서 멀리서도 "저기 뭔가 있다"가 읽힌다
     const eyes = makeEyeMaterials();
@@ -2484,6 +2495,7 @@ export class Stage {
       );
       core.position.y = def.height * 0.42;
       torso.add(core);
+      slimeCore = { mat: coreMat, base: coreMat.color.getHex(), core, jellyMat: bodyMat };
       // 어미 — 젤 속에 반쯤 묻힌 눈알들. 핵처럼 떠 있고 크기 제각각, 동공은
       // syncEnemies 가 매 프레임 플레이어 쪽으로 돌린다 (몸은 무정형인데 눈만 따라온다)
       if (type === 'slime_mother') {
@@ -2609,6 +2621,7 @@ export class Stage {
       legs: legsPair,
       leechMats,
       motherEyes,
+      slimeCore,
       flashMaterials,
       shieldBaseZ: 0,
       hitFlashUntil: 0,
@@ -3342,6 +3355,25 @@ export class Stage {
         }
         visual.torso.rotation.z = roll;
         visual.torso.scale.y = (enemy.wallWindupTicks ?? 0) > 0 ? 0.7 : 1;
+      }
+
+      // 슬라임 핵 — 삼킨 아이템이 있으면 노랗게 (죽이면 게워 낸다는 표시).
+      // 젤막 알파(0.82)가 핵 기여를 18% 로 깎아 뒤에서 비추는 방식으론 무슨 색을
+      // 넣어도 녹색으로 읽힌다 (실측) — 그래서 배부른 핵만 투명 패스 renderOrder 로
+      // 젤 '위에' 덧그린다. 겉 젤은 손대지 않으니 그대로 녹색이다
+      if (visual.slimeCore) {
+        const sc = visual.slimeCore;
+        const fed = !!enemy.eatenItems?.length;
+        sc.mat.color.setHex(fed ? SLIME_CORE_FULL : sc.base);
+        sc.mat.transparent = fed; // 투명 패스로 넘겨야 젤보다 나중에 그려진다 (opacity 1)
+        sc.core.renderOrder = fed ? 2 : 0;
+        sc.jellyMat.depthWrite = !fed; // 젤 깊이가 남아 있으면 핵이 깊이 판정에서 진다
+        // 발광 — 환경광 0.04 던전에서 스스로 빛나야 노랗게 보인다.
+        // 위 flashMaterials 루프가 상태 발광을 칠한 뒤라, 검정(무상태)일 때만 얹는다
+        if (fed && sc.mat.emissive.getHex() === 0) {
+          sc.mat.emissive.setHex(SLIME_CORE_FULL);
+          sc.mat.emissiveIntensity = 0.85;
+        }
       }
 
       // 어미 슬라임 — 젤 속 눈알들이 일제히 플레이어를 따라 돈다 (무정형 몸에 눈만 산 것)
