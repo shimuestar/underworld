@@ -1360,6 +1360,28 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   const dist = Math.hypot(distX, distZ);
   const attack = currentAttack(def, enemy);
 
+  // 돌진 캔슬(cancelOnHit) — 물어뜯으려 달려드는 몸에 한 발이라도 박히면 끊긴다.
+  // 뒤로 고꾸라져 잠깐 무방비 — 달려오는 구울을 침착하게 쏘는 보상
+  const chargingNow =
+    enemy.attackMode === 'charge' && (enemy.ai === 'windup' || enemy.ai === 'charging');
+  if (chargingNow && def.chargeAttack?.cancelOnHit && enemy.chargeHealthRef !== undefined) {
+    if (enemy.health < enemy.chargeHealthRef) {
+      enemy.chargeHealthRef = undefined;
+      enemy.ai = 'recover';
+      enemy.timer = def.chargeAttack.cancelStaggerTicks ?? 40;
+      enemy.attackFreezeTicks = 0;
+      enemy.whiffed = true; // 끊긴 직후는 무방비 — 반격 창
+      if (dist > 0.001) pushEnemy(enemy, -distX / dist, -distZ / dist, 1.3, 14); // 뒤로 고꾸라진다
+      world.events.emit('charge_broken', {
+        enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z,
+      });
+    } else {
+      enemy.chargeHealthRef = enemy.health;
+    }
+  } else if (!chargingNow) {
+    enemy.chargeHealthRef = undefined;
+  }
+
   // 알아챈 직후 멈칫 — 몸은 플레이어 쪽으로 돌리되 발도 무기도 나가지 않는다.
   // 느낌표가 뜨자마자 달려들면 표시를 읽을 틈이 없다
   if ((enemy.noticeTicks ?? 0) > 0) {
@@ -1546,6 +1568,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       ) {
         enemy.attackMode = 'charge';
         enemy.chargeCooldown = ch.cooldownTicks ?? 0;
+        enemy.chargeHealthRef = enemy.health; // 캔슬 기준 — 개시 순간의 체력
         startWindup(world, enemy, ch);
         world.events.emit('enemy_charge', { enemyId: enemy.id, enemyType: enemy.type, dist });
         break;

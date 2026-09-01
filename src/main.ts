@@ -127,6 +127,15 @@ events.on('web_caught', () => padRumble('webSnag'));
 events.on('web_torn', () => padRumble('webTear'));
 events.on('web_broken', () => padRumble('webSnag'));
 
+// 돌진 캔슬 — 달려들던 물어뜯기가 총알에 끊겼다: 비명 + 불꽃 + 안내
+events.on('charge_broken', (payload) => {
+  const cb = payload as { enemyId: number; x: number; z: number };
+  audio.play('head_shriek', panAt(cb.x, cb.z)); // 고통의 괴성
+  stage.spawnGuardSparks(cb.x, cb.z, 1.2, 0xffa050, 1.6); // 살점이 튀는 주황 불꽃
+  stage.flashEnemyHit(cb.enemyId);
+  showReaction('달려들기를 끊었다!', 1100);
+});
+
 // 타겟 락온 — 걸림/전환은 짧은 철컥, 놓침은 낮은 톤, 허탕은 약한 헛손질
 events.on('lockon_start', () => {
   audio.play('reload_end');

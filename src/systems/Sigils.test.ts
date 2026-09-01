@@ -1269,6 +1269,31 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(moans.length).toBeGreaterThan(0); // 걷기 5틱 뒤 첫 흐느낌
   });
 
+  it('구울 물어뜯기 캔슬 — 달려드는 중 피해를 입으면 끊기고 고꾸라진다', () => {
+    world.player.health = 100000;
+    const g = add('ghoul', 12, 6); // 6m — 달려들기 사거리 [2.6, 8] 안
+    g.ai = 'chase';
+    let broken = false;
+    world.events.on('charge_broken', () => (broken = true));
+    for (let i = 0; i < 200 && (g.ai as string) !== 'windup' && (g.ai as string) !== 'charging'; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect(g.attackMode).toBe('charge'); // 물어뜯기 돌진에 들어갔다
+    g.health -= 5; // 달려드는 몸에 한 발
+    world.input = Input.emptySnapshot();
+    Enemies.tick(world, DT);
+    expect(broken).toBe(true);
+    expect(g.ai).toBe('recover'); // 고꾸라져 무방비
+    expect(g.whiffed).toBe(true); // 반격 창
+    const hp = world.player.health;
+    for (let i = 0; i < 60; i++) {
+      world.input = Input.emptySnapshot();
+      Enemies.tick(world, DT);
+    }
+    expect(world.player.health).toBe(hp); // 끊긴 물어뜯기는 닿지 않는다
+  });
+
   it('구울 살금살금 — 달려들기 사정거리 밖에선 느리게 걷고, 안에선 제 속도로 뛴다', () => {
     const def = enemyDef2('ghoul');
     const stalk = (def as unknown as { stalk: { speedMul: number; untilRange: number } }).stalk;

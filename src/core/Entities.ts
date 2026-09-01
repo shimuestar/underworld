@@ -17,6 +17,10 @@ export interface ProjectileSplashDef {
 }
 
 export interface EnemyAttackDef {
+  /** 참 = 돌진(windup·charging) 중 피해를 입으면 공격이 끊기고 고꾸라진다 (구울 물어뜯기) */
+  cancelOnHit?: boolean;
+  /** 끊겼을 때 뻗는 틱 — 반격 창 */
+  cancelStaggerTicks?: number;
   type: string;
   windupTicks: number;
   recoverTicks: number;
