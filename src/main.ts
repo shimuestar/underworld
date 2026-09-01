@@ -225,6 +225,10 @@ const world = new World(events, {
   level,
 });
 
+// 시작 층(지하 1층)은 loadFloor 를 거치지 않는다 — 봉인 여부를 여기서 한 번 세운다.
+// 이게 없으면 기본값 false 로 남아 첫 틱에 출구가 열려 버린다 (슬라임 보스 생존 중인데도)
+world.exitNeedsKey = world.enemies.some((e) => e.floorBoss || enemyDef(e.type).boss);
+
 const stage = new Stage(app);
 const minimap = new Minimap(level);
 const debugOverlay = new DebugOverlay();

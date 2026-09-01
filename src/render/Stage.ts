@@ -1386,6 +1386,10 @@ export class Stage {
       this.exitLight.color.setHex(open ? COLOR_EXIT_OPEN : COLOR_EXIT_LOCKED);
       this.exitLight.intensity = 0.9;
     }
+    // 창살 발광 — 잠긴 동안만 벌겋게 달아 있다. 열리면 식은 쇠로 매달려 있는다
+    const barMesh = this.exitBars?.children[0] as THREE.Mesh | undefined;
+    const barMat = barMesh?.material as THREE.MeshLambertMaterial | undefined;
+    if (barMat) barMat.emissiveIntensity = open ? 0.06 : 0.4;
     // 열리는 순간 한 번 크게 번쩍인다 — 멀리서도 보이도록. 창살 상승은 매 프레임 감긴다
     if (open) this.exitFlashUntil = performance.now() + EXIT_FLASH_MS;
   }
@@ -1423,12 +1427,12 @@ export class Stage {
   }
 
   private updateExitLight(now: number): void {
-    // 쇠창살 — 열리면 천천히 감아올리고, 잠기면 내려온다 (부활로 다시 잠길 때)
+    // 쇠창살 — 열리면 천천히 감아올리고, 잠기면 내려온다 (부활로 다시 잠길 때).
+    // 다 올라가도 숨기지 않는다 — 상인방(2.9m) 아래로 촉이 매달려 '올라간 쇠창살'로 읽힌다
     if (this.exitBars) {
       const target = this.exitOpen ? 1 : 0;
       this.exitBarsRise += (target - this.exitBarsRise) * 0.045;
-      this.exitBars.position.y = this.exitBarsRise * 2.7;
-      this.exitBars.visible = this.exitBarsRise < 0.995;
+      this.exitBars.position.y = this.exitBarsRise * 2.55;
     }
     if (!this.exitLight || !this.exitOpen) return;
     const left = this.exitFlashUntil - now;

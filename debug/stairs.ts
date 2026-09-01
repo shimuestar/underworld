@@ -44,6 +44,11 @@ const sz = level.spawn.z; // 6
 const ex = level.exitPos!.x; // 10 (칸 [3,2] 중심)
 const ez = level.exitPos!.z; // 14
 const view = new URLSearchParams(location.search).get('view') ?? 'front';
+// ?bars=up — 주인을 잡은 뒤의 그림: 창살이 감겨 올라가 촉만 매달려 있다
+if (new URLSearchParams(location.search).get('bars') === 'up') {
+  const bars = group.getObjectByName('exitBars');
+  if (bars) bars.position.y = 2.55;
+}
 if (view === 'front') {
   // 플레이어가 뒤돌아 입구 계단을 본 그림
   camera.position.set(sx, 1.6, sz + 3.2);
