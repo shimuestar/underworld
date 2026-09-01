@@ -3037,15 +3037,22 @@ function render(alpha: number): void {
   } else if (onExit) {
     // 마지막 층에서만 "나간다" 다 — 그 앞은 아래층으로 내려가는 계단이다
     const last = floorIndex + 1 >= ZONE.length;
+    const stairFrac = world.stairHoldTicks / balance.stairs.holdTicks;
     altarPrompt!.textContent = world.exitNeedsKey
       ? world.hasExitKey
         ? `${IK} — 열쇠로 자물쇠를 연다`
         : '쇠사슬이 잠겨 있다 — 이 층의 주인이 열쇠를 쥐고 있다'
-      : last
-        ? `${IK} — 구역을 벗어난다`
-        : `${IK} — 아래층으로 내려간다  (${floorIndex + 2}/${ZONE.length})`;
+      : stairFrac > 0
+        ? `${last ? '구역을 벗어나는 중' : '내려가는 중'}\n${'█'.repeat(Math.round(stairFrac * 20)).padEnd(20, '░')}  ${Math.round(stairFrac * 100)}%`
+        : last
+          ? `${IK} 길게 — 구역을 벗어난다`
+          : `${IK} 길게 — 아래층으로 내려간다  (${floorIndex + 2}/${ZONE.length})`;
   } else if (onEntrance) {
-    altarPrompt!.textContent = `${IK} — 위층으로 올라간다  (${floorIndex}/${ZONE.length})`;
+    const stairFrac = world.stairHoldTicks / balance.stairs.holdTicks;
+    altarPrompt!.textContent =
+      stairFrac > 0
+        ? `올라가는 중\n${'█'.repeat(Math.round(stairFrac * 20)).padEnd(20, '░')}  ${Math.round(stairFrac * 100)}%`
+        : `${IK} 길게 — 위층으로 올라간다  (${floorIndex}/${ZONE.length})`;
   }
   if (centerKeycap !== null) {
     interactKeyEl!.textContent = centerKeycap;

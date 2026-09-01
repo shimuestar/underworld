@@ -910,6 +910,8 @@ export class World {
 
   /** 소모품 공용 사용 쿨다운 — 한 프레임에 물약을 들이붓지 못하게 */
   itemCooldown = 0;
+  /** 계단 홀드 진행 틱 — 발판에서 상호작용을 붙든 시간. 놓거나 떠나면 0 */
+  stairHoldTicks = 0;
   /** 타겟 락온(R3) — 잡힌 적 id. 추적·전환·해제는 PlayerMove 가 맡는다 */
   lockOnId: number | null = null;
   /** 락온 pitch 오프셋(rad) — 오른스틱 상하로 몸통 위/아래를 고른다. 놓으면 복귀 */

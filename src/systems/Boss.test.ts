@@ -1127,8 +1127,13 @@ describe('출구 (7.4) — 쇠사슬·자물쇠·열쇠', () => {
     expect(world.hasExitKey).toBe(false); // 열쇠는 1회 소모
     expect(world.cleared).toBe(false);
 
-    // 그다음 E 로 내려간다
-    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    // 그다음 E 를 붙들어야 내려간다 — 게이지가 차기 전엔 그대로다
+    for (let i = 0; i < balance.stairs.holdTicks - 1; i++) {
+      world.input = { ...Input.emptySnapshot(), interactHeld: true };
+      Exit.tick(world, DT);
+    }
+    expect(world.cleared).toBe(false); // 아직 덜 붙들었다
+    world.input = { ...Input.emptySnapshot(), interactHeld: true };
     Exit.tick(world, DT);
     world.input = Input.emptySnapshot();
     expect(log).toEqual(['locked', 'locked', 'unlocked', 'cleared']);
@@ -1175,13 +1180,25 @@ describe('출구 (7.4) — 쇠사슬·자물쇠·열쇠', () => {
     world.events.on('floor_ascend', (payload) => up.push(payload));
     world.player.x = world.level.spawn.x;
     world.player.z = world.level.spawn.z;
-    world.input = { ...Input.emptySnapshot(), interactPressed: true };
-    Exit.tick(world, DT);
+    for (let i = 0; i < balance.stairs.holdTicks + 2; i++) {
+      world.input = { ...Input.emptySnapshot(), interactHeld: true };
+      Exit.tick(world, DT);
+    }
     expect(up).toHaveLength(0); // 첫 층 — 올라갈 곳이 없다
     world.canAscend = true;
-    Exit.tick(world, DT);
+    for (let i = 0; i < balance.stairs.holdTicks + 2 && up.length === 0; i++) {
+      world.input = { ...Input.emptySnapshot(), interactHeld: true };
+      Exit.tick(world, DT);
+    }
     world.input = Input.emptySnapshot();
     expect(up).toHaveLength(1);
+    // 붙들다 놓으면 게이지가 사라진다
+    world.input = { ...Input.emptySnapshot(), interactHeld: true };
+    Exit.tick(world, DT);
+    expect(world.stairHoldTicks).toBeGreaterThan(0);
+    world.input = Input.emptySnapshot();
+    Exit.tick(world, DT);
+    expect(world.stairHoldTicks).toBe(0);
   });
 });
 

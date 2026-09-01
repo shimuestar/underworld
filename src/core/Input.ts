@@ -65,6 +65,8 @@ export interface InputSnapshot {
   useSelectedSkill: boolean;
   /** 이번 틱에 상호작용 키(E)가 눌렸는가 (엣지) */
   interactPressed: boolean;
+  /** 상호작용 키를 붙들고 있는가 — 계단 오르내림 같은 홀드 동작용 */
+  interactHeld: boolean;
   /** 원거리 무기 교체 (휠) — -1/0/+1 */
   cycleRanged: number;
   /** 이번 틱에 누른 퀵슬롯 번호 (1~5, 없으면 0) */
@@ -369,6 +371,8 @@ export class Input {
       cycleSkill: this.cycleSkills > 0,
       useSelectedSkill: this.useSelected > 0,
       interactPressed: this.interacts > 0 || (padPlain && pad.pressed('interact')),
+      interactHeld:
+        this.keys.has(keyBindings.code('interact')) || (padPlain && pad.held('interact')),
       cycleRanged: this.cycleRanged !== 0 ? this.cycleRanged : padPlain && pad.pressed('cycleWeapon') ? 1 : 0,
       useSlot: this.useSlot !== 0 ? this.useSlot : padSlot,
     };
@@ -424,6 +428,7 @@ export class Input {
       cycleSkill: false,
       useSelectedSkill: false,
       interactPressed: false,
+      interactHeld: false,
       cycleRanged: 0,
       useSlot: 0,
     };

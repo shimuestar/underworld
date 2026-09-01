@@ -32,14 +32,26 @@ export function init(world: World): void {
 export function tick(world: World, _dt: number): void {
   if (world.cleared) return;
   const p = world.player;
+  // 오르내림은 붙들어야 한다 — 스치듯 눌러 실수로 층을 넘지 않게 (의식적 결정).
+  // 상호작용 키(E·패드 B)든 근접 키(우클릭 — 한 키 체계)든 붙들면 찬다
+  const holding = world.input.interactHeld || world.input.meleeHeld;
+  const HOLD = balance.stairs.holdTicks;
 
   // 입구 발판 — 내려온 계단을 되짚어 위층으로 올라간다
   const spawn = world.level.spawn;
   world.onEntrancePad =
     world.canAscend && Math.hypot(p.x - spawn.x, p.z - spawn.z) <= EXIT_RADIUS;
-  if (world.onEntrancePad && world.input.interactPressed) {
-    world.events.emit('floor_ascend', {});
-    return;
+  if (world.onEntrancePad) {
+    if (holding) {
+      world.stairHoldTicks++;
+      if (world.stairHoldTicks >= HOLD) {
+        world.stairHoldTicks = 0;
+        world.events.emit('floor_ascend', {});
+        return;
+      }
+    } else {
+      world.stairHoldTicks = 0;
+    }
   }
 
   // 자가 회복 — 보스는 죽었는데 자물쇠는 잠겨 있고 열쇠가 손에도 바닥에도 없으면
@@ -70,6 +82,7 @@ export function tick(world: World, _dt: number): void {
   world.onExitPad = dist <= EXIT_RADIUS;
   if (!world.onExitPad) {
     world.exitLockedNotified = false;
+    if (!world.onEntrancePad) world.stairHoldTicks = 0; // 두 발판 다 아니면 게이지 소멸
     return;
   }
 
@@ -92,8 +105,14 @@ export function tick(world: World, _dt: number): void {
     return;
   }
 
-  // 밟는 것만으로는 끝나지 않는다 — 명시적으로 E 를 눌러야 내려간다
-  if (!world.input.interactPressed) return;
+  // 밟는 것만으로는 끝나지 않는다 — 붙들고 있어야 내려간다 (게이지는 main 이 그린다)
+  if (!holding) {
+    world.stairHoldTicks = 0;
+    return;
+  }
+  world.stairHoldTicks++;
+  if (world.stairHoldTicks < HOLD) return;
+  world.stairHoldTicks = 0;
   world.cleared = true;
   world.events.emit('zone_cleared', { tick: world.tick });
 }
