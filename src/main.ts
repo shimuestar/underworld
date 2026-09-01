@@ -107,6 +107,14 @@ function padRumble(
   input.gamepad.rumble(r.ms, r.strong, r.weak);
 }
 
+/** 세기 배율이 붙는 진동 — 활 당김(당길수록 굵게)·놓는 반동(당긴 만큼 굵게) */
+function padRumbleScaled(kind: 'draw' | 'loose', frac: number): void {
+  if (!input.usingPad) return;
+  const r = balance.input.gamepad.rumble[kind];
+  const m = Math.max(0, Math.min(1, frac));
+  input.gamepad.rumble(r.ms, r.strong * m, r.weak * m);
+}
+
 /** 안내 문구의 키 표기 — 마지막으로 쓴 장치를 따라간다. 키보드 쪽은 기능 id 면
  *  현재 설정을 읽고, 'Enter'·'우클릭' 같은 고정 표기는 그대로 보여 준다 */
 function keyLabel(kb: KeyAction | string, action: PadAction): string {
@@ -1769,7 +1777,8 @@ events.on('quiver_full', () => {
   showReaction('화살통이 가득 찼다', 1600);
 });
 events.on('arrow_loosed', (payload) => {
-  padRumble('shot'); // 시위를 놓는 반동
+  // 놓는 반동 — 살짝 당겨 쏘면 약하게, 풀차지는 굵게
+  padRumbleScaled('loose', 0.3 + 0.7 * ((payload as { chargeFrac: number }).chargeFrac ?? 0));
   const shot = payload as { chargeFrac: number; damage: number; remaining: number };
   audio.play('bow_twang');
   stage.triggerRecoil();
@@ -2734,6 +2743,8 @@ function render(alpha: number): void {
     world.weapon.ranged === 'bow'
       ? (world.weapon.bowDraw ?? 0) / balance.weapons.bow.maxDrawTicks
       : 0;
+  // 활 당김 진동 — 당기는 동안 계속, 당길수록 굵게 (매 프레임 갱신해 이어 붙인다)
+  if (bowDrawFrac > 0 && !world.paused) padRumbleScaled('draw', 0.15 + 0.85 * bowDrawFrac);
   // 왼손에 든 원거리 무기 (오른손 해머는 항상 보인다)
   stage.setHandWeapon(world.weapon.ranged);
   stage.updateHands({
