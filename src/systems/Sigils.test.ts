@@ -1482,7 +1482,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(leech.whiffed).toBe(true);
   });
 
-  it('구울 파먹기 — 물리는 동안 피가 닳고, 근접 연타 6번에 밀쳐낸다', () => {
+  it('구울 파먹기 — 물리는 동안 피가 닳고, 근접 연타(mashToEscape)에 밀쳐낸다', () => {
     const g = add('ghoul', 7, 6); // 플레이어(6,6) 코앞
     g.ai = 'latched';
     g.timer = 1; // 다음 틱에 첫 물기

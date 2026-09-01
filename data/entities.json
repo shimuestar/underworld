@@ -41,12 +41,12 @@
       "idleWander": { "radius": 3.5, "speedMul": 0.5, "pauseTicks": 55 },
       "attack": { "type": "contact", "arcDeg": 150, "windupTicks": 13, "recoverTicks": 18, "whiffRecoverTicks": 42, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
       "_leapNote": "도약 — 26틱 × 15 = 6.5m. 예고 시점 좌표로만 날아가므로 옆으로 비키면 헛짚는다. leapHeight 만큼 공중으로 포물선을 그리며 몸을 던진다. 슬라임과 같은 즉발 접촉(적색·회피 전용) — 패링 가능(청색)이던 시절엔 착지 후 판정 창 탓에 점프가 위협적이지 않았다 (2026-08-30)",
-      "chargeAttack": { "type": "contact", "arcDeg": 150, "leapHeight": 1.9, "chargeSpeed": 15, "chargeRunTicks": 26, "minRange": 3.2, "maxRange": 7, "windupTicks": 20, "recoverTicks": 30, "whiffRecoverTicks": 75, "impactRangeMul": 1.25, "playerKnockback": 0.9, "parryable": false, "telegraph": "red", "cooldownTicks": 200 },
+      "chargeAttack": { "type": "contact", "arcDeg": 150, "leapHeight": 1.9, "chargeSpeed": 15, "chargeRunTicks": 26, "minRange": 3.2, "maxRange": 7, "windupTicks": 30, "recoverTicks": 30, "whiffRecoverTicks": 75, "impactRangeMul": 1.25, "playerKnockback": 0.9, "parryable": false, "telegraph": "red", "cooldownTicks": 200 },
       "_wallNote": "벽거미 — 추격 중 벽이 닿으면 붙어 오르고, 벽을 따라 기다가 사거리에 들면 적색 도약으로 덮친다. 예고 시점 좌표로만 날아가 옆 대시가 정답. 붙은 채 맞으면 떨어져 뻗는다. 흰 거미는 지상 유지 (역할 분담)",
       "wallCrawl": {
         "height": 1.9, "speedMul": 0.9, "attachRange": 2.2, "climbTicks": 24,
         "fallTicks": 10, "fallStunTicks": 50, "_reattachNote": "벽에서 내려온 뒤 다시 붙기까지의 지연 — 문 앞에서 붙기/내리기를 반복하는 맴돌이 방지 (2026-08-30)", "reattachDelayTicks": 90,
-        "pounceMinRange": 3, "pounceMaxRange": 7, "pounceWindupTicks": 34, "pounceAirTicks": 18,
+        "pounceMinRange": 3, "pounceMaxRange": 7, "_windupNote": "예고 1.5배 (2026-09-01 — 도약류 준비 동작을 더 보여 준다)", "pounceWindupTicks": 51, "pounceAirTicks": 18,
         "pounceRadius": 1.1, "_dmg1010": "12→13 (2026-08-30 +10%)", "_contactNote": "비행 중 몸이 스치면 그 순간 타격 (2026-08-30 — 관통 노딜 체감 수정). 착지 광역(pounceRadius)과 별개인 몸통 접촉 반경. 조준은 발사 순간 재조준 — 예고 시작 좌표로 던지면 걷기만 해도 다 피해 위협이 없었다. 회피는 비행 0.3초 동안의 대시", "pounceContactRadius": 0.8, "pounceDamage": 13, "pounceKnockback": 1.6,
         "pounceRecoverTicks": 40, "pounceWhiffTicks": 65,
         "cooldownTicks": 180, "skitterIntervalTicks": 22
@@ -85,7 +85,7 @@
       "_faceSuckNote": "낙하가 명중하면 얼굴에 붙어 흡혈한다 — 화면을 가리고, 빨 때마다 제 몸을 채운다. 해머 한 방이면 떼어 걷어차고, maxSucks 번 빨면 배불러 스스로 뛰어내린다",
       "faceSuck": { "intervalTicks": 55, "damage": 8, "heal": 8, "maxSucks": 3, "mashToEscape": 6, "kickDistance": 5, "kickStunTicks": 50, "selfDetachHop": 3 },
       "_leapNote": "지상에서도 4m 밖이면 얼굴로 뛰어든다 — 맞으면 흡혈 부착. 적색(회피 전용), 예고 시점 좌표로만 난다",
-      "chargeAttack": { "type": "contact", "arcDeg": 130, "leapHeight": 1.7, "chargeSpeed": 14, "chargeRunTicks": 20, "minRange": 4, "maxRange": 9, "windupTicks": 22, "recoverTicks": 40, "whiffRecoverTicks": 60, "impactRangeMul": 1.2, "playerKnockback": 0.4, "parryable": false, "telegraph": "red", "cooldownTicks": 200, "latches": true },
+      "chargeAttack": { "type": "contact", "arcDeg": 130, "leapHeight": 1.7, "chargeSpeed": 14, "chargeRunTicks": 20, "minRange": 4, "maxRange": 9, "windupTicks": 33, "recoverTicks": 40, "whiffRecoverTicks": 60, "impactRangeMul": 1.2, "playerKnockback": 0.4, "parryable": false, "telegraph": "red", "cooldownTicks": 200, "latches": true },
       "counters": { "pistol": "best", "rifle": "best", "grenade": "poor", "flash": "good", "melee": "good", "magic": "good", "deflect": "none" },
       "drops": []
     },
@@ -107,7 +107,7 @@
  "stalk": { "speedMul": 0.3, "untilRange": 8 },
  "_latchNote": "달려들기 — 맞으면 피해 대신 들러붙어 파먹는다. 근접 키 연타로 밀쳐내야 풀린다 (balance.ghoulGrapple). 방어로 막으면 평소처럼 흘려보낸다",
       "_cancelNote": "달려드는 몸에 한 발이라도 박히면 물어뜯기가 끊긴다 — 고꾸라져 cancelStaggerTicks 동안 무방비 (2026-09-01). 달려오는 구울을 침착하게 쏘는 보상",
-      "chargeAttack": { "type": "contact", "arcDeg": 130, "chargeSpeed": 13, "chargeRunTicks": 22, "minRange": 2.6, "maxRange": 8, "windupTicks": 24, "recoverTicks": 45, "whiffRecoverTicks": 65, "impactRangeMul": 1.2, "parryable": false, "telegraph": "red", "cooldownTicks": 220, "latches": true, "cancelOnHit": true, "cancelStaggerTicks": 45 },
+      "chargeAttack": { "type": "contact", "arcDeg": 130, "chargeSpeed": 13, "chargeRunTicks": 22, "minRange": 2.6, "maxRange": 8, "windupTicks": 36, "recoverTicks": 45, "whiffRecoverTicks": 65, "impactRangeMul": 1.2, "parryable": false, "telegraph": "red", "cooldownTicks": 220, "latches": true, "cancelOnHit": true, "cancelStaggerTicks": 45 },
       "counters": { "pistol": "good", "rifle": "good", "grenade": "good", "flash": "best", "melee": "good", "magic": "good", "deflect": "none" },
       "drops": []
     },
