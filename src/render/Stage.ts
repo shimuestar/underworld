@@ -333,6 +333,9 @@ interface EnemyVisual {
   hitFlashUntil: number;
   /** 감전 — 이 시각까지 몸에 전류가 흐른다 (뇌창에 맞을 때마다 갱신) */
   zapUntil?: number;
+  /** 근접 피격 셰이크 — 이 시각까지 매 프레임 무작위로 몸이 튄다 (연출 전용) */
+  hitShakeUntil?: number;
+  hitShakeAmp?: number;
   /** 전류 마디 — 매 프레임 몸 위 아무 데나 다시 놓아 지직거리게 만든다 */
   zap?: { group: THREE.Group; mat: THREE.MeshBasicMaterial; segs: THREE.Mesh[] };
   /** 근접 무기 팔 피벗 — 치켜들었다 내리찍는다 */
@@ -1178,6 +1181,15 @@ export class Stage {
   flashShield(enemyId: number): void {
     const visual = this.enemyVisuals.get(enemyId);
     if (visual) visual.shieldFlashUntil = performance.now() + 120;
+  }
+
+  /** 근접 피격 셰이크 — 0.1초 동안 몸이 무작위로 튄다 (판정 좌표는 그대로) */
+  shakeEnemyHit(enemyId: number, heavy: boolean): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    if (!visual) return;
+    const cfg = balance.hitShake;
+    visual.hitShakeUntil = performance.now() + cfg.durationMs;
+    visual.hitShakeAmp = cfg.amp * (heavy ? cfg.heavyMul : 1);
   }
 
   /** 방어막 튕김 번쩍 (7.2 피드백) */
@@ -2756,10 +2768,21 @@ export class Stage {
       // 여기서는 몸을 옆으로 밀고 살짝 기울이기만 한다 — 풀리면 하던 동작이 그대로 이어진다
       const shocked = (enemy.shockTicks ?? 0) > 0;
       const shake = shocked ? Math.sin((now / 1000) * SHOCK_SHAKE_HZ * Math.PI * 2) : 0;
+      // 근접 피격 셰이크 — 남은 시간에 비례해 잦아드는 무작위 튐 (해머 손맛. 판정 무관)
+      let hitJx = 0;
+      let hitJy = 0;
+      let hitJz = 0;
+      if ((visual.hitShakeUntil ?? 0) > now) {
+        const frac = ((visual.hitShakeUntil ?? 0) - now) / balance.hitShake.durationMs;
+        const amp = (visual.hitShakeAmp ?? 0) * frac;
+        hitJx = (Math.random() - 0.5) * 2 * amp;
+        hitJy = (Math.random() - 0.5) * 2 * amp * 0.7; // 발이 땅에서 크게 뜨진 않게
+        hitJz = (Math.random() - 0.5) * 2 * amp;
+      }
       visual.group.position.set(
-        enemy.prevX + (enemy.x - enemy.prevX) * alpha - Math.cos(enemy.yaw) * shake * SHOCK_SHAKE_AMP,
-        jumpY,
-        enemy.prevZ + (enemy.z - enemy.prevZ) * alpha + Math.sin(enemy.yaw) * shake * SHOCK_SHAKE_AMP,
+        enemy.prevX + (enemy.x - enemy.prevX) * alpha - Math.cos(enemy.yaw) * shake * SHOCK_SHAKE_AMP + hitJx,
+        jumpY + hitJy,
+        enemy.prevZ + (enemy.z - enemy.prevZ) * alpha + Math.sin(enemy.yaw) * shake * SHOCK_SHAKE_AMP + hitJz,
       );
       visual.group.rotation.y = enemy.yaw;
       if (shocked) visual.zapUntil = Math.max(visual.zapUntil ?? 0, now + 40); // 떠는 내내 전류가 보인다

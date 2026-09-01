@@ -1114,6 +1114,7 @@ events.on('melee_hit', (payload) => {
   const hit = payload as { enemyId: number; damage?: number; heavy?: boolean };
   audio.play(hit.heavy ? 'heavy_hit' : 'melee_hit');
   stage.flashEnemyHit(hit.enemyId);
+  stage.shakeEnemyHit(hit.enemyId, hit.heavy === true); // 0.1초 무작위 떨림 — 박힌 손맛
   minimap.notifyCombat(hit.enemyId); // 미니맵 전투 추적
   spawnHitBloodOn(hit.enemyId, { damage: hit.damage ?? 10, heavy: hit.heavy });
   if (hit.heavy) {
