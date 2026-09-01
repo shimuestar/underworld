@@ -95,7 +95,7 @@ function padBtn(action: PadAction): string {
   return buttonName(input.gamepad.binding(action));
 }
 /** 패드 진동 — 패드로 놀고 있을 때만 (꽂아만 두고 키보드로 노는 사람은 제외) */
-function padRumble(kind: 'hit' | 'heavy' | 'shot' | 'kill'): void {
+function padRumble(kind: 'hit' | 'heavy' | 'kill' | 'shot' | 'cast' | 'block' | 'parry'): void {
   if (!input.usingPad) return;
   const r = balance.input.gamepad.rumble[kind];
   input.gamepad.rumble(r.ms, r.strong, r.weak);
@@ -545,6 +545,7 @@ events.on('parry_attempt', (payload) => {
   if (result === 'perfect') audio.play('parry_perfect');
   else if (result === 'normal') audio.play('parry_normal');
   else audio.play('parry_fail');
+  if (result === 'perfect' || result === 'normal') padRumble('parry'); // 받아친 손맛
 });
 // 보스는 boss_execute(타격) 후 치명타면 melee_kill 도 같은 틱에 온다 — 연출 1회만
 let executePresentedTick = -1;
@@ -609,6 +610,7 @@ events.on('bat_swoop', (payload) => {
 });
 events.on('bat_parried', (payload) => {
   audio.play('parry_perfect');
+  padRumble('parry');
   stage.triggerCameraKick(0.3, 150);
   const bp = payload as { x: number; z: number };
   stage.spawnGuardSparks(bp.x, bp.z, 1.3, 0x9fd8ff, 1.6); // 받아친 불꽃
@@ -797,6 +799,7 @@ events.on('footstep', (payload) => {
   audio.play((payload as { sprint?: boolean }).sprint ? 'footstep_run' : 'footstep_walk');
 });
 events.on('cast_spell', (payload) => {
+  padRumble('cast'); // 원거리 마법도 손에서 나가는 순간
   const { cast, sigil, channel } = payload as { cast?: string; sigil?: string; channel?: boolean };
   // 해머가 지팡이가 된다 — 머리에서 스킬 색 마력.
   // 채널(관통 뇌창)은 붙들고 있는 내내 내민 자세로 붙잡아 둔다
@@ -1045,6 +1048,7 @@ events.on('headshot_kill', (payload) => {
 events.on('block_hit', (payload) => {
   audio.play('block_hit');
   stage.triggerBlockHit((payload as { kind?: string }).kind);
+  padRumble('block'); // 챙 — 팔에 오는 충격
 });
 
 // ---- 무기 — 원거리(좌클릭, 휠 교체) / 근접(우클릭) ----
@@ -1118,15 +1122,16 @@ events.on('enemy_damaged', (payload) => {
     heightFrac: hit.zone === 'head' ? 0.85 : hit.zone === 'limb' ? 0.25 : 0.55,
     towardPlayer: true, // 총알이 몸 뒤로 뚫는 그림은 몸에 가려 안 보인다 — 정면으로
   });
-  padRumble('shot');
 });
 
+// 근접 처치 — 원거리 처치는 울리지 않는다 (원거리 진동은 발사 순간뿐)
+events.on('melee_kill', () => padRumble('kill'));
 events.on('melee_hit', (payload) => {
   const hit = payload as { enemyId: number; damage?: number; heavy?: boolean };
   audio.play(hit.heavy ? 'heavy_hit' : 'melee_hit');
   stage.flashEnemyHit(hit.enemyId);
   stage.shakeEnemyHit(hit.enemyId, hit.heavy === true); // 0.1초 무작위 떨림 — 박힌 손맛
-  padRumble(hit.heavy ? 'heavy' : 'hit');
+  padRumble(hit.heavy ? 'heavy' : 'hit'); // 근접은 몸에 닿는 순간이 곧 진동이다
   minimap.notifyCombat(hit.enemyId); // 미니맵 전투 추적
   spawnHitBloodOn(hit.enemyId, { damage: hit.damage ?? 10, heavy: hit.heavy });
   if (hit.heavy) {
@@ -1355,7 +1360,6 @@ events.on('melee_kill', (payload) => {
   }
 });
 events.on('enemy_died', (payload) => {
-  padRumble('kill'); // 처치 — 굵은 한 방 (타격 진동을 덮는다)
   const dead = payload as {
     enemyType: string; x: number; z: number; blastX?: number; blastZ?: number;
   };
@@ -1725,6 +1729,7 @@ events.on('quiver_full', () => {
   showReaction('화살통이 가득 찼다', 1600);
 });
 events.on('arrow_loosed', (payload) => {
+  padRumble('shot'); // 시위를 놓는 반동
   const shot = payload as { chargeFrac: number; damage: number; remaining: number };
   audio.play('bow_twang');
   stage.triggerRecoil();
@@ -1936,6 +1941,7 @@ events.on('shot_fired', (payload) => {
   const shot = payload as {
     ex: number; ey: number; ez: number; hitEnemy: boolean; blocked?: boolean;
   };
+  padRumble('shot'); // 원거리는 손에서 나가는 순간 — 반동
   stage.spawnTracer(shot.ex, shot.ey, shot.ez);
   stage.triggerRecoil();
   audio.play('gunshot');

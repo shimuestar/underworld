@@ -17,12 +17,15 @@
       "lookCurve": 2.0,
       "triggerThreshold": 0.35,
       "activeTimeoutMs": 4000,
-      "_rumbleNote": "패드 진동 (dual-rumble, 크롬/엣지 + 엑박) — 때리면 짧게, 강타는 굵게, 총알 명중은 가볍게, 처치는 크게. 미지원 패드에선 조용히 무시 (2026-09-01)",
+      "_rumbleNote": "패드 진동 (dual-rumble, 크롬/엣지 + 엑박). 근접은 몸에 닿는 순간(명중·강타·처치), 원거리는 손에서 나가는 순간(발사·시위·시전) — 원거리가 적 피격에 울리면 컨셉이 이상하다 (2026-09-01 사용자 지시). 방패 챙(block)·패링(parry)도 울린다. 미지원 패드에선 조용히 무시",
       "rumble": {
         "hit": { "ms": 70, "strong": 0.35, "weak": 0.5 },
         "heavy": { "ms": 110, "strong": 0.8, "weak": 0.6 },
-        "shot": { "ms": 45, "strong": 0.15, "weak": 0.35 },
-        "kill": { "ms": 160, "strong": 0.9, "weak": 0.7 }
+        "kill": { "ms": 160, "strong": 1.0, "weak": 0.85 },
+        "shot": { "ms": 60, "strong": 0.45, "weak": 0.25 },
+        "cast": { "ms": 70, "strong": 0.3, "weak": 0.5 },
+        "block": { "ms": 90, "strong": 0.5, "weak": 0.4 },
+        "parry": { "ms": 120, "strong": 0.85, "weak": 0.55 }
       },
       "_holdNote": "패드 랜턴 버튼을 이만큼 붙들면 배터리 교체다 (짧게는 켜고 끄기). 버튼이 모자라 한 버튼에 둘을 얹었다",
       "holdTicks": 18
