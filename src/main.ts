@@ -726,11 +726,21 @@ events.on('prop_broken', (payload) => {
   const mat = cfg?.material ?? 'wood';
   audio.play(PROP_BREAK_SOUND[mat] ?? 'prop_break_wood', panAt(pb.x, pb.z));
   stage.spawnPropDebris(pb.x, pb.z, PROP_DEBRIS_COLOR[mat] ?? 0x7a5a34, cfg?.height ?? 0.8);
+  if ((pb as { source?: string }).source === 'melee') {
+    // 해머로 와장창 — 명중보다 굵은 진동과 흔들림
+    padRumble('heavy');
+    stage.triggerCameraKick(0.4, 150);
+  }
 });
 events.on('prop_hit', (payload) => {
   // 석관 첫 방 — 금이 갔다 (돌 부딪는 소리로 '한 방 더'를 알린다)
-  const ph = payload as { x: number; z: number };
+  const ph = payload as { x: number; z: number; source?: string };
   audio.play('hit_wall', panAt(ph.x, ph.z));
+  if (ph.source === 'melee') {
+    // 해머가 박힌 건 몬스터든 기믹이든 같은 손맛 — 진동 + 화면 흔들림
+    padRumble('hit');
+    stage.triggerCameraKick(0.25, 120);
+  }
 });
 events.on('prop_fuse_lit', (payload) => {
   const pf = payload as { x: number; z: number };

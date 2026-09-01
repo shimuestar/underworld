@@ -900,7 +900,7 @@ function moveProjectiles(world: World, dt: number): void {
 
       if (hitPropTarget) {
         const ptypes = balance.props.types as Record<string, { hp: number }>;
-        damageProp(world, hitPropTarget, ptypes[hitPropTarget.type]?.hp ?? 1, 2); // 화살·마법은 한 방 몫
+        damageProp(world, hitPropTarget, ptypes[hitPropTarget.type]?.hp ?? 1, 2, 'projectile'); // 화살·마법은 한 방 몫
         world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', {
           x: proj.x + dirX * hitT, y: proj.y + dirY * hitT, z: proj.z + dirZ * hitT, hitEnemy: true,
         });

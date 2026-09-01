@@ -431,7 +431,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     const dist = Math.hypot(toX, toZ);
     if (dist > range + pcfg.collisionRadius || dist === 0) continue;
     if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
-    damageProp(world, prop, pcfg.hp, 2); // 해머는 한 방 몫(2점) — 일반 기믹이 한 방에 깨진다
+    damageProp(world, prop, pcfg.hp, 2, 'melee'); // 해머는 한 방 몫(2점) — 일반 기믹이 한 방에 깨진다
     hitAny = true; // 기믹을 깬 것도 헛스윙은 아니다
   }
 
@@ -724,7 +724,7 @@ function fire(world: World): void {
   if (propHit && (!hit || propHit.t < hit.t) && (!barrelHit || propHit.t < barrelHit.t)) {
     hit = null; // 기믹이 제일 앞 — 총알은 여기서 멈춘다
     barrelHit = null;
-    damageProp(world, propHit.prop, propCfg(propHit.prop.type)?.hp ?? 1);
+    damageProp(world, propHit.prop, propCfg(propHit.prop.type)?.hp ?? 1, 1, 'pistol');
     hitT = propHit.t;
   }
   if (barrelHit && (!hit || barrelHit.t < hit.t)) {

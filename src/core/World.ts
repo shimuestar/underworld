@@ -376,24 +376,32 @@ export function scatterAwayFromPlayer(
 
 /** 기믹을 부순다 — 상태·차단 해제만 하고 prop_broken 을 낸다. 전리품·매복·폭발 롤은
  *  Props 시스템이 이벤트로 잇는다 (시스템 간 직접 참조 금지 규약) */
-export function breakProp(world: World, prop: PropState): void {
+export function breakProp(world: World, prop: PropState, source?: string): void {
   if (!prop.alive) return;
   prop.alive = false;
   if (prop.blocker) {
     world.level.removeBlocker(prop.blocker);
     prop.blocker = undefined;
   }
-  world.events.emit('prop_broken', { id: prop.id, type: prop.type, x: prop.x, z: prop.z });
+  world.events.emit('prop_broken', { id: prop.id, type: prop.type, x: prop.x, z: prop.z, source });
 }
 
 /** 기믹 타격 — 누적 타격량이 hp 에 닿으면 부서진다. amount 는 무기 몫:
  *  총알 1점(일반 기믹 2발), 해머·화살 2점(한 방). 남으면 prop_hit(금 가는 피드백)만.
  *  hp 는 호출부가 balance 에서 읽어 넘긴다 — World 는 데이터에 의존하지 않는다 */
-export function damageProp(world: World, prop: PropState, hp: number, amount = 1): void {
+export function damageProp(
+  world: World,
+  prop: PropState,
+  hp: number,
+  amount = 1,
+  source?: string,
+): void {
   if (!prop.alive) return;
   prop.hits += amount;
-  if (prop.hits >= hp) breakProp(world, prop);
-  else world.events.emit('prop_hit', { id: prop.id, type: prop.type, x: prop.x, z: prop.z });
+  if (prop.hits >= hp) breakProp(world, prop, source);
+  else {
+    world.events.emit('prop_hit', { id: prop.id, type: prop.type, x: prop.x, z: prop.z, source });
+  }
 }
 
 /** 반경 안 기믹을 전부 부순다 — 폭발(수류탄·화염구·통·기믹 폭발) 공용 */
