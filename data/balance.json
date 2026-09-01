@@ -60,6 +60,8 @@
         "blastWave": { "ms": 220, "strong": 0.9, "weak": 1.0, "reachMul": 2.0 },
         "_moreNote": "roar=보스 포효(길고 낮게) / heartbeat=저체력 맥박(thresholdFrac 이하, intervalMs 마다 두근-두근) / tremble=초음파 비명 동안 가는 떨림 / execute=처형 이단(퍽-gapMs-우드득 tailMs) / crumble=균열벽 붕괴(12m 안) / webSnag·webTear=거미줄 걸림·찢기",
         "roar": { "ms": 2200, "strong": 1.0, "weak": 1.0 },
+        "_barsRiseNote": "쇠창살 상승 — reach(m) 안에서만, 가까울수록 진하게 (소리·진동 공용 도달거리)",
+        "barsRise": { "ms": 1400, "strong": 0.8, "weak": 0.55, "reach": 10 },
         "heartbeat": { "ms": 90, "strong": 0.3, "weak": 0.5, "intervalMs": 850, "thresholdFrac": 0.25 },
         "tremble": { "ms": 80, "strong": 0.12, "weak": 0.4 },
         "execute": { "ms": 90, "strong": 1.0, "weak": 0.5, "gapMs": 130, "tailMs": 200 },

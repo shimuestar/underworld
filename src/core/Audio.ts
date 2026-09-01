@@ -111,6 +111,8 @@ export type SoundName =
   | 'shop_deny'
   | 'dry_fire'
   | 'exit_opened'
+  | 'bars_rise'
+  | 'boss_fanfare'
   | 'stamina_empty';
 
 const MASTER_GAIN = 0.25;
@@ -709,6 +711,28 @@ export class GameAudio {
         // 숨이 찬다 — 짧게 두 번 헐떡이는 저역 노이즈
         this.noise(0.16, 0.3, 700);
         this.noise(0.2, 0.24, 520, 0.2);
+        break;
+      case 'bars_rise':
+        // 쇠창살 감아올림 — 윈치 저음이 서서히 조여 오르고, 철컥철컥 걸쇠가 걸린다.
+        // 마지막에 창살이 홈에 안착하는 쿵
+        this.tone(62, 1.5, 'sawtooth', 0.4, 0, 110);
+        this.noise(0.05, 0.55, 2600, 0.0);
+        this.noise(0.05, 0.5, 2400, 0.24);
+        this.noise(0.05, 0.45, 2700, 0.48);
+        this.noise(0.05, 0.4, 2500, 0.72);
+        this.noise(0.05, 0.35, 2300, 0.96);
+        this.tone(130, 0.22, 'square', 0.4, 1.3, 78);
+        this.noise(0.12, 0.5, 800, 1.3);
+        break;
+      case 'boss_fanfare':
+        // 보스 처치 — 경쾌한 상행 아르페지오 '띠리링' 뒤에 한 음 높이 '딩~'.
+        // UI 사운드 — 거리·패닝과 무관하게 항상 이 볼륨으로 나온다
+        this.tone(659, 0.09, 'triangle', 0.55);
+        this.tone(784, 0.09, 'triangle', 0.55, 0.09);
+        this.tone(988, 0.09, 'triangle', 0.55, 0.18);
+        this.tone(1319, 0.24, 'triangle', 0.6, 0.28);
+        this.tone(1568, 0.55, 'triangle', 0.5, 0.6);
+        this.tone(784, 0.5, 'sine', 0.3, 0.62); // 아래 옥타브 받침 — 소리에 몸통
         break;
       case 'exit_opened':
         // 봉인 해제 — 낮게 깔린 돌 갈림 뒤에 위로 열리는 화음

@@ -1487,8 +1487,13 @@ events.on('melee_kill', (payload) => {
 });
 events.on('enemy_died', (payload) => {
   const dead = payload as {
-    enemyType: string; x: number; z: number; blastX?: number; blastZ?: number;
+    enemyId?: number; enemyType: string; x: number; z: number; blastX?: number; blastZ?: number;
   };
+  // 보스 처치 팡파르 — UI 사운드라 거리와 무관하게 나온다 (띠리링 딩~)
+  const deadBoss =
+    enemyDef(dead.enemyType).boss ||
+    world.enemies.find((e) => e.id === dead.enemyId)?.floorBoss === true;
+  if (deadBoss) audio.play('boss_fanfare');
   // 폭발로 죽었으면 파편이 폭심 반대쪽으로 날아간다 (살아남은 적은 몸이 밀린다)
   const launch = dead.blastX !== undefined ? balance.explosionKnockback.burstLaunch : 0;
   const deathAt = panAt(dead.x, dead.z);
@@ -2232,8 +2237,19 @@ events.on('exit_opened', () => {
 });
 events.on('exit_unlocked', () => {
   unlockedFloors.add(floorIndex); // 오르내려도·부활해도 다시 잠기지 않는다
-  audio.play('unlock_chain');
   showReaction('층의 주인이 쓰러졌다 — 쇠창살이 올라간다', 2600);
+  // 쇠창살 감아올림 — 창살 근처(reach 10m)에서만 들리고 떨린다. 멀면 조용:
+  // 전투가 어디서 끝나든 팡파르(거리 무관)가 처치 자체는 알려 준다
+  const exit = world.level.exitPos;
+  if (!exit) return;
+  const d = Math.hypot(world.player.x - exit.x, world.player.z - exit.z);
+  const cfg = balance.input.gamepad.rumble.barsRise;
+  if (d > cfg.reach) return;
+  const frac = 1 - d / cfg.reach; // 10m 끝은 0 근처 — 겨우 들리고 겨우 떨린다
+  audio.play('bars_rise', { pan: panAt(exit.x, exit.z).pan, vol: Math.max(0.1, frac) });
+  if (input.usingPad && performance.now() >= rumbleHoldUntil) {
+    input.gamepad.rumble(cfg.ms, cfg.strong * frac, cfg.weak * frac);
+  }
 });
 events.on('exit_locked', (payload) => {
   // E 로 흔들어 봤을 때만 소리를 낸다 — 밟기만 해도 짤그랑거리면 시끄럽다

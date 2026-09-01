@@ -288,8 +288,9 @@ function handleSplit(world: World, enemy: EnemyState): void {
   });
 }
 
-/** 새끼 분리 — 시전이 끝나면 큐만 건다. 실제 사출은 emitBrood 가 한 마리씩,
- *  머리에서 순차적으로 뛰쳐나오게 한다. healthCost 는 여기서 한 번에 치른다 */
+/** 새끼 분리 — 큐만 건다. 실제 사출은 emitBrood 가 한 마리씩 머리에서 순차로.
+ *  healthCost 는 5마리 기준 — 부족분만 낳으면 그에 비례해서만 깎인다
+ *  (10초 박자마다 도는 충원이라, 정액으로 두면 어미가 제 소환에 말라 죽는다) */
 function spawnBrood(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
   const brood = attack.brood;
   if (!brood) return;
@@ -299,7 +300,8 @@ function spawnBrood(world: World, enemy: EnemyState, attack: EnemyAttackDef): vo
   if (spawnCount <= 0) return;
   enemy.broodLeft = spawnCount;
   enemy.broodTicks = 1; // 다음 틱부터 튀어나오기 시작
-  enemy.health = Math.max(1, enemy.health - brood.healthCost); // 제 몸을 떼어 준 값
+  const cost = Math.ceil(brood.healthCost * (spawnCount / brood.count));
+  enemy.health = Math.max(1, enemy.health - cost); // 제 몸을 떼어 준 값
   world.events.emit('boss_brood', {
     enemyId: enemy.id, enemyType: enemy.type, count: spawnCount, x: enemy.x, z: enemy.z,
   });
@@ -567,7 +569,7 @@ function batRecoilDamage(world: World, enemy: EnemyState, amount: number): boole
   world.events.emit('bat_recoil', { enemyId: enemy.id, x: enemy.x, z: enemy.z, amount });
   if (enemy.health > 0) return false;
   enemy.alive = false;
-  world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
+  world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
   return true;
 }
 
@@ -1327,6 +1329,23 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   if ((enemy.summonCooldown ?? 0) > 0) enemy.summonCooldown = (enemy.summonCooldown ?? 0) - 1;
   if ((enemy.chargeCooldown ?? 0) > 0) enemy.chargeCooldown = (enemy.chargeCooldown ?? 0) - 1;
 
+  // 새끼 분리 — 타이머 구동 (2026-09-01): 전투에 들어오면 즉시 5마리, 그 뒤로는
+  // 10초 박자(cooldownTicks)마다 살아 있는 새끼를 빼고 부족분만 시전 없이 충원한다.
+  // 무엇을 하던 중이든(근접·돌진·경직) 박자는 지킨다 — 예측 가능한 리듬이 정보다.
+  // 화상(말라붙음)·빙결(통째로 얼음) 중엔 박자를 미루고, 풀리는 즉시 낳는다
+  const beatBrood = def.summonAttack?.brood;
+  if (
+    beatBrood &&
+    enemy.ai !== 'idle' &&
+    (enemy.summonCooldown ?? 0) <= 0 &&
+    !enemy.broodLeft &&
+    enemy.burnTicks <= 0 &&
+    (enemy.freezeTicks ?? 0) <= 0
+  ) {
+    spawnBrood(world, enemy, def.summonAttack!); // 부족분 0 이면 조용히 지나간다
+    enemy.summonCooldown = beatBrood.cooldownTicks;
+  }
+
   // 연타를 멈추면 막아낸 기록이 사라진다 (붙어서 계속 때릴 때만 밀쳐내기가 나간다)
   if ((enemy.blockedStreakTicks ?? 0) > 0) {
     enemy.blockedStreakTicks = (enemy.blockedStreakTicks ?? 0) - 1;
@@ -1508,22 +1527,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         startWindup(world, enemy, currentAttack(def, enemy));
         break;
       }
-      // 새끼 분리 — 몸에서 슬라임 다섯을 떼어 무리를 만든다 (어미 슬라임).
-      // 제 체력을 대가로 치르고, 살아 있는 새끼가 많으면 아껴 둔다.
-      // 화상 중엔 말라붙어 떼어낼 몸이 없다 — 불이 무리를 끊는 정답
-      const brood = def.summonAttack?.brood;
-      if (
-        def.summonAttack &&
-        brood &&
-        (enemy.summonCooldown ?? 0) <= 0 &&
-        enemy.burnTicks <= 0 &&
-        world.enemies.filter((e) => e.alive && e.type === brood.type).length < brood.maxAlive
-      ) {
-        enemy.attackMode = 'summon';
-        enemy.summonCooldown = brood.cooldownTicks;
-        startWindup(world, enemy, def.summonAttack);
-        break;
-      }
+      // (새끼 분리는 AI 선택이 아니라 10초 박자 타이머가 돈다 — 위 beatBrood 블록)
       // 굶주림(구울) — 생명 입자가 플레이어보다 가까우면 먹으러 간다.
       // 처치가 구울 곁에서 나면 입자를 놓고 플레이어와 경쟁하게 된다
       const hunger = def.eatsMotes;
@@ -1672,12 +1676,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
       if (enemy.timer > 0) break;
 
-      if (attack.type === 'summon') {
-        // 시전 완료 — 부풀었던 몸에서 새끼들이 떨어져 나간다
-        spawnBrood(world, enemy, attack);
-        enemy.ai = 'recover';
-        enemy.timer = attack.recoverTicks;
-      } else if (attack.type === 'projectile') {
+      if (attack.type === 'projectile') {
         // 쏘기 직전 사선을 한 번 더 확인 — 겨누는 0.5초 사이 아군이 끼어들 수 있다.
         // 끼어들었으면 쏘지 않고 내린다 (아군 등에 쏘는 것보다 훨씬 낫다)
         // (교착을 풀려고 포기한 상태라면 그대로 쏜다 — 안전장치)

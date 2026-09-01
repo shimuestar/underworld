@@ -609,7 +609,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     const mom = add('slime_mother', 14, 6);
     mom.ai = 'chase';
     const before = mom.health;
-    // 소환 windup(48틱) 뒤 머리에서 한 마리씩 순차 사출 — 다섯이 다 나올 때까지
+    // 전투 개시 즉시(타이머 구동) 머리에서 한 마리씩 순차 사출 — 다섯이 다 나올 때까지
     for (
       let i = 0;
       i < 200 && world.enemies.filter((e) => e.type === 'slime_small').length < 5;
@@ -622,6 +622,27 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(lastborn.jumpY ?? 0).toBeGreaterThan(0);
     expect(mom.health).toBe(before - 30);
     expect(mom.summonCooldown).toBeGreaterThan(0); // 재사용 대기가 돈다
+  });
+
+  it('어미 슬라임 — 10초 박자마다 부족분만 즉시 충원한다', () => {
+    world.player.health = 100000;
+    const mom = add('slime_mother', 14, 6);
+    mom.ai = 'chase';
+    const kids = (): EnemyState[] =>
+      world.enemies.filter((e) => e.alive && e.type === 'slime_small');
+    // 첫 박자 — 5마리
+    for (let i = 0; i < 60; i++) Enemies.tick(world, DT);
+    expect(kids()).toHaveLength(5);
+    const hpAfterFirst = mom.health;
+    // 둘을 잡는다 — 박자(600틱) 전에는 충원되지 않는다
+    kids()[0]!.alive = false;
+    kids()[0]!.alive = false; // 필터가 다시 돌아 다음 생존자
+    for (let i = 0; i < 300; i++) Enemies.tick(world, DT);
+    expect(kids()).toHaveLength(3);
+    // 박자가 돌아오면 부족분 2만 — 비용도 2마리 몫만 깎인다
+    for (let i = 0; i < 320; i++) Enemies.tick(world, DT);
+    expect(kids()).toHaveLength(5);
+    expect(hpAfterFirst - mom.health).toBeLessThanOrEqual(12); // 30 이 아니라 2/5 몫
   });
 
   it('어미 슬라임 — 화상 중에는 말라붙어 새끼를 못 떼어낸다', () => {
