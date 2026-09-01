@@ -18,6 +18,7 @@ import { KEY_ACTIONS, keyBindings, type KeyAction } from './core/KeyBindings';
 import { Stage } from './render/Stage';
 import { grenadeThrowSpeed } from './systems/Weapons';
 import * as PlayerMove from './systems/PlayerMove';
+import { padAimAssist } from './systems/PlayerMove';
 import * as Enemies from './systems/Enemies';
 import * as GhoulHeads from './systems/GhoulHeads';
 import * as Weapons from './systems/Weapons';
@@ -82,6 +83,7 @@ const flashOverlay = document.getElementById('flash');
 const hurtOverlay = document.getElementById('hurt');
 const altarPrompt = document.getElementById('altar-prompt');
 const interactKeyEl = document.getElementById('interact-key');
+const crosshairEl = document.getElementById('crosshair')!;
 if (!app || !hud || !deathOverlay || !deathHint || !flashOverlay || !hurtOverlay || !altarPrompt)
   throw new Error('index.html에 필요한 오버레이 요소가 없다');
 
@@ -2760,6 +2762,13 @@ function render(alpha: number): void {
   stage.setCorruptionStage(Math.floor(world.corruption.applied / 12.5));
   stage.setExitOpen(world.exitOpen);
   minimap.update(p, world.enemies, alpha, world.exitOpen, world.godMode === true);
+
+  // 패드 에임 어시스트 표적 표시 — 물고 있으면 조준점이 커지고 붉어진다.
+  // 어시스트 자체는 스틱을 젓는 동안만 끌지만, 표시는 표적 위면 항상 — "걸리고 있다"의 증거
+  crosshairEl.classList.toggle(
+    'lock',
+    input.usingPad && !world.dead && !world.uiOpen && padAimAssist(world) !== null,
+  );
 
   // 하단 중앙 상태 표시 — HP 바 + 무기 슬롯
   const wpn = world.weapon;

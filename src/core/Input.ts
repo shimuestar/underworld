@@ -23,6 +23,8 @@ export interface InputSnapshot {
   /** 패드 오른스틱 시선 — 마우스와 분리해 싣는다 (에임 어시스트는 스틱에만 걸린다) */
   padLookDX: number;
   padLookDY: number;
+  /** 패드 왼스틱(이동)이 움직이는 중 — 자석은 스틱을 젓는 동안에만 끌어야 한다 */
+  padMoveActive: boolean;
   /** 이번 틱에 랜턴 토글 키가 눌렸는가 (엣지) */
   lanternToggle: boolean;
   /** 이번 틱에 배터리 교체 키가 눌렸는가 (엣지) */
@@ -335,6 +337,7 @@ export class Input {
       lookDY: this.dy,
       padLookDX: padLookX,
       padLookDY: padLookY,
+      padMoveActive: Math.abs(axes.moveX) + Math.abs(axes.moveY) > 0,
       lanternToggle: this.lanternToggles > 0 || padLanternTap,
       batterySwap: this.batterySwaps > 0 || (padPlain && pad.pressed('battery')) || padLanternHold,
       meleePressed: this.meleeClicks > 0 || (padPlain && pad.pressed('melee')),
@@ -385,6 +388,7 @@ export class Input {
       lookDY: 0,
       padLookDX: 0,
       padLookDY: 0,
+      padMoveActive: false,
       lanternToggle: false,
       batterySwap: false,
       meleePressed: false,

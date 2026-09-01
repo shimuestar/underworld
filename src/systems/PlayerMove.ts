@@ -10,7 +10,7 @@ let strideTicks = 0;
 /** 에임 어시스트 표적 — 조준점에서 각도상 가장 가까운 적 (사거리·시야선 안).
  *  잠복(천장 거머리)·죽은 척 구울은 제외 — 어시스트가 숨은 적을 밀고해선 안 된다.
  *  각크기(atan(반지름/거리))를 원뿔에 더해 가까운 적일수록 후하게 잡는다 */
-function padAimAssist(
+export function padAimAssist(
   world: World,
 ): { offYaw: number; offPitch: number; off: number; angRadius: number } | null {
   const aa = balance.input.gamepad.aimAssist;
@@ -48,7 +48,9 @@ export function tick(world: World, dt: number): void {
   const aa = balance.input.gamepad.aimAssist;
   let padDX = input.padLookDX;
   let padDY = input.padLookDY;
-  const stickActive = padDX !== 0 || padDY !== 0;
+  // 시선 스틱이든 이동 스틱이든 젓는 동안엔 어시스트가 산다 — 옆걸음으로 지나치는
+  // 표적에도 조준이 붙는 콘솔 관례. 손을 다 떼면 아무 일도 없다
+  const stickActive = padDX !== 0 || padDY !== 0 || input.padMoveActive;
   const assist = stickActive ? padAimAssist(world) : null;
   if (assist) {
     padDX *= aa.frictionMul;
