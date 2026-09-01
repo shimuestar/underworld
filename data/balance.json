@@ -699,7 +699,7 @@
     "statPop": { "scaleMul": 1.6, "durationMs": 350 },
     "centerGain": { "holdMs": 900, "absorbMs": 380, "risePx": 10, "fontPx": 21, "rollIntervalMs": 30, "rollStepRatio": 0.3, "bigGold": 20, "bigXp": 45, "bigScaleMul": 1.35 }
   },
-  "_hitShakeNote": "근접 피격 셰이크 — 해머가 박히면 durationMs 동안 매 프레임 무작위로 몸이 튄다 (남은 시간에 비례해 잦아든다). 강타는 heavyMul 배. 연출 전용 — 판정 좌표는 안 움직인다 (2026-09-01)",
+  "_hitShakeNote": "피격 셰이크 — 해머·총·화살·스킬이 맞으면 durationMs 동안 매 프레임 무작위로 몸이 튄다 (남은 시간에 비례해 잦아든다). 해머 강타만 heavyMul 배. 연출 전용 — 판정 좌표는 안 움직인다 (2026-09-01)",
   "hitShake": { "durationMs": 100, "amp": 0.07, "heavyMul": 1.6 },
   "hitMarker": {
     "lifeMs": 1600,

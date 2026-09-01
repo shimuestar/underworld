@@ -1090,7 +1090,10 @@ function spawnHitBloodOn(
 // 미니맵 전투 추적 — 내가 때린 적은 잠시 실시간으로 보인다 (권총·스킬·해머 공통)
 events.on('enemy_damaged', (payload) => {
   const id = (payload as { enemyId?: number }).enemyId;
-  if (id !== undefined) minimap.notifyCombat(id);
+  if (id !== undefined) {
+    minimap.notifyCombat(id);
+    stage.shakeEnemyHit(id, false); // 총·화살·스킬도 같은 0.1초 피격 떨림 (해머는 melee_hit 쪽)
+  }
 });
 // 미니맵 소리 핑 — 시야 밖 적의 소리가 난 자리에 흐릿한 점이 깜빡인다 (공간 음향의 시각 짝)
 for (const noisyEvent of [
