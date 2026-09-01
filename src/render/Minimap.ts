@@ -85,9 +85,22 @@ export class Minimap {
       '<span style="color:#e04444">●</span>적 ' +
       '<span style="color:#cc9922">●</span>처형 가능';
     document.body.appendChild(this.legend);
+
+    // 층 표시 — 미니맵 왼쪽 위에 '지하 N층'
+    this.floorTitle = document.createElement('div');
+    this.floorTitle.style.cssText =
+      'position:fixed;top:10px;right:16px;font:bold 11px/1 monospace;color:#d8e0ea;' +
+      'text-shadow:1px 1px 0 #000;pointer-events:none;user-select:none;z-index:2;';
+    document.body.appendChild(this.floorTitle);
   }
 
   private readonly legend: HTMLDivElement;
+  private readonly floorTitle: HTMLDivElement;
+
+  /** 층 이름 표시 — main 이 층을 갈아 끼울 때 부른다 ('지하 1층' 등) */
+  setFloorTitle(text: string): void {
+    this.floorTitle.textContent = text;
+  }
 
   private revealedSetFor(level: Level): Set<number> {
     let set = this.revealedByLevel.get(level.id);
@@ -197,6 +210,7 @@ export class Minimap {
   toggle(): void {
     this.visible = !this.visible;
     this.canvas.style.display = this.visible ? 'block' : 'none';
+    this.floorTitle.style.display = this.visible ? 'block' : 'none';
     this.legend.style.display = this.visible ? 'block' : 'none';
   }
 

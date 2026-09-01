@@ -1013,23 +1013,28 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       if (level.charAt(col, row) !== 'A') continue;
       const x = (col + 0.5) * cs;
       const z = (row + 0.5) * cs;
+      // 성소답게 빛난다 — 멀리서도 '저기가 제단'이 읽히는 밝기 (2026-09-01 증광)
       const pillar = new THREE.Mesh(
         new THREE.BoxGeometry(ALTAR_FOOTPRINT, 2.1, ALTAR_FOOTPRINT),
         new THREE.MeshLambertMaterial({
           color: COLOR_ALTAR,
           emissive: COLOR_ALTAR,
-          emissiveIntensity: 0.18,
+          emissiveIntensity: 0.6,
         }),
       );
       pillar.position.set(x, 1.05, z);
       group.add(pillar);
       const cap = new THREE.Mesh(
         new THREE.BoxGeometry(1.5, 0.18, 1.5),
-        new THREE.MeshLambertMaterial({ color: COLOR_ALTAR }),
+        new THREE.MeshLambertMaterial({
+          color: COLOR_ALTAR,
+          emissive: COLOR_ALTAR,
+          emissiveIntensity: 0.85,
+        }),
       );
       cap.position.set(x, 2.2, z);
       group.add(cap);
-      const light = new THREE.PointLight(COLOR_ALTAR_LIGHT, 1.1, 8, 0);
+      const light = new THREE.PointLight(COLOR_ALTAR_LIGHT, 2.4, 14, 0);
       light.position.set(x, 2.6, z);
       group.add(light);
     }

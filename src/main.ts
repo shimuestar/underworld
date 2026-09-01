@@ -2242,6 +2242,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   });
 
   floorIndex = index;
+  minimap.setFloorTitle(`지하 ${index + 1}층`);
   levelJson = ZONE[index]!;
   traveling = false;
 
@@ -2668,14 +2669,15 @@ function shortPadBtn(b: number): string {
 }
 function skillSlotKeyLabel(i: number): string {
   if (input.usingPad) {
-    return `${shortPadBtn(input.gamepad.binding('skillSelect'))}+${shortPadBtn(input.gamepad.binding(`skill${i + 1}` as PadAction))}`;
+    // 선택 버튼(RB) 접두는 생략 — 칸마다 반복되면 소음이다 (다이아 라벨이 조합을 안내)
+    return shortPadBtn(input.gamepad.binding(`skill${i + 1}` as PadAction));
   }
   return keyBindings.label(`skill${i + 1}` as KeyAction);
 }
 function quickSlotKeyLabel(i: number): string {
   if (input.usingPad) {
     if (i >= 4) return '—'; // 패드 조합은 D-패드 4방향까지 — 5번 자리가 없다
-    return `${shortPadBtn(input.gamepad.binding('itemSelect'))}+${shortPadBtn(input.gamepad.binding(`slot${i + 1}` as PadAction))}`;
+    return shortPadBtn(input.gamepad.binding(`slot${i + 1}` as PadAction));
   }
   return keyBindings.label(`slot${i + 1}` as KeyAction);
 }
