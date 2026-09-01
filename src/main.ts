@@ -127,6 +127,15 @@ events.on('web_caught', () => padRumble('webSnag'));
 events.on('web_torn', () => padRumble('webTear'));
 events.on('web_broken', () => padRumble('webSnag'));
 
+// 타겟 락온 — 걸림/전환은 짧은 철컥, 놓침은 낮은 톤, 허탕은 약한 헛손질
+events.on('lockon_start', () => {
+  audio.play('reload_end');
+  padRumble('interact');
+});
+events.on('lockon_switch', () => audio.play('reload_end'));
+events.on('lockon_end', () => audio.play('reload_start'));
+events.on('lockon_fail', () => padRumble('whiff'));
+
 // 폭발 충격파 — 피해가 없어도 근처에서 터지면 거리만큼 진동이 온다 (공기가 때린다).
 // 피해를 입은 폭발은 곧이어 오는 player_damaged 의 blast 가 이걸 덮는다
 events.on('explosion', (payload) => {
@@ -2855,6 +2864,8 @@ function render(alpha: number): void {
   stage.setCorruptionStage(Math.floor(world.corruption.applied / 12.5));
   stage.setExitOpen(world.exitOpen);
   minimap.update(p, world.enemies, alpha, world.exitOpen, world.godMode === true);
+
+  stage.setLockOn(world.lockOnId); // 락온 마름모 — 잡힌 적 머리 위
 
   // 패드 에임 어시스트 표적 표시 — 물고 있으면 조준점이 커지고 붉어진다.
   // 어시스트 자체는 스틱을 젓는 동안만 끌지만, 표시는 표적 위면 항상 — "걸리고 있다"의 증거

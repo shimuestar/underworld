@@ -26,6 +26,7 @@ export const KEY_ACTIONS = [
   { id: 'slot5', label: '퀵슬롯 5' },
   { id: 'inventory', label: '가방 · 스킬 열기' },
   { id: 'map', label: '미니맵 접기 · 펴기' },
+  { id: 'lockOn', label: '타겟 락온 켜기 · 끄기 (기본 비움)' },
 ] as const;
 
 export type KeyAction = (typeof KEY_ACTIONS)[number]['id'];
@@ -53,6 +54,7 @@ export const DEFAULT_KEY_BINDINGS: Record<KeyAction, string> = {
   slot5: 'Digit5',
   inventory: 'KeyI',
   map: 'KeyM',
+  lockOn: '', // 마우스 유저는 불필요 — 원하면 설정에서 건다
 };
 
 const STORAGE_KEY = 'underworld.keybindings.v1';

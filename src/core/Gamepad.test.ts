@@ -228,12 +228,12 @@ describe('리매핑', () => {
   });
 
   it('저장본이 깨져 있어도 기본값으로 뜬다', () => {
-    localStorage.setItem('underworld.gamepad.bindings.v2', '{{{');
+    localStorage.setItem('underworld.gamepad.bindings.v3', '{{{');
     expect(new GamepadInput().allBindings()).toEqual(DEFAULT_BINDINGS);
   });
 
   it('저장본에 없는 기능은 기본값을 쓴다 — 기능이 늘어도 설정이 안 깨진다', () => {
-    localStorage.setItem('underworld.gamepad.bindings.v2', JSON.stringify({ skillSelect: 14 }));
+    localStorage.setItem('underworld.gamepad.bindings.v3', JSON.stringify({ skillSelect: 14 }));
     const reloaded = new GamepadInput();
     expect(reloaded.binding('skillSelect')).toBe(14);
     expect(reloaded.binding('ranged')).toBe(DEFAULT_BINDINGS.ranged);

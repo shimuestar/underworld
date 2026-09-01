@@ -2,10 +2,58 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import { spendStamina, type World } from '../core/World';
+import { spendStamina, type EnemyState, type World } from '../core/World';
 
 /** 질주 보폭 카운터 — 뛰는 동안만 차고, 멈추면 리셋된다 */
 let strideTicks = 0;
+
+/** 락온 후보 — 살아 있고 위장(죽은 척)이 아니며 사거리·시야선 안. offYaw 는 감은 각 */
+function lockCandidates(
+  world: World,
+  range: number,
+): Array<{ e: EnemyState; offYaw: number; dist: number }> {
+  const p = world.player;
+  const out: Array<{ e: EnemyState; offYaw: number; dist: number }> = [];
+  for (const e of world.enemies) {
+    if (!e.alive || e.feigning) continue;
+    const dx = e.x - p.x;
+    const dz = e.z - p.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 1 || dist > range) continue;
+    if (!world.level.hasLineOfSight(p.x, p.z, e.x, e.z)) continue;
+    let offYaw = Math.atan2(-dx, -dz) - p.yaw;
+    offYaw = Math.atan2(Math.sin(offYaw), Math.cos(offYaw));
+    out.push({ e, offYaw, dist });
+  }
+  return out;
+}
+
+/** 락온 획득 — 시야각(fovRad) 안에서 화면 중앙에 가장 가까운 적 */
+export function acquireLockTarget(world: World, fovRad: number, range: number): EnemyState | null {
+  let best: { e: EnemyState; offYaw: number } | null = null;
+  for (const c of lockCandidates(world, range)) {
+    if (Math.abs(c.offYaw) > fovRad / 2) continue;
+    if (!best || Math.abs(c.offYaw) < Math.abs(best.offYaw)) best = c;
+  }
+  return best ? best.e : null;
+}
+
+/** 락온 전환 — 오른스틱을 튕긴 쪽(화면 좌우)의 가장 가까운 다른 적.
+ *  오른쪽 튕김 = 시선 오른쪽 = offYaw 음수 방향 (yaw 는 오른쪽 회전이 감소) */
+function switchLockTarget(
+  world: World,
+  current: EnemyState,
+  dirSign: number,
+  range: number,
+): EnemyState | null {
+  let best: { e: EnemyState; offYaw: number } | null = null;
+  for (const c of lockCandidates(world, range)) {
+    if (c.e === current) continue;
+    if (Math.sign(c.offYaw) !== dirSign) continue;
+    if (!best || Math.abs(c.offYaw) < Math.abs(best.offYaw)) best = c;
+  }
+  return best ? best.e : null;
+}
 
 /** 에임 어시스트 표적 — 조준점에서 각도상 가장 가까운 적 (사거리·시야선 안).
  *  죽은 척 구울만 제외(시체처럼 보여야 한다) — 천장 거머리는 눈에 보이는 표적이라
@@ -60,32 +108,116 @@ export function tick(world: World, dt: number): void {
   const p = world.player;
   const input = world.input;
 
-  // 시선 — 마우스 델타를 이번 틱에 소비. 패드 스틱만 에임 어시스트를 거친다:
-  // 조준점이 적 위를 지나면 스틱이 무거워지고(마찰), 스틱을 움직이는 동안엔
-  // 적 중심으로 살짝 끌린다(자석). 손을 떼면 절대 저절로 조준하지 않는다
+  // ── 타겟 락온 (R3, 소울라이크) — 토글·유지·해제 판단이 시선 처리보다 먼저다
+  const lk = balance.input.gamepad.lockOn;
   const sens = balance.input.mouseSensitivity;
-  const aa = balance.input.gamepad.aimAssist;
-  let padDX = input.padLookDX;
-  let padDY = input.padLookDY;
-  // 시선 스틱이든 이동 스틱이든 젓는 동안엔 어시스트가 산다 — 옆걸음으로 지나치는
-  // 표적에도 조준이 붙는 콘솔 관례. 손을 다 떼면 아무 일도 없다
-  const stickActive = padDX !== 0 || padDY !== 0 || input.padMoveActive;
-  const assist = stickActive ? padAimAssist(world) : null;
-  if (assist) {
-    padDX *= aa.frictionMul;
-    padDY *= aa.frictionMul;
-  }
-  p.yaw -= (input.lookDX + padDX) * sens;
   const pitchMax = (balance.input.pitchMaxDeg * Math.PI) / 180;
-  p.pitch = Math.max(
-    -pitchMax,
-    Math.min(pitchMax, p.pitch - (input.lookDY + padDY) * sens),
-  );
-  if (assist && assist.off <= (aa.magnetConeDeg * Math.PI) / 180 + assist.angRadius) {
-    // 몸 실루엣 가장자리까지만 끈다 — 이미 몸 위면 0 (머리를 노리는 손을 방해하지 않는다)
-    const step = (aa.magnetDegPerTick * Math.PI) / 180;
-    p.yaw += Math.max(-step, Math.min(step, assist.pullYaw));
-    p.pitch += Math.max(-step * 0.7, Math.min(step * 0.7, assist.pullPitch));
+  if (input.lockOnPressed && !world.dead) {
+    if (world.lockOnId !== null) {
+      world.lockOnId = null;
+      world.events.emit('lockon_end', {});
+    } else {
+      const t = acquireLockTarget(world, (lk.acquireFovDeg * Math.PI) / 180, lk.range);
+      if (t) {
+        world.lockOnId = t.id;
+        world.lockOnPitchOffset = 0;
+        world.lockOnLosLost = 0;
+        world.events.emit('lockon_start', { enemyId: t.id });
+      } else {
+        world.events.emit('lockon_fail', {});
+      }
+    }
+  }
+  if (world.lockOnSwitchCooldown > 0) world.lockOnSwitchCooldown--;
+
+  let lockTarget: EnemyState | null = null;
+  if (world.lockOnId !== null) {
+    lockTarget = world.enemies.find((e) => e.id === world.lockOnId && e.alive) ?? null;
+    if (!lockTarget) {
+      // 대상이 죽었다 — 근처의 다음 적으로 자동 전환, 없으면 해제
+      const next = acquireLockTarget(world, Math.PI * 2, lk.range);
+      world.lockOnId = next ? next.id : null;
+      world.lockOnPitchOffset = 0;
+      lockTarget = next;
+      if (next) world.events.emit('lockon_switch', { enemyId: next.id });
+      else world.events.emit('lockon_end', {});
+    }
+    if (lockTarget) {
+      const dist = Math.hypot(lockTarget.x - p.x, lockTarget.z - p.z);
+      const seen = world.level.hasLineOfSight(p.x, p.z, lockTarget.x, lockTarget.z);
+      world.lockOnLosLost = seen ? 0 : world.lockOnLosLost + 1;
+      if (dist > lk.breakRange || world.lockOnLosLost > lk.losGraceTicks) {
+        // 멀어졌거나 기둥 하나를 지나는 유예(1초)를 넘겨 가려졌다 — 놓친다
+        world.lockOnId = null;
+        lockTarget = null;
+        world.events.emit('lockon_end', {});
+      }
+    }
+  }
+
+  if (lockTarget) {
+    // ── 락온 카메라 — 대상 몸통을 상한 걸린 속도로 부드럽게 추적
+    // 오른스틱 좌우 튕김 = 대상 전환 (오른쪽 튕김 = 화면 오른쪽 적)
+    if (Math.abs(input.padLookAxisX) >= lk.switchFlick && world.lockOnSwitchCooldown <= 0) {
+      const next = switchLockTarget(world, lockTarget, input.padLookAxisX > 0 ? -1 : 1, lk.range);
+      if (next) {
+        world.lockOnId = next.id;
+        world.lockOnPitchOffset = 0;
+        world.lockOnSwitchCooldown = lk.switchCooldownTicks;
+        lockTarget = next;
+        world.events.emit('lockon_switch', { enemyId: next.id });
+      }
+    }
+    // 상하 입력 = pitch 오프셋 (머리/다리를 고른다). 놓으면 몸통으로 스르르 복귀
+    const dyIn = (input.lookDY + input.padLookDY) * sens;
+    const maxOff = (lk.pitchOffsetMaxDeg * Math.PI) / 180;
+    if (dyIn !== 0) {
+      world.lockOnPitchOffset = Math.max(
+        -maxOff,
+        Math.min(maxOff, world.lockOnPitchOffset - dyIn),
+      );
+    } else {
+      world.lockOnPitchOffset *= 0.94;
+    }
+    const ldx = lockTarget.x - p.x;
+    const ldz = lockTarget.z - p.z;
+    const ldist = Math.hypot(ldx, ldz) || 1;
+    let dYaw = Math.atan2(-ldx, -ldz) - p.yaw;
+    dYaw = Math.atan2(Math.sin(dYaw), Math.cos(dYaw));
+    const aimY =
+      (lockTarget.jumpY ?? 0) + enemyDef(lockTarget.type).height * lk.aimHeightFrac;
+    const wantPitch =
+      Math.atan2(aimY - (p.y + balance.player.eyeHeight), ldist) + world.lockOnPitchOffset;
+    const cap = (lk.turnDegPerTick * Math.PI) / 180;
+    p.yaw += Math.max(-cap, Math.min(cap, dYaw));
+    p.pitch = Math.max(
+      -pitchMax,
+      Math.min(pitchMax, p.pitch + Math.max(-cap, Math.min(cap, wantPitch - p.pitch))),
+    );
+  } else {
+    // ── 자유 시선 — 마우스 델타를 이번 틱에 소비. 패드 스틱만 에임 어시스트를 거친다:
+    // 조준점이 적 위를 지나면 스틱이 무거워지고(마찰), 스틱을 움직이는 동안엔
+    // 적 중심으로 살짝 끌린다(자석). 손을 떼면 절대 저절로 조준하지 않는다
+    const aa = balance.input.gamepad.aimAssist;
+    let padDX = input.padLookDX;
+    let padDY = input.padLookDY;
+    const stickActive = padDX !== 0 || padDY !== 0 || input.padMoveActive;
+    const assist = stickActive ? padAimAssist(world) : null;
+    if (assist) {
+      padDX *= aa.frictionMul;
+      padDY *= aa.frictionMul;
+    }
+    p.yaw -= (input.lookDX + padDX) * sens;
+    p.pitch = Math.max(
+      -pitchMax,
+      Math.min(pitchMax, p.pitch - (input.lookDY + padDY) * sens),
+    );
+    if (assist && assist.off <= (aa.magnetConeDeg * Math.PI) / 180 + assist.angRadius) {
+      // 몸 실루엣 가장자리까지만 끈다 — 이미 몸 위면 0 (머리를 노리는 손을 방해하지 않는다)
+      const step = (aa.magnetDegPerTick * Math.PI) / 180;
+      p.yaw += Math.max(-step, Math.min(step, assist.pullYaw));
+      p.pitch += Math.max(-step * 0.7, Math.min(step * 0.7, assist.pullPitch));
+    }
   }
 
   // 초음파 비명(박쥐) — 조준이 잔떨림에 실려 흔들린다. 시선 입력 뒤에 얹어

@@ -19,6 +19,7 @@ export const PAD_ACTIONS = [
   { id: 'cycleWeapon', label: '원거리 무기 교체' },
   { id: 'interact', label: '상호작용 (문 · 제단 · 상자)' },
   { id: 'reload', label: '재장전 / 시위 내리기' },
+  { id: 'lockOn', label: '타겟 락온 켜기 · 끄기' },
   { id: 'lantern', label: '랜턴 켜기 · 끄기 (길게 = 배터리 교체)' },
   { id: 'battery', label: '배터리 교체 (기본은 랜턴 길게)' },
   { id: 'inventory', label: '가방 · 스킬 열기' },
@@ -76,7 +77,8 @@ export const DEFAULT_BINDINGS: Record<PadAction, number> = {
   skill3: 0, // 선택 + A
   skill4: 2, // 선택 + X
   itemSelect: 4, // LB — 누른 채 D-패드
-  lantern: 11, // R3
+  lockOn: 11, // R3 — 소울라이크 관례
+  lantern: 12, // D-패드 ↑ (평상시. 소모품 선택+↑ 퀵슬롯 1과는 단독/조합 공존)
   battery: 13, // D-패드 ↓ (평상시). 랜턴(R3) 길게로도 된다
   inventory: 9, // Menu
   pause: 8, // View — 이게 없으면 패드만 쓰는 사람은 이 설정 화면에 영영 못 온다
@@ -88,7 +90,9 @@ export const DEFAULT_BINDINGS: Record<PadAction, number> = {
 
 // v2 (2026-08-31): 칩(조합) 개편 — 구 저장본(skill1~4 = -1, cast/cycleSkill)이 새 기본값을
 // 덮어쓰면 스킬 조합이 통째로 죽는다. 키를 올려 새 구조로 새로 시작한다
-const STORAGE_KEY = 'underworld.gamepad.bindings.v2';
+// v3 (2026-09-01): 락온(R3) 추가·랜턴 D-패드 ↑ 이동 — 구 저장본의 lantern=R3 가
+// 새 lockOn 기본과 겹친다. 현 기본값이 곧 직전 사용자 배치라 리셋 손실이 없다
+const STORAGE_KEY = 'underworld.gamepad.bindings.v3';
 
 /** 축 데드존 + 응답 곡선. 중앙부를 눌러 정밀 조준을 살린다 */
 function curve(value: number, deadzone: number, exponent: number): number {

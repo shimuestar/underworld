@@ -17,7 +17,19 @@
       "lookCurve": 2.0,
       "triggerThreshold": 0.35,
       "activeTimeoutMs": 4000,
-      "_aimAssistNote": "패드 에임 어시스트 (콘솔 FPS 관례) — 마우스는 영향 없음. 마찰: 조준점이 적(coneDeg + 적 각크기) 위를 지나면 스틱 감도가 frictionMul 로 무거워진다. 자석: 스틱을 움직이는 동안만 magnetConeDeg 안의 적 중심으로 틱당 magnetDegPerTick 만큼 끌린다 — 손을 떼면 절대 저절로 조준하지 않는다. 잠복·죽은 척은 제외 (밀고 금지) (2026-09-01)",
+      "_lockOnNote": "타겟 락온 (R3, 소울라이크) — 화면 중앙에 가까운 적을 잡아 카메라가 부드럽게 추적한다(turnDegPerTick 상한). 오른스틱 좌우 튕김 = 대상 전환, 상하 = pitch 오프셋(±pitchOffsetMaxDeg, 놓으면 복귀). 대상이 죽으면 근처로 자동 전환, breakRange 이탈·시야 losGraceTicks 상실이면 해제. 락온 중 에임 어시스트는 꺼진다 (2026-09-01)",
+    "lockOn": {
+      "range": 25,
+      "breakRange": 28,
+      "acquireFovDeg": 60,
+      "turnDegPerTick": 8,
+      "pitchOffsetMaxDeg": 10,
+      "switchFlick": 0.6,
+      "switchCooldownTicks": 15,
+      "losGraceTicks": 60,
+      "aimHeightFrac": 0.55
+    },
+    "_aimAssistNote": "패드 에임 어시스트 (콘솔 FPS 관례) — 마우스는 영향 없음. 마찰: 조준점이 적(coneDeg + 적 각크기) 위를 지나면 스틱 감도가 frictionMul 로 무거워진다. 자석: 스틱을 움직이는 동안만 magnetConeDeg 안의 적 중심으로 틱당 magnetDegPerTick 만큼 끌린다 — 손을 떼면 절대 저절로 조준하지 않는다. 잠복·죽은 척은 제외 (밀고 금지) (2026-09-01)",
       "aimAssist": {
         "range": 28,
         "coneDeg": 7,

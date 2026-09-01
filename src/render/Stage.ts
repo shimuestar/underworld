@@ -568,6 +568,32 @@ function makeEyeMaterials(): EyeKit {
     }),
   };
 }
+let lockTexture: THREE.CanvasTexture | null = null;
+/** 락온 마름모 — 소울라이크 관례의 표적 표시. 어두운 테두리로 어느 배경에서도 남는다 */
+function getLockTexture(): THREE.CanvasTexture {
+  if (lockTexture) return lockTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  ctx.beginPath();
+  ctx.moveTo(32, 8);
+  ctx.lineTo(56, 32);
+  ctx.lineTo(32, 56);
+  ctx.lineTo(8, 32);
+  ctx.closePath();
+  ctx.lineWidth = 9;
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.stroke();
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = '#ffd24a';
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255, 210, 74, 0.25)';
+  ctx.fill();
+  lockTexture = new THREE.CanvasTexture(canvas);
+  return lockTexture;
+}
+
 function getAlertTexture(): THREE.CanvasTexture {
   if (alertTexture) return alertTexture;
   const canvas = document.createElement('canvas');
@@ -1161,6 +1187,31 @@ export class Stage {
    *  그 프레임에 알아채는 경우 표시가 통째로 사라진다 (실측으로 확인).
    *  여기 적어 두면 다음 동기화 때 시각 객체가 생기면서 그대로 이어 붙는다 */
   private readonly alertAt = new Map<number, number>();
+  /** 타겟 락온 — 잡힌 적 id 와 머리 위 마름모 스프라이트 */
+  private lockOnTargetId: number | null = null;
+  private lockSprite: THREE.Sprite | null = null;
+
+  /** 락온 마커 대상 지정 — null 이면 숨긴다 (main 이 매 프레임 부른다) */
+  setLockOn(enemyId: number | null): void {
+    this.lockOnTargetId = enemyId;
+    if (enemyId === null && this.lockSprite) this.lockSprite.visible = false;
+  }
+
+  private ensureLockSprite(): THREE.Sprite {
+    if (this.lockSprite) return this.lockSprite;
+    const spr = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: getLockTexture(),
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+      }),
+    );
+    spr.visible = false;
+    this.scene.add(spr);
+    this.lockSprite = spr;
+    return spr;
+  }
 
   /** 인지 표시 — 알아챈 순간 머리 위에서 튀어올랐다 옅어진다 */
   markAlert(enemyId: number): void {
@@ -2925,6 +2976,19 @@ export class Stage {
       // 떨림의 기우뚱. z 회전은 이 연출만 쓰므로 매 프레임 절대값으로 넣는다 —
       // 자세를 만드는 x 회전(기울임·내지름)은 건드리지 않는다
       visual.torso.rotation.z = shocked ? shake * SHOCK_ROLL : 0;
+
+      // 락온 마커 — 잡힌 적 머리 위에서 은은히 숨쉰다
+      if (enemy.id === this.lockOnTargetId) {
+        const spr = this.ensureLockSprite();
+        const pulse = 1 + Math.sin(now / 180) * 0.1;
+        spr.visible = true;
+        spr.scale.set(0.55 * pulse, 0.55 * pulse, 1);
+        spr.position.set(
+          visual.group.position.x,
+          visual.group.position.y + def2.height + 0.65,
+          visual.group.position.z,
+        );
+      }
 
       // 인지 표시 — 뛰어올랐다(팝) 잠깐 머물고 옅어진다
       const alertStart = this.alertAt.get(enemy.id);

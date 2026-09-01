@@ -25,6 +25,10 @@ export interface InputSnapshot {
   padLookDY: number;
   /** 패드 왼스틱(이동)이 움직이는 중 — 자석은 스틱을 젓는 동안에만 끌어야 한다 */
   padMoveActive: boolean;
+  /** 오른스틱 X 원시값(-1~1, 데드존 적용) — 락온 대상 전환 튕김 판정용 */
+  padLookAxisX: number;
+  /** 이번 틱에 락온 토글(R3·키보드 설정 키)이 눌렸는가 (엣지) */
+  lockOnPressed: boolean;
   /** 이번 틱에 랜턴 토글 키가 눌렸는가 (엣지) */
   lanternToggle: boolean;
   /** 이번 틱에 배터리 교체 키가 눌렸는가 (엣지) */
@@ -100,6 +104,7 @@ export class Input {
   private padLanternHeld = 0;
   private padLanternSwapped = false;
   private interacts = 0;
+  private lockOnPresses = 0;
   private cycleRanged = 0;
   private useSlot = 0;
 
@@ -140,6 +145,7 @@ export class Input {
       if (skill >= 0) this.useSkill = skill + 1;
       if (e.code === kb.code('cycleSkill')) this.cycleSkills++; // 스킬 교체 — 선택 칸 회전
       if (e.code === kb.code('interact')) this.interacts++;
+      if (kb.code('lockOn') !== '' && e.code === kb.code('lockOn')) this.lockOnPresses++;
       // 퀵슬롯 1~5 — 마지막에 누른 것 하나만 남긴다 (한 틱에 두 개를 쓸 일은 없다)
       const digit = [kb.code('slot1'), kb.code('slot2'), kb.code('slot3'), kb.code('slot4'), kb.code('slot5')].indexOf(e.code);
       if (digit >= 0) this.useSlot = digit + 1;
@@ -338,6 +344,8 @@ export class Input {
       padLookDX: padLookX,
       padLookDY: padLookY,
       padMoveActive: Math.abs(axes.moveX) + Math.abs(axes.moveY) > 0,
+      padLookAxisX: axes.lookX,
+      lockOnPressed: this.lockOnPresses > 0 || (padPlain && pad.pressed('lockOn')),
       lanternToggle: this.lanternToggles > 0 || padLanternTap,
       batterySwap: this.batterySwaps > 0 || (padPlain && pad.pressed('battery')) || padLanternHold,
       meleePressed: this.meleeClicks > 0 || (padPlain && pad.pressed('melee')),
@@ -372,6 +380,7 @@ export class Input {
     this.cycleSkills = 0;
     this.useSelected = 0;
     this.interacts = 0;
+    this.lockOnPresses = 0;
     this.cycleRanged = 0;
     this.useSlot = 0;
     return snapshot;
@@ -389,6 +398,8 @@ export class Input {
       padLookDX: 0,
       padLookDY: 0,
       padMoveActive: false,
+      padLookAxisX: 0,
+      lockOnPressed: false,
       lanternToggle: false,
       batterySwap: false,
       meleePressed: false,
