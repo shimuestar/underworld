@@ -134,9 +134,19 @@ describe('패드 에임 어시스트', () => {
     expect(centerOff).toBeLessThanOrEqual(halfW + 0.002); // 몸 가장자리엔 붙었다
   });
 
-  it('잠복한 적은 밀고하지 않는다 — 천장 거머리 위에서 마찰이 없다', () => {
+  it('천장에 붙은 거머리도 표적이다 — 올려다보면 마찰이 걸린다', () => {
     const l = add('leech', 16, 10);
     l.lurking = true;
+    l.jumpY = 3.3; // 천장께 매달림
+    world.player.pitch = 0.2; // 매달린 몸 쪽으로 올려다본다 (표적 0.248rad 근처)
+    const yaw0 = world.player.yaw;
+    padLookTick(0.5);
+    expect(Math.abs(world.player.yaw - yaw0)).toBeLessThan(0.5 * SENS * 0.9); // 무거워졌다
+  });
+
+  it('죽은 척 구울은 밀고하지 않는다 — 시체 위에서 마찰이 없다', () => {
+    const g = add('ghoul', 16, 10);
+    g.feigning = true;
     const yaw0 = world.player.yaw;
     padLookTick(0.5);
     expect(Math.abs(world.player.yaw - yaw0)).toBeCloseTo(0.5 * SENS, 6); // 온전한 감도

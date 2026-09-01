@@ -8,7 +8,8 @@ import { spendStamina, type World } from '../core/World';
 let strideTicks = 0;
 
 /** 에임 어시스트 표적 — 조준점에서 각도상 가장 가까운 적 (사거리·시야선 안).
- *  잠복(천장 거머리)·죽은 척 구울은 제외 — 어시스트가 숨은 적을 밀고해선 안 된다.
+ *  죽은 척 구울만 제외(시체처럼 보여야 한다) — 천장 거머리는 눈에 보이는 표적이라
+ *  잠복 중에도 어시스트가 걸린다 (2026-09-01 사용자 지시. 높이는 jumpY 가 안다).
  *  각크기(atan(반지름/거리))를 원뿔에 더해 가까운 적일수록 후하게 잡는다.
  *  pullYaw/pullPitch 는 몸 실루엣 '가장자리'까지의 끌림 — 조준점이 이미 몸 위에
  *  있으면 0 이다. 자석은 붙을 때까지만 돕고, 몸 안에서 머리/몸통을 고르는 건
@@ -28,7 +29,7 @@ export function padAimAssist(
   const eyeY = p.y + balance.player.eyeHeight;
   let best: ReturnType<typeof padAimAssist> = null;
   for (const e of world.enemies) {
-    if (!e.alive || e.lurking || e.feigning) continue;
+    if (!e.alive || e.feigning) continue;
     const dx = e.x - p.x;
     const dz = e.z - p.z;
     const dist = Math.hypot(dx, dz);
