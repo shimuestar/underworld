@@ -100,7 +100,8 @@ function padBtn(action: PadAction): string {
 function padRumble(
   kind:
     | 'hit' | 'heavy' | 'kill' | 'shot' | 'cast' | 'block' | 'parry' | 'whiff'
-    | 'interact' | 'hurt' | 'drain' | 'blast' | 'reload' | 'pickup' | 'use',
+    | 'interact' | 'hurt' | 'drain' | 'blast' | 'reload' | 'pickup' | 'use'
+    | 'roar' | 'heartbeat' | 'tremble' | 'crumble' | 'webSnag' | 'webTear',
 ): void {
   if (!input.usingPad) return;
   const r = balance.input.gamepad.rumble[kind];
@@ -114,6 +115,17 @@ function padRumbleScaled(kind: 'draw' | 'loose', frac: number): void {
   const m = Math.max(0, Math.min(1, frac));
   input.gamepad.rumble(r.ms, r.strong * m, r.weak * m);
 }
+
+let nextHeartbeatAt = 0; // 저체력 맥박 스케줄
+// 균열벽 붕괴 — 가까우면 낮은 우르릉 (충격파와 별개의 결)
+events.on('crack_wall_broken', (payload) => {
+  const c = payload as { x: number; z: number };
+  if (Math.hypot(world.player.x - c.x, world.player.z - c.z) <= 12) padRumble('crumble');
+});
+// 거미줄 — 걸리는 순간 끈적하게, 찢을 때마다 톡, 다 찢으면 걸림과 같은 결로 마침
+events.on('web_caught', () => padRumble('webSnag'));
+events.on('web_torn', () => padRumble('webTear'));
+events.on('web_broken', () => padRumble('webSnag'));
 
 // 폭발 충격파 — 피해가 없어도 근처에서 터지면 거리만큼 진동이 온다 (공기가 때린다).
 // 피해를 입은 폭발은 곧이어 오는 player_damaged 의 blast 가 이걸 덮는다
@@ -945,6 +957,7 @@ events.on('enemy_alerted', (payload) => {
   // 보스는 포효가 곧 인지음이므로 신호음을 겹쳐 내지 않는다
   const now = performance.now();
   const boss = enemyDef(info.enemyType).boss;
+  if (boss) padRumble('roar'); // 포효가 손까지 온다 — 길고 낮게
   if (!boss && now >= alertSoundUntil) {
     alertSoundUntil = now + ALERT_SOUND_GAP_MS;
     audio.play('enemy_alert');
@@ -1166,7 +1179,17 @@ events.on('enemy_damaged', (payload) => {
 });
 
 // 근접 처치 — 원거리 처치는 울리지 않는다 (원거리 진동은 발사 순간뿐)
-events.on('melee_kill', () => padRumble('kill'));
+events.on('melee_kill', (payload) => {
+  if ((payload as { execution?: boolean }).execution !== true) {
+    padRumble('kill');
+    return;
+  }
+  // 처형 — 이단: 퍽(강모터) … 우드득(둘 다 최대)
+  if (!input.usingPad) return;
+  const ex = balance.input.gamepad.rumble.execute;
+  input.gamepad.rumble(ex.ms, ex.strong, ex.weak);
+  window.setTimeout(() => input.gamepad.rumble(ex.tailMs, 1.0, 1.0), ex.gapMs);
+});
 events.on('melee_hit', (payload) => {
   const hit = payload as { enemyId: number; damage?: number; heavy?: boolean };
   audio.play(hit.heavy ? 'heavy_hit' : 'melee_hit');
@@ -2762,8 +2785,24 @@ function render(alpha: number): void {
     world.weapon.ranged === 'bow'
       ? (world.weapon.bowDraw ?? 0) / balance.weapons.bow.maxDrawTicks
       : 0;
-  // 활 당김 진동 — 당기는 동안 계속, 당길수록 굵게 (매 프레임 갱신해 이어 붙인다)
-  if (bowDrawFrac > 0 && !world.paused) padRumbleScaled('draw', 0.15 + 0.85 * bowDrawFrac);
+  // 프레임 지속 진동 — 우선순위: 활 당김 > 초음파 떨림 > 저체력 심장박동
+  if (bowDrawFrac > 0 && !world.paused) {
+    padRumbleScaled('draw', 0.15 + 0.85 * bowDrawFrac); // 당길수록 굵게
+  } else if ((world.player.aimShakeTicks ?? 0) > 0 && !world.paused && !world.dead) {
+    padRumble('tremble'); // 초음파 비명 — 조준 흔들림과 촉각을 맞춘다
+  } else if (
+    !world.paused &&
+    !world.dead &&
+    world.player.health / balance.player.healthMax <=
+      balance.input.gamepad.rumble.heartbeat.thresholdFrac
+  ) {
+    const hbNow = performance.now();
+    if (hbNow >= nextHeartbeatAt) {
+      nextHeartbeatAt = hbNow + balance.input.gamepad.rumble.heartbeat.intervalMs;
+      padRumble('heartbeat');
+      window.setTimeout(() => padRumble('heartbeat'), 160); // 두근-두근
+    }
+  }
   // 왼손에 든 원거리 무기 (오른손 해머는 항상 보인다)
   stage.setHandWeapon(world.weapon.ranged);
   stage.updateHands({
