@@ -208,18 +208,35 @@ export class GamepadInput {
     return !this.now.has(b) && this.prev.has(b);
   }
 
-  /** 진동 — 지원 패드(dual-rumble)에서만, 실패는 조용히 무시. 새 효과가 이전 것을 덮는다 */
+  /** 진동 — 지원 패드(dual-rumble)에서만, 실패는 조용히 무시. 새 효과가 이전 것을 덮는다.
+   *  startDelay 는 반드시 넣는다 — 일부 크롬(특히 맥)은 이 필드가 없으면 TypeError 로
+   *  조용히 거부해 진동이 영영 안 울린다 (실측 보고). 구식 hapticActuators 도 폴백 */
   rumble(ms: number, strong: number, weak: number): void {
     if (this.padIndex === null) return;
-    const pad = navigator.getGamepads?.()[this.padIndex];
-    const actuator = (
-      pad as { vibrationActuator?: { playEffect?: (type: string, params: object) => Promise<unknown> } } | null
-    )?.vibrationActuator;
-    void actuator?.playEffect?.('dual-rumble', {
-      duration: ms,
-      strongMagnitude: strong,
-      weakMagnitude: weak,
-    })?.catch(() => {});
+    const pad = navigator.getGamepads?.()[this.padIndex] as
+      | (Gamepad & {
+          vibrationActuator?: {
+            playEffect?: (type: string, params: object) => Promise<unknown>;
+          };
+          hapticActuators?: Array<{ pulse?: (value: number, duration: number) => Promise<unknown> }>;
+        })
+      | null;
+    if (!pad) return;
+    const actuator = pad.vibrationActuator;
+    if (actuator?.playEffect) {
+      void actuator
+        .playEffect('dual-rumble', {
+          startDelay: 0,
+          duration: ms,
+          strongMagnitude: strong,
+          weakMagnitude: weak,
+        })
+        .catch(() => {});
+      return;
+    }
+    // 파이어폭스/구식 경로 — 세기 하나짜리 펄스
+    const haptic = pad.hapticActuators?.[0];
+    if (haptic?.pulse) void haptic.pulse(Math.max(strong, weak), ms).catch(() => {});
   }
 
   /** 매핑을 거치지 않은 버튼 번호로 직접 묻는다 — 리매핑 화면 자신은 고정 버튼을

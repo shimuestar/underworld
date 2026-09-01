@@ -241,6 +241,7 @@ export class GamepadUI {
       const button = this.pad.firstNewButton();
       if (button === null) return;
       this.pad.bind(this.capturing.id, button);
+      this.pad.rumble(160, 0.8, 0.8); // 걸렸다는 응답 — 안 울리면 이 브라우저·연결이 진동 미지원
       this.capturing = null;
       this.rebuild();
       return;
@@ -373,7 +374,8 @@ export class GamepadUI {
     const hint = document.createElement('div');
     hint.textContent =
       '패드: D-패드 ↑↓ 선택 · A 설정 · Y 기본값 · B 닫기   |   ' +
-      '키보드: ↑↓ 선택 · Enter 설정 · Delete 해제 · Esc 닫기';
+      '키보드: ↑↓ 선택 · Enter 설정 · Delete 해제 · Esc 닫기' +
+      (this.mode === 'pad' ? '   |   버튼을 걸면 진동으로 응답한다 (진동 테스트)' : '');
     hint.style.cssText = 'margin-top:12px;color:#6c7280;font-size:11px;';
     panel.appendChild(hint);
 
