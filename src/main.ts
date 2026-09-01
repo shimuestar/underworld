@@ -105,6 +105,9 @@ function padRumble(
     | 'roar' | 'heartbeat' | 'tremble' | 'crumble' | 'webSnag' | 'webTear',
 ): void {
   if (!input.usingPad) return;
+  // 포효가 도는 동안은 아무것도 못 끼어든다 — 패드는 마지막 효과가 앞 효과를
+  // 교체해 버려서, 사격 한 방이면 2.2초짜리 포효가 수백 ms 로 잘리던 원인
+  if (kind !== 'roar' && performance.now() < rumbleHoldUntil) return;
   const r = balance.input.gamepad.rumble[kind];
   input.gamepad.rumble(r.ms, r.strong, r.weak);
   if (kind === 'roar') rumbleHoldUntil = performance.now() + r.ms;
@@ -113,6 +116,7 @@ function padRumble(
 /** 세기 배율이 붙는 진동 — 활 당김(당길수록 굵게)·놓는 반동(당긴 만큼 굵게) */
 function padRumbleScaled(kind: 'draw' | 'loose', frac: number): void {
   if (!input.usingPad) return;
+  if (performance.now() < rumbleHoldUntil) return; // 포효 우선
   const r = balance.input.gamepad.rumble[kind];
   const m = Math.max(0, Math.min(1, frac));
   input.gamepad.rumble(r.ms, r.strong * m, r.weak * m);
@@ -157,6 +161,7 @@ events.on('explosion', (payload) => {
   const d = Math.hypot(world.player.x - b.x, world.player.z - b.z);
   if (d > reach) return;
   const frac = 1 - d / reach;
+  if (performance.now() < rumbleHoldUntil) return; // 포효 우선
   input.gamepad.rumble(cfg.ms, cfg.strong * frac, cfg.weak * Math.min(1, frac + 0.15));
 });
 
@@ -1212,9 +1217,13 @@ events.on('melee_kill', (payload) => {
   }
   // 처형 — 이단: 퍽(강모터) … 우드득(둘 다 최대)
   if (!input.usingPad) return;
+  if (performance.now() < rumbleHoldUntil) return; // 포효 우선
   const ex = balance.input.gamepad.rumble.execute;
   input.gamepad.rumble(ex.ms, ex.strong, ex.weak);
-  window.setTimeout(() => input.gamepad.rumble(ex.tailMs, 1.0, 1.0), ex.gapMs);
+  window.setTimeout(() => {
+    if (performance.now() < rumbleHoldUntil) return; // 포효 우선
+    input.gamepad.rumble(ex.tailMs, 1.0, 1.0);
+  }, ex.gapMs);
 });
 events.on('melee_hit', (payload) => {
   const hit = payload as { enemyId: number; damage?: number; heavy?: boolean };
