@@ -9,14 +9,24 @@ let strideTicks = 0;
 
 /** 에임 어시스트 표적 — 조준점에서 각도상 가장 가까운 적 (사거리·시야선 안).
  *  잠복(천장 거머리)·죽은 척 구울은 제외 — 어시스트가 숨은 적을 밀고해선 안 된다.
- *  각크기(atan(반지름/거리))를 원뿔에 더해 가까운 적일수록 후하게 잡는다 */
+ *  각크기(atan(반지름/거리))를 원뿔에 더해 가까운 적일수록 후하게 잡는다.
+ *  pullYaw/pullPitch 는 몸 실루엣 '가장자리'까지의 끌림 — 조준점이 이미 몸 위에
+ *  있으면 0 이다. 자석은 붙을 때까지만 돕고, 몸 안에서 머리/몸통을 고르는 건
+ *  플레이어 몫이어야 한다 (덩치 큰 적 헤드샷이 중심 끌림과 싸우던 문제) */
 export function padAimAssist(
   world: World,
-): { offYaw: number; offPitch: number; off: number; angRadius: number } | null {
+): {
+  offYaw: number;
+  offPitch: number;
+  off: number;
+  angRadius: number;
+  pullYaw: number;
+  pullPitch: number;
+} | null {
   const aa = balance.input.gamepad.aimAssist;
   const p = world.player;
   const eyeY = p.y + balance.player.eyeHeight;
-  let best: { offYaw: number; offPitch: number; off: number; angRadius: number } | null = null;
+  let best: ReturnType<typeof padAimAssist> = null;
   for (const e of world.enemies) {
     if (!e.alive || e.lurking || e.feigning) continue;
     const dx = e.x - p.x;
@@ -32,7 +42,15 @@ export function padAimAssist(
     const angRadius = Math.atan2(def.radius, dist);
     if (off > (aa.coneDeg * Math.PI) / 180 + angRadius) continue;
     if (!world.level.hasLineOfSight(p.x, p.z, e.x, e.z)) continue;
-    if (!best || off < best.off) best = { offYaw, offPitch, off, angRadius };
+    if (best && off >= best.off) continue;
+    // 실루엣 가장자리 클램프 — 세로는 발목~정수리, 가로는 몸 반지름의 90%
+    const pitchTop = Math.atan2((e.jumpY ?? 0) + def.height * 0.95 - eyeY, dist);
+    const pitchBot = Math.atan2((e.jumpY ?? 0) + def.height * 0.1 - eyeY, dist);
+    const pullPitch =
+      p.pitch > pitchTop ? pitchTop - p.pitch : p.pitch < pitchBot ? pitchBot - p.pitch : 0;
+    const halfW = Math.atan2(def.radius * 0.9, dist);
+    const pullYaw = Math.abs(offYaw) <= halfW ? 0 : offYaw - Math.sign(offYaw) * halfW;
+    best = { offYaw, offPitch, off, angRadius, pullYaw, pullPitch };
   }
   return best;
 }
@@ -63,9 +81,10 @@ export function tick(world: World, dt: number): void {
     Math.min(pitchMax, p.pitch - (input.lookDY + padDY) * sens),
   );
   if (assist && assist.off <= (aa.magnetConeDeg * Math.PI) / 180 + assist.angRadius) {
+    // 몸 실루엣 가장자리까지만 끈다 — 이미 몸 위면 0 (머리를 노리는 손을 방해하지 않는다)
     const step = (aa.magnetDegPerTick * Math.PI) / 180;
-    p.yaw += Math.max(-step, Math.min(step, assist.offYaw));
-    p.pitch += Math.max(-step * 0.7, Math.min(step * 0.7, assist.offPitch));
+    p.yaw += Math.max(-step, Math.min(step, assist.pullYaw));
+    p.pitch += Math.max(-step * 0.7, Math.min(step * 0.7, assist.pullPitch));
   }
 
   // 초음파 비명(박쥐) — 조준이 잔떨림에 실려 흔들린다. 시선 입력 뒤에 얹어

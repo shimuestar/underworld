@@ -106,6 +106,34 @@ describe('패드 에임 어시스트', () => {
     expect(Math.abs(world.player.yaw - yaw0)).toBeCloseTo(0.5 * SENS, 6);
   });
 
+  it('몸 위에 오르면 끌림이 멈춘다 — 덩치 큰 적 머리를 자유롭게 노린다', () => {
+    add('ghoul', 16, 10); // 키 1.85 — 정면 8m
+    // 조준을 머리 높이(실루엣 안 위쪽)로 — 세로 끌림이 0 이어야 한다
+    world.player.pitch = 0.015; // 머리께 — 정수리(0.0197rad) 바로 아래, 실루엣 안
+    const pitch0 = world.player.pitch;
+    const yaw0 = world.player.yaw;
+    // 이동 스틱만 젓는 상태 — 자석 조건은 살아 있다
+    for (let i = 0; i < 20; i++) {
+      world.input = { ...Input.emptySnapshot(), padMoveActive: true };
+      PlayerMove.tick(world, DT);
+    }
+    expect(world.player.pitch).toBeCloseTo(pitch0, 9); // 중심(가슴)으로 안 끌려 내려간다
+    expect(world.player.yaw).toBeCloseTo(yaw0, 9); // 이미 몸 위 — 가로 끌림도 없다
+  });
+
+  it('몸 밖에서는 실루엣 가장자리까지 끌린다 — 붙는 순간 멈춘다', () => {
+    const e = add('ghoul', 16, 10.9); // 옆으로 어긋남(6.4도) — 자석 원뿔 안, 몸 밖
+    for (let i = 0; i < 60; i++) {
+      world.input = { ...Input.emptySnapshot(), padMoveActive: true };
+      PlayerMove.tick(world, DT);
+    }
+    // 중심까지 다 끌려가지 않고 가장자리 언저리에서 멈춘다
+    const centerOff = yawOffTo(e.x, e.z);
+    const halfW = Math.atan2(0.42 * 0.9, Math.hypot(e.x - 8, e.z - 10));
+    expect(centerOff).toBeGreaterThan(halfW * 0.5); // 중심 고정이 아니다
+    expect(centerOff).toBeLessThanOrEqual(halfW + 0.002); // 몸 가장자리엔 붙었다
+  });
+
   it('잠복한 적은 밀고하지 않는다 — 천장 거머리 위에서 마찰이 없다', () => {
     const l = add('leech', 16, 10);
     l.lurking = true;
