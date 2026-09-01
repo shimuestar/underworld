@@ -1973,13 +1973,13 @@ events.on('player_died', () => {
   // 죽은 자리에 비석 — 가방 소모품만 떨어뜨린다 (스킬·기본 무기·탄약·골드는 그대로).
   // 부활 후 그 자리로 돌아와 밟으면 되찾는다
   spillInventoryToGrave(world, world.player.x, world.player.z);
-  const dk = keyLabel('Enter', 'interact');
-  deathHint!.textContent = !world.respawn
-    ? `${dk} 키로 재시작`
-    : Math.hypot(world.respawn.x - level.spawn.x, world.respawn.z - level.spawn.z) < 0.01
-      ? `${dk} — 이 층 처음부터` // 제단을 아직 안 밟았다 — 층 입구로 돌아간다
-      : `${dk} — 제단에서 부활`;
+  deathHint!.textContent = deathHintText();
   deathOverlay.classList.add('visible');
+});
+
+events.on('respawned', (payload) => {
+  const tribute = (payload as { tribute?: number }).tribute ?? 0;
+  if (tribute > 0) showReaction(`부활의 재물 — 골드 ${tribute} 을 제단에 바쳤다`, 3200);
 });
 
 events.on('grave_dropped', () =>
@@ -1993,10 +1993,17 @@ events.on('grave_recovered', (payload) => {
   );
 });
 
-/** 제단 리스폰 — 위치·체력 복원, 탄약 상한, 마나 0, 각인·오염 유지, 구간 진행도 초기화 */
+/** 죽인 적의 배치 키(층 번호 포함) — 부활을 거듭해도 안 살아난다.
+ *  층 좌표는 층마다 겹치므로 층 번호를 키에 넣는다. 전체 재시작(reload)이 곧 초기화다 */
+const slainSpawnKeys = new Set<string>();
+
+/** 제단 리스폰 — 위치·체력 복원, 탄약 상한, 마나 0, 각인·오염 유지.
+ *  부활의 대가로 골드 전액을 재물로 바치고, 죽였던 적은 되살아나지 않는다 (2026-09) */
 function respawnAtAltar(): void {
   const p = world.player;
   const point = world.respawn!;
+  const tribute = world.gold;
+  world.gold = 0;
   p.x = point.x;
   p.z = point.z;
   p.prevX = point.x;
@@ -2021,8 +2028,16 @@ function respawnAtAltar(): void {
   world.mana.chainIndex = 0;
   world.mana.outOfCombatTicks = 0;
   world.mana.inCombat = false;
-  world.enemies = spawnEnemies(levelJson.entities, level); // 구간 진행도 초기화
-  // 보스도 되살아났다 — 열쇠로 딴 적 없는 층이면 쇠사슬도 다시 잠긴다
+  // 살아 있던 적만 배치 자리로 되돌린다 — 죽인 적(종·홈 좌표로 대조)은 그대로 죽어 있다.
+  // 목록은 부활을 거듭해도 쌓인다 (죽은 적은 배열에서 빠지므로 매번 다시 봐선 잊는다).
+  // 소환수·분열체는 배치에 없으므로 함께 사라진다
+  for (const e of world.enemies) {
+    if (!e.alive) slainSpawnKeys.add(`${floorIndex}:${e.type}@${e.homeX},${e.homeZ}`);
+  }
+  world.enemies = spawnEnemies(levelJson.entities, level).filter(
+    (e) => !slainSpawnKeys.has(`${floorIndex}:${e.type}@${e.homeX},${e.homeZ}`),
+  );
+  // 주인을 이미 잡은 층이면 쇠창살은 잠기지 않는다 (죽은 주인은 안 살아난다)
   world.exitNeedsKey =
     world.enemies.some((e) => e.floorBoss || enemyDef(e.type).boss) &&
     !unlockedFloors.has(floorIndex);
@@ -2047,7 +2062,7 @@ function respawnAtAltar(): void {
   world.faceLeechMash = 0;
   world.dead = false;
   deathOverlay!.classList.remove('visible');
-  events.emit('respawned', { x: point.x, z: point.z });
+  events.emit('respawned', { x: point.x, z: point.z, tribute });
 }
 
 events.on('shot_fired', (payload) => {
@@ -2097,8 +2112,23 @@ function restartAfterDeath(): void {
   if (world.respawn) respawnAtAltar();
   else location.reload();
 }
+/** 사망 화면 안내 — 두 갈래: 부활(골드 재물) / 던전 처음부터. 장치 바뀌면 표기도 따라온다 */
+function deathHintText(): string {
+  const reviveKey = keyLabel('Enter', 'interact');
+  const restartKey = keyLabel('R', 'reload');
+  if (!world.respawn) return `${reviveKey} — 던전 다시 공략 (처음부터)`;
+  const atFloorStart =
+    Math.hypot(world.respawn.x - level.spawn.x, world.respawn.z - level.spawn.z) < 0.01;
+  return (
+    `${reviveKey} — ${atFloorStart ? '층 입구에서 부활' : '제단에서 부활'}` +
+    ` (골드 전액을 재물로 · 죽인 적은 안 살아난다)\n` +
+    `${restartKey} — 던전 다시 공략 (처음부터)`
+  );
+}
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Enter' && world.dead) restartAfterDeath();
+  if (!world.dead) return;
+  if (e.code === 'Enter') restartAfterDeath();
+  else if (e.code === 'KeyR') location.reload();
 });
 
 // ---- 제단 ----
@@ -2291,9 +2321,8 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   // 도착한 계단이 곧 부활 지점이다 — 3층에서 죽었다고 1층부터 다시 하게 만들지 않는다.
   // 제단을 밟으면 그쪽으로 옮겨 가므로 제단은 여전히 "더 가까운 저장점" 값을 한다
   world.respawn = { x: at.x, z: at.z };
-  // 출구 잠금 — 보스가 배치된 층에서 아직 열쇠로 딴 적이 없으면 잠긴다.
-  // 살아 있는지가 아니라 "딴 적 있는지" 가 기준이다: 보스를 죽이고 열쇠를 안 쓴 채
-  // 오가도 사슬은 그대로 걸려 있어야 한다 (열쇠도 손에/바닥에 그대로 있다)
+  // 출구 봉인 — 주인이 배치된 층에서 아직 딴 적이 없으면 쇠창살이 내려온다.
+  // 층을 새로 로드하면 적이 초기화되므로, 이미 딴 층(unlockedFloors)만 예외다
   world.exitNeedsKey =
     levelJson.entities.some(
       (e) =>
@@ -2507,7 +2536,10 @@ function simulate(dt: number): void {
     else if (input.gamepad.rawPressed(0)) shopUI.padBuy(); // A
     else if (input.gamepad.rawPressed(1)) shopUI.padClose(); // B
   }
-  if (world.dead && input.gamepad.pressed('interact')) restartAfterDeath();
+  if (world.dead) {
+    if (input.gamepad.pressed('interact')) restartAfterDeath();
+    else if (input.gamepad.pressed('reload')) location.reload();
+  }
 
   // 히트스톱 — simulate를 건너뛰되 반응 입력(릴리즈)은 버퍼에 보관 (docs/architecture.md §1)
   if (world.freezeTicks > 0) {
@@ -3040,14 +3072,7 @@ function render(alpha: number): void {
   // 중앙 키캡 — 이번 프레임에 보여 줄 키 (null = 숨김). 문 같은 단순 대상 전용
   let centerKeycap: string | null = null;
   // 사망 화면 힌트 — 죽은 뒤에 패드를 집거나 내려놔도 표기가 따라온다
-  if (world.dead) {
-    const dk = keyLabel('Enter', 'interact');
-    deathHint!.textContent = !world.respawn
-    ? `${dk} 키로 재시작`
-    : Math.hypot(world.respawn.x - level.spawn.x, world.respawn.z - level.spawn.z) < 0.01
-      ? `${dk} — 이 층 처음부터` // 제단을 아직 안 밟았다 — 층 입구로 돌아간다
-      : `${dk} — 제단에서 부활`;
-  }
+  if (world.dead) deathHint!.textContent = deathHintText();
   if (showAltarPrompt) {
     altarPrompt!.textContent =
       `제단 — ${IK} 보급 상점\n` +

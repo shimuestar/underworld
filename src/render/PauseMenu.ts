@@ -74,7 +74,7 @@ export class PauseMenu {
         // 저장 = 제단 진입 시 등록되는 리스폰 지점. 사망 시 부활 지점과 같은 곳이다
         hint: (world) =>
           world.respawn
-            ? '제단 체크포인트 — 각인·골드는 그대로, 적 배치는 초기화'
+            ? '제단 체크포인트 — 골드 전액을 재물로 바친다 · 죽인 적은 안 살아난다'
             : '아직 들른 제단이 없다',
         enabled: (world) => world.respawn !== null,
         run: actions.loadSave,
