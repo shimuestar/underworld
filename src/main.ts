@@ -2662,10 +2662,30 @@ const skillCells = Array.from({ length: balance.skills.quickslots }, (_, i) => {
 
 /** 스킬 퀵슬롯 — 마름모 안은 색 원반과 키 하나뿐이라, 고른 칸의 이름만 뭉치 위에 적는다.
  *  마나가 모자라거나 쿨다운이면 원반이 바래고, 쿨다운은 마름모가 비스듬히 차오른다 */
+/** 슬롯 키 표기 — 장치를 따라간다: 패드면 조합(선택+버튼), 키보드면 현재 설정 키 */
+function shortPadBtn(b: number): string {
+  return buttonName(b).replace('D-패드 ', '');
+}
+function skillSlotKeyLabel(i: number): string {
+  if (input.usingPad) {
+    return `${shortPadBtn(input.gamepad.binding('skillSelect'))}+${shortPadBtn(input.gamepad.binding(`skill${i + 1}` as PadAction))}`;
+  }
+  return keyBindings.label(`skill${i + 1}` as KeyAction);
+}
+function quickSlotKeyLabel(i: number): string {
+  if (input.usingPad) {
+    if (i >= 4) return '—'; // 패드 조합은 D-패드 4방향까지 — 5번 자리가 없다
+    return `${shortPadBtn(input.gamepad.binding('itemSelect'))}+${shortPadBtn(input.gamepad.binding(`slot${i + 1}` as PadAction))}`;
+  }
+  return keyBindings.label(`slot${i + 1}` as KeyAction);
+}
+
 function syncSkillSlots(): void {
   world.skillSlots.forEach((id, i) => {
     const ui = skillCells[i];
     if (!ui) return;
+    const keyText = skillSlotKeyLabel(i);
+    if (ui.key.textContent !== keyText) ui.key.textContent = keyText;
     const selected = world.selectedSkill === i;
     if (!id) {
       ui.cell.className = `dslot p${i} skill empty${selected ? ' selected' : ''}`;
@@ -2709,6 +2729,8 @@ function syncQuickslots(): void {
   view.forEach((slot, i) => {
     const ui = quickCells[i];
     if (!ui) return;
+    const keyText = quickSlotKeyLabel(i);
+    if (ui.key.textContent !== keyText) ui.key.textContent = keyText;
     if (!slot.kind) {
       ui.cell.className = `dslot p${i} item empty`;
       ui.setKind(null);
