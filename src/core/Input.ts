@@ -284,9 +284,11 @@ export class Input {
     const skillLayer = pad.held('skillSelect');
     const itemLayer = !skillLayer && pad.held('itemSelect');
     const padPlain = !skillLayer && !itemLayer;
-    // 조준(ADS) 레이어 — 조준 버튼(기본 LT)을 붙든 동안 근접 버튼(RT)이 발사가 된다.
-    // 조준 없이 근접 버튼만 누르면 평소처럼 해머다
-    const padAiming = padPlain && pad.held('ranged');
+    // 조준(ADS) — 조준 버튼(기본 LT)을 붙든 동안 근접 버튼(RT)이 발사가 된다.
+    // 조준 없이 근접 버튼만 누르면 평소처럼 해머다.
+    // 조준 자체는 레이어와 무관하게 유지된다 — 조준한 채 스킬(RB+버튼)을 끼워 넣어도
+    // 줌·견착이 안 풀린다 (2026-09-01 사용자 결정). 발사만 레이어 중에 잠긴다
+    const padAiming = pad.held('ranged');
 
     // 패드 랜턴 버튼: 짧게 떼면 켜고 끄기, holdTicks 넘게 붙들면 배터리 교체 (한 번만)
     let padLanternTap = false;
@@ -358,8 +360,8 @@ export class Input {
       batterySwap: this.batterySwaps > 0 || (padPlain && pad.pressed('battery')) || padLanternHold,
       meleePressed: this.meleeClicks > 0 || (padPlain && !padAiming && pad.pressed('melee')),
       meleeHeld: this.meleeDown || (padPlain && !padAiming && pad.held('melee')),
-      rangedPressed: this.rangedClicks > 0 || (padAiming && pad.pressed('melee')),
-      rangedHeld: this.rangedDown || (padAiming && pad.held('melee')),
+      rangedPressed: this.rangedClicks > 0 || (padAiming && padPlain && pad.pressed('melee')),
+      rangedHeld: this.rangedDown || (padAiming && padPlain && pad.held('melee')),
       reload: this.reloads > 0 || (padPlain && pad.pressed('reload')),
       reactionPressed: this.reactionClicks > 0 || (padPlain && pad.pressed('reaction')),
       reactionHeld: this.reactionDown || (padPlain && pad.held('reaction')),
