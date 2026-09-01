@@ -202,7 +202,8 @@ export function tick(world: World, dt: number): void {
     let padDX = input.padLookDX;
     let padDY = input.padLookDY;
     const stickActive = padDX !== 0 || padDY !== 0 || input.padMoveActive;
-    const assist = stickActive ? padAimAssist(world) : null;
+    // 에임 보정은 조준(LT) 중에만 — 평시 시선은 온전히 자유다 (2026-09-01 ADS 개편)
+    const assist = stickActive && input.padAiming ? padAimAssist(world) : null;
     if (assist) {
       padDX *= aa.frictionMul;
       padDY *= aa.frictionMul;

@@ -2871,7 +2871,11 @@ function render(alpha: number): void {
   // 어시스트 자체는 스틱을 젓는 동안만 끌지만, 표시는 표적 위면 항상 — "걸리고 있다"의 증거
   crosshairEl.classList.toggle(
     'lock',
-    input.usingPad && !world.dead && !world.uiOpen && padAimAssist(world) !== null,
+    input.usingPad &&
+      world.input.padAiming &&
+      !world.dead &&
+      !world.uiOpen &&
+      padAimAssist(world) !== null,
   );
 
   // 하단 중앙 상태 표시 — HP 바 + 무기 슬롯
@@ -3082,7 +3086,7 @@ function render(alpha: number): void {
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}${world.skillTestMode ? '   [스킬 테스트]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     (input.usingPad
-      ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 원거리(${padBtn('cycleWeapon')} 교체)  ${padBtn('melee')} 근접·처형·상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
+      ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 조준+${padBtn('melee')} 발사(${padBtn('cycleWeapon')} 무기 교체)  ${padBtn('melee')} 근접·처형·상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
         `${padBtn('skillSelect')}+${padBtn('skill1')}·${padBtn('skill2')}·${padBtn('skill3')}·${padBtn('skill4')} 스킬  ${padBtn('itemSelect')}+D-패드 소모품  ${padBtn('inventory')} 가방→스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴(길게=배터리)  ${padBtn('pause')} 일시정지·키 설정`
       : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형·상호작용  Shift 짧게=패링·꾹=방어\n' +
         'Z·X·C·V 스킬  Q 스킬 교체·휠클릭 사용  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G/U 테스트(U=스킬 전부)');

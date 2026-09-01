@@ -11,8 +11,8 @@ import { balance } from './Balance';
 
 /** 패드에 걸 수 있는 기능. 라벨은 리매핑 화면이 그대로 쓴다 */
 export const PAD_ACTIONS = [
-  { id: 'ranged', label: '원거리 발사 / 활 당기기' },
-  { id: 'melee', label: '근접 · 처형' },
+  { id: 'ranged', label: '조준 — 누른 채 근접 버튼 = 발사 (에임 보정)' },
+  { id: 'melee', label: '근접 · 처형 (조준 중엔 발사)' },
   { id: 'reaction', label: '반응 (패링 · 방패)' },
   { id: 'dodge', label: '회피' },
   { id: 'sprint', label: '질주' },

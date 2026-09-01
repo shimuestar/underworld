@@ -27,6 +27,8 @@ export interface InputSnapshot {
   padMoveActive: boolean;
   /** 오른스틱 X 원시값(-1~1, 데드존 적용) — 락온 대상 전환 튕김 판정용 */
   padLookAxisX: number;
+  /** 패드 조준(ADS) — 조준 버튼(기본 LT)을 붙들고 있다. 에임 보정은 이때만 산다 */
+  padAiming: boolean;
   /** 이번 틱에 락온 토글(R3·키보드 설정 키)이 눌렸는가 (엣지) */
   lockOnPressed: boolean;
   /** 이번 틱에 랜턴 토글 키가 눌렸는가 (엣지) */
@@ -280,6 +282,9 @@ export class Input {
     const skillLayer = pad.held('skillSelect');
     const itemLayer = !skillLayer && pad.held('itemSelect');
     const padPlain = !skillLayer && !itemLayer;
+    // 조준(ADS) 레이어 — 조준 버튼(기본 LT)을 붙든 동안 근접 버튼(RT)이 발사가 된다.
+    // 조준 없이 근접 버튼만 누르면 평소처럼 해머다
+    const padAiming = padPlain && pad.held('ranged');
 
     // 패드 랜턴 버튼: 짧게 떼면 켜고 끄기, holdTicks 넘게 붙들면 배터리 교체 (한 번만)
     let padLanternTap = false;
@@ -345,13 +350,14 @@ export class Input {
       padLookDY: padLookY,
       padMoveActive: Math.abs(axes.moveX) + Math.abs(axes.moveY) > 0,
       padLookAxisX: axes.lookX,
+      padAiming,
       lockOnPressed: this.lockOnPresses > 0 || (padPlain && pad.pressed('lockOn')),
       lanternToggle: this.lanternToggles > 0 || padLanternTap,
       batterySwap: this.batterySwaps > 0 || (padPlain && pad.pressed('battery')) || padLanternHold,
-      meleePressed: this.meleeClicks > 0 || (padPlain && pad.pressed('melee')),
-      meleeHeld: this.meleeDown || (padPlain && pad.held('melee')),
-      rangedPressed: this.rangedClicks > 0 || (padPlain && pad.pressed('ranged')),
-      rangedHeld: this.rangedDown || (padPlain && pad.held('ranged')),
+      meleePressed: this.meleeClicks > 0 || (padPlain && !padAiming && pad.pressed('melee')),
+      meleeHeld: this.meleeDown || (padPlain && !padAiming && pad.held('melee')),
+      rangedPressed: this.rangedClicks > 0 || (padAiming && pad.pressed('melee')),
+      rangedHeld: this.rangedDown || (padAiming && pad.held('melee')),
       reload: this.reloads > 0 || (padPlain && pad.pressed('reload')),
       reactionPressed: this.reactionClicks > 0 || (padPlain && pad.pressed('reaction')),
       reactionHeld: this.reactionDown || (padPlain && pad.held('reaction')),
@@ -399,6 +405,7 @@ export class Input {
       padLookDY: 0,
       padMoveActive: false,
       padLookAxisX: 0,
+      padAiming: false,
       lockOnPressed: false,
       lanternToggle: false,
       batterySwap: false,

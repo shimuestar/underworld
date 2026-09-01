@@ -59,7 +59,8 @@ function add(type: string, x: number, z: number): EnemyState {
 }
 
 function padLookTick(dx: number): void {
-  world.input = { ...Input.emptySnapshot(), padLookDX: dx };
+  // 에임 보정은 조준(LT) 중에만 산다 — 테스트도 조준 상태로 젓는다
+  world.input = { ...Input.emptySnapshot(), padLookDX: dx, padAiming: true };
   PlayerMove.tick(world, DT);
   world.input = Input.emptySnapshot();
 }
@@ -114,7 +115,7 @@ describe('패드 에임 어시스트', () => {
     const yaw0 = world.player.yaw;
     // 이동 스틱만 젓는 상태 — 자석 조건은 살아 있다
     for (let i = 0; i < 20; i++) {
-      world.input = { ...Input.emptySnapshot(), padMoveActive: true };
+      world.input = { ...Input.emptySnapshot(), padMoveActive: true, padAiming: true };
       PlayerMove.tick(world, DT);
     }
     expect(world.player.pitch).toBeCloseTo(pitch0, 9); // 중심(가슴)으로 안 끌려 내려간다
@@ -124,7 +125,7 @@ describe('패드 에임 어시스트', () => {
   it('몸 밖에서는 실루엣 가장자리까지 끌린다 — 붙는 순간 멈춘다', () => {
     const e = add('ghoul', 16, 10.9); // 옆으로 어긋남(6.4도) — 자석 원뿔 안, 몸 밖
     for (let i = 0; i < 60; i++) {
-      world.input = { ...Input.emptySnapshot(), padMoveActive: true };
+      world.input = { ...Input.emptySnapshot(), padMoveActive: true, padAiming: true };
       PlayerMove.tick(world, DT);
     }
     // 중심까지 다 끌려가지 않고 가장자리 언저리에서 멈춘다

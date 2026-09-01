@@ -38,7 +38,7 @@ const PAD_ROWS: Row[] = PAD_ACTIONS.map((a) => ({ kind: 'pad' as const, id: a.id
 
 /** 다이어그램용 짧은 기능 이름 — 콜아웃 한 줄에 여러 개가 붙는다 */
 const SHORT_LABEL: Record<PadAction, string> = {
-  ranged: '원거리', melee: '근접', reaction: '반응', dodge: '회피', sprint: '질주', lockOn: '락온',
+  ranged: '조준', melee: '근접·발사', reaction: '반응', dodge: '회피', sprint: '질주', lockOn: '락온',
   cycleWeapon: '무기 교체', interact: '상호작용', reload: '재장전', lantern: '랜턴',
   battery: '배터리', inventory: '가방', pause: '일시정지',
   skillSelect: '스킬 선택', skill1: '스킬 1', skill2: '스킬 2', skill3: '스킬 3', skill4: '스킬 4',
