@@ -83,7 +83,7 @@
       },
       "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 24, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue", "latches": true },
       "_faceSuckNote": "낙하가 명중하면 얼굴에 붙어 흡혈한다 — 화면을 가리고, 빨 때마다 제 몸을 채운다. 해머 한 방이면 떼어 걷어차고, maxSucks 번 빨면 배불러 스스로 뛰어내린다",
-      "faceSuck": { "intervalTicks": 55, "damage": 8, "heal": 8, "maxSucks": 3, "mashToEscape": 6, "kickDistance": 5, "kickStunTicks": 50, "selfDetachHop": 3 },
+      "faceSuck": { "intervalTicks": 55, "damage": 8, "heal": 8, "maxSucks": 3, "_mashNote": "6 → 3 (2026-09-01, 구울 파먹기와 동일)", "mashToEscape": 3, "kickDistance": 5, "kickStunTicks": 50, "selfDetachHop": 3 },
       "_leapNote": "지상에서도 4m 밖이면 얼굴로 뛰어든다 — 맞으면 흡혈 부착. 적색(회피 전용), 예고 시점 좌표로만 난다",
       "chargeAttack": { "type": "contact", "arcDeg": 130, "leapHeight": 1.7, "chargeSpeed": 14, "chargeRunTicks": 20, "minRange": 4, "maxRange": 9, "windupTicks": 33, "recoverTicks": 40, "whiffRecoverTicks": 60, "impactRangeMul": 1.2, "playerKnockback": 0.4, "parryable": false, "telegraph": "red", "cooldownTicks": 200, "latches": true },
       "counters": { "pistol": "best", "rifle": "best", "grenade": "poor", "flash": "good", "melee": "good", "magic": "good", "deflect": "none" },
