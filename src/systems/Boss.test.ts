@@ -1096,9 +1096,11 @@ describe('goblin_chieftain 원거리 공격', () => {
   });
 });
 
-describe('출구 (7.4) — 쇠사슬·자물쇠·열쇠', () => {
-  it('열쇠 없인 E 도 소용없고, 열쇠로 풀면 그다음 E 로 내려간다', () => {
+describe('출구 (7.4) — 붉은 쇠창살, 층의 주인', () => {
+  it('주인이 살아 있는 동안은 붙들어도 잠겨 있고, 죽는 순간 저절로 열린다', () => {
     world.exitNeedsKey = true; // 보스 층 로드 상태 — main 의 loadFloor 가 세팅한다
+    const boss = spawnEnemyAt('goblin_chieftain', 20, 6, 77);
+    world.enemies.push(boss);
     const log: string[] = [];
     world.events.on('exit_locked', () => log.push('locked'));
     world.events.on('exit_unlocked', () => log.push('unlocked'));
@@ -1109,25 +1111,24 @@ describe('출구 (7.4) — 쇠사슬·자물쇠·열쇠', () => {
     Exit.tick(world, DT);
     expect(log).toEqual(['locked']); // 밟자마자 알림 1회
 
-    // 열쇠 없이 E — 사슬만 짤그랑
-    world.input = { ...Input.emptySnapshot(), interactPressed: true };
-    Exit.tick(world, DT);
+    // 주인이 살아 있는 동안은 붙들어도 소용없다 — 쇠창살만 덜컹
+    for (let i = 0; i < balance.stairs.holdTicks + 5; i++) {
+      world.input = { ...Input.emptySnapshot(), interactHeld: true };
+      Exit.tick(world, DT);
+    }
     world.input = Input.emptySnapshot();
-    expect(log).toEqual(['locked', 'locked']);
     expect(world.cleared).toBe(false);
     expect(world.exitOpen).toBe(false);
 
-    // 열쇠를 쥐고 E — 자물쇠가 풀린다. 아직 내려가지는 않는다
-    world.hasExitKey = true;
-    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    // 주인이 죽는다 — 다음 틱에 창살이 저절로 오른다. 아직 내려가지는 않는다
+    boss.alive = false;
     Exit.tick(world, DT);
-    world.input = Input.emptySnapshot();
-    expect(log).toEqual(['locked', 'locked', 'unlocked']);
+    expect(log).toEqual(['locked', 'unlocked']);
     expect(world.exitOpen).toBe(true);
-    expect(world.hasExitKey).toBe(false); // 열쇠는 1회 소모
+    expect(world.exitNeedsKey).toBe(false);
     expect(world.cleared).toBe(false);
 
-    // 그다음 E 를 붙들어야 내려간다 — 게이지가 차기 전엔 그대로다
+    // 이제 붙들면 내려간다 — 게이지가 차기 전엔 그대로다
     for (let i = 0; i < balance.stairs.holdTicks - 1; i++) {
       world.input = { ...Input.emptySnapshot(), interactHeld: true };
       Exit.tick(world, DT);
@@ -1136,22 +1137,28 @@ describe('출구 (7.4) — 쇠사슬·자물쇠·열쇠', () => {
     world.input = { ...Input.emptySnapshot(), interactHeld: true };
     Exit.tick(world, DT);
     world.input = Input.emptySnapshot();
-    expect(log).toEqual(['locked', 'locked', 'unlocked', 'cleared']);
+    expect(log).toEqual(['locked', 'unlocked', 'cleared']);
     expect(world.cleared).toBe(true);
   });
 
-  it('보스는 잠긴 층에서만 열쇠를 떨군다 — 잡몹·이미 딴 층은 아니다', () => {
-    Exit.init(world);
-    const keys = (): number => world.groundItems.filter((g) => g.kind === 'key').length;
+  it('배치 플래그(floorBoss) 워든도 주인이다 — 잡몹만 남으면 그대로 열린다', () => {
     world.exitNeedsKey = true;
-    world.events.emit('enemy_died', { enemyType: 'goblin_chieftain', x: 8, z: 6 });
-    expect(keys()).toBe(1);
-    world.exitNeedsKey = false; // 이미 딴 층 (부활 재전투)
-    world.events.emit('enemy_died', { enemyType: 'goblin_chieftain', x: 8, z: 6 });
-    expect(keys()).toBe(1);
-    world.exitNeedsKey = true;
-    world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 8, z: 6 });
-    expect(keys()).toBe(1);
+    const master = spawnEnemyAt('warden', 20, 6, 78);
+    master.floorBoss = true; // 레벨 JSON 의 boss: true 배치 — Spawner 가 세운다
+    const mob = spawnEnemyAt('goblin_runner', 22, 6, 79);
+    world.enemies.push(master, mob);
+    let unlocked = 0;
+    world.events.on('exit_unlocked', () => unlocked++);
+    Exit.tick(world, DT);
+    expect(unlocked).toBe(0); // 주인 생존 — 잠김 유지
+    mob.alive = false;
+    Exit.tick(world, DT);
+    expect(unlocked).toBe(0); // 잡몹 죽음은 무관
+    master.alive = false;
+    Exit.tick(world, DT);
+    expect(unlocked).toBe(1); // 주인 사망 — 자동 개방
+    Exit.tick(world, DT);
+    expect(unlocked).toBe(1); // 한 번만
   });
 
   it('발판 밖에서 E 를 눌러도 클리어되지 않는다', () => {

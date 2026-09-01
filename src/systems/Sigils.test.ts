@@ -564,27 +564,18 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(eaves.ai).toBe('chase');
   });
 
-  it('보스는 죽었는데 자물쇠·열쇠가 모두 없으면 열쇠를 다시 떨군다 — 소프트락 방지', () => {
+  it('주인이 죽은 채 로드돼도(부활 재입장) 쇠창살은 첫 틱에 오른다 — 소프트락 방지', () => {
     const boss = add('slime_mother', 12, 6);
     boss.alive = false;
     world.exitNeedsKey = true;
-    world.hasExitKey = false;
+    let unlocked = 0;
+    world.events.on('exit_unlocked', () => unlocked++);
     Exit.tick(world, DT);
-    const key = world.groundItems.find((g) => g.kind === 'key');
-    expect(key).toBeTruthy();
-    expect([key!.x, key!.z]).toEqual([12, 6]); // 죽은 보스 자리
-    // 한 번만 — 다음 틱에 또 떨구지 않는다
+    expect(world.exitOpen).toBe(true);
+    expect(unlocked).toBe(1);
+    // 한 번만 — 다음 틱에 또 울리지 않는다
     Exit.tick(world, DT);
-    expect(world.groundItems.filter((g) => g.kind === 'key')).toHaveLength(1);
-  });
-
-  it('열쇠를 이미 손에 쥐고 있으면 다시 떨구지 않는다', () => {
-    const boss = add('slime_mother', 12, 6);
-    boss.alive = false;
-    world.exitNeedsKey = true;
-    world.hasExitKey = true;
-    Exit.tick(world, DT);
-    expect(world.groundItems.some((g) => g.kind === 'key')).toBe(false);
+    expect(unlocked).toBe(1);
   });
 
   it('죽으면 가방 소모품만 비석에 남고, 그 자리를 밟으면 되찾는다', () => {

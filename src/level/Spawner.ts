@@ -181,6 +181,7 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
     const spawned = spawnEnemyAt(placement.type, x, z, nextEnemySpawnId++);
     // 죽은 척 배치 — 시체처럼 엎어져 시작한다 (구울). 기척·소음·피격이 깨운다
     if ((placement as { feign?: boolean }).feign) spawned.feigning = true;
+    if ((placement as { boss?: boolean }).boss) spawned.floorBoss = true; // 층의 주인 — 출구 봉인
     // 천장 배치 (거머리) — 천장에 매달려 시작한다
     if ((placement as { ceiling?: boolean }).ceiling && enemyDef(placement.type).ceilingLurk) {
       spawned.lurking = true;

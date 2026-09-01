@@ -206,9 +206,8 @@ export function tick(world: World, dt: number): void {
       continue;
     }
     if (item.kind === 'key') {
+      // 열쇠 흐름 폐지(2026-09) — 남은 저장 데이터의 열쇠는 조용히 삼킨다
       world.groundItems.splice(i, 1);
-      world.hasExitKey = true;
-      world.events.emit('exit_key_picked', {});
       continue;
     }
     if (item.kind === 'gold') {

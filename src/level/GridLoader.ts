@@ -415,7 +415,8 @@ const ALCOVE_STEP_RUN = 0.44;
 const STAIR_RISE = 0.34;
 const STAIR_STONE = 0x4a443b;
 /** 봉인된 출구 — 꺼진 돌바닥. 열린 초록과 한눈에 구분돼야 한다 */
-export const COLOR_EXIT_LOCKED = 0x3a3f44;
+// 2026-09-01 의미 교정 — 잠김 = 붉은 쇠창살, 열림 = 녹색 (사용자: 녹색은 '내려갈 수 있다')
+export const COLOR_EXIT_LOCKED = 0xc03030;
 export const COLOR_EXIT_OPEN = 0x3fae5a;
 /** XZ 평면 레이 vs 직사각형 — 최소 t(≥0)와 부딪힌 축. 안 만나면 null.
  *  원점이 상자 안이면 t=0 (격자의 "출발점이 벽 안" 규약과 같다) */
@@ -774,35 +775,33 @@ function buildStairwell(
   glow.position.set(0, 1.3, front - 1.5); // 낮고 깊게 — 디딤판을 비스듬히 훑는다
   g.add(glow);
 
-  // 쇠사슬 두 줄 + 자물쇠 — 벽감 입에 걸려 있다. 자물쇠를 따면 Stage 가 감춘다
-  const chain = new THREE.Group();
-  chain.name = 'exitChain';
-  const iron = new THREE.MeshLambertMaterial({ color: 0x3c3c44 });
-  for (const y0 of [1.2, 0.82]) {
-    const links = 9;
-    for (let i = 0; i < links; i++) {
-      const t = (i + 0.5) / links;
-      const sag = Math.sin(Math.PI * t) * 0.15; // 가운데가 처진다
-      const link = new THREE.Mesh(
-        new THREE.BoxGeometry(innerW / links + 0.03, 0.055, 0.055),
-        iron,
-      );
-      link.position.set(-innerW / 2 + innerW * t, y0 - sag, front - 0.08);
-      link.rotation.z = Math.cos(Math.PI * t) * 0.3; // 처진 결을 따라 기운다
-      chain.add(link);
-    }
+  // 쇠창살 — 벽감 입을 통째로 막는다. 잠긴 동안 붉게 달아 있고,
+  // 이 층의 주인이 죽으면 Stage 가 위로 감아올린다 (내려갈 수 있다는 신호)
+  const bars = new THREE.Group();
+  bars.name = 'exitBars';
+  const barIron = new THREE.MeshLambertMaterial({
+    color: 0x4a3034,
+    emissive: 0xb03030,
+    emissiveIntensity: 0.4,
+  });
+  const rods = 6;
+  for (let i = 0; i < rods; i++) {
+    const bx = -innerW / 2 + (innerW * (i + 0.5)) / rods;
+    const rod = new THREE.Mesh(new THREE.BoxGeometry(0.07, 2.5, 0.07), barIron);
+    rod.position.set(bx, 1.25, front - 0.1);
+    bars.add(rod);
+    // 창살 끝 촉 — 닫혀 있을 땐 바닥에 묻혀 있고, 올라가면 드러난다
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.2, 4), barIron);
+    tip.rotation.x = Math.PI;
+    tip.position.set(bx, -0.08, front - 0.1);
+    bars.add(tip);
   }
-  // 자물쇠 — 아랫줄 가운데에 매달린 몸통 + 고리
-  const lockBody = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.3, 0.1), iron);
-  lockBody.position.set(0, 0.46, front - 0.08);
-  chain.add(lockBody);
-  const shackle = new THREE.Mesh(
-    new THREE.TorusGeometry(0.09, 0.03, 6, 10, Math.PI),
-    iron,
-  );
-  shackle.position.set(0, 0.62, front - 0.08);
-  chain.add(shackle);
-  g.add(chain);
+  for (const y0 of [0.55, 1.9]) {
+    const cross = new THREE.Mesh(new THREE.BoxGeometry(innerW + 0.12, 0.09, 0.09), barIron);
+    cross.position.set(0, y0, front - 0.1);
+    bars.add(cross);
+  }
+  g.add(bars);
   return g;
 }
 

@@ -660,6 +660,8 @@ export interface EnemyState {
   downTicks?: number;
   /** 추락 낙하 잔여 틱 */
   batFallTicks?: number;
+  /** 참 = 이 층의 주인 (배치 플래그) — 종 자체가 보스가 아니어도 출구 봉인을 쥔다 */
+  floorBoss?: boolean;
   /** 참 = 처치 보상 없음(드랍·골드·XP) — 보스가 소환한 새끼. 생명 입자는 나온다 */
   noLoot?: boolean;
   /** 랜턴 속박 잔여 틱 — 빛기둥에 잡혀 있는 동안 매 틱 갱신된다 (0 = 자유) */
@@ -986,7 +988,6 @@ export class World {
   exitNeedsKey = false;
 
   /** 족장이 떨군 열쇠를 주웠는가 */
-  hasExitKey = false;
 
   /** 입구 계단으로 위층에 올라갈 수 있는가 — 첫 층은 거짓 (층 번호는 main 이 안다) */
   canAscend = false;

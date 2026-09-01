@@ -27,7 +27,7 @@ const ENEMY = '#e04444';
 const ENEMY_IDLE = 'rgba(224,68,68,0.35)';
 const ENEMY_STAGGERED = '#cc9922';
 const PING = 'rgba(230,230,240,0.7)'; // 소리 핑 — 흐릿한 잿빛 점
-const EXIT_LOCKED = '#3a3f44'; // 봉인된 출구 (월드의 COLOR_EXIT_LOCKED 와 같은 색)
+const EXIT_LOCKED = '#c23a3a'; // 봉인된 출구 — 붉은 쇠창살 (열리면 기본 녹색 X 가 드러난다)
 
 export class Minimap {
   private readonly canvas: HTMLCanvasElement;

@@ -97,6 +97,7 @@ function padBtn(action: PadAction): string {
   return buttonName(input.gamepad.binding(action));
 }
 /** 패드 진동 — 패드로 놀고 있을 때만 (꽂아만 두고 키보드로 노는 사람은 제외) */
+let rumbleHoldUntil = 0; // 포효처럼 긴 진동을 잔진동이 덮지 못하게 지키는 시각
 function padRumble(
   kind:
     | 'hit' | 'heavy' | 'kill' | 'shot' | 'cast' | 'block' | 'parry' | 'whiff'
@@ -106,6 +107,7 @@ function padRumble(
   if (!input.usingPad) return;
   const r = balance.input.gamepad.rumble[kind];
   input.gamepad.rumble(r.ms, r.strong, r.weak);
+  if (kind === 'roar') rumbleHoldUntil = performance.now() + r.ms;
 }
 
 /** 세기 배율이 붙는 진동 — 활 당김(당길수록 굵게)·놓는 반동(당긴 만큼 굵게) */
@@ -562,8 +564,6 @@ for (const name of [
   'boss_execute',
   'exit_locked',
   'exit_unlocked',
-  'exit_key_dropped',
-  'exit_key_picked',
   'floor_ascend',
   'exit_opened',
   'zone_cleared',
@@ -974,8 +974,12 @@ events.on('enemy_alerted', (payload) => {
   // 소리는 한 번만 (겹치면 소리가 뭉개져 오히려 안 들린다).
   // 보스는 포효가 곧 인지음이므로 신호음을 겹쳐 내지 않는다
   const now = performance.now();
-  const boss = enemyDef(info.enemyType).boss;
-  if (boss) padRumble('roar'); // 포효가 손까지 온다 — 길고 낮게
+  const boss =
+    enemyDef(info.enemyType).boss ||
+    world.enemies.find((e) => e.id === info.enemyId)?.floorBoss === true;
+  // 포효 진동 — UI 신호라 보스와의 거리와 무관하게 무조건 울린다.
+  // rumbleHold 로 활 당김·심장박동 등 프레임 지속 진동이 덮지 못하게 지킨다
+  if (boss) padRumble('roar');
   if (!boss && now >= alertSoundUntil) {
     alertSoundUntil = now + ALERT_SOUND_GAP_MS;
     audio.play('enemy_alert');
@@ -2020,8 +2024,8 @@ function respawnAtAltar(): void {
   world.enemies = spawnEnemies(levelJson.entities, level); // 구간 진행도 초기화
   // 보스도 되살아났다 — 열쇠로 딴 적 없는 층이면 쇠사슬도 다시 잠긴다
   world.exitNeedsKey =
-    world.enemies.some((e) => enemyDef(e.type).boss) && !unlockedFloors.has(floorIndex);
-  world.hasExitKey = false;
+    world.enemies.some((e) => e.floorBoss || enemyDef(e.type).boss) &&
+    !unlockedFloors.has(floorIndex);
   world.exitOpen = false;
   // 폭발통도 되살린다 — 남은 차단 블록을 먼저 걷어내야 유령 벽이 쌓이지 않는다
   for (const barrel of world.barrels) if (barrel.blocker) level.removeBlocker(barrel.blocker);
@@ -2179,15 +2183,10 @@ events.on('boss_staggered', () =>
 events.on('exit_opened', () => {
   showReaction('내려가는 계단 — E 로 내려간다', 2200);
 });
-events.on('exit_key_dropped', () => showReaction('족장이 열쇠를 떨어뜨렸다', 2600));
-events.on('exit_key_picked', () => {
-  audio.play('pickup_gold');
-  showReaction('족장의 열쇠 — 출구의 자물쇠를 열 수 있다', 3200);
-});
 events.on('exit_unlocked', () => {
   unlockedFloors.add(floorIndex); // 오르내려도·부활해도 다시 잠기지 않는다
   audio.play('unlock_chain');
-  showReaction('자물쇠가 열렸다 — 쇠사슬이 흘러내린다', 2600);
+  showReaction('층의 주인이 쓰러졌다 — 쇠창살이 올라간다', 2600);
 });
 events.on('exit_locked', (payload) => {
   // E 로 흔들어 봤을 때만 소리를 낸다 — 밟기만 해도 짤그랑거리면 시끄럽다
@@ -2299,7 +2298,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     levelJson.entities.some(
       (e) =>
         e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') &&
-        enemyDef(e.type).boss,
+        (enemyDef(e.type).boss || (e as { boss?: boolean }).boss === true),
     ) && !unlockedFloors.has(index);
   world.canAscend = index > 0;
   world.onEntrancePad = false;
@@ -2827,8 +2826,10 @@ function render(alpha: number): void {
     world.weapon.ranged === 'bow'
       ? (world.weapon.bowDraw ?? 0) / balance.weapons.bow.maxDrawTicks
       : 0;
-  // 프레임 지속 진동 — 우선순위: 활 당김 > 초음파 떨림 > 저체력 심장박동
-  if (bowDrawFrac > 0 && !world.paused) {
+  // 프레임 지속 진동 — 우선순위: (포효 홀드) > 활 당김 > 초음파 떨림 > 저체력 심장박동
+  if (performance.now() < rumbleHoldUntil) {
+    // 포효가 손에 남아 있는 동안은 잔진동이 덮지 않는다
+  } else if (bowDrawFrac > 0 && !world.paused) {
     padRumbleScaled('draw', 0.15 + 0.85 * bowDrawFrac); // 당길수록 굵게
   } else if ((world.player.aimShakeTicks ?? 0) > 0 && !world.paused && !world.dead) {
     padRumble('tremble'); // 초음파 비명 — 조준 흔들림과 촉각을 맞춘다
@@ -3072,9 +3073,7 @@ function render(alpha: number): void {
     const last = floorIndex + 1 >= ZONE.length;
     const stairFrac = world.stairHoldTicks / balance.stairs.holdTicks;
     altarPrompt!.textContent = world.exitNeedsKey
-      ? world.hasExitKey
-        ? `${IK} — 열쇠로 자물쇠를 연다`
-        : '쇠사슬이 잠겨 있다 — 이 층의 주인이 열쇠를 쥐고 있다'
+      ? '붉은 쇠창살이 내려와 있다 — 이 층의 주인을 잡아야 올라간다'
       : stairFrac > 0
         ? `${last ? '구역을 벗어나는 중' : '내려가는 중'}\n${'█'.repeat(Math.round(stairFrac * 20)).padEnd(20, '░')}  ${Math.round(stairFrac * 100)}%`
         : last

@@ -998,7 +998,9 @@ export class Stage {
   /** 지금 씬에 올라가 있는 층 지오메트리 — 다음 층으로 갈 때 걷어낸다 */
   private levelGroup: THREE.Group | null = null;
   /** 출구 계단을 막은 쇠사슬·자물쇠 — 자물쇠를 따면 사라진다 */
-  private exitChain: THREE.Object3D | undefined;
+  private exitBars: THREE.Object3D | undefined;
+  /** 쇠창살 상승 진행 0(내려옴)~1(올라감) — 매 프레임 목표로 감긴다 */
+  private exitBarsRise = 0;
   /** 내려가는 연출 — 시작 시각(0 이면 안 도는 중) */
   private descentStart = 0;
   private descentMs = 1;
@@ -1296,15 +1298,17 @@ export class Stage {
     this.scene.add(this.ambientLight);
     this.exitPad = group.getObjectByName('exitPad') as THREE.Mesh | undefined;
     this.exitLight = group.getObjectByName('exitLight') as THREE.PointLight | undefined;
-    this.exitChain = group.getObjectByName('exitChain') ?? undefined;
+    this.exitBars = group.getObjectByName('exitBars') ?? undefined;
+    this.exitBarsRise = 0;
+    this.exitOpen = null; // 층이 바뀌었다 — 다음 setExitOpen 이 무조건 다시 칠하게
     this.descentStart = 0;
     this.exitOpen = true; // 아래 호출이 실제로 반영되도록 반대값에서 시작
     this.setExitOpen(false);
   }
 
   private exitPad?: THREE.Mesh;
+  private exitOpen: boolean | null = null;
   private exitLight?: THREE.PointLight;
-  private exitOpen = true;
   private exitFlashUntil = 0;
 
   /** 출구 개방 — 봉인 중엔 꺼진 돌바닥, 열리면 초록으로 켜진다.
@@ -1370,18 +1374,19 @@ export class Stage {
   setExitOpen(open: boolean): void {
     if (open === this.exitOpen) return;
     this.exitOpen = open;
-    // 녹색 = "열쇠가 필요한 특별한 계단" 표시다. 잠겨 있을 때만 녹색으로 빛나고,
-    // 열려 있으면(보스 없는 층·자물쇠 딴 뒤) 수수한 돌판이다
+    // 잠김 = 붉게 달아오른 쇠창살, 열림 = 녹색 — '내려갈 수 있다/없다'가 색으로 읽힌다
     const mat = this.exitPad?.material as THREE.MeshLambertMaterial | undefined;
     if (mat) {
-      mat.color.setHex(open ? COLOR_EXIT_LOCKED : COLOR_EXIT_OPEN);
-      mat.emissive.setHex(open ? COLOR_EXIT_LOCKED : COLOR_EXIT_OPEN);
-      mat.emissiveIntensity = open ? 0.06 : 0.5;
-      mat.opacity = open ? 0.55 : 0.85;
+      mat.color.setHex(open ? COLOR_EXIT_OPEN : COLOR_EXIT_LOCKED);
+      mat.emissive.setHex(open ? COLOR_EXIT_OPEN : COLOR_EXIT_LOCKED);
+      mat.emissiveIntensity = 0.5;
+      mat.opacity = 0.85;
     }
-    if (this.exitChain) this.exitChain.visible = !open; // 자물쇠가 풀리면 사슬이 사라진다
-    if (this.exitLight) this.exitLight.intensity = open ? 0 : 0.9;
-    // 열리는 순간 한 번 크게 번쩍인다 — 멀리서도 보이도록
+    if (this.exitLight) {
+      this.exitLight.color.setHex(open ? COLOR_EXIT_OPEN : COLOR_EXIT_LOCKED);
+      this.exitLight.intensity = 0.9;
+    }
+    // 열리는 순간 한 번 크게 번쩍인다 — 멀리서도 보이도록. 창살 상승은 매 프레임 감긴다
     if (open) this.exitFlashUntil = performance.now() + EXIT_FLASH_MS;
   }
 
@@ -1418,6 +1423,13 @@ export class Stage {
   }
 
   private updateExitLight(now: number): void {
+    // 쇠창살 — 열리면 천천히 감아올리고, 잠기면 내려온다 (부활로 다시 잠길 때)
+    if (this.exitBars) {
+      const target = this.exitOpen ? 1 : 0;
+      this.exitBarsRise += (target - this.exitBarsRise) * 0.045;
+      this.exitBars.position.y = this.exitBarsRise * 2.7;
+      this.exitBars.visible = this.exitBarsRise < 0.995;
+    }
     if (!this.exitLight || !this.exitOpen) return;
     const left = this.exitFlashUntil - now;
     this.exitLight.intensity = left > 0 ? 0.9 + 5 * (left / EXIT_FLASH_MS) : 0.9;
