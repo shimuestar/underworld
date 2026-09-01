@@ -95,7 +95,9 @@ function padBtn(action: PadAction): string {
   return buttonName(input.gamepad.binding(action));
 }
 /** 패드 진동 — 패드로 놀고 있을 때만 (꽂아만 두고 키보드로 노는 사람은 제외) */
-function padRumble(kind: 'hit' | 'heavy' | 'kill' | 'shot' | 'cast' | 'block' | 'parry'): void {
+function padRumble(
+  kind: 'hit' | 'heavy' | 'kill' | 'shot' | 'cast' | 'block' | 'parry' | 'whiff' | 'interact' | 'hurt' | 'drain',
+): void {
   if (!input.usingPad) return;
   const r = balance.input.gamepad.rumble[kind];
   input.gamepad.rumble(r.ms, r.strong, r.weak);
@@ -1064,6 +1066,7 @@ events.on('block_hit', (payload) => {
 // ---- 무기 — 원거리(좌클릭, 휠 교체) / 근접(우클릭) ----
 events.on('weapon_switched', () => audio.play('weapon_switch'));
 events.on('hammer_swing', (payload) => {
+  padRumble('whiff'); // 휘두르는 바람 — 명중하면 곧바로 hit/heavy 가 덮는다
   const sw = payload as { heavy?: boolean; step?: number; speedMul?: number };
   audio.play(sw.heavy ? 'hammer_heavy' : 'hammer_swing');
   stage.triggerHammerSwing(sw.step ?? 1, sw.speedMul ?? 1);
@@ -1167,6 +1170,7 @@ events.on('explosion', (payload) => {
 });
 // 보물상자 — 골드 무더기와 각인 하나가 쏟아진다
 events.on('chest_opened', (payload) => {
+  padRumble('interact');
   const info = payload as { gold: number; sigilId: string | null };
   audio.play('chest_opened');
   const sigil = info.sigilId ? ` · ${sigilDef(info.sigilId).name} 스킬` : '';
@@ -1340,8 +1344,12 @@ function spawnBloodSplatter(): void {
 const grappleRing = document.getElementById('grapple-ring');
 const grappleCount = document.getElementById('grapple-count');
 events.on('player_damaged', (payload) => {
-  const hit = payload as { blocked?: boolean; srcX?: number; srcZ?: number; srcId?: number };
+  const hit = payload as {
+    blocked?: boolean; srcX?: number; srcZ?: number; srcId?: number; source?: string;
+  };
   if (hit.blocked) return;
+  // 맞았다 — 굵은 충격. 파먹기·흡혈(주기 피해)은 약한 모터 위주의 다른 결
+  padRumble(hit.source === 'ghoul_bite' || hit.source === 'leech_suck' ? 'drain' : 'hurt');
   audio.play('player_hurt');
   hurtOverlay!.style.transition = 'none';
   hurtOverlay!.style.opacity = '1';
@@ -2102,6 +2110,7 @@ events.on('door_unlocked', (payload) => {
   showReaction('잠금이 풀렸다 — 문이 옆으로 밀린다', 2200);
 });
 events.on('lever_pulled', (payload) => {
+  padRumble('interact');
   const info = payload as { lever: { row: number; col: number } };
   audio.play('lever_pull');
   stage.pullLever(info.lever.row, info.lever.col);
@@ -2115,6 +2124,7 @@ events.on('door_needs_lever', () => {
   showReaction('손으로는 안 열린다 — 어딘가의 레버를 찾아야 한다', 2000);
 });
 events.on('door_opened', (payload) => {
+  padRumble('interact'); // 문이 밀려 열리는 감각
   const at = payload as { row: number; col: number };
   const opened = world.doors.find((d) => d.row === at.row && d.col === at.col);
   stage.openDoor(at.row, at.col, opened?.swingDir ?? 1);
