@@ -203,6 +203,20 @@ export class GamepadInput {
     return !this.now.has(b) && this.prev.has(b);
   }
 
+  /** 진동 — 지원 패드(dual-rumble)에서만, 실패는 조용히 무시. 새 효과가 이전 것을 덮는다 */
+  rumble(ms: number, strong: number, weak: number): void {
+    if (this.padIndex === null) return;
+    const pad = navigator.getGamepads?.()[this.padIndex];
+    const actuator = (
+      pad as { vibrationActuator?: { playEffect?: (type: string, params: object) => Promise<unknown> } } | null
+    )?.vibrationActuator;
+    void actuator?.playEffect?.('dual-rumble', {
+      duration: ms,
+      strongMagnitude: strong,
+      weakMagnitude: weak,
+    })?.catch(() => {});
+  }
+
   /** 매핑을 거치지 않은 버튼 번호로 직접 묻는다 — 리매핑 화면 자신은 고정 버튼을
    *  써야 한다. 매핑을 잘못 걸어 놓고 그 화면에서 못 빠져나오면 손쓸 방법이 없다 */
   rawPressed(button: number): boolean {

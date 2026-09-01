@@ -17,6 +17,13 @@
       "lookCurve": 2.0,
       "triggerThreshold": 0.35,
       "activeTimeoutMs": 4000,
+      "_rumbleNote": "패드 진동 (dual-rumble, 크롬/엣지 + 엑박) — 때리면 짧게, 강타는 굵게, 총알 명중은 가볍게, 처치는 크게. 미지원 패드에선 조용히 무시 (2026-09-01)",
+      "rumble": {
+        "hit": { "ms": 70, "strong": 0.35, "weak": 0.5 },
+        "heavy": { "ms": 110, "strong": 0.8, "weak": 0.6 },
+        "shot": { "ms": 45, "strong": 0.15, "weak": 0.35 },
+        "kill": { "ms": 160, "strong": 0.9, "weak": 0.7 }
+      },
       "_holdNote": "패드 랜턴 버튼을 이만큼 붙들면 배터리 교체다 (짧게는 켜고 끄기). 버튼이 모자라 한 버튼에 둘을 얹었다",
       "holdTicks": 18
     }

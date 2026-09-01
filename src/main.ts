@@ -94,6 +94,13 @@ const input = new Input(app);
 function padBtn(action: PadAction): string {
   return buttonName(input.gamepad.binding(action));
 }
+/** 패드 진동 — 패드로 놀고 있을 때만 (꽂아만 두고 키보드로 노는 사람은 제외) */
+function padRumble(kind: 'hit' | 'heavy' | 'shot' | 'kill'): void {
+  if (!input.usingPad) return;
+  const r = balance.input.gamepad.rumble[kind];
+  input.gamepad.rumble(r.ms, r.strong, r.weak);
+}
+
 /** 안내 문구의 키 표기 — 마지막으로 쓴 장치를 따라간다. 키보드 쪽은 기능 id 면
  *  현재 설정을 읽고, 'Enter'·'우클릭' 같은 고정 표기는 그대로 보여 준다 */
 function keyLabel(kb: KeyAction | string, action: PadAction): string {
@@ -1108,6 +1115,7 @@ events.on('enemy_damaged', (payload) => {
     heightFrac: hit.zone === 'head' ? 0.85 : hit.zone === 'limb' ? 0.25 : 0.55,
     towardPlayer: true, // 총알이 몸 뒤로 뚫는 그림은 몸에 가려 안 보인다 — 정면으로
   });
+  padRumble('shot');
 });
 
 events.on('melee_hit', (payload) => {
@@ -1115,6 +1123,7 @@ events.on('melee_hit', (payload) => {
   audio.play(hit.heavy ? 'heavy_hit' : 'melee_hit');
   stage.flashEnemyHit(hit.enemyId);
   stage.shakeEnemyHit(hit.enemyId, hit.heavy === true); // 0.1초 무작위 떨림 — 박힌 손맛
+  padRumble(hit.heavy ? 'heavy' : 'hit');
   minimap.notifyCombat(hit.enemyId); // 미니맵 전투 추적
   spawnHitBloodOn(hit.enemyId, { damage: hit.damage ?? 10, heavy: hit.heavy });
   if (hit.heavy) {
@@ -1343,6 +1352,7 @@ events.on('melee_kill', (payload) => {
   }
 });
 events.on('enemy_died', (payload) => {
+  padRumble('kill'); // 처치 — 굵은 한 방 (타격 진동을 덮는다)
   const dead = payload as {
     enemyType: string; x: number; z: number; blastX?: number; blastZ?: number;
   };
