@@ -2234,14 +2234,23 @@ events.on('boss_staggered', () =>
 // 이제 exit_opened 는 "보스 없는(또는 이미 딴) 층" 의 로드 직후 신호다 — 조용히 안내만
 events.on('exit_opened', () => {
   showReaction('내려가는 계단 — E 로 내려간다', 2200);
-  barsCineArmed = false; // 로드 직후 열림 — 볼 연출이 없다
-  stage.snapBarsUp();
+  // 주인을 잡아 딴 층인데 상승 연출을 아직 못 봤다면(잡자마자 새끼들에게 죽어
+  // 부활했거나, 층을 오갔다 돌아온 경우) 연출을 남겨 둔다 — 계단에 다가가면 올라간다.
+  // 그 외(보스 없는 층·이미 본 층)는 연출 없이 처음부터 올라가 있다
+  if (unlockedFloors.has(floorIndex) && !barsCineSeen.has(floorIndex)) {
+    barsCineArmed = true;
+  } else {
+    barsCineArmed = false;
+    stage.snapBarsUp();
+  }
 });
 // 쇠창살 시네마틱 — 주인을 잡는 순간이 아니라 '플레이어가 계단 10m 안에 처음
 // 들어오는 순간' 3초 상승 연출·소리·진동이 시작된다. 멀리서 잡으면 그때는
 // 팡파르만 나오고, 계단에 가 보면 눈앞에서 올라간다 (안 보이던 문제의 답)
 let barsCineArmed = false;
-let barsCineUntil = 0; // 이 시각까지 매 프레임 거리 비례 진동 펄스
+let barsCineUntil = 0; // 이 시각까지 거리 비례 진동 펄스
+let nextBarsPulseAt = 0; // 펄스 간격 관리 — 60Hz 재발행은 모터가 돌기 전에 리셋돼 못 느낀다
+const barsCineSeen = new Set<number>(); // 상승 연출을 실제로 본 층 — 못 봤으면 재입장에도 남긴다
 events.on('exit_unlocked', () => {
   unlockedFloors.add(floorIndex); // 오르내려도·부활해도 다시 잠기지 않는다
   showReaction('층의 주인이 쓰러졌다 — 쇠창살이 올라간다', 2600);
@@ -2891,10 +2900,13 @@ function render(alpha: number): void {
   if (performance.now() < rumbleHoldUntil) {
     // 포효가 손에 남아 있는 동안은 잔진동이 덮지 않는다
   } else if (performance.now() < barsCineUntil && !world.paused && input.usingPad) {
-    // 쇠창살이 감겨 올라가는 3초 — 현재 거리에 비례해 손이 떨린다 (다가갈수록 진하게)
+    // 쇠창살이 감겨 올라가는 3초 — 현재 거리에 비례해 손이 떨린다 (다가갈수록 진하게).
+    // 겹치는 긴 펄스(300ms 를 230ms 마다) — 매 프레임 재발행하면 모터가 돌기 전에
+    // 효과가 리셋돼 실기에서 아무것도 못 느낀다
     const exit = world.level.exitPos;
     const cfg = balance.input.gamepad.rumble.barsRise;
-    if (exit) {
+    if (exit && performance.now() >= nextBarsPulseAt) {
+      nextBarsPulseAt = performance.now() + cfg.pulseGapMs;
       const d = Math.hypot(world.player.x - exit.x, world.player.z - exit.z);
       const frac = Math.max(cfg.minFrac, Math.min(1, 1 - d / cfg.reach));
       input.gamepad.rumble(cfg.pulseMs, cfg.strong * frac, cfg.weak * frac);
@@ -2978,10 +2990,12 @@ function render(alpha: number): void {
       const d = Math.hypot(world.player.x - exit.x, world.player.z - exit.z);
       if (d <= cfg.reach) {
         barsCineArmed = false;
+        barsCineSeen.add(floorIndex); // 봤다 — 다음 재입장부턴 처음부터 올라가 있다
         stage.startBarsRise(balance.stairs.barsRiseMs);
         const frac = Math.max(cfg.minFrac, 1 - d / cfg.reach);
         audio.play('bars_rise', { pan: panAt(exit.x, exit.z).pan, vol: Math.max(0.35, frac) });
         barsCineUntil = performance.now() + balance.stairs.barsRiseMs;
+        nextBarsPulseAt = 0;
       }
     }
   }
