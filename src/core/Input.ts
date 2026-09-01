@@ -20,6 +20,9 @@ export interface InputSnapshot {
   /** 이번 틱 동안 누적된 마우스 이동량 (포인터 락 중에만) */
   lookDX: number;
   lookDY: number;
+  /** 패드 오른스틱 시선 — 마우스와 분리해 싣는다 (에임 어시스트는 스틱에만 걸린다) */
+  padLookDX: number;
+  padLookDY: number;
   /** 이번 틱에 랜턴 토글 키가 눌렸는가 (엣지) */
   lanternToggle: boolean;
   /** 이번 틱에 배터리 교체 키가 눌렸는가 (엣지) */
@@ -328,8 +331,10 @@ export class Input {
       sprintPressed: this.sprintPresses > 0,
       // 회피는 패드에선 버튼 하나 — 연타는 스틱·버튼에 어울리는 입력이 아니다
       dodgePressed: padPlain && pad.pressed('dodge'),
-      lookDX: this.dx + padLookX,
-      lookDY: this.dy + padLookY,
+      lookDX: this.dx,
+      lookDY: this.dy,
+      padLookDX: padLookX,
+      padLookDY: padLookY,
       lanternToggle: this.lanternToggles > 0 || padLanternTap,
       batterySwap: this.batterySwaps > 0 || (padPlain && pad.pressed('battery')) || padLanternHold,
       meleePressed: this.meleeClicks > 0 || (padPlain && pad.pressed('melee')),
@@ -378,6 +383,8 @@ export class Input {
       dodgePressed: false,
       lookDX: 0,
       lookDY: 0,
+      padLookDX: 0,
+      padLookDY: 0,
       lanternToggle: false,
       batterySwap: false,
       meleePressed: false,

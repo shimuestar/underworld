@@ -7,14 +7,64 @@ import { spendStamina, type World } from '../core/World';
 /** 질주 보폭 카운터 — 뛰는 동안만 차고, 멈추면 리셋된다 */
 let strideTicks = 0;
 
+/** 에임 어시스트 표적 — 조준점에서 각도상 가장 가까운 적 (사거리·시야선 안).
+ *  잠복(천장 거머리)·죽은 척 구울은 제외 — 어시스트가 숨은 적을 밀고해선 안 된다.
+ *  각크기(atan(반지름/거리))를 원뿔에 더해 가까운 적일수록 후하게 잡는다 */
+function padAimAssist(
+  world: World,
+): { offYaw: number; offPitch: number; off: number; angRadius: number } | null {
+  const aa = balance.input.gamepad.aimAssist;
+  const p = world.player;
+  const eyeY = p.y + balance.player.eyeHeight;
+  let best: { offYaw: number; offPitch: number; off: number; angRadius: number } | null = null;
+  for (const e of world.enemies) {
+    if (!e.alive || e.lurking || e.feigning) continue;
+    const dx = e.x - p.x;
+    const dz = e.z - p.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 1 || dist > aa.range) continue;
+    const def = enemyDef(e.type);
+    let offYaw = Math.atan2(-dx, -dz) - p.yaw;
+    offYaw = Math.atan2(Math.sin(offYaw), Math.cos(offYaw)); // -π..π 로 감는다
+    const targetY = (e.jumpY ?? 0) + def.height * 0.55;
+    const offPitch = Math.atan2(targetY - eyeY, dist) - p.pitch;
+    const off = Math.hypot(offYaw, offPitch);
+    const angRadius = Math.atan2(def.radius, dist);
+    if (off > (aa.coneDeg * Math.PI) / 180 + angRadius) continue;
+    if (!world.level.hasLineOfSight(p.x, p.z, e.x, e.z)) continue;
+    if (!best || off < best.off) best = { offYaw, offPitch, off, angRadius };
+  }
+  return best;
+}
+
 export function tick(world: World, dt: number): void {
   const p = world.player;
   const input = world.input;
 
-  // 시선 — 마우스 델타를 이번 틱에 소비
-  p.yaw -= input.lookDX * balance.input.mouseSensitivity;
+  // 시선 — 마우스 델타를 이번 틱에 소비. 패드 스틱만 에임 어시스트를 거친다:
+  // 조준점이 적 위를 지나면 스틱이 무거워지고(마찰), 스틱을 움직이는 동안엔
+  // 적 중심으로 살짝 끌린다(자석). 손을 떼면 절대 저절로 조준하지 않는다
+  const sens = balance.input.mouseSensitivity;
+  const aa = balance.input.gamepad.aimAssist;
+  let padDX = input.padLookDX;
+  let padDY = input.padLookDY;
+  const stickActive = padDX !== 0 || padDY !== 0;
+  const assist = stickActive ? padAimAssist(world) : null;
+  if (assist) {
+    padDX *= aa.frictionMul;
+    padDY *= aa.frictionMul;
+  }
+  p.yaw -= (input.lookDX + padDX) * sens;
   const pitchMax = (balance.input.pitchMaxDeg * Math.PI) / 180;
-  p.pitch = Math.max(-pitchMax, Math.min(pitchMax, p.pitch - input.lookDY * balance.input.mouseSensitivity));
+  p.pitch = Math.max(
+    -pitchMax,
+    Math.min(pitchMax, p.pitch - (input.lookDY + padDY) * sens),
+  );
+  if (assist && assist.off <= (aa.magnetConeDeg * Math.PI) / 180 + assist.angRadius) {
+    const step = (aa.magnetDegPerTick * Math.PI) / 180;
+    p.yaw += Math.max(-step, Math.min(step, assist.offYaw));
+    p.pitch += Math.max(-step * 0.7, Math.min(step * 0.7, assist.offPitch));
+  }
 
   // 초음파 비명(박쥐) — 조준이 잔떨림에 실려 흔들린다. 시선 입력 뒤에 얹어
   // 조준 자체를 어긋나게 한다 (연출이 아니라 실제 탄착이 흔들린다)
