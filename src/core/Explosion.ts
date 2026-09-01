@@ -91,7 +91,7 @@ export function explodeAt(world: World, x: number, z: number, cfg: ExplosionSpec
   if (playerDist <= cfg.radius && p.iframeTicks <= 0) {
     const damage = damageAt(playerDist);
     p.health -= damage;
-    world.events.emit('player_damaged', { amount: damage, health: p.health, srcX: x, srcZ: z });
+    world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'explosion', srcX: x, srcZ: z });
     if (playerDist > 0) {
       pushPlayer(p, (p.x - x) / playerDist, (p.z - z) / playerDist, cfg.playerKnockback, cfg.playerKnockbackTicks);
     }

@@ -41,6 +41,9 @@
         "_bowNote": "draw = 풀당김 기준 최대 세기(당김 비율로 스케일, 당기는 내내 이어 울린다) / loose = 놓는 반동(당긴 만큼 굵게)",
         "draw": { "ms": 90, "strong": 0.4, "weak": 0.55 },
         "loose": { "ms": 80, "strong": 0.75, "weak": 0.5 },
+        "_blastNote": "blast = 폭발 피해를 입었다 (hurt 보다 굵고 길다) / blastWave = 피해 없이 근처에서 터졌다 — radius×reachMul 안에서 가까울수록 굵은 충격파",
+        "blast": { "ms": 260, "strong": 1.0, "weak": 1.0 },
+        "blastWave": { "ms": 220, "strong": 0.9, "weak": 1.0, "reachMul": 2.0 },
         "reload": { "ms": 50, "strong": 0.2, "weak": 0.4 },
         "pickup": { "ms": 35, "strong": 0.08, "weak": 0.3 },
         "use": { "ms": 90, "strong": 0.2, "weak": 0.45 }

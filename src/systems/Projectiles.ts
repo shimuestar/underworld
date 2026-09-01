@@ -1446,7 +1446,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
   if (playerDist <= grenade.radius && p.iframeTicks <= 0) {
     const damage = damageAt(playerDist);
     p.health -= damage;
-    world.events.emit('player_damaged', { amount: damage, health: p.health, srcX: proj.x, srcZ: proj.z });
+    world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'explosion', srcX: proj.x, srcZ: proj.z });
     if (p.health <= 0) {
       p.health = 0;
       world.dead = true;

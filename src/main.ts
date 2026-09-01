@@ -100,7 +100,7 @@ function padBtn(action: PadAction): string {
 function padRumble(
   kind:
     | 'hit' | 'heavy' | 'kill' | 'shot' | 'cast' | 'block' | 'parry' | 'whiff'
-    | 'interact' | 'hurt' | 'drain' | 'reload' | 'pickup' | 'use',
+    | 'interact' | 'hurt' | 'drain' | 'blast' | 'reload' | 'pickup' | 'use',
 ): void {
   if (!input.usingPad) return;
   const r = balance.input.gamepad.rumble[kind];
@@ -114,6 +114,19 @@ function padRumbleScaled(kind: 'draw' | 'loose', frac: number): void {
   const m = Math.max(0, Math.min(1, frac));
   input.gamepad.rumble(r.ms, r.strong * m, r.weak * m);
 }
+
+// 폭발 충격파 — 피해가 없어도 근처에서 터지면 거리만큼 진동이 온다 (공기가 때린다).
+// 피해를 입은 폭발은 곧이어 오는 player_damaged 의 blast 가 이걸 덮는다
+events.on('explosion', (payload) => {
+  if (!input.usingPad) return;
+  const b = payload as { x: number; z: number; radius: number };
+  const cfg = balance.input.gamepad.rumble.blastWave;
+  const reach = b.radius * cfg.reachMul;
+  const d = Math.hypot(world.player.x - b.x, world.player.z - b.z);
+  if (d > reach) return;
+  const frac = 1 - d / reach;
+  input.gamepad.rumble(cfg.ms, cfg.strong * frac, cfg.weak * Math.min(1, frac + 0.15));
+});
 
 /** 안내 문구의 키 표기 — 마지막으로 쓴 장치를 따라간다. 키보드 쪽은 기능 id 면
  *  현재 설정을 읽고, 'Enter'·'우클릭' 같은 고정 표기는 그대로 보여 준다 */
@@ -1367,8 +1380,14 @@ events.on('player_damaged', (payload) => {
     blocked?: boolean; srcX?: number; srcZ?: number; srcId?: number; source?: string;
   };
   if (hit.blocked) return;
-  // 맞았다 — 굵은 충격. 파먹기·흡혈(주기 피해)은 약한 모터 위주의 다른 결
-  padRumble(hit.source === 'ghoul_bite' || hit.source === 'leech_suck' ? 'drain' : 'hurt');
+  // 맞았다 — 굵은 충격. 파먹기·흡혈은 약모터의 다른 결, 폭발 피해는 가장 굵고 길게
+  padRumble(
+    hit.source === 'ghoul_bite' || hit.source === 'leech_suck'
+      ? 'drain'
+      : hit.source === 'explosion' || hit.source === 'fireball' || hit.source === 'implode'
+        ? 'blast'
+        : 'hurt',
+  );
   audio.play('player_hurt');
   hurtOverlay!.style.transition = 'none';
   hurtOverlay!.style.opacity = '1';
