@@ -1278,6 +1278,8 @@ export class Stage {
     /** 소모품을 마시는 중 진행률 0~1 과 그 아이템 색 */
     drinkFrac?: number;
     drinkColor?: number;
+    /** 참 = 총을 내려 쥔다 (패드에서 조준 버튼을 안 붙든 상태) */
+    gunLowered?: boolean;
   }): void {
     this.hands.update(state);
   }

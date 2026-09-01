@@ -2823,6 +2823,8 @@ function render(alpha: number): void {
     doorFrac: Door.channelFrac(world),
     drinkFrac: Items.channelFrac(world),
     drinkColor: world.itemChannel ? itemColor(world.itemChannel.kind) : undefined,
+    // 패드에서 조준(LT)을 안 붙들면 총을 내려 쥔다 — 마우스는 항상 견착
+    gunLowered: input.usingPad && !world.input.padAiming,
     // 손에 직접 띄우는 수치 — 왼손 탄약 / 오른손 연타 단계
     ammoText:
       world.weapon.ranged === 'pistol'

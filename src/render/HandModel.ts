@@ -113,6 +113,8 @@ export class HandModel {
   private swingSpeed = 1;
   private swingFrom: SwingPose | null = null;
   private baseRotX = 0;
+  /** 견착 해제 블렌드 0~1 — 패드에서 조준(LT)을 안 하는 동안 총을 내려 쥔다 */
+  private lowerBlend = 0;
   /** 왼팔(총) 자세 보간값 — 가드 블렌드와 별도로 유지된다 */
   private gunPoseY = 0;
   private gunPoseRot = 0;
@@ -403,6 +405,8 @@ export class HandModel {
     drinkColor?: number;
     /** 왼손에 띄울 탄약 수 */
     ammoText?: string;
+    /** 참 = 총을 내려 쥔다 (패드에서 조준 버튼을 안 붙든 상태). 가드·장전이 우선 */
+    gunLowered?: boolean;
   }): void {
     const now = performance.now();
     this.ammoLabel.set(state.ammoText ?? '');
@@ -707,6 +711,18 @@ export class HandModel {
     this.leftArm.position.y += this.gunPoseY * gunWeight;
     this.leftArm.position.z += gunZ * gunWeight;
     this.leftArm.rotation.x += this.gunPoseRot * gunWeight;
+
+    // 견착 해제 — 조준을 안 하면 총을 내려 쥔다. 가드(swing)·장전이 올리는 게 우선이고,
+    // 올릴 때(조준 시작)는 빠르게, 내릴 때는 부드럽게 붙는다
+    const lowerTarget = state.gunLowered && !state.reloading && now >= this.finisherUntil ? 1 : 0;
+    this.lowerBlend += (lowerTarget - this.lowerBlend) * (lowerTarget < this.lowerBlend ? 0.4 : 0.16);
+    const lower = this.lowerBlend * (1 - swing);
+    if (lower > 0.002) {
+      this.leftArm.position.lerp(LOWERED_LEFT.pos, lower);
+      this.leftArm.rotation.x += (LOWERED_LEFT.rotX - this.leftArm.rotation.x) * lower;
+      this.leftArm.rotation.y += (LOWERED_LEFT.rotY - this.leftArm.rotation.y) * lower;
+      this.leftArm.rotation.z += (LOWERED_LEFT.rotZ - this.leftArm.rotation.z) * lower;
+    }
     if (swing > 0) {
       this.bracerMaterial.emissive.set(this.parryGlow);
       this.bracerMaterial.emissiveIntensity = swing;
@@ -820,5 +836,8 @@ const DOOR_PUSH_HZ = 1.1;
 // 왼팔 대기: 총을 든 손. 각도는 총열이 화면 중앙(조준점)으로 수렴하도록 맞췄다 —
 // 실측으로 좌 2.9°·상 3.4° 어긋나 있던 것을 보정한 값
 const REST_LEFT = { pos: new THREE.Vector3(-0.17, -0.15, -0.5), rotX: 0.008, rotY: -0.013, rotZ: 0 };
+// 내려 쥔 자세(패드에서 조준 안 할 때) — 총구를 아래로 떨구고 몸쪽으로 당긴다.
+// LT 를 붙들면 REST(견착)로 올라온다 — "겨눴다/내렸다"가 손에 보인다
+const LOWERED_LEFT = { pos: new THREE.Vector3(-0.26, -0.34, -0.38), rotX: -0.55, rotY: -0.3, rotZ: 0.12 };
 // 가드 높이: 조준점(화면 중앙)을 가리지 않도록 하단에 배치 — 시야 확보 피드백
 const GUARD_LEFT = { pos: new THREE.Vector3(0.02, -0.24, -0.44), rotX: 0.12, rotY: -1.3, rotZ: -0.3 };
