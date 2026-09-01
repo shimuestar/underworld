@@ -55,7 +55,7 @@ export function buttonName(index: number): string {
 }
 
 /** 기본 매핑 (Xbox 배치 기준) — 칩(조합) 방식. 2026-08-31 사용자 실측 배치를 기본으로 승격:
- *  - 발사 = LT · 근접 = RT (당기는 손맛), 반응 = X, 회피 = A, 상호작용 = B, 재장전 = Y
+ *  - 조준 = LT · 근접/발사 = RT, 반응 = Y, 회피 = A, 상호작용 = B, 재장전 = X (2026-09-01 스왑)
  *  - 스킬: skillSelect(RB)를 누른 채 Y·B·A·X = 스킬 1~4 — 회전 선택 대신 직접 시전.
  *    조합 레이어 중엔 그 버튼들의 평상시 기능(회피·상호작용 등)이 눌리지 않는다
  *  - 소모품: itemSelect(LB)를 누른 채 D-패드 ↑→↓← = 퀵슬롯 1~4
@@ -65,12 +65,12 @@ export function buttonName(index: number): string {
 export const DEFAULT_BINDINGS: Record<PadAction, number> = {
   ranged: 6, // LT
   melee: 7, // RT
-  reaction: 2, // X
+  reaction: 3, // Y
   dodge: 0, // A
   sprint: 10, // L3
   cycleWeapon: 14, // D-패드 ← (평상시)
   interact: 1, // B
-  reload: 3, // Y
+  reload: 2, // X
   skillSelect: 5, // RB — 누른 채 스킬 버튼
   skill1: 3, // 선택 + Y
   skill2: 1, // 선택 + B
@@ -92,7 +92,8 @@ export const DEFAULT_BINDINGS: Record<PadAction, number> = {
 // 덮어쓰면 스킬 조합이 통째로 죽는다. 키를 올려 새 구조로 새로 시작한다
 // v3 (2026-09-01): 락온(R3) 추가·랜턴 D-패드 ↑ 이동 — 구 저장본의 lantern=R3 가
 // 새 lockOn 기본과 겹친다. 현 기본값이 곧 직전 사용자 배치라 리셋 손실이 없다
-const STORAGE_KEY = 'underworld.gamepad.bindings.v3';
+// v4 (2026-09-01): 반응 X→Y, 재장전 Y→X 스왑 — 구 저장본이 새 기본을 덮지 않게
+const STORAGE_KEY = 'underworld.gamepad.bindings.v4';
 
 /** 축 데드존 + 응답 곡선. 중앙부를 눌러 정밀 조준을 살린다 */
 function curve(value: number, deadzone: number, exponent: number): number {
