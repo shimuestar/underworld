@@ -48,6 +48,7 @@ export type SoundName =
   | 'spider_pounce'
   | 'slime_windup'
   | 'slime_split'
+  | 'slime_gulp'
   | 'footstep_walk'
   | 'chain_locked'
   | 'unlock_chain'
@@ -459,6 +460,13 @@ export class GameAudio {
         // 철퍽 — 갈라지는 젖은 파열
         this.noise(0.16, 0.55, 900);
         this.tone(240, 0.12, 'triangle', 0.35, 0, 110);
+        break;
+      case 'slime_gulp':
+        // 꿀꺽 — 젖은 쩝(노이즈) 뒤에 목구멍으로 미끄러져 내려가는 삼킴 + 낮은 blop.
+        // 예고(slime_windup)와 확실히 갈리게 짧고 높은 데서 뚝 떨어진다
+        this.noise(0.05, 0.4, 1400);
+        this.tone(340, 0.08, 'sine', 0.75, 0.03, 120);
+        this.tone(95, 0.11, 'sine', 0.8, 0.11, 52);
         break;
       case 'footstep_run':
         // 질주 발소리 — 낮고 짧은 쿵. 두 번 키웠다 (0.4→0.62→0.95 + 저음 겹)

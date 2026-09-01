@@ -1090,8 +1090,12 @@ events.on('ghoul_rise', (payload) => {
   showReaction('시체가 일어난다!', 1600);
 });
 events.on('ghoul_ate_mote', () => audio.play('hit_flesh'));
-// 슬라임 식탐 — 삼킬 때 꿀렁 (게워 내는 건 죽음 파편·자석 픽업이 이미 요란하다)
-events.on('slime_ate', () => audio.play('slime_windup'));
+// 슬라임 식탐 — 삼킬 때 꿀꺽 (게워 내는 건 죽음 파편·자석 픽업이 이미 요란하다).
+// 예고음(slime_windup) 재활용은 공격 신호와 헷갈려서 전용 삼킴음으로 갈랐다
+events.on('slime_ate', (payload) => {
+  const at = payload as { x: number; z: number };
+  audio.play('slime_gulp', panAt(at.x, at.z));
+});
 // 새끼 사출 — 머리에서 한 마리씩 튀어나올 때마다 철퍽
 events.on('brood_pop', (payload) => {
   const bp = payload as { x: number; z: number; enemyType: string };
