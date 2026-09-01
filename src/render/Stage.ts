@@ -1205,8 +1205,10 @@ export class Stage {
         transparent: true,
         opacity: 0.95,
         depthWrite: false,
+        depthTest: false, // 몸통·벽 뒤에서도 마커는 보인다 — "잡고 있다"는 확답
       }),
     );
+    spr.renderOrder = 999;
     spr.visible = false;
     this.scene.add(spr);
     this.lockSprite = spr;
@@ -2977,15 +2979,17 @@ export class Stage {
       // 자세를 만드는 x 회전(기울임·내지름)은 건드리지 않는다
       visual.torso.rotation.z = shocked ? shake * SHOCK_ROLL : 0;
 
-      // 락온 마커 — 잡힌 적 머리 위에서 은은히 숨쉰다
+      // 락온 마커 — 소울라이크처럼 몸통 중앙에 찍힌다. 항상 몸 앞에 그려져
+      // (depthTest 끔) 가려질 일이 없고, 숨쉬는 맥동으로 시선이 걸린다
       if (enemy.id === this.lockOnTargetId) {
         const spr = this.ensureLockSprite();
-        const pulse = 1 + Math.sin(now / 180) * 0.1;
+        const pulse = 1 + Math.sin(now / 160) * 0.15;
+        const size = Math.max(0.7, def2.radius * 1.3) * pulse;
         spr.visible = true;
-        spr.scale.set(0.55 * pulse, 0.55 * pulse, 1);
+        spr.scale.set(size, size, 1);
         spr.position.set(
           visual.group.position.x,
-          visual.group.position.y + def2.height + 0.65,
+          visual.group.position.y + def2.height * 0.55,
           visual.group.position.z,
         );
       }
