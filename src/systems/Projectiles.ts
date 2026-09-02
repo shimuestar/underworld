@@ -640,6 +640,48 @@ function castBlink(world: World, effects: Record<string, number>): void {
   world.events.emit('blink', { fromX: p.x, fromZ: p.z, range: p.blinkLeft });
 }
 
+/** 서리 볼트 — 아주 살짝 유도된다 (패드 조준 보조, 2026-09-02).
+ *  진행 방향 원뿔(homingConeDeg) 안에서 가장 정면에 가까운 적을 향해
+ *  매 틱 homingDegPerTick 만큼만 머리를 튼다 — 빗맞을 조준만 살려 주고,
+ *  옆·뒤의 적을 쫓아가는 유도탄은 아니다. 죽은 척 구울은 밀고하지 않는다 */
+function steerFrostBolt(world: World, proj: ProjectileState): void {
+  const fx = sigilDef('sig_frost').effects;
+  const maxTurn = ((fx['homingDegPerTick'] ?? 0) * Math.PI) / 180;
+  if (maxTurn <= 0) return;
+  const cone = ((fx['homingConeDeg'] ?? 0) * Math.PI) / 180;
+  const range = fx['homingRange'] ?? 0;
+  const speedXZ = Math.hypot(proj.vx, proj.vz);
+  if (speedXZ < 1e-4) return;
+  const heading = Math.atan2(proj.vz, proj.vx);
+  const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
+  let bestOff = cone;
+  let want: number | null = null;
+  const consider = (tx: number, tz: number): void => {
+    const dx = tx - proj.x;
+    const dz = tz - proj.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.5 || d > range) return;
+    const toTarget = Math.atan2(dz, dx);
+    const off = Math.abs(wrap(toTarget - heading));
+    if (off >= bestOff) return;
+    if (!world.level.hasLineOfSight(proj.x, proj.z, tx, tz)) return;
+    bestOff = off;
+    want = toTarget;
+  };
+  for (const enemy of world.enemies) {
+    if (enemy.alive && !enemy.feigning) consider(enemy.x, enemy.z);
+  }
+  // 폭발통·기믹도 후보다 — 통을 겨눈 사격을 옆의 적이 빼앗지 않게
+  // '정면에 더 가까운 표적'이 이긴다 (통 유도는 패드에게 덤이기도 하다)
+  for (const barrel of world.barrels) if (barrel.alive) consider(barrel.x, barrel.z);
+  for (const prop of world.props) if (prop.alive) consider(prop.x, prop.z);
+  if (want === null) return;
+  const turn = Math.max(-maxTurn, Math.min(maxTurn, wrap(want - heading)));
+  const nh = heading + turn;
+  proj.vx = Math.cos(nh) * speedXZ;
+  proj.vz = Math.sin(nh) * speedXZ;
+}
+
 /** 부순 적 투사체를 배열에서 뺀다. 자기 자신을 먼저 지운 뒤 호출해야 한다 —
  *  뒤에서 앞으로 도는 루프라 아래쪽 원소가 빠지면 남은 인덱스가 당겨진다.
  *  다음 회차가 배열 밖을 보거나 하나를 건너뛰지 않게 맞춘 인덱스를 돌려준다 */
@@ -670,6 +712,7 @@ function moveProjectiles(world: World, dt: number): void {
     }
 
     if (proj.kind === 'grenade') proj.vy -= balance.weapons.grenade.gravity * dt; // 포물선
+    if (proj.kind === 'frost' && proj.owner === 'player') steerFrostBolt(world, proj);
 
     const stepX = proj.vx * dt;
     const stepY = proj.vy * dt;

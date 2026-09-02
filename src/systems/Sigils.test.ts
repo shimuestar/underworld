@@ -2391,6 +2391,26 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(slowMoved).toBeLessThan(quickMoved * 0.6);
   });
 
+  it('서리 볼트 — 원뿔 안의 빗나간 조준은 살짝 휘어 따라간다', () => {
+    Sigils.acquire(world, 'sig_frost');
+    world.mana.value = 100;
+    add('goblin_runner', 16, 7.4); // 정면(+X)에서 살짝 옆 — 유도 원뿔(22도) 안
+    castSlot(1);
+    const bolt = world.projectiles.find((pr) => pr.kind === 'frost')!;
+    for (let i = 0; i < 12 && world.projectiles.includes(bolt); i++) Projectiles.tick(world, DT);
+    expect(bolt.vz).toBeGreaterThan(0.3); // 적 쪽(+Z)으로 머리를 틀었다
+  });
+
+  it('서리 볼트 — 원뿔 밖(옆·뒤)의 적은 쫓지 않는다', () => {
+    Sigils.acquire(world, 'sig_frost');
+    world.mana.value = 100;
+    add('goblin_runner', 8, 11); // 진행 방향에서 ~56도 — 원뿔 밖
+    castSlot(1);
+    const bolt = world.projectiles.find((pr) => pr.kind === 'frost')!;
+    for (let i = 0; i < 12 && world.projectiles.includes(bolt); i++) Projectiles.tick(world, DT);
+    expect(Math.abs(bolt.vz)).toBeLessThan(0.01); // 그대로 직진
+  });
+
   it('그림자 이동: 순간이동이 아니라 질주 — 과정이 보이고, 내내 무적이며, 도착 무적 꼬리', () => {
     Sigils.acquire(world, 'sig_shadowstep');
     world.mana.value = 100;
