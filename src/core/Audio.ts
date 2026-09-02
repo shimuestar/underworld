@@ -715,17 +715,22 @@ export class GameAudio {
         this.noise(0.06, 0.4, 900, 0.13);
         break;
       case 'trap_spike_down':
-        // 가시 회수 — 돌이 갈리며 쇠가 홈으로 스르륵 들어간다 (0.75초, 회수 시간과 같다)
-        this.noise(0.4, 0.5, 700);
-        this.noise(0.3, 0.42, 2400, 0.05);
-        this.noise(0.25, 0.35, 1200, 0.35);
-        this.tone(140, 0.6, 'triangle', 0.3, 0, 60);
+        // 가시 회수 — 1.5초(cooldownTicks) 내내 돌이 갈리며 쇠가 홈으로 천천히 들어간다.
+        // 거친 갈림을 세 겹으로 이어 붙이고 저음이 내려간다 — 안 들린다는 피드백에 크게
+        this.noise(0.55, 0.9, 900);
+        this.noise(0.5, 0.75, 2200, 0.05);
+        this.noise(0.55, 0.8, 800, 0.5);
+        this.noise(0.5, 0.65, 1900, 0.55);
+        this.noise(0.5, 0.7, 700, 1.0);
+        this.tone(150, 1.45, 'triangle', 0.55, 0, 55);
+        this.tone(75, 1.4, 'sine', 0.5, 0.05, 45);
         break;
       case 'trap_rearm':
-        // 걸쇠가 물린다 — 쇠 철컥 한 번 (다시 밟히면 또 나온다는 신호)
-        this.tone(640, 0.05, 'square', 0.55, 0, 380);
-        this.noise(0.05, 0.55, 2600);
-        this.tone(220, 0.12, 'triangle', 0.4, 0.04, 150);
+        // 걸쇠가 물린다 — 굵은 쇠 철컥 (다시 밟히면 또 나온다는 신호)
+        this.tone(640, 0.06, 'square', 0.8, 0, 360);
+        this.noise(0.06, 0.85, 2600);
+        this.tone(210, 0.16, 'triangle', 0.6, 0.04, 140);
+        this.tone(60, 0.14, 'sine', 0.5, 0.05, 45);
         break;
       case 'trap_empty':
         // 빈 노즐 — 가볍게 텅
@@ -733,10 +738,13 @@ export class GameAudio {
         this.noise(0.03, 0.25, 4000, 0.02);
         break;
       case 'trap_spikes':
-        // 가시 — 쇠가 돌을 긁으며 솟는다: 거친 노이즈 + 저음 + 쇳소리 울림
-        this.noise(0.09, 0.9, 1800);
-        this.tone(180, 0.14, 'sawtooth', 0.5, 0, 95);
-        this.tone(1400, 0.16, 'triangle', 0.18, 0.02, 900);
+        // 가시가 솟는다 — 크고 날카롭게: 쇠가 돌 홈을 박차는 파열 + 굵은 저음 + 길게 우는 쇳소리 + 바닥 둥.
+        // 작고 약하다는 피드백에 전체를 키웠다 (2026-09-02)
+        this.noise(0.14, 1.4, 1700);
+        this.noise(0.08, 1.0, 4200);
+        this.tone(160, 0.3, 'sawtooth', 0.95, 0, 70);
+        this.tone(1900, 0.38, 'triangle', 0.45, 0.02, 1100);
+        this.tone(52, 0.28, 'sine', 0.95, 0.03, 40);
         break;
       case 'trap_net':
         // 그물 — 줄이 툭 끊기고 천장에서 무거운 천이 촤악 떨어진다

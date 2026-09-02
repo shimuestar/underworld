@@ -2,6 +2,7 @@
 // 게임 로직 없음: 상태(phase·timer)를 읽어 모형을 움직일 뿐이다.
 // tell(발견 단서)은 여기서 만든다 — 판석과 다른 색의 판, 벽의 검은 노즐, 네 귀의 구멍.
 import * as THREE from 'three';
+import { balance } from '../core/Balance';
 
 export interface TrapView {
   type: string;
@@ -262,9 +263,17 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
     if (plate) plate.position.y = trap.phase === 'telegraph' ? 0.0 : 0.03;
     const spikes = data['spikes'] as THREE.Group | undefined;
     if (spikes) {
-      const target = trap.phase === 'firing' ? 0 : -1.25;
-      // 솟을 때는 순간, 들어갈 때는 스르륵
-      spikes.position.y = target > spikes.position.y ? target : spikes.position.y + (target - spikes.position.y) * 0.12;
+      // 솟을 때는 순간(firing), 들어갈 때는 회수 시간(cooldownTicks) 내내 타이머에 맞춰 천천히 —
+      // 회수 소리(돌 갈림)와 길이가 같고, 걸쇠 철컥과 함께 완전히 들어간다
+      if (trap.phase === 'firing') {
+        spikes.position.y = 0;
+      } else if (trap.phase === 'cooldown') {
+        const cd = Math.max(1, balance.traps.types.trap_spike.cooldownTicks);
+        const progress = 1 - Math.max(0, Math.min(1, trap.timer / cd));
+        spikes.position.y = -1.25 * progress;
+      } else {
+        spikes.position.y = -1.25;
+      }
     }
   } else if (trap.type === 'trap_net') {
     const line = data['line'] as THREE.Mesh | undefined;
