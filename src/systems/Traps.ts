@@ -458,12 +458,17 @@ export function tick(world: World, _dt: number): void {
         break;
       case 'firing':
         if (trap.type === 'trap_gas') tickGasCloud(world, trap, cfg);
-        if (--trap.timer <= 0) afterFire(world, trap, cfg);
+        if (--trap.timer <= 0) {
+          // 작동이 끝난다 — 가시가 들어가고, 구름이 걷힌다 (소리는 main 이 종별로)
+          world.events.emit('trap_retract', { id: trap.id, type: trap.type, x: trap.x, z: trap.z });
+          afterFire(world, trap, cfg);
+        }
         break;
       case 'cooldown':
         if (--trap.timer <= 0) {
           trap.phase = 'armed';
           trap.timer = 0;
+          world.events.emit('trap_rearmed', { id: trap.id, type: trap.type, x: trap.x, z: trap.z });
         }
         break;
       default:

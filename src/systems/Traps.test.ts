@@ -130,11 +130,16 @@ describe('함정 — 가시 압력판', () => {
       expect(e.alive).toBe(false);
       expect(ev).toEqual(['pop', 'kill', `died:${e.id}`]);
     }
-    // 가시가 내려가고 쿨이 돌면 다시 armed
+    // 가시가 내려가고(회수 소리) 쿨이 돌면 다시 armed(재장전 소리)
+    const cycle: string[] = [];
+    world.events.on('trap_retract', () => cycle.push('retract'));
+    world.events.on('trap_rearmed', () => cycle.push('rearmed'));
     tickTraps(world, T.trap_spike.upTicks);
     expect(trap.phase).toBe('cooldown');
+    expect(cycle).toEqual(['retract']);
     tickTraps(world, T.trap_spike.cooldownTicks);
     expect(trap.phase).toBe('armed');
+    expect(cycle).toEqual(['retract', 'rearmed']);
     expect(trap.charges).toBe(-1); // 무한
   });
 

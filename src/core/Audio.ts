@@ -125,7 +125,10 @@ export type SoundName =
   | 'trap_cough'
   | 'trap_rumble'
   | 'trap_whoosh'
-  | 'trap_ping';
+  | 'trap_ping'
+  | 'trap_spike_down'
+  | 'trap_rearm'
+  | 'trap_empty';
 
 const MASTER_GAIN = 0.25;
 
@@ -704,8 +707,32 @@ export class GameAudio {
         this.tone(1300, 0.09, 'triangle', 0.35, 0, 500);
         break;
       case 'trap_click':
-        // 압력판 딸깍 — 발밑에서 뭔가 걸렸다
-        this.tone(900, 0.035, 'square', 0.45, 0, 700);
+        // 가시판을 밟았다 — 묵직한 돌판 침강(저음 둥) + 돌 갈림 + 쇠 걸쇠가 물리는 철컥 + 두 번째 둔탁음.
+        // "발밑에서 큰 것이 움직였다"가 확실히 읽혀야 한다 (2026-09-02 사용자 요청)
+        this.tone(72, 0.28, 'sine', 1.0, 0, 44);
+        this.noise(0.14, 0.75, 380);
+        this.tone(520, 0.06, 'square', 0.5, 0.11, 300);
+        this.noise(0.05, 0.5, 2400, 0.11);
+        this.tone(56, 0.2, 'sine', 0.7, 0.16, 40);
+        break;
+      case 'trap_spike_down':
+        // 가시 회수 — 쇠가 돌 홈을 긁으며 스르륵 내려가고 바닥에 툭 안착
+        this.noise(0.26, 0.42, 2600);
+        this.noise(0.26, 0.36, 1300, 0.2);
+        this.tone(130, 0.42, 'triangle', 0.3, 0, 62);
+        this.tone(62, 0.12, 'sine', 0.55, 0.44, 46);
+        break;
+      case 'trap_rearm':
+        // 재장전 — 래칫이 세 번 째깍이고 걸쇠가 다시 물린다 (다시 밟히면 또 나온다는 신호)
+        this.tone(1400, 0.03, 'square', 0.32, 0, 1300);
+        this.tone(1400, 0.03, 'square', 0.32, 0.09, 1300);
+        this.tone(1400, 0.03, 'square', 0.32, 0.18, 1300);
+        this.noise(0.04, 0.3, 3000, 0.18);
+        this.tone(700, 0.06, 'square', 0.5, 0.3, 480);
+        break;
+      case 'trap_empty':
+        // 빈 노즐 — 가볍게 텅
+        this.tone(900, 0.035, 'square', 0.4, 0, 700);
         this.noise(0.03, 0.25, 4000, 0.02);
         break;
       case 'trap_spikes':

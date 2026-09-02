@@ -520,6 +520,8 @@ for (const name of [
   'trap_gas_cough',
   'trap_whoosh',
   'trap_revealed',
+  'trap_retract',
+  'trap_rearmed',
   'ammo_picked',
   'grenade_picked',
   'battery_picked',
@@ -845,7 +847,25 @@ events.on('trap_telegraph', (payload) => {
     }
     return;
   }
-  audio.play(t.type === 'trap_spike' ? 'trap_click' : 'trap_hiss', panAt(t.x, t.z));
+  if (t.type === 'trap_spike') {
+    // 묵직한 판 침강 — 내가 밟았으면 발밑 진동도 온다
+    audio.play('trap_click', panAt(t.x, t.z));
+    const trap = world.traps.find((tr) => tr.id === (payload as { id: number }).id);
+    if (trap?.triggeredBy === 'player') padRumble('heavy');
+    return;
+  }
+  audio.play('trap_hiss', panAt(t.x, t.z));
+});
+// 작동이 끝나고 다시 장전되는 과정도 들린다 — 가시가 들어가고(회수), 래칫이 걸린다(재장전)
+events.on('trap_retract', (payload) => {
+  const t = payload as { type: string; x: number; z: number };
+  if (t.type === 'trap_spike') audio.play('trap_spike_down', panAt(t.x, t.z));
+});
+events.on('trap_rearmed', (payload) => {
+  const t = payload as { type: string; x: number; z: number };
+  if (t.type === 'trap_spike' || t.type === 'trap_dart' || t.type === 'trap_gas') {
+    audio.play('trap_rearm', panAt(t.x, t.z));
+  }
 });
 events.on('trap_gas_cough', () => audio.play('trap_cough')); // 내 기침 — 패닝 없음
 let trapRevealHintShown = false;
@@ -919,7 +939,7 @@ events.on('trap_glyph_burst', (payload) => {
 });
 events.on('trap_spent', (payload) => {
   const t = payload as { type: string; x: number; z: number };
-  if (t.type === 'trap_dart') audio.play('trap_click', panAt(t.x, t.z)); // 빈 노즐 — 텅
+  if (t.type === 'trap_dart') audio.play('trap_empty', panAt(t.x, t.z)); // 빈 노즐 — 텅
 });
 events.on('prop_fuse_lit', (payload) => {
   const pf = payload as { x: number; z: number };
