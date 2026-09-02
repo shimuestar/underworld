@@ -53,7 +53,11 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
   판을 누르지 않는다(모든 밟는 함정 공통). 가시가 서 있을 때 들어오면 몸당 1회(나갔다 오면 또) — **대시 무적도
   소용없다**(`ignoreIframes`), 그림자 이동만 면제. 회수 중엔 피해·트리거 없음, 걸쇠가 물린 뒤에야 다시 밟힌다.
   이벤트 `trap_retract`(회수 시작) · `trap_rearmed`(걸쇠).
-- **포자 식물** (2026-09-02 재설계) — 배기구 대신 식물. 근접하면 개화 뒤 분출. 총(히트스캔)·화살·마법이 `hitRadius×height` 상자를
+- **독 상태** — 포자 구름에 닿으면 `poisonInitial` 즉시 피해(`player_damaged`, source `poison`) 뒤 `poisonDurationTicks`(30초) 동안
+  `poisonTotal` 이 `poisonTickIntervalTicks` 마다 조금씩 깎인다(`poison_tick` — 붉은 화면·진동 없음). 이미 중독 중이면 시간만 갱신.
+  HUD `#buff-poison` 아이콘(부채꼴 잔여 시간 + 초), 체력 바가 병든 녹색. `Traps.tickPoison` 이 진행한다.
+- **포자 식물** (2026-09-02 재설계) — 배기구 대신 식물. 근접하면 **1초 바르르 떨며** 개화 뒤 분출, **한 번 터지면 끝**(시든 주머니·늘어진
+  꽃잎·바닥 포자 자국이 남는다). 총(히트스캔)·화살·마법이 `hitRadius×height` 상자를
   맞히면 `provokeTrap`(World 헬퍼)으로 곧장 예고 — 멀리서 안전하게 터뜨리거나 적 옆에서 터뜨려 구름에 몰아넣는다.
   소리: 개화 `trap_bloom`, 분출 `trap_spore`.
 - **자동 순환 장치의 소리**(자동 가시판·자동 다트·진자) — `balance.traps.autoSound`: reach(10m) 밖은 무음, 안에서는

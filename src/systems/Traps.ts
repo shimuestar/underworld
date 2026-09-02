@@ -202,11 +202,57 @@ function tickOil(world: World, trap: TrapState, cfg: TrapCfg): void {
   }
 }
 
-/** 독가스 구름 — 도는 동안 매 틱. 피해는 없다: 시야가 흔들리고 숨이 막히고(스태미너), 기침이 방을 깨운다 */
+/** 독 — 포자에 닿았다. 처음이면 즉시 피해(막기 불가, 연쇄 끊김) 뒤 지속 피해가 시작되고,
+ *  이미 중독 중이면 시간만 갱신된다 (초기 피해 반복 없음 — 구름 안에 서 있어도 누적 타격은 아니다) */
+function applyPoison(world: World, trap: TrapState, cfg: TrapCfg): void {
+  const p = world.player;
+  const duration = Math.max(1, Math.round(cfg['poisonDurationTicks'] ?? 1800));
+  if ((p.poisonTicks ?? 0) > 0) {
+    p.poisonTicks = Math.max(p.poisonTicks ?? 0, duration);
+    return;
+  }
+  p.poisonTicks = duration;
+  p.poisonPerTick = (cfg['poisonTotal'] ?? 0) / duration;
+  p.poisonAccum = 0;
+  hurtPlayer(world, trap, cfg['poisonInitial'] ?? 0, { blockable: false, source: 'poison' });
+  world.events.emit('poison_applied', { ticks: duration, total: cfg['poisonTotal'] ?? 0 });
+}
+
+/** 독 진행 — 간격마다 누적분을 깎는다. player_damaged 를 쓰지 않는다(붉은 화면·진동 도배 방지) */
+function tickPoison(world: World): void {
+  const p = world.player;
+  if ((p.poisonTicks ?? 0) <= 0 || world.dead) return;
+  const cfg = trapCfg('trap_gas');
+  const interval = Math.max(1, Math.round(cfg?.['poisonTickIntervalTicks'] ?? 30));
+  p.poisonTicks = (p.poisonTicks ?? 0) - 1;
+  p.poisonAccum = (p.poisonAccum ?? 0) + (p.poisonPerTick ?? 0);
+  const last = p.poisonTicks <= 0;
+  if (p.poisonTicks % interval === 0 || last) {
+    const amount = p.poisonAccum ?? 0;
+    p.poisonAccum = 0;
+    if (amount > 0) {
+      p.health -= amount;
+      world.events.emit('poison_tick', { amount, health: p.health });
+      if (p.health <= 0) {
+        p.health = 0;
+        world.dead = true;
+        world.events.emit('player_died', { tick: world.tick });
+      }
+    }
+  }
+  if (last) {
+    p.poisonTicks = 0;
+    p.poisonPerTick = 0;
+    world.events.emit('poison_ended', {});
+  }
+}
+
+/** 포자 구름 — 도는 동안 매 틱. 시야가 흔들리고 숨이 막히고(스태미너), 기침이 방을 깨우고, 독이 든다 */
 function tickGasCloud(world: World, trap: TrapState, cfg: TrapCfg): void {
   const r = cfg['cloudRadius'] ?? 3;
   const p = world.player;
   if (!world.dead && Math.hypot(p.x - trap.x, p.z - trap.z) <= r) {
+    applyPoison(world, trap, cfg);
     p.aimShakeTicks = Math.max(p.aimShakeTicks ?? 0, cfg['shakeTicks'] ?? 0);
     p.aimShakeAmp = Math.max(p.aimShakeAmp ?? 0, cfg['shakeAmp'] ?? 0);
     if (spendStamina(world.stamina, cfg['staminaDrainPerTick'] ?? 0, balance.player.stamina.regenDelayTicks)) {
@@ -521,6 +567,7 @@ export function init(world: World): void {
 
 export function tick(world: World, _dt: number): void {
   revealTraps(world);
+  tickPoison(world);
   for (const trap of world.traps) {
     const cfg = trapCfg(trap.type);
     if (!cfg) continue;

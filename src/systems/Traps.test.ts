@@ -542,19 +542,20 @@ describe('함정 — 독가스 배기구', () => {
     expect(world.player.aimShakeTicks).toBeGreaterThan(0);
     expect(coughs.length).toBeGreaterThanOrEqual(2);
     expect(listener.ai).toBe('chase'); // 기침을 들었다
-    expect(world.player.health).toBe(balance.player.healthMax);
+    // 구름 자체는 피해가 없다 — 깎인 건 독의 초기 피해(+ 미세 도트)만
+    expect(world.player.health).toBeLessThanOrEqual(balance.player.healthMax - T.trap_gas.poisonInitial);
+    expect(world.player.health).toBeGreaterThan(balance.player.healthMax - T.trap_gas.poisonInitial - 1);
   });
 
-  it('구름 안의 적은 경둔화, 구름이 걷히면 쿨 뒤 재무장', () => {
+  it('구름 안의 적은 경둔화, 구름이 걷히면 식물은 시든 채 남는다(1회성)', () => {
     const gas = putTrap(world, 'trap_gas', 30, 6);
     const e = addEnemy(world, 'goblin_runner', 30.5, 6);
     tickTraps(world, T.trap_gas.telegraphTicks + 2);
     expect(e.slowMul).toBe(T.trap_gas.enemySlowMul);
     tickTraps(world, T.trap_gas.cloudTicks);
-    expect(gas.phase).toBe('cooldown');
-    e.x = 60; // 비켜 서야 재무장 뒤 곧장 다시 밟히지 않는다
-    tickTraps(world, T.trap_gas.cooldownTicks);
-    expect(gas.phase).toBe('armed');
+    expect(gas.phase).toBe('spent'); // 한 번 터진 식물은 끝 — 다시 피지 않는다
+    tickTraps(world, 120);
+    expect(gas.phase).toBe('spent');
   });
 });
 
@@ -775,5 +776,51 @@ describe('함정 — 포자 식물 원거리 도발', () => {
     for (let i = 0; i < 30 && plant.phase === 'armed'; i++) Projectiles.tick(world, DT);
     expect(plant.phase).toBe('telegraph');
     expect(world.projectiles).toHaveLength(0); // 화살은 식물에 박혔다
+  });
+});
+
+describe('함정 — 포자 식물: 1초 떨림, 1회성, 독 상태', () => {
+  it('구름에 닿으면 초기 피해 뒤 독이 들고, 30초 동안 poisonTotal 이 조금씩 깎이고, 재접촉은 시간만 갱신한다', () => {
+    const world = makeWorld();
+    const plant = putTrap(world, 'trap_gas', 6, 6);
+    const c = T.trap_gas;
+    const ev: string[] = [];
+    world.events.on('poison_applied', () => ev.push('applied'));
+    world.events.on('poison_ended', () => ev.push('ended'));
+    const dmg: string[] = [];
+    world.events.on('player_damaged', (p) => dmg.push((p as { source: string }).source));
+    let dot = 0;
+    world.events.on('poison_tick', (p) => (dot += (p as { amount: number }).amount));
+    tickTraps(world, c.telegraphTicks + 2); // 떨림 1초 뒤 터짐 — 구름 안에 서 있다
+    expect(plant.phase).toBe('firing');
+    expect(ev).toEqual(['applied']);
+    expect(dmg).toEqual(['poison']);
+    expect(world.player.health).toBeCloseTo(balance.player.healthMax - c.poisonInitial, 3);
+    // 구름 안에 계속 있어도 초기 피해는 다시 없다 (시간만 갱신된다)
+    tickTraps(world, 60);
+    expect(dmg).toHaveLength(1);
+    expect(world.player.poisonTicks).toBe(c.poisonDurationTicks); // 매 틱 갱신 — 꽉 찬 채
+    // 구름을 나와 30초를 채운다 — 나온 뒤의 도트 총량 ≈ poisonTotal (머문 60틱치는 그 위에 조금 더)
+    const dotBefore = dot;
+    world.player.x = 30;
+    tickTraps(world, c.poisonDurationTicks + 5);
+    // 머문 60틱 동안 쌓인 누적분(시간은 갱신됐지만 독은 계속 흐른다)이 그 위에 더해진다
+    const perTick = c.poisonTotal / c.poisonDurationTicks;
+    expect(dot - dotBefore).toBeCloseTo(c.poisonTotal + 60 * perTick, 1);
+    expect(ev).toEqual(['applied', 'ended']);
+    expect(world.player.poisonTicks ?? 0).toBe(0);
+  });
+
+  it('한 번 터진 식물은 끝이다 — spent, 다시 다가가도 안 터진다', () => {
+    const world = makeWorld();
+    const plant = putTrap(world, 'trap_gas', 6, 6);
+    const c = T.trap_gas;
+    tickTraps(world, c.telegraphTicks + c.cloudTicks + 3);
+    expect(plant.phase).toBe('spent');
+    world.player.x = 30;
+    tickTraps(world, 5);
+    world.player.x = 6;
+    tickTraps(world, 5);
+    expect(plant.phase).toBe('spent');
   });
 });

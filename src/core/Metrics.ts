@@ -140,6 +140,11 @@ export class Metrics {
     events.on('player_died', () => {
       if (this.lastDamageWasTrap) this.trapDeaths++;
     });
+    events.on('poison_tick', (payload) => {
+      // 독 도트 — player_damaged 를 안 쓰므로 여기서 받은 피해에 합산 (독 사망도 함정 사망으로 친다)
+      this.damageTakenTotal += (payload as { amount: number }).amount;
+      this.lastDamageWasTrap = true;
+    });
     events.on('shield_broken', () => this.shieldsBroken++);
     events.on('xp_gained', (payload) => {
       this.xpGained += (payload as { amount: number }).amount;

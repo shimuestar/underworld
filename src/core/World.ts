@@ -59,6 +59,10 @@ export interface PlayerState {
   blinkShroudAfter?: number;
   aimShakeTicks?: number;
   aimShakeAmp?: number;
+  /** 독 상태 — 남은 틱 / 틱당 피해(누적해 간격마다 적용) / 아직 적용 안 된 누적분 */
+  poisonTicks?: number;
+  poisonPerTick?: number;
+  poisonAccum?: number;
   /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */
   webLastDodgeTicks?: number;
 }

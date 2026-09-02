@@ -522,6 +522,9 @@ for (const name of [
   'trap_revealed',
   'trap_retract',
   'trap_rearmed',
+  'poison_applied',
+  'poison_tick',
+  'poison_ended',
   'ammo_picked',
   'grenade_picked',
   'battery_picked',
@@ -901,6 +904,12 @@ events.on('trap_rearmed', (payload) => {
   }
 });
 events.on('trap_gas_cough', () => audio.play('trap_cough')); // 내 기침 — 패닝 없음
+// 독 — 걸리는 순간 알리고(초기 피해는 player_damaged 가 이미 붉게 알린다), 풀리면 알린다.
+// 도트 틱은 조용히 — 짧은 초록 기침 정도만 (붉은 화면·진동 도배 방지)
+events.on('poison_applied', () => {
+  showReaction('독에 중독됐다 — 30초 동안 체력이 조금씩 깎인다', 2600);
+});
+events.on('poison_ended', () => showReaction('독이 풀렸다', 1400));
 let trapRevealHintShown = false;
 events.on('trap_revealed', (payload) => {
   const t = payload as { x: number; z: number };
@@ -2916,6 +2925,16 @@ const manaRow = document.getElementById('status-mana')!;
 const staminaRow = document.getElementById('status-stamina')!;
 const staminaFill = document.getElementById('status-stamina-fill')!;
 // 음식 버프 아이콘 — 고기 아이콘을 한 번 그려 넣고, 매 프레임 남은 시간 덮개만 갱신
+// 독 디버프 아이콘 — 해골 대신 포자 주머니 픽토그램 (프리미티브 규칙: 단색 SVG)
+const buffPoisonEl = document.getElementById('buff-poison')!;
+buffPoisonEl.insertAdjacentHTML(
+  'afterbegin',
+  '<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="9" r="6.5" fill="#8fd35a"/>' +
+    '<circle cx="8.5" cy="7.5" r="1.3" fill="#2f4a1e"/><circle cx="13.5" cy="10" r="1.1" fill="#2f4a1e"/>' +
+    '<rect x="10" y="14" width="2" height="6" fill="#4d6b2e"/><circle cx="5" cy="17" r="1.8" fill="#6f9a3a"/><circle cx="17" cy="17" r="1.8" fill="#6f9a3a"/></svg>',
+);
+const buffPoisonCd = buffPoisonEl.querySelector<HTMLElement>('.buff-cd')!;
+const buffPoisonSec = buffPoisonEl.querySelector<HTMLElement>('.buff-sec')!;
 const buffFoodEl = document.getElementById('buff-food')!;
 buffFoodEl.insertAdjacentHTML('afterbegin', itemIconSvg('food', 22));
 const buffFoodCd = buffFoodEl.querySelector<HTMLElement>('.buff-cd')!;
@@ -3320,7 +3339,9 @@ function render(alpha: number): void {
     world.foodRegenTicks > 0 && p.health < balance.player.healthMax && !world.dead,
   );
   // 체력은 붉은 계열 — 낮아지면 더 밝은 경고색으로 (2026-08-29 녹색에서 교체)
-  hpFill.style.background = hpFrac > 0.25 ? '#c22e2e' : '#ff4838';
+  // 중독 중엔 체력 바가 병든 녹색으로 물든다 (저체력 경고색보다 우선하지 않는다)
+  hpFill.style.background =
+    hpFrac <= 0.25 ? '#ff4838' : (p.poisonTicks ?? 0) > 0 ? '#6f9a3a' : '#c22e2e';
   // 바 안 숫자 — '남은 양 / 최대치'. 바뀔 때만 써서 리플로우를 아낀다
   const hpText = `${Math.ceil(Math.max(0, p.health))} / ${balance.player.healthMax}`;
   const hpNum = document.getElementById('status-hp-num')!;
@@ -3362,6 +3383,18 @@ function render(alpha: number): void {
     buffFoodSec.textContent = String(Math.ceil(world.foodRegenTicks / 60));
   } else {
     buffFoodEl.classList.remove('on');
+  }
+  // 독 디버프 — 남은 시간 부채꼴 + 남은 초. 도트는 poison_tick 이 따로 알린다
+  const poisonLeft = p.poisonTicks ?? 0;
+  if (poisonLeft > 0 && !world.dead) {
+    buffPoisonEl.classList.add('on');
+    const total = balance.traps.types.trap_gas.poisonDurationTicks;
+    const remainDeg = Math.min(360, (poisonLeft / total) * 360);
+    buffPoisonCd.style.background =
+      `conic-gradient(transparent 0deg ${remainDeg}deg, rgba(0, 0, 0, 0.72) ${remainDeg}deg 360deg)`;
+    buffPoisonSec.textContent = String(Math.ceil(poisonLeft / 60));
+  } else {
+    buffPoisonEl.classList.remove('on');
   }
   // 랜턴 — HP·마나 바 아래의 얇은 실선 게이지. 오른쪽에 % 와 예비 전지 개수
   const battFrac = Math.max(0, Math.min(1, world.lantern.battery / balance.lantern.batteryMax));

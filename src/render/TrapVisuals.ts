@@ -208,7 +208,9 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     }
     // 꽃잎 4장 — 주머니 꼭대기에 힌지. 닫혀 있다가 예고·분출 중 바깥으로 벌어진다
     const petals: THREE.Group[] = [];
+    const petalArounds: THREE.Group[] = [];
     const petalMat = new THREE.MeshLambertMaterial({ color: PETAL });
+    data['petalMat'] = petalMat;
     for (let i = 0; i < 4; i++) {
       // 두 겹 — 바깥(around)은 둘레 배치(y 회전), 안(hinge)은 개폐(x 회전).
       // 한 그룹에 둘을 같이 걸면 오일러 순서(XYZ) 때문에 옆 꽃잎이 제 축으로 안 기운다
@@ -223,8 +225,20 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
       around.add(hinge);
       group.add(around);
       petals.push(hinge);
+      petalArounds.push(around);
     }
     data['petals'] = petals;
+    data['petalArounds'] = petalArounds;
+    // 터진 자리 — 바닥의 포자 자국 (spent 에서만 보인다)
+    const residue = new THREE.Mesh(
+      new THREE.CircleGeometry(1.1, 14),
+      new THREE.MeshLambertMaterial({ color: 0x2f4a1e, transparent: true, opacity: 0.75 }),
+    );
+    residue.rotation.x = -Math.PI / 2;
+    residue.position.y = 0.02;
+    residue.visible = false;
+    group.add(residue);
+    data['residue'] = residue;
     const cloud = new THREE.Group();
     const cloudMat = new THREE.MeshLambertMaterial({ color: GAS, transparent: true, opacity: 0, depthWrite: false });
     for (let i = 0; i < 8; i++) {
@@ -366,20 +380,40 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
       mat.color.setHex(trap.phase === 'spent' ? 0x2a1a3a : GLYPH);
     }
   } else if (trap.type === 'trap_gas') {
-    // 개화 — 예고·분출 중 꽃잎이 벌어지고 주머니가 부풀며 은은히 빛난다
+    // 예고 — 1초간 바르르 떨며 부풀고, 터지면(firing) 꽃잎이 벌어지고 빛난다.
+    // 한 번 터진 자리(spent)는 시든 주머니 + 늘어진 꽃잎 + 바닥 포자 자국으로 남는다
     const petals = data['petals'] as THREE.Group[] | undefined;
     const bulb = data['bulb'] as THREE.Mesh | undefined;
     const bulbMat = data['bulbMat'] as THREE.MeshLambertMaterial | undefined;
-    const open = trap.phase === 'telegraph' || trap.phase === 'firing';
+    const residue = data['residue'] as THREE.Mesh | undefined;
+    const spent = trap.phase === 'spent';
+    const trembling = trap.phase === 'telegraph';
+    const burst = trap.phase === 'firing';
+    // 떨림 — 배치 좌표를 기억해 두고 그 주위로 흔든다 (첫 호출 = 아직 흔들기 전)
+    const baseX = (data['baseX'] as number | undefined) ?? (data['baseX'] = group.position.x);
+    const baseZ = (data['baseZ'] as number | undefined) ?? (data['baseZ'] = group.position.z);
+    group.position.x = (baseX as number) + (trembling ? (Math.random() - 0.5) * 0.07 : 0);
+    group.position.z = (baseZ as number) + (trembling ? (Math.random() - 0.5) * 0.07 : 0);
     if (petals) {
-      const target = open ? -0.55 : 1.05; // 개화 — 바깥·위로 확 벌어진다
+      const target = burst ? -0.55 : spent ? 1.5 : 1.05; // 터짐 — 바깥으로 / 시듦 — 축 늘어짐
       for (const h of petals) h.rotation.x += (target - h.rotation.x) * 0.12;
     }
+    // 시들면 꽃잎 힌지도 쭈그러진 주머니 꼭대기로 내려앉고 색이 바랜다
+    const arounds = data['petalArounds'] as THREE.Group[] | undefined;
+    if (arounds) for (const a of arounds) a.position.y += ((spent ? 0.92 : 1.4) - a.position.y) * 0.1;
+    const petalMat = data['petalMat'] as THREE.MeshLambertMaterial | undefined;
+    if (petalMat) petalMat.color.setHex(spent ? 0x4f5f33 : PETAL);
     if (bulb) {
-      const swell = open ? 1.22 + 0.06 * Math.sin(nowMs / 90) : 1;
-      bulb.scale.set(swell, 1.15 * swell, swell);
+      const swell = trembling ? 1.12 + 0.1 * Math.abs(Math.sin(nowMs / 45)) : burst ? 1.25 : spent ? 0.55 : 1;
+      const targetY = spent ? 0.4 : 1.15 * swell;
+      bulb.scale.set(swell, spent ? bulb.scale.y + (targetY - bulb.scale.y) * 0.1 : targetY, swell);
+      if (spent) bulb.position.y += (0.72 - bulb.position.y) * 0.1; // 쭈그러져 내려앉는다
     }
-    if (bulbMat) bulbMat.emissiveIntensity = trap.phase === 'firing' ? 0.45 + 0.2 * Math.abs(Math.sin(nowMs / 160)) : open ? 0.2 : 0;
+    if (bulbMat) {
+      bulbMat.emissiveIntensity = burst ? 0.45 + 0.2 * Math.abs(Math.sin(nowMs / 160)) : trembling ? 0.25 : 0;
+      bulbMat.color.setHex(spent ? 0x4a5a2e : 0x8fbf4a);
+    }
+    if (residue) residue.visible = spent;
     const cloud = data['cloud'] as THREE.Group | undefined;
     const mat = data['cloudMat'] as THREE.MeshLambertMaterial | undefined;
     if (cloud && mat) {
