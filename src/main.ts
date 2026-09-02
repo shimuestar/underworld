@@ -123,6 +123,8 @@ function padRumbleScaled(kind: 'draw' | 'loose', frac: number): void {
 }
 
 let nextHeartbeatAt = 0; // 저체력 맥박 스케줄
+const statusHpEl = document.getElementById('status-hp')!;
+const statusHpFillEl = document.getElementById('status-hp-fill')!;
 // 균열벽 붕괴 — 가까우면 낮은 우르릉 (충격파와 별개의 결)
 events.on('crack_wall_broken', (payload) => {
   const c = payload as { x: number; z: number };
@@ -2964,8 +2966,24 @@ function render(alpha: number): void {
       nextHeartbeatAt = hbNow + balance.input.gamepad.rumble.heartbeat.intervalMs;
       padRumble('heartbeat');
       window.setTimeout(() => padRumble('heartbeat'), 160); // 두근-두근
+      // HP 바도 같은 박자로 두근거린다 — 진동이 없는 키보드에서도 눈으로 온다
+      statusHpFillEl.classList.remove('beat');
+      void statusHpFillEl.offsetWidth; // 리플로우 — 연속 박동에도 애니메이션이 다시 돈다
+      statusHpFillEl.classList.add('beat');
     }
   }
+  // 저체력 표시 — 심박 진동과 같은 문턱. 바 테두리가 붉게 달아오른다
+  statusHpEl.classList.toggle(
+    'low',
+    !world.dead &&
+      world.player.health / balance.player.healthMax <=
+        balance.input.gamepad.rumble.heartbeat.thresholdFrac,
+  );
+  // 패드 레이어 홀드 — 고르는 중인 퀵슬롯 뭉치가 살짝 커진다 (선택 상태 안내)
+  const skillHold = input.usingPad && input.gamepad.held('skillSelect');
+  const itemHold = input.usingPad && !skillHold && input.gamepad.held('itemSelect');
+  skillPad.classList.toggle('layer-hold', skillHold);
+  quickPad.classList.toggle('layer-hold', itemHold);
   // 왼손에 든 원거리 무기 (오른손 해머는 항상 보인다)
   stage.setHandWeapon(world.weapon.ranged);
   stage.updateHands({
