@@ -1858,8 +1858,22 @@ events.on('inventory_full', () => {
 events.on('gold_picked', (payload) => {
   audio.play('pickup_gold');
   padRumble('pickup');
-  // HUD 숫자 팝은 흡수 비행이 도착하는 순간 — 지갑에 들어갔다는 인과
-  showCenterGain((payload as { amount: number }).amount, 0);
+  // 골드도 XP 와 같은 연출 — 동전이 놓여 있던 자리에서 '◆ +N' 이 떠오른다.
+  // 발밑(2.2m 안)이면 같은 방향으로 밀어낸다 — 코앞 스프라이트는 화면을 가린다
+  const g = payload as { amount: number; x?: number; z?: number };
+  if (g.amount < 1) return;
+  let gx = g.x ?? world.player.x;
+  let gz = g.z ?? world.player.z;
+  const dx = gx - world.player.x;
+  const dz = gz - world.player.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 2.2) {
+    const fx = d > 0.3 ? dx / d : -Math.sin(world.player.yaw);
+    const fz = d > 0.3 ? dz / d : -Math.cos(world.player.yaw);
+    gx = world.player.x + fx * 2.2;
+    gz = world.player.z + fz * 2.2;
+  }
+  stage.spawnGoldNumber(gx, 1.05, gz, g.amount);
 });
 events.on('xp_gained', (payload) => {
   const gain = payload as { amount: number; enemyType?: string; x?: number; z?: number };
@@ -2768,6 +2782,21 @@ const skillCells = Array.from({ length: balance.skills.quickslots }, (_, i) => {
   mark.className = 'mark';
   ui.body.appendChild(mark);
   return { ...ui, mark };
+});
+
+/** 방금 쓴 칸 번쩍 — 스킬·아이템 공용. 리플로우로 연사에도 애니메이션이 다시 돈다 */
+function flashSlotUsed(cell: HTMLElement): void {
+  cell.classList.remove('used');
+  void cell.offsetWidth;
+  cell.classList.add('used');
+}
+events.on('cast_spell', (payload) => {
+  const i = world.skillSlots.indexOf((payload as { sigil: string }).sigil);
+  if (i >= 0 && skillCells[i]) flashSlotUsed(skillCells[i]!.cell);
+});
+events.on('item_used', (payload) => {
+  const i = world.quickslots.indexOf((payload as { kind: ItemKind }).kind);
+  if (i >= 0 && quickCells[i]) flashSlotUsed(quickCells[i]!.cell);
 });
 
 /** 스킬 퀵슬롯 — 마름모 안은 색 원반과 키 하나뿐이라, 고른 칸의 이름만 뭉치 위에 적는다.

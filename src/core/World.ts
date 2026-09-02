@@ -475,6 +475,9 @@ export interface GroundItemState {
   graveItems?: { kind: ItemKind; count: number }[];
   /** 자석 흡수 중 — 공중으로 떠서 플레이어에게 날아간다 */
   magnet?: boolean;
+  /** 자석이 물기 직전 놓여 있던 자리 — 골드 획득 표기가 이 자리에서 떠오른다 */
+  originX?: number;
+  originZ?: number;
   /** 비행 중 높이와 현재 속도 (자석 상태에서만 의미 있음) */
   y?: number;
   speed?: number;

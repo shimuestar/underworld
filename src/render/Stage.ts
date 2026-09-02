@@ -3804,6 +3804,16 @@ export class Stage {
     });
   }
 
+  /** 골드 획득 — 놓여 있던 자리에서 XP 와 같은 연출로 떠오른다 (금색) */
+  spawnGoldNumber(x: number, y: number, z: number, amount: number): void {
+    const cfg = balance.hud.xpPop; // '같은 연출' — XP 와 크기·시간·움직임을 공유한다
+    this.spawnFloatText(x, y, z, `◆ +${Math.round(amount)}`, {
+      sizeM: cfg.sizeM,
+      color: '#ffcc3a', // HUD 골드 표기와 같은 금색
+      ms: cfg.ms,
+    });
+  }
+
   private spawnFloatText(
     x: number, y: number, z: number, text: string,
     opt: { sizeM: number; color: string; ms: number },

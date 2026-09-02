@@ -172,6 +172,8 @@ export function tick(world: World, dt: number): void {
         continue;
       }
       item.magnet = true;
+      item.originX = item.x; // 놓여 있던 자리 — 획득 표기가 여기서 뜬다 (비행 후엔 잃는다)
+      item.originZ = item.z;
       item.y = restHeight(item.kind) + mag.popUp; // 살짝 튀어오르며 출발
       item.speed = mag.startSpeed;
     }
@@ -213,7 +215,10 @@ export function tick(world: World, dt: number): void {
     if (item.kind === 'gold') {
       world.groundItems.splice(i, 1);
       world.gold += item.amount ?? 0;
-      world.events.emit('gold_picked', { amount: item.amount ?? 0, total: world.gold });
+      world.events.emit('gold_picked', {
+        amount: item.amount ?? 0, total: world.gold,
+        x: item.originX ?? item.x, z: item.originZ ?? item.z,
+      });
       continue;
     }
     // 기믹 전리품 — 탄약·수류탄·배터리는 가방을 거치지 않고 바로 들어간다
