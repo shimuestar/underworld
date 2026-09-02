@@ -855,14 +855,17 @@ events.on('trap_telegraph', (payload) => {
     }
     return;
   }
-  if (isSpikeType(t.type)) {
-    // 묵직한 판 침강 — 내가 밟았으면 발밑 진동도 온다
+  if (isSpikeType(t.type) || t.type === 'trap_dart') {
+    // 묵직한 판 침강(가시판·다트 압력판 공통) — 내가 밟았으면 발밑 진동도 온다
     if (spikeSoundOnce('tele')) audio.play('trap_click', panAt(t.x, t.z));
     const trap = world.traps.find((tr) => tr.id === (payload as { id: number }).id);
-    if (trap?.type === 'trap_spike' && trap.triggeredBy === 'player') padRumble('heavy');
+    if ((trap?.type === 'trap_spike' || trap?.type === 'trap_dart') && trap.triggeredBy === 'player') {
+      padRumble('heavy');
+    }
     return;
   }
-  audio.play('trap_hiss', panAt(t.x, t.z));
+  // 가스·자동 다트 발사기 — 발판 없이 쉬익 (같은 틱에 여러 개면 한 번)
+  if (spikeSoundOnce('hiss')) audio.play('trap_hiss', panAt(t.x, t.z));
 });
 // 작동이 끝나고 다시 장전되는 과정도 들린다 — 가시가 들어가고(회수), 래칫이 걸린다(재장전)
 events.on('trap_retract', (payload) => {
@@ -905,8 +908,8 @@ events.on('trap_fired', (payload) => {
     // 발밑에서 쇠가 솟는다 — 가까울수록 화면이 흔들린다 (피해 유무와 무관)
     const d = Math.hypot(world.player.x - t.x, world.player.z - t.z);
     if (d < 12) stage.triggerCameraKick(0.35 * (1 - d / 12), 120);
-  } else if (t.type === 'trap_dart') {
-    audio.play('trap_dart', panAt(t.x, t.z));
+  } else if (t.type === 'trap_dart' || t.type === 'trap_dart_auto') {
+    if (spikeSoundOnce('dart')) audio.play('trap_dart', panAt(t.x, t.z));
   } else if (t.type === 'trap_net') {
     audio.play('trap_net', panAt(t.x, t.z));
   } else if (t.type === 'trap_rockfall') {

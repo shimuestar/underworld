@@ -216,7 +216,7 @@ describe('1구역 층 구성', () => {
           for (const [sr, sc] of stairs) {
             expect(Math.hypot((c - sc) * json.cellSize, (r - sr) * json.cellSize)).toBeGreaterThanOrEqual(8);
           }
-          if (e.type === 'trap_dart') {
+          if (e.type === 'trap_dart' || e.type === 'trap_dart_auto') {
             const [dr, dc] = DIRS[(e as { dir?: string }).dir ?? 'N']!;
             expect(at(json.grid, c - dc, r - dr)).toBe('#');
           }

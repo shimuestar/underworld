@@ -23,6 +23,7 @@ const PLATE_RUST = 0x6e3a2c; // 자동 순환 가시판 — 녹슨 붉은색으�
 const GROOVE = 0x2a2622;
 const IRON = 0x14121a;
 const IRON_SPENT = 0x4a4a50;
+const BRASS = 0x9a7a3a; // 자동 순환 다트 발사기 노즐 — 밟는 다트(검은 쇠)와 구분
 const SPIKE = 0x9a9aa4;
 const NET_LINE = 0xd8d2b8; // 랜턴에 반짝이는 실
 const NET_BUNDLE = 0x2c2418;
@@ -49,23 +50,27 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
   group.add(reveal);
   data['reveal'] = reveal;
 
-  if (trap.type === 'trap_dart') {
-    // 압력판 — 밝은 판 + 가운데 홈 (밟으면 내려앉는다)
-    const plate = new THREE.Mesh(
-      new THREE.BoxGeometry(3.0, 0.05, 3.0),
-      new THREE.MeshLambertMaterial({ color: PLATE_LIGHT }),
-    );
-    plate.position.y = 0.03;
-    group.add(plate);
-    const groove = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.02, 0.5),
-      new THREE.MeshLambertMaterial({ color: GROOVE }),
-    );
-    groove.position.y = 0.06;
-    group.add(groove);
-    data['plate'] = plate;
-    data['groove'] = groove;
-    // 노즐 — -dir 쪽 벽면에 검은 구멍 3개. 예고 중 안쪽이 붉게 달아오른다
+  if (trap.type === 'trap_dart' || trap.type === 'trap_dart_auto') {
+    if (trap.type === 'trap_dart') {
+      // 압력판 — 밝은 판 + 가운데 홈 (밟으면 내려앉는다). 자동 발사기는 발판이 없다
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(3.0, 0.05, 3.0),
+        new THREE.MeshLambertMaterial({ color: PLATE_LIGHT }),
+      );
+      plate.position.y = 0.03;
+      group.add(plate);
+      const groove = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 0.02, 0.5),
+        new THREE.MeshLambertMaterial({ color: GROOVE }),
+      );
+      groove.position.y = 0.06;
+      group.add(groove);
+      data['plate'] = plate;
+      data['groove'] = groove;
+    }
+    // 노즐 — -dir 쪽 벽면에 구멍 3개(밟는 다트 = 검은 쇠, 자동 = 황동). 예고 중 안쪽이 붉게 달아오른다
+    const nozzleBase = trap.type === 'trap_dart_auto' ? BRASS : IRON;
+    data['nozzleBase'] = nozzleBase;
     const nozzleMats: THREE.MeshLambertMaterial[] = [];
     const px = -trap.dirZ; // dir 에 수직 (좌우 간격 축)
     const pz = trap.dirX;
@@ -73,7 +78,7 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     const wx = -trap.dirX * (cellSize / 2 - 0.12);
     const wz = -trap.dirZ * (cellSize / 2 - 0.12);
     for (const off of [-0.6, 0, 0.6]) {
-      const mat = new THREE.MeshLambertMaterial({ color: IRON, emissive: 0xff3020, emissiveIntensity: 0.12 });
+      const mat = new THREE.MeshLambertMaterial({ color: nozzleBase, emissive: 0xff3020, emissiveIntensity: 0.12 });
       const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.24, 10), mat);
       // 실린더 축(Y)을 dir 축으로 — 벽에서 튀어나온 관
       if (trap.dirX !== 0) nozzle.rotation.z = Math.PI / 2;
@@ -254,16 +259,17 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
     reveal.intensity = live ? 0.9 + 0.5 * Math.abs(Math.sin(nowMs / 520)) : 0;
   }
   const plate = data['plate'] as THREE.Mesh | undefined;
-  if (trap.type === 'trap_dart') {
-    // 판 — 예고·작동 중 내려앉는다
+  if (trap.type === 'trap_dart' || trap.type === 'trap_dart_auto') {
+    // 판 — 예고·작동 중 내려앉는다 (가시판과 같은 3cm)
     if (plate) plate.position.y = trap.phase === 'telegraph' || trap.phase === 'firing' ? 0.0 : 0.03;
     const mats = data['nozzleMats'] as THREE.MeshLambertMaterial[] | undefined;
+    const base = (data['nozzleBase'] as number | undefined) ?? IRON;
     if (mats) {
       const spent = trap.phase === 'spent';
       const glow = trap.phase === 'telegraph' ? 0.7 + 0.5 * Math.abs(Math.sin(nowMs / 40)) : spent ? 0 : 0.12;
       for (const m of mats) {
         m.emissiveIntensity = glow;
-        m.color.setHex(spent ? IRON_SPENT : IRON);
+        m.color.setHex(spent ? IRON_SPENT : base);
       }
     }
   } else if (trap.type === 'trap_spike' || trap.type === 'trap_spike_auto') {

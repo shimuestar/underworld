@@ -720,3 +720,30 @@ describe('함정 — 자동 순환 가시판', () => {
     expect(forced.cycleTick).toBe(1);
   });
 });
+
+describe('함정 — 자동 순환 다트 발사기', () => {
+  it('트리거 없이 idle → 예고 → 발사를 돈다, 위상 플래그가 있으면 그것부터', () => {
+    const world = makeWorld();
+    const auto = putTrap(world, 'trap_dart_auto', 30, 6, 'W');
+    auto.phaseOffset = 0;
+    const c = T.trap_dart_auto;
+    const ev: string[] = [];
+    world.events.on('trap_telegraph', () => ev.push('tele'));
+    world.events.on('trap_fired', () => ev.push('fire'));
+    tickTraps(world, c.idleTicks);
+    expect(ev).toEqual(['tele']);
+    expect(auto.phase).toBe('telegraph');
+    tickTraps(world, c.telegraphTicks);
+    expect(ev).toEqual(['tele', 'fire']);
+    expect(world.projectiles.filter((pr) => pr.trapShot)).toHaveLength(c.dartCount);
+    expect(auto.phase).toBe('armed');
+    // 다음 주기에 또
+    world.projectiles.length = 0;
+    tickTraps(world, c.idleTicks + c.telegraphTicks);
+    expect(ev).toEqual(['tele', 'fire', 'tele', 'fire']);
+  });
+
+  it('밟는 다트 판은 0.5초(30틱) 예고 뒤 쏜다', () => {
+    expect(T.trap_dart.telegraphTicks).toBe(30);
+  });
+});

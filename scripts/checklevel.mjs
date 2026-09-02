@@ -145,7 +145,7 @@ function check(path) {
         const d = Math.hypot((c - sc) * (level.cellSize ?? 4), (r - sr) * (level.cellSize ?? 4));
         if (d < 8) errors.push(`${e.type} [${r},${c}] 이 계단에서 ${d.toFixed(1)}m — 8m 안`);
       }
-      if (e.type === 'trap_dart') {
+      if (e.type === 'trap_dart' || e.type === 'trap_dart_auto') {
         const [dr, dc] = DIRS[e.dir ?? 'N'];
         if (at(grid, c - dc, r - dr) !== '#') errors.push(`다트 [${r},${c}] 의 노즐 벽(-dir) 이 벽이 아니다`);
       }

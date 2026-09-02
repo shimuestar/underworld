@@ -356,6 +356,34 @@ function tickAutoSpike(world: World, trap: TrapState, cfg: TrapCfg): void {
   if (phase === 'firing') spikeContact(world, trap, cfg);
 }
 
+/** 자동 순환 다트 발사기 — 트리거 없이 idle → telegraph(노즐 달아오름) → 발사를 돈다.
+ *  위상은 phaseOffset, 없으면 (row+col) 짝홀 반주기 — 복도에 줄지어 놓으면 순차 발사 회랑이 된다 */
+function tickAutoDart(world: World, trap: TrapState, cfg: TrapCfg): void {
+  const idle = Math.max(1, Math.round(cfg['idleTicks'] ?? 120));
+  const tele = Math.max(1, Math.round(cfg['telegraphTicks'] ?? 30));
+  const cycle = idle + tele;
+  if (trap.cycleTick === undefined) {
+    trap.cycleTick =
+      ((trap.phaseOffset ?? ((trap.row + trap.col) % 2) * Math.floor(cycle / 2)) % cycle + cycle) % cycle;
+    trap.phase = 'armed';
+  }
+  trap.cycleTick = (trap.cycleTick + 1) % cycle;
+  const t = trap.cycleTick;
+  const at = { id: trap.id, type: trap.type, x: trap.x, z: trap.z };
+  if (t === idle) {
+    trap.phase = 'telegraph';
+    trap.timer = tele;
+    world.events.emit('trap_telegraph', at);
+  } else if (t === 0) {
+    fireDarts(world, trap, cfg);
+    trap.phase = 'armed';
+    trap.timer = 0;
+    world.events.emit('trap_fired', { ...at, dirX: trap.dirX, dirZ: trap.dirZ });
+  } else if (trap.phase === 'telegraph') {
+    trap.timer = cycle - t;
+  }
+}
+
 /** 작동 뒤 — 장전이 남으면 쿨다운, 다 썼으면 spent */
 function afterFire(world: World, trap: TrapState, cfg: TrapCfg): void {
   if (trap.charges > 0) trap.charges--;
@@ -506,6 +534,10 @@ export function tick(world: World, _dt: number): void {
     }
     if (trap.type === 'trap_spike_auto') {
       tickAutoSpike(world, trap, cfg); // 트리거 없이 순환한다
+      continue;
+    }
+    if (trap.type === 'trap_dart_auto') {
+      tickAutoDart(world, trap, cfg); // 트리거 없이 주기마다 쏜다
       continue;
     }
     switch (trap.phase) {
