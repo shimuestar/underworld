@@ -16,6 +16,7 @@ import type {
   ProjectileState,
 } from '../core/World';
 import { FINISHER_CONTACT_MS, HandModel } from './HandModel';
+import { animateTrap, buildTrapGroup, type TrapView } from './TrapVisuals';
 
 // 적 타입별 몸통 색 (시각 팔레트 — 튜닝값 아님)
 const ENEMY_COLORS: Record<string, number> = {
@@ -999,6 +1000,7 @@ export class Stage {
   private readonly chestVisuals = new Map<number, { group: THREE.Group; lid: THREE.Object3D }>();
   /** 기믹(파괴물) 시각 — 배열에서 빠지면(파괴) 걷는다 (syncBarrels 와 같은 규약) */
   private readonly propVisuals = new Map<number, THREE.Group>();
+  private readonly trapVisuals = new Map<number, THREE.Group>();
   /** 심지 불빛 — 폭발 당첨 기믹의 치익 반짝임 */
   private fuseGlows: { light: THREE.PointLight; bornMs: number; ttlMs: number }[] = [];
   private readonly barrelVisuals = new Map<
@@ -1374,6 +1376,8 @@ export class Stage {
     this.heldVictims.clear();
     this.syncEnemies([], 1);
     this.syncBarrels([]);
+    this.syncProps([]);
+    this.syncTraps([], 4);
     this.syncChests([]);
     this.syncGroundItems([]);
     this.syncLifeMotes([]);
@@ -4897,6 +4901,34 @@ export class Stage {
         if (mesh.material) (mesh.material as THREE.Material).dispose();
       });
       this.propVisuals.delete(id);
+    }
+  }
+
+  /** 함정 — 배열 전체를 매 프레임 받아 id 로 모형을 캐시한다 (props 와 같은 규약).
+   *  spent 도 남긴다(빈 노즐·내려간 가시가 보여야 "썼다"가 읽힌다) — 배열에서 빠질 때만 걷는다 */
+  syncTraps(traps: (TrapView & { id: number; x: number; z: number })[], cellSize: number): void {
+    const now = performance.now();
+    const seen = new Set<number>();
+    for (const trap of traps) {
+      seen.add(trap.id);
+      let group = this.trapVisuals.get(trap.id);
+      if (!group) {
+        group = buildTrapGroup(trap, cellSize);
+        group.position.set(trap.x, 0, trap.z);
+        this.trapVisuals.set(trap.id, group);
+        this.scene.add(group);
+      }
+      animateTrap(group, trap, now);
+    }
+    for (const [id, group] of this.trapVisuals) {
+      if (seen.has(id)) continue;
+      this.scene.remove(group);
+      group.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        if (mesh.material) (mesh.material as THREE.Material).dispose();
+      });
+      this.trapVisuals.delete(id);
     }
   }
 

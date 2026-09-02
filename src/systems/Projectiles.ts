@@ -1113,7 +1113,9 @@ function moveProjectiles(world: World, dt: number): void {
           world.events.emit('player_damaged', {
             amount: damage, health: p.health, blocked,
             srcX: p.x - proj.vx, srcZ: p.z - proj.vz,
+            source: proj.trapShot ? 'trap_dart' : undefined,
           });
+          if (proj.trapShot) world.events.emit('trap_hit_player', { type: 'trap_dart', amount: damage });
           if (p.health <= 0) {
             p.health = 0;
             world.dead = true;
@@ -1206,12 +1208,15 @@ function applyProjectileHit(
     world.events.emit('barrier_blocked', { enemyId: enemy.id, kind: 'magic' });
     return;
   }
-  // 동료 오사는 위력이 줄어든다 — 사고로 보이되 한 방에 죽지는 않게
+  // 동료 오사는 위력이 줄어든다 — 사고로 보이되 한 방에 죽지는 않게.
+  // 함정이 쏜 것(trapShot)은 오사가 아니다 — 풀 피해, 숫자도 뜬다 (적을 유도해 걸리게 한 보상)
   const damage =
-    proj.owner === 'enemy' ? proj.damage * balance.enemyAi.friendlyFireDamageMul : proj.damage;
+    proj.owner === 'enemy' && !proj.trapShot
+      ? proj.damage * balance.enemyAi.friendlyFireDamageMul
+      : proj.damage;
   const directDealt = applyFrostOnHit(world.events, enemy, damage);
   enemy.health -= directDealt;
-  if (proj.owner === 'player') {
+  if (proj.owner === 'player' || proj.trapShot) {
     world.events.emit('damage_pop', { enemyId: enemy.id, amount: directDealt });
   }
   enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
@@ -1249,11 +1254,14 @@ function applyProjectileHit(
         // 마법 처치도 마나 0 — 마나는 패링/처형 경로로만 (combat.md §5)
         world.events.emit('spell_kill', { enemyType: enemy.type });
       }
+    } else if (proj.trapShot) {
+      // 함정 처치 — 플레이어가 유도한 전과지만 마나는 없다 (총 처치와 같은 결)
+      world.events.emit('trap_kill', { enemyType: enemy.type, trapType: 'trap_dart' });
     } else {
       // 동료 오사 — 플레이어 전과가 아니므로 처치 통계·마나 경로에서 제외
       world.events.emit('friendly_fire_kill', { enemyType: enemy.type });
     }
-    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
+    world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
   }
 }
 
@@ -1370,10 +1378,10 @@ function implodeBolt(
     if (enemy === direct) continue; // 직격 피해와 중복되지 않게
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     // 적이 쏜 것이면 동료 오사 규칙을 따른다 (사고로 보이되 한 방에 죽지 않게)
-    const mul = proj.owner === 'enemy' ? balance.enemyAi.friendlyFireDamageMul : 1;
+    const mul = proj.owner === 'enemy' && !proj.trapShot ? balance.enemyAi.friendlyFireDamageMul : 1;
     const sparkDealt = applyFrostOnHit(world.events, enemy, sp.damage * falloff * mul);
     enemy.health -= sparkDealt;
-    if (proj.owner === 'player') {
+    if (proj.owner === 'player' || proj.trapShot) {
       world.events.emit('damage_pop', { enemyId: enemy.id, amount: sparkDealt });
     }
     if (enemy.health <= 0) {

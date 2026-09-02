@@ -9,7 +9,7 @@ import { World, type ItemKind } from './core/World';
 import { countOf, initInventory, spillInventoryToGrave, itemColor, itemDef } from './core/Inventory';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
-import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt, spawnProps } from './level/Spawner';
+import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt, spawnProps, spawnTraps } from './level/Spawner';
 import { Minimap } from './render/Minimap';
 import { PauseMenu } from './render/PauseMenu';
 import { GamepadUI, padDiagramSvg } from './render/GamepadUI';
@@ -34,6 +34,7 @@ import * as Corruption from './systems/Corruption';
 import * as Altar from './systems/Altar';
 import * as Barrels from './systems/Barrels';
 import * as Props from './systems/Props';
+import * as Traps from './systems/Traps';
 import * as Chest from './systems/Chest';
 import * as Exit from './systems/Exit';
 import * as Door from './systems/Door';
@@ -67,6 +68,7 @@ interface FloorState {
   enemies: World['enemies'];
   barrels: World['barrels'];
   props: World['props'];
+  traps: World['traps'];
   chests: World['chests'];
   doors: World['doors'];
   groundItems: World['groundItems'];
@@ -228,6 +230,7 @@ const world = new World(events, {
   enemies: spawnEnemies(levelJson.entities, level),
   barrels: spawnBarrels(levelJson.entities, level),
   props: spawnProps(levelJson.entities, level),
+  traps: spawnTraps(levelJson.entities, level),
   chests: spawnChests(levelJson.entities, level),
   level,
 });
@@ -499,6 +502,15 @@ for (const name of [
   'prop_fuse_lit',
   'prop_ambush',
   'prop_loot',
+  'trap_triggered',
+  'trap_telegraph',
+  'trap_fired',
+  'trap_spent',
+  'trap_hit_player',
+  'trap_hit_enemy',
+  'trap_kill',
+  'trap_disarmed',
+  'trap_parried',
   'ammo_picked',
   'grenade_picked',
   'battery_picked',
@@ -810,6 +822,26 @@ events.on('prop_hit', (payload) => {
     padRumble('hit');
     stage.triggerCameraKick(0.25, 120);
   }
+});
+// ---- 함정 — 예고는 소리·모형 동작으로만 (UI 표시 없음) ----
+events.on('trap_telegraph', (payload) => {
+  const t = payload as { type: string; x: number; z: number };
+  audio.play(t.type === 'trap_spike' ? 'trap_click' : 'trap_hiss', panAt(t.x, t.z));
+});
+events.on('trap_fired', (payload) => {
+  const t = payload as { type: string; x: number; z: number };
+  if (t.type === 'trap_spike') {
+    audio.play('trap_spikes', panAt(t.x, t.z));
+    // 발밑에서 쇠가 솟는다 — 가까울수록 화면이 흔들린다 (피해 유무와 무관)
+    const d = Math.hypot(world.player.x - t.x, world.player.z - t.z);
+    if (d < 12) stage.triggerCameraKick(0.35 * (1 - d / 12), 120);
+  } else if (t.type === 'trap_dart') {
+    audio.play('trap_dart', panAt(t.x, t.z));
+  }
+});
+events.on('trap_spent', (payload) => {
+  const t = payload as { type: string; x: number; z: number };
+  if (t.type === 'trap_dart') audio.play('trap_click', panAt(t.x, t.z)); // 빈 노즐 — 텅
 });
 events.on('prop_fuse_lit', (payload) => {
   const pf = payload as { x: number; z: number };
@@ -1475,7 +1507,8 @@ events.on('player_damaged', (payload) => {
   padRumble(
     hit.source === 'ghoul_bite' || hit.source === 'leech_suck'
       ? 'drain'
-      : hit.source === 'explosion' || hit.source === 'fireball' || hit.source === 'implode'
+      : hit.source === 'explosion' || hit.source === 'fireball' || hit.source === 'implode' ||
+          hit.source === 'trap_rockfall'
         ? 'blast'
         : 'hurt',
   );
@@ -2123,6 +2156,9 @@ function respawnAtAltar(): void {
   world.barrels = spawnBarrels(levelJson.entities, level);
   for (const prop of world.props) if (prop.blocker) level.removeBlocker(prop.blocker);
   world.props = spawnProps(levelJson.entities, level);
+  // 함정도 전부 재무장한다 (spent 포함) — 부활은 골드 전액이라 파밍 악용이 안 된다
+  for (const trap of world.traps) if (trap.blocker) level.removeBlocker(trap.blocker);
+  world.traps = spawnTraps(levelJson.entities, level);
   for (const chest of world.chests) if (chest.blocker) level.removeBlocker(chest.blocker);
   world.chests = spawnChests(levelJson.entities, level);
   world.chestInView = null;
@@ -2355,6 +2391,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     enemies: world.enemies,
     barrels: world.barrels,
     props: world.props,
+    traps: world.traps,
     chests: world.chests,
     doors: world.doors,
     groundItems: world.groundItems,
@@ -2375,6 +2412,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     world.enemies = saved.enemies;
     world.barrels = saved.barrels;
     world.props = saved.props;
+    world.traps = saved.traps;
     world.chests = saved.chests;
     world.doors = saved.doors;
     world.groundItems = saved.groundItems;
@@ -2387,6 +2425,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     world.enemies = spawnEnemies(levelJson.entities, level);
     world.barrels = spawnBarrels(levelJson.entities, level);
     world.props = spawnProps(levelJson.entities, level);
+    world.traps = spawnTraps(levelJson.entities, level);
     world.chests = spawnChests(levelJson.entities, level);
     world.doors = level.doors.map((d) => ({
       row: d.row, col: d.col, x: d.x, z: d.z, dirX: d.dirX, dirZ: d.dirZ,
@@ -2560,6 +2599,7 @@ const systems = [
   Projectiles.tick,
   Barrels.tick, // 같은 틱에 쏜 화염구·던진 수류탄이 통을 터뜨릴 수 있게 뒤에 둔다
   Props.tick, // 기믹 심지도 같은 이유로 투사체 뒤
+  Traps.tick, // 함정 — 다트가 같은 틱에 나가고, 반응(Reaction)은 다음 틱부터 받아친다
   Mana.tick,
   Altar.tick,
   Door.tick,
@@ -2956,6 +2996,7 @@ function render(alpha: number): void {
   stage.syncLifeMotes(world.lifeMotes);
   stage.syncBarrels(world.barrels);
   stage.syncProps(world.props);
+  stage.syncTraps(world.traps, world.level.cellSize);
   stage.syncChests(world.chests);
   const chargeFrac =
     world.weapon.ranged === 'grenade' && world.weapon.grenadeCharge > 0

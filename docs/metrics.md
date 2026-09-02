@@ -53,3 +53,17 @@ altar_entered   { ammoLeftRatio, pendingCorruption, multiplier }
 altar_bypassed  { ammoLeftRatio }
 zone_cleared    { tick }
 ```
+
+## 함정 (traps) — 2026-09-02
+
+| 카운터 | 이벤트 | 뜻 |
+|---|---|---|
+| `traps.triggered` | `trap_triggered` | 함정이 작동을 시작한 횟수 (플레이어·적 구분은 페이로드 `by`) |
+| `traps.hitsPlayer` | `trap_hit_player` | 함정 피해를 플레이어가 받은 횟수 (다트 포함) |
+| `traps.hitsEnemy` | `trap_hit_enemy` | 함정 피해를 적이 받은 횟수 — 유도 플레이 지표 |
+| `traps.kills` | `trap_kill` | 함정으로 죽은 적 (마나 없음 — 총 처치와 같은 결) |
+| `traps.disarms` | `trap_disarmed` | 플레이어가 해체한 함정(그물 줄 끊기 등) |
+| `traps.parried` | `trap_parried` | 진자 칼날 완벽 패링 |
+| `traps.deaths` | `player_died` 직전 `player_damaged.source` 가 `trap_*` | 함정으로 죽은 횟수 |
+
+시스템(`src/systems/Traps.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).

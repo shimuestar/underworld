@@ -7,7 +7,7 @@ import z01f1 from '../../data/levels/z01_f1.json';
 import z01f2 from '../../data/levels/z01_f2.json';
 import z01f3 from '../../data/levels/z01_f3.json';
 import { Level } from './GridLoader';
-import { isSpawnable, spawnBarrels, spawnChests, spawnEnemies } from './Spawner';
+import { isSpawnable, spawnBarrels, spawnChests, spawnEnemies, spawnTraps } from './Spawner';
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
 
@@ -71,7 +71,7 @@ describe('1구역 층 구성', () => {
       // 층 보스는 곡선에서 뺀다 — 보스 체력은 잡몹 로스터의 난이도 곡선과 별개 축이다
       const ents = json.entities.filter(
         (e) =>
-          e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !('group' in e) && !enemyDef(e.type).boss,
+          e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !e.type.startsWith('trap_') && !('group' in e) && !enemyDef(e.type).boss,
       );
       const elites = ents.filter((e) => ELITE.has(e.type)).length;
       const hp = ents.reduce((sum, e) => sum + enemyDef(e.type).health, 0);
@@ -95,7 +95,7 @@ describe('1구역 층 구성', () => {
   it('한 층이 유독 빽빽하지 않다 — 밀도가 층마다 두 배 넘게 뛰지 않는다', () => {
     const density = ZONE.map((json) => {
       const ents = json.entities.filter(
-        (e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !('group' in e),
+        (e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !e.type.startsWith('trap_') && !('group' in e),
       );
       const floors = json.grid.join('').split('').filter((ch) => !SOLID.has(ch)).length;
       return ents.length / floors;
@@ -154,7 +154,7 @@ describe('1구역 층 구성', () => {
 
       it('적 타입이 전부 실제로 스폰되는 것들이다 — 스텁을 놓으면 그 자리가 빈다', () => {
         const stubs = json.entities
-          .filter((e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_'))
+          .filter((e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !e.type.startsWith('trap_'))
           .filter((e) => !isSpawnable(e.type))
           .map((e) => e.type);
         expect([...new Set(stubs)]).toEqual([]);
@@ -163,7 +163,7 @@ describe('1구역 층 구성', () => {
       it('제단 안전 반경 안에 적을 두지 않는다 — 스포너가 조용히 지운다', () => {
         const level = new Level(json);
         const dropped = json.entities
-          .filter((e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_'))
+          .filter((e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !e.type.startsWith('trap_'))
           .filter((e) => {
             if (!level.altarPos) return false;
             const x = (e.cell[1]! + 0.5) * level.cellSize;
@@ -177,7 +177,7 @@ describe('1구역 층 구성', () => {
       it('스폰 근처에 적이 없다 — 내려오자마자 전투가 붙으면 안 된다', () => {
         const level = new Level(json);
         const near = json.entities
-          .filter((e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_'))
+          .filter((e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !e.type.startsWith('trap_'))
           .filter((e) => {
             const x = (e.cell[1]! + 0.5) * level.cellSize;
             const z = (e.cell[0]! + 0.5) * level.cellSize;
@@ -191,7 +191,7 @@ describe('1구역 층 구성', () => {
         const level = new Level(json);
         // 매복 대기조(group)는 트리거로 나오는 것이라 처음부터 안 선다 — 세지 않는다
         const enemies = json.entities.filter(
-          (e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !('group' in e),
+          (e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !e.type.startsWith('trap_') && !('group' in e),
         );
         expect(spawnEnemies(json.entities, level)).toHaveLength(enemies.length);
         expect(spawnBarrels(json.entities, level)).toHaveLength(
@@ -200,6 +200,27 @@ describe('1구역 층 구성', () => {
         expect(spawnChests(json.entities, level)).toHaveLength(
           json.entities.filter((e) => e.type === 'chest').length,
         );
+        expect(spawnTraps(json.entities, level)).toHaveLength(
+          json.entities.filter((e) => e.type.startsWith('trap_')).length,
+        );
+      });
+
+      it('함정은 바닥 칸에, 계단 8m 밖에, 다트는 노즐 벽(-dir)이 진짜 벽이어야 한다', () => {
+        const DIRS: Record<string, [number, number]> = { N: [-1, 0], S: [1, 0], E: [0, 1], W: [0, -1] };
+        const stairs: [number, number][] = [];
+        json.grid.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === 'S' || ch === 'X') stairs.push([r, c]); }));
+        for (const e of json.entities) {
+          if (!e.type.startsWith('trap_')) continue;
+          const [r, c] = e.cell as [number, number];
+          expect(at(json.grid, c, r)).toBe('.');
+          for (const [sr, sc] of stairs) {
+            expect(Math.hypot((c - sc) * json.cellSize, (r - sr) * json.cellSize)).toBeGreaterThanOrEqual(8);
+          }
+          if (e.type === 'trap_dart') {
+            const [dr, dc] = DIRS[(e as { dir?: string }).dir ?? 'N']!;
+            expect(at(json.grid, c - dc, r - dr)).toBe('#');
+          }
+        }
       });
 
       it('횃불이 전부 진짜 벽(#)에 붙어 있다 — 문에 걸면 열릴 때 허공에 남는다', () => {

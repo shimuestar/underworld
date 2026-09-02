@@ -113,7 +113,11 @@ export type SoundName =
   | 'exit_opened'
   | 'bars_rise'
   | 'boss_fanfare'
-  | 'stamina_empty';
+  | 'stamina_empty'
+  | 'trap_hiss'
+  | 'trap_dart'
+  | 'trap_click'
+  | 'trap_spikes';
 
 const MASTER_GAIN = 0.25;
 
@@ -680,6 +684,27 @@ export class GameAudio {
         this.tone(80, 0.26, 'square', 1.2, 0, 42);
         this.noise(0.2, 1.2, 2600, 0.05);
         this.noise(0.22, 0.8, 900, 0.16);
+        break;
+      case 'trap_hiss':
+        // 다트 함정 예고 — 압축 공기가 새는 쉬익. 이 소리가 나면 몸을 낮추거나 받아쳐라
+        this.noise(0.3, 0.45, 3000);
+        this.tone(2400, 0.28, 'sine', 0.08, 0, 1800);
+        break;
+      case 'trap_dart':
+        // 다트 발사 — 짧은 채찍질 + 쇳소리
+        this.noise(0.05, 0.6, 2200);
+        this.tone(1300, 0.09, 'triangle', 0.35, 0, 500);
+        break;
+      case 'trap_click':
+        // 압력판 딸깍 — 발밑에서 뭔가 걸렸다
+        this.tone(900, 0.035, 'square', 0.45, 0, 700);
+        this.noise(0.03, 0.25, 4000, 0.02);
+        break;
+      case 'trap_spikes':
+        // 가시 — 쇠가 돌을 긁으며 솟는다: 거친 노이즈 + 저음 + 쇳소리 울림
+        this.noise(0.09, 0.9, 1800);
+        this.tone(180, 0.14, 'sawtooth', 0.5, 0, 95);
+        this.tone(1400, 0.16, 'triangle', 0.18, 0.02, 900);
         break;
       case 'prop_fuse':
         // 치익 — 숨은 폭발물의 심지. 이 소리가 나면 도망쳐라

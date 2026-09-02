@@ -3,7 +3,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import { findWallNormal, type BarrelState, type ChestState, type EnemyState, type PropState } from '../core/World';
+import { findWallNormal, type BarrelState, type ChestState, type EnemyState, type PropState, type TrapState } from '../core/World';
 import type { Level } from './GridLoader';
 
 export interface EntityPlacement {
@@ -155,6 +155,52 @@ export function spawnProps(placements: EntityPlacement[], level: Level): PropSta
   return props;
 }
 
+let nextTrapId = 1;
+
+/** 배치 dir 표기('N'|'S'|'E'|'W') → 단위 벡터. 글리프 dir 과 같은 규약(N = -Z) */
+function dirVector(dir: string | undefined): { dirX: number; dirZ: number } {
+  switch (dir) {
+    case 'S': return { dirX: 0, dirZ: 1 };
+    case 'E': return { dirX: 1, dirZ: 0 };
+    case 'W': return { dirX: -1, dirZ: 0 };
+    default: return { dirX: 0, dirZ: -1 };
+  }
+}
+
+/** 레벨의 trap_* 배치 → 함정 상태. 차단 블록은 없다 — 밟는 물건이다.
+ *  균형 데이터에 없는 타입은 경고 후 건너뛴다 (레벨이 코드보다 앞서 갈 수 있다) */
+export function spawnTraps(placements: EntityPlacement[], level: Level): TrapState[] {
+  const traps: TrapState[] = [];
+  const types = balance.traps.types as Record<string, { charges?: number } | undefined>;
+  for (const placement of placements) {
+    if (!placement.type.startsWith('trap_')) continue;
+    const cfg = types[placement.type];
+    if (!cfg) {
+      console.warn(`[Spawner] 미정의 함정 건너뜀: ${placement.type}`);
+      continue;
+    }
+    const [row, col] = placement.cell;
+    if (row === undefined || col === undefined) continue;
+    if (level.solidAt(col, row)) {
+      console.warn(`[Spawner] 벽 안의 함정 건너뜀: [${row}, ${col}]`);
+      continue;
+    }
+    const { dirX, dirZ } = dirVector((placement as { dir?: string }).dir);
+    traps.push({
+      id: nextTrapId++,
+      type: placement.type,
+      x: (col + 0.5) * level.cellSize,
+      z: (row + 0.5) * level.cellSize,
+      row, col,
+      phase: 'armed',
+      timer: 0,
+      charges: cfg.charges ?? -1,
+      dirX, dirZ,
+    });
+  }
+  return traps;
+}
+
 export function spawnEnemies(placements: EntityPlacement[], level: Level): EnemyState[] {
   const enemies: EnemyState[] = [];
   let skippedNearAltar = 0;
@@ -162,6 +208,7 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
   for (const placement of placements) {
     if (placement.group) continue; // 매복 대기조
     if (placement.type.startsWith('prop_')) continue; // 기믹 — spawnProps 몫 (경고 없이)
+    if (placement.type.startsWith('trap_')) continue; // 함정 — spawnTraps 몫
     if (!IMPLEMENTED.has(placement.type)) {
       console.warn(`[Spawner] 미구현 적 타입 건너뜀: ${placement.type}`);
       continue;

@@ -133,6 +133,25 @@ function check(path) {
     else if (!open.has(`${c},${r}`)) warns.push(`${what} [${r},${c}] 이 격리 구역에 있다`);
   }
 
+  // ③-b 함정 — 바닥 칸(위에서 이미 검사) + 계단 8m 밖 + 다트는 -dir 칸이 벽(노즐 벽)
+  {
+    const DIRS = { N: [-1, 0], S: [1, 0], E: [0, 1], W: [0, -1] };
+    const stairs = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if ('SX'.includes(at(grid, c, r))) stairs.push([r, c]);
+    for (const e of level.entities ?? []) {
+      if (!e.type.startsWith('trap_')) continue;
+      const [r, c] = e.cell;
+      for (const [sr, sc] of stairs) {
+        const d = Math.hypot((c - sc) * (level.cellSize ?? 4), (r - sr) * (level.cellSize ?? 4));
+        if (d < 8) errors.push(`${e.type} [${r},${c}] 이 계단에서 ${d.toFixed(1)}m — 8m 안`);
+      }
+      if (e.type === 'trap_dart') {
+        const [dr, dc] = DIRS[e.dir ?? 'N'];
+        if (at(grid, c - dc, r - dr) !== '#') errors.push(`다트 [${r},${c}] 의 노즐 벽(-dir) 이 벽이 아니다`);
+      }
+    }
+  }
+
   // 균열 벽 트리거는 실제로 C 를 가리켜야 한다
   for (const t of level.triggers ?? []) {
     if (t.type !== 'crack_wall') continue;

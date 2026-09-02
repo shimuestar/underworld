@@ -34,6 +34,11 @@ export interface MetricsSnapshot {
   shieldsBroken: number;
   ammo: { shotsFired: number; shotsHit: number; altarEntries: number; altarBypasses: number };
   mana: { gained: number; decayed: number; lostToFail: number };
+  /** 함정 — 작동 / 플레이어 피격 / 적 피격 / 함정 처치 / 해체 / 진자 패링 / 함정 사망 */
+  traps: {
+    triggered: number; hitsPlayer: number; hitsEnemy: number; kills: number;
+    disarms: number; parried: number; deaths: number;
+  };
   derived: {
     ammoLeftRatioAtAltar: number | null;
     altarBypassRatio: number | null;
@@ -78,6 +83,14 @@ export class Metrics {
   private manaDecayed = 0;
   private manaLostToFail = 0;
   private tier3Encounters = 0;
+  private trapsTriggered = 0;
+  private trapHitsPlayer = 0;
+  private trapHitsEnemy = 0;
+  private trapKills = 0;
+  private trapDisarms = 0;
+  private trapParried = 0;
+  private trapDeaths = 0;
+  private lastDamageWasTrap = false; // 마지막 피해가 함정이었나 — 사망 귀속용
   private maxChainThisEncounter = 0;
 
   constructor(events: Events) {
@@ -112,6 +125,20 @@ export class Metrics {
     });
     events.on('gold_picked', (payload) => {
       this.goldCollected += (payload as { amount: number }).amount;
+    });
+    // 함정 — 시스템 안에 카운터를 두지 않는다 (CLAUDE.md 4). 전부 이벤트 구독
+    events.on('trap_triggered', () => this.trapsTriggered++);
+    events.on('trap_hit_player', () => this.trapHitsPlayer++);
+    events.on('trap_hit_enemy', () => this.trapHitsEnemy++);
+    events.on('trap_kill', () => this.trapKills++);
+    events.on('trap_disarmed', () => this.trapDisarms++);
+    events.on('trap_parried', () => this.trapParried++);
+    events.on('player_damaged', (payload) => {
+      const src = (payload as { source?: string }).source;
+      this.lastDamageWasTrap = typeof src === 'string' && src.startsWith('trap_');
+    });
+    events.on('player_died', () => {
+      if (this.lastDamageWasTrap) this.trapDeaths++;
     });
     events.on('shield_broken', () => this.shieldsBroken++);
     events.on('xp_gained', (payload) => {
@@ -212,6 +239,15 @@ export class Metrics {
         gained: round2(this.manaGained) ?? 0,
         decayed: round2(this.manaDecayed) ?? 0,
         lostToFail: round2(this.manaLostToFail) ?? 0,
+      },
+      traps: {
+        triggered: this.trapsTriggered,
+        hitsPlayer: this.trapHitsPlayer,
+        hitsEnemy: this.trapHitsEnemy,
+        kills: this.trapKills,
+        disarms: this.trapDisarms,
+        parried: this.trapParried,
+        deaths: this.trapDeaths,
       },
       derived: {
         ammoLeftRatioAtAltar: round2(avg(this.ammoLeftRatios)),

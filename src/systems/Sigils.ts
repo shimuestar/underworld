@@ -12,6 +12,7 @@ export function defaultModifiers(): Modifiers {
     dodgeDistanceMul: 1,
     dodgeIFrameTicks: balance.reaction.dodgeIFrameTicks,
     ambientVisionBoost: 0,
+    revealTrapsRadius: 0,
   };
 }
 

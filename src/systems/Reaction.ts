@@ -121,7 +121,8 @@ export function tick(world: World, _dt: number): void {
     }
   }
 
-  // 반사 대상 — 반경 내 접근 중인 적 투사체. 화살(deflectable=false)은 반사 불가 → 회피로
+  // 반사 대상 — 반경 내 접근 중인 적 투사체. 적 화살(deflectable=false)은 반사 불가 → 회피로.
+  // 함정 다트는 kind 'arrow' 지만 deflectable=true — 받아치면 마나가 들어오는 훈련장이다
   let deflectTarget: { proj: ProjectileState; dist: number } | null = null;
   for (const proj of world.projectiles) {
     if (proj.owner !== 'enemy' || !proj.deflectable) continue;

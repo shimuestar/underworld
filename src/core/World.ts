@@ -77,6 +77,8 @@ export interface Modifiers {
   dodgeIFrameTicks: number;
   /** 암시야 — 렌더 ambient 가산 계수 */
   ambientVisionBoost: number;
+  /** 함정 감지 — 이 반경(m) 안의 함정을 알아챈다. 0 = 없음 */
+  revealTrapsRadius: number;
 }
 
 export interface CorruptionState {
@@ -122,6 +124,8 @@ export interface ProjectileState {
   /** 회수 가능한 내 화살 — 꽂히거나 적을 맞히면 바닥 아이템으로 남는다.
    *  적 궁수의 화살은 이 표식이 없어 렌더 잔존물로만 남는다 */
   recoverable?: boolean;
+  /** 함정이 쏜 것 — 적 소유지만 동료 오사 감쇄를 받지 않고, 적을 맞히면 피해 숫자가 뜬다 */
+  trapShot?: boolean;
 }
 
 export interface SpellState {
@@ -353,6 +357,36 @@ export interface PropState {
   fuseTicks: number;
   /** 참 = 폭발 롤이 빈손이 된다 — 작은방 배치 기믹 (좁은 방 폭발은 억울하다) */
   noExplode?: boolean;
+  blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
+/** 함정 상태 머신 — armed(대기) → telegraph(예고) → firing(작동 중) → cooldown → armed.
+ *  1회용은 firing 뒤 spent. disarmed = 플레이어가 해체(그물 줄 끊기 등) */
+export type TrapPhase = 'armed' | 'telegraph' | 'firing' | 'cooldown' | 'spent' | 'disarmed';
+export interface TrapState {
+  id: number;
+  /** balance.traps.types 의 키 — 'trap_dart' 등 */
+  type: string;
+  x: number;
+  z: number;
+  row: number;
+  col: number;
+  phase: TrapPhase;
+  /** 현재 phase 의 잔여 틱 */
+  timer: number;
+  /** 남은 작동 횟수. -1 = 무한 */
+  charges: number;
+  /** 방향형 함정(다트·그물·진자·낙석)의 축. 기본 (0,-1) */
+  dirX: number;
+  dirZ: number;
+  triggeredBy?: 'player' | 'enemy';
+  /** 진자 — 주기 카운터 */
+  cycleTick?: number;
+  /** 이번 작동에서 이미 맞은 몸 (플레이어 = -1) */
+  hitIds?: number[];
+  /** 함정 감지 각인이 알아챈 함정 */
+  revealed?: boolean;
+  /** 낙석 잔해 차단 블록 */
   blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
 
@@ -905,6 +939,8 @@ export class World {
   barrels: BarrelState[] = [];
   /** 부술 수 있는 기믹들 — 층 전환 시 main 이 갈아 끼운다 */
   props: PropState[] = [];
+  /** 함정 — Traps 시스템이 상태 머신을 돈다. 층에 속한다 (floorStates 동행) */
+  traps: TrapState[] = [];
 
   /** 소모품 가방 — 빈 칸은 null. 칸 수는 Items.init 이 balance 를 읽어 잡는다
    *  (World 는 데이터에 의존하지 않는다 — pushPlayer 와 같은 규약) */
@@ -1048,6 +1084,7 @@ export class World {
       /** 폭발통 — 없는 레벨(테스트 아레나 등)에서는 생략한다 */
       barrels?: BarrelState[];
       props?: PropState[];
+      traps?: TrapState[];
       chests?: ChestState[];
       level: Level;
     },
@@ -1063,6 +1100,7 @@ export class World {
     this.enemies = init.enemies;
     if (init.barrels) this.barrels = init.barrels;
     if (init.props) this.props = init.props;
+    if (init.traps) this.traps = init.traps;
     if (init.chests) this.chests = init.chests;
     this.level = init.level;
     this.doors = init.level.doors.map((d) => ({
