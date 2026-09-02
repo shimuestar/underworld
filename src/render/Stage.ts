@@ -1029,8 +1029,10 @@ export class Stage {
   private descentYaw: number | null = null;
   private readonly tracers: Tracer[] = [];
   private readonly particles: Particle[] = [];
-  /** 피해 숫자 — 맞은 자리 위로 떠올랐다 사라지는 캔버스 스프라이트 */
-  private readonly damagePops: { sprite: THREE.Sprite; y0: number; bornMs: number }[] = [];
+  /** 피해 숫자·처치 XP — 맞은 자리 위로 떠올랐다 사라지는 캔버스 스프라이트 */
+  private readonly damagePops: {
+    sprite: THREE.Sprite; y0: number; bornMs: number; ms: number;
+  }[] = [];
   private readonly hands = new HandModel();
   /** 카메라 충격 (처형 등) — 남은 시간과 세기 */
   private camKickUntil = 0;
@@ -3784,8 +3786,28 @@ export class Stage {
     const cfg = balance.hud.damageNumbers;
     const shown = Math.round(amount);
     if (shown < 1) return;
-    const text = String(shown);
     const big = amount >= cfg.bigAt;
+    this.spawnFloatText(x, y, z, String(shown), {
+      sizeM: big ? cfg.bigSizeM : cfg.sizeM,
+      color: big ? '#ffd75e' : '#ffffff',
+      ms: cfg.ms,
+    });
+  }
+
+  /** 처치 XP — 피해 숫자와 같은 자리·같은 방식, 단 더 크게 (delayMs 는 부르는 쪽 몫) */
+  spawnXpNumber(x: number, y: number, z: number, amount: number): void {
+    const cfg = balance.hud.xpPop;
+    this.spawnFloatText(x, y, z, `✦ +${Math.round(amount)}`, {
+      sizeM: cfg.sizeM,
+      color: '#e9f2e3', // HUD XP 표기(#cfd8c9)보다 살짝 밝게 — 월드 그늘에서 죽지 않게
+      ms: cfg.ms,
+    });
+  }
+
+  private spawnFloatText(
+    x: number, y: number, z: number, text: string,
+    opt: { sizeM: number; color: string; ms: number },
+  ): void {
     const font = "900 64px 'Arial Black', sans-serif";
     const canvas = document.createElement('canvas');
     const c2 = canvas.getContext('2d');
@@ -3801,7 +3823,7 @@ export class Stage {
     c2.lineJoin = 'round';
     c2.strokeStyle = 'rgba(12,9,6,0.9)';
     c2.strokeText(text, w / 2, 46);
-    c2.fillStyle = big ? '#ffd75e' : '#ffffff';
+    c2.fillStyle = opt.color;
     c2.fillText(text, w / 2, 46);
     const mat = new THREE.SpriteMaterial({
       map: new THREE.CanvasTexture(canvas),
@@ -3810,19 +3832,18 @@ export class Stage {
     });
     const sprite = new THREE.Sprite(mat);
     sprite.renderOrder = 998;
-    const h = big ? cfg.bigSizeM : cfg.sizeM;
-    sprite.scale.set(h * (w / 88), h, 1);
+    sprite.scale.set(opt.sizeM * (w / 88), opt.sizeM, 1);
     // 연타가 같은 자리에 겹치지 않게 옆으로 살짝 흩는다
     sprite.position.set(x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5);
     this.scene.add(sprite);
-    this.damagePops.push({ sprite, y0: y, bornMs: performance.now() });
+    this.damagePops.push({ sprite, y0: y, bornMs: performance.now(), ms: opt.ms });
   }
 
   private updateDamagePops(now: number): void {
     const cfg = balance.hud.damageNumbers;
     for (let i = this.damagePops.length - 1; i >= 0; i--) {
       const p = this.damagePops[i]!;
-      const f = (now - p.bornMs) / cfg.ms;
+      const f = (now - p.bornMs) / p.ms;
       if (f >= 1) {
         this.scene.remove(p.sprite);
         p.sprite.material.map?.dispose();

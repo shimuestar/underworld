@@ -1860,7 +1860,18 @@ events.on('gold_picked', (payload) => {
   showCenterGain((payload as { amount: number }).amount, 0);
 });
 events.on('xp_gained', (payload) => {
-  showCenterGain(0, (payload as { amount: number }).amount);
+  const gain = payload as { amount: number; enemyType?: string; x?: number; z?: number };
+  // 처치 XP — 죽은 적 머리 위, 피해 숫자가 먼저 지나간 뒤에 뜬다 (겹침 방지).
+  // 자리가 없는 XP(각인 중복 정산 등)만 기존 중앙 표기로 남는다
+  if (gain.x !== undefined && gain.z !== undefined && gain.enemyType) {
+    const y = enemyDef(gain.enemyType).height + 0.25;
+    const { x, z, amount } = gain;
+    window.setTimeout(() => {
+      if (!world.dead) stage.spawnXpNumber(x!, y, z!, amount);
+    }, balance.hud.xpPop.delayMs);
+    return;
+  }
+  showCenterGain(0, gain.amount);
 });
 // ---- 활 ----
 events.on('bow_draw_started', () => audio.play('reload_start'));
