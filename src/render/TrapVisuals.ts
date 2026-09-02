@@ -127,9 +127,10 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     // 밝은 실이 드러나고, 랜턴을 끄면 어둠(환경광 0.04)에 묻힌다 — 켜서 살피는 이유가 된다
     const px = -trap.dirZ;
     const pz = trap.dirX;
+    // 투명 재질 — Stage 가 랜턴 상태·빔 안/밖에 따라 opacity 를 매 프레임 정한다
     const line = new THREE.Mesh(
       new THREE.BoxGeometry(trap.dirX !== 0 ? 0.02 : cellSize * 0.96, 0.02, trap.dirX !== 0 ? cellSize * 0.96 : 0.02),
-      new THREE.MeshLambertMaterial({ color: NET_LINE }),
+      new THREE.MeshLambertMaterial({ color: NET_LINE, transparent: true, opacity: 0.1, emissive: NET_LINE, emissiveIntensity: 0 }),
     );
     line.position.set(px * 0, 0.45, pz * 0);
     group.add(line);

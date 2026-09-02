@@ -4928,6 +4928,29 @@ export class Stage {
         // 저주 문양은 어둠 속에서만 보인다 — 랜턴을 끄면 드러난다. 오염 25(문양 해독)·
         // 감지 각인이 알아챈 것은 항상. 터진 자리(spent)는 그을음처럼 남아 있다
         group.visible = trap.phase === 'spent' || !this.lanternIsOn || this.glyphsReadable || trap.revealed === true;
+      } else if (trap.type === 'trap_net') {
+        // 그물의 실은 랜턴 빔이 닿을 때만 드러난다 — 꺼져 있으면 거의 투명, 켜졌어도 빔 밖이면 희미.
+        // 횃불 잔광만으로 보이던 문제(2026-09-02)의 답: 재질이 아니라 가시성 자체를 빔에 묶는다
+        const line = (group.userData as Record<string, unknown>)['line'] as THREE.Mesh | undefined;
+        const mat = line?.material as THREE.MeshLambertMaterial | undefined;
+        if (line && mat) {
+          let opacity = 0.04;
+          let glow = 0;
+          if (this.lanternIsOn && trap.phase === 'armed') {
+            const dx = trap.x - this.camera.position.x;
+            const dz = trap.z - this.camera.position.z;
+            const dist = Math.hypot(dx, dz);
+            const fwd = this.camera.getWorldDirection(new THREE.Vector3());
+            const flat = Math.hypot(fwd.x, fwd.z) || 1;
+            const cosAng = dist > 0.01 ? (dx * fwd.x + dz * fwd.z) / (dist * flat) : 1;
+            const half = ((balance.lantern.angleDeg * 1.6) * Math.PI) / 180; // 반음영까지 포함
+            const inBeam = cosAng > Math.cos(half) && dist < balance.lantern.radius;
+            opacity = inBeam ? 1 : 0.12;
+            glow = inBeam ? 0.45 : 0;
+          }
+          mat.opacity = opacity;
+          mat.emissiveIntensity = glow;
+        }
       } else if (trap.type === 'trap_oil' && trap.phase === 'firing') {
         // 불티 — 타는 동안 계속 피어오른다 (화상 적의 불티와 같은 파티클)
         const data = group.userData as Record<string, unknown>;
