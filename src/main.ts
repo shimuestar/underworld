@@ -515,6 +515,7 @@ for (const name of [
   'trap_glyph_burst',
   'trap_gas_cough',
   'trap_whoosh',
+  'trap_revealed',
   'ammo_picked',
   'grenade_picked',
   'battery_picked',
@@ -843,6 +844,15 @@ events.on('trap_telegraph', (payload) => {
   audio.play(t.type === 'trap_spike' ? 'trap_click' : 'trap_hiss', panAt(t.x, t.z));
 });
 events.on('trap_gas_cough', () => audio.play('trap_cough')); // 내 기침 — 패닝 없음
+let trapRevealHintShown = false;
+events.on('trap_revealed', (payload) => {
+  const t = payload as { x: number; z: number };
+  audio.play('trap_ping', panAt(t.x, t.z));
+  if (!trapRevealHintShown) {
+    trapRevealHintShown = true;
+    showReaction('함정 감지 — 보랏빛이 도는 자리는 밟지 마라', 2400);
+  }
+});
 events.on('trap_whoosh', (payload) => {
   const t = payload as { x: number; z: number };
   audio.play('trap_whoosh', panAt(t.x, t.z));

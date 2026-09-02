@@ -124,7 +124,8 @@ export type SoundName =
   | 'trap_glyph'
   | 'trap_cough'
   | 'trap_rumble'
-  | 'trap_whoosh';
+  | 'trap_whoosh'
+  | 'trap_ping';
 
 const MASTER_GAIN = 0.25;
 
@@ -751,6 +752,11 @@ export class GameAudio {
         // 칼날이 지나간다 — 공기를 가르는 스윕
         this.noise(0.22, 0.5, 700);
         this.tone(320, 0.2, 'sine', 0.2, 0, 900);
+        break;
+      case 'trap_ping':
+        // 함정 감지 — 맑은 두 음 (각인이 알아챘다)
+        this.tone(1320, 0.09, 'sine', 0.35, 0, 1320);
+        this.tone(1760, 0.16, 'sine', 0.3, 0.09, 1760);
         break;
       case 'prop_fuse':
         // 치익 — 숨은 폭발물의 심지. 이 소리가 나면 도망쳐라

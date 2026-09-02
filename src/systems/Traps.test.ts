@@ -579,3 +579,34 @@ describe('함정 — 진자 칼날', () => {
     expect(bhp - boss.health).toBeCloseTo(T.trap_pendulum.enemyDamage * T.trap_pendulum.bossDamageMul, 3);
   });
 });
+
+describe('함정 감지 각인', () => {
+  it('반경 안에 들어온 함정을 한 번 알아채고(trap_revealed 1회), 각인이 없으면 알아채지 못한다', () => {
+    const world = makeWorld();
+    const near = putTrap(world, 'trap_spike', 14, 6); // 8m
+    const far = putTrap(world, 'trap_spike', 30, 6); // 24m
+    const ev: number[] = [];
+    world.events.on('trap_revealed', (p) => ev.push((p as { id: number }).id));
+    tickTraps(world, 3);
+    expect(near.revealed ?? false).toBe(false); // 각인 없음
+    world.modifiers.revealTrapsRadius = 12;
+    tickTraps(world, 3);
+    expect(near.revealed).toBe(true);
+    expect(far.revealed ?? false).toBe(false);
+    expect(ev).toEqual([near.id]); // 한 번만
+    // 각인을 빼도 이미 알아챈 것은 잊지 않는다
+    world.modifiers.revealTrapsRadius = 0;
+    tickTraps(world, 1);
+    expect(near.revealed).toBe(true);
+  });
+
+  it('recompute — 눈 부위에 새기면 revealTrapsRadius 가 잡힌다', () => {
+    const world = makeWorld();
+    world.sigils.equipped.eye = 'sig_trapsense';
+    Sigils.recompute(world);
+    expect(world.modifiers.revealTrapsRadius).toBe(12);
+    world.sigils.equipped.eye = null;
+    Sigils.recompute(world);
+    expect(world.modifiers.revealTrapsRadius).toBe(0);
+  });
+});

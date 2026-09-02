@@ -11,7 +11,10 @@ export interface TrapView {
   dirZ: number;
   /** 진자 주기 카운터 */
   cycleTick?: number;
+  /** 함정 감지 각인이 알아챘다 — 보랏빛으로 드러난다 */
+  revealed?: boolean;
 }
+const REVEAL = 0x7d5cff;
 
 const PLATE_LIGHT = 0x7d7568; // 다트 압력판 — 주변 판석보다 밝다
 const PLATE_DARK = 0x3b3733; // 가시판 — 주변보다 어둡다
@@ -38,6 +41,11 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
   const group = new THREE.Group();
   const data: Record<string, unknown> = {};
   group.userData = data;
+  // 감지 발광 — 각인이 알아챈 함정 위에 은은한 보라 빛 (평소엔 꺼져 있다)
+  const reveal = new THREE.PointLight(REVEAL, 0, 4.5, 0);
+  reveal.position.y = 0.5;
+  group.add(reveal);
+  data['reveal'] = reveal;
 
   if (trap.type === 'trap_dart') {
     // 압력판 — 밝은 판 + 가운데 홈 (밟으면 내려앉는다)
@@ -232,6 +240,11 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
 /** 매 프레임 — phase·timer 로 모형을 움직인다. 보간은 프레임 기반(연출 전용) */
 export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): void {
   const data = group.userData as Record<string, unknown>;
+  const reveal = data['reveal'] as THREE.PointLight | undefined;
+  if (reveal) {
+    const live = trap.revealed === true && trap.phase !== 'spent' && trap.phase !== 'disarmed';
+    reveal.intensity = live ? 0.9 + 0.5 * Math.abs(Math.sin(nowMs / 520)) : 0;
+  }
   const plate = data['plate'] as THREE.Mesh | undefined;
   if (trap.type === 'trap_dart') {
     // 판 — 예고·작동 중 내려앉는다

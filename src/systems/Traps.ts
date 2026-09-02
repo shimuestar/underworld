@@ -402,6 +402,19 @@ function fire(world: World, trap: TrapState, cfg: TrapCfg): void {
   }
 }
 
+/** 함정 감지 각인 — 반경 안에 들어온 함정을 알아챈다. 한 번 알아챈 것은 계속 안다 */
+function revealTraps(world: World): void {
+  const r = world.modifiers.revealTrapsRadius;
+  if (r <= 0) return;
+  const p = world.player;
+  for (const trap of world.traps) {
+    if (trap.revealed || trap.phase === 'spent' || trap.phase === 'disarmed') continue;
+    if (Math.hypot(trap.x - p.x, trap.z - p.z) > r) continue;
+    trap.revealed = true;
+    world.events.emit('trap_revealed', { id: trap.id, type: trap.type, x: trap.x, z: trap.z });
+  }
+}
+
 /** 구독. 시작 시 1회 — 기름에 불이 붙는 순간(어디서 붙었든) 불길 소리에 방이 깬다 */
 export function init(world: World): void {
   world.events.on('trap_ignited', (payload) => {
@@ -412,6 +425,7 @@ export function init(world: World): void {
 }
 
 export function tick(world: World, _dt: number): void {
+  revealTraps(world);
   for (const trap of world.traps) {
     const cfg = trapCfg(trap.type);
     if (!cfg) continue;

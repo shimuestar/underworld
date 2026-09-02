@@ -5,7 +5,7 @@
   "sigils": [
     { "id": "sig_darkvision",  "name": "암시야", "desc": "어둠 속에서도 주변이 어렴풋이 보인다",     "slot": "eye",      "tier": "passive", "zone": 1, "slice": true, "color": "#4fb0ff",  "effects": { "ambientVisionBoost": 1.0 } },
     { "id": "sig_weakpoint",   "name": "약점 투시", "desc": "적의 약점이 드러난다",   "slot": "eye",      "tier": "passive", "zone": 2, "slice": false, "color": "#00e5c0", "effects": { "showBreakPoints": 1 } },
-    { "id": "sig_trapsense",   "name": "함정 감지", "desc": "12m 안의 함정을 알아챈다",   "slot": "eye",      "tier": "passive", "zone": 2, "slice": false, "color": "#7d5cff", "effects": { "revealTrapsRadius": 12 } },
+    { "id": "sig_trapsense",   "name": "함정 감지", "desc": "12m 안의 함정이 보랏빛으로 드러난다 — 어둠 속 저주 문양도",   "slot": "eye",      "tier": "passive", "zone": 1, "slice": true, "color": "#7d5cff", "effects": { "revealTrapsRadius": 12 } },
     { "id": "sig_lifesight",   "name": "잔명 시야", "desc": "적의 남은 체력이 보인다",   "slot": "eye",      "tier": "passive", "zone": 4, "slice": false, "color": "#b9f227", "effects": { "showHealthBars": 1 } },
 
     { "id": "sig_fireball",    "name": "화염구", "desc": "불덩이를 쏘아 터뜨린다 — 맞은 적은 불탄다",      "slot": "rightArm", "tier": "small",   "zone": 1, "slice": true, "color": "#ff6b2b",  "cast": "projectile", "effects": {  "damage": 45, "burnTicks": 180, "burnDamagePerTick": 0.15, "speed": 26, "radius": 0.35, "lifeTicks": 120, "cooldownTicks": 30, "manaCost": 22, "explodeRadius": 4.0, "explodeDamage": 30, "explodeFalloffMin": 0.3, "blastRadius": 2.2, "blastKnockback": 4.5, "blastKnockbackTicks": 12 } },

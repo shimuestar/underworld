@@ -188,6 +188,7 @@ export function recompute(world: World): void {
     if (effects['dodgeDistanceMul']) mods.dodgeDistanceMul = effects['dodgeDistanceMul'];
     if (effects['iFrameTicks']) mods.dodgeIFrameTicks = effects['iFrameTicks'];
     if (effects['ambientVisionBoost']) mods.ambientVisionBoost = effects['ambientVisionBoost'];
+    if (effects['revealTrapsRadius']) mods.revealTrapsRadius = effects['revealTrapsRadius'];
   }
 
   world.modifiers = mods;
