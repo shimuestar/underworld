@@ -3117,11 +3117,18 @@ function render(alpha: number): void {
   );
   // 체력은 붉은 계열 — 낮아지면 더 밝은 경고색으로 (2026-08-29 녹색에서 교체)
   hpFill.style.background = hpFrac > 0.25 ? '#c22e2e' : '#ff4838';
+  // 바 안 숫자 — '남은 양 / 최대치'. 바뀔 때만 써서 리플로우를 아낀다
+  const hpText = `${Math.ceil(Math.max(0, p.health))} / ${balance.player.healthMax}`;
+  const hpNum = document.getElementById('status-hp-num')!;
+  if (hpNum.textContent !== hpText) hpNum.textContent = hpText;
   // 마나 — 중앙 오른쪽. 연쇄 중에는 밝게
   const manaFrac = Math.max(0, Math.min(1, world.mana.value / balance.mana.max));
   const manaFill = document.getElementById('status-mana-fill')!;
   manaFill.style.width = `${manaFrac * 100}%`;
   manaFill.style.background = world.mana.chainIndex > 0 ? '#7fc4ff' : '#4a9eff';
+  const manaText = `${Math.floor(Math.max(0, world.mana.value))} / ${balance.mana.max}`;
+  const manaNum = document.getElementById('status-mana-num')!;
+  if (manaNum.textContent !== manaText) manaNum.textContent = manaText;
   // 무적 — HP·마나 바를 깜빡여 켜져 있다는 걸 계속 알린다 (CSS 애니메이션)
   hpRow.classList.toggle('god', world.godMode === true);
   manaRow.classList.toggle('god', world.godMode === true);
