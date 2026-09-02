@@ -53,6 +53,8 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
   판을 누르지 않는다(모든 밟는 함정 공통). 가시가 서 있을 때 들어오면 몸당 1회(나갔다 오면 또) — **대시 무적도
   소용없다**(`ignoreIframes`), 그림자 이동만 면제. 회수 중엔 피해·트리거 없음, 걸쇠가 물린 뒤에야 다시 밟힌다.
   이벤트 `trap_retract`(회수 시작) · `trap_rearmed`(걸쇠).
+- **자동 순환 장치의 소리**(자동 가시판·자동 다트·진자) — `balance.traps.autoSound`: reach(10m) 밖은 무음, 안에서는
+  `(1 - d/reach)^curve` 로 줄어든다(경계에서 거의 안 들리고 바로 옆에서 제 크기). 밟는 함정은 일반 공간 음향.
 - **자동 순환 다트 발사기** — 발판 없이 `-dir` 벽의 황동 노즐만. `idleTicks → telegraphTicks → 발사` 반복. 위상 `phase`/짝홀 규칙은
   자동 가시판과 같다 — 복도에 줄지어 놓고 위상을 30틱씩 어긋내면 순차 발사 회랑.
 - **자동 순환 가시판** — 트리거 없이 `downTicks → telegraphTicks → upTicks → cooldownTicks` 를 돈다. 위상은 배치 `phase`(틱),

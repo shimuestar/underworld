@@ -843,6 +843,17 @@ function spikeSoundOnce(kind: string): boolean {
   return true;
 }
 const isSpikeType = (type: string): boolean => type === 'trap_spike' || type === 'trap_spike_auto';
+const isAutoTrap = (type: string): boolean =>
+  type === 'trap_spike_auto' || type === 'trap_dart_auto' || type === 'trap_pendulum';
+/** 함정 소리 위치 — 밟는 함정은 일반 공간 음향(멀리서도 최소 볼륨), 자동 순환 장치는
+ *  reach 밖 무음·안에서는 거리 제곱 감쇠 (null = 안 들린다) */
+function trapSoundAt(type: string, x: number, z: number): { pan: number; vol: number } | null {
+  if (!isAutoTrap(type)) return panAt(x, z);
+  const cfg = balance.traps.autoSound;
+  const d = Math.hypot(world.player.x - x, world.player.z - z);
+  if (d >= cfg.reach) return null;
+  return { pan: panAt(x, z).pan, vol: Math.pow(1 - d / cfg.reach, cfg.curve) };
+}
 events.on('trap_telegraph', (payload) => {
   const t = payload as { type: string; x: number; z: number };
   if (t.type === 'trap_rockfall') {
@@ -857,27 +868,32 @@ events.on('trap_telegraph', (payload) => {
   }
   if (isSpikeType(t.type) || t.type === 'trap_dart') {
     // 묵직한 판 침강(가시판·다트 압력판 공통) — 내가 밟았으면 발밑 진동도 온다
-    if (spikeSoundOnce('tele')) audio.play('trap_click', panAt(t.x, t.z));
+    const at = trapSoundAt(t.type, t.x, t.z);
+    if (at && spikeSoundOnce('tele')) audio.play('trap_click', at);
     const trap = world.traps.find((tr) => tr.id === (payload as { id: number }).id);
     if ((trap?.type === 'trap_spike' || trap?.type === 'trap_dart') && trap.triggeredBy === 'player') {
       padRumble('heavy');
     }
     return;
   }
-  // 가스·자동 다트 발사기 — 발판 없이 쉬익 (같은 틱에 여러 개면 한 번)
-  if (spikeSoundOnce('hiss')) audio.play('trap_hiss', panAt(t.x, t.z));
+  // 가스·자동 다트 발사기 — 발판 없이 쉬익 (같은 틱에 여러 개면 한 번, 자동은 10m 감쇠)
+  const at = trapSoundAt(t.type, t.x, t.z);
+  if (at && spikeSoundOnce('hiss')) audio.play('trap_hiss', at);
 });
 // 작동이 끝나고 다시 장전되는 과정도 들린다 — 가시가 들어가고(회수), 래칫이 걸린다(재장전)
 events.on('trap_retract', (payload) => {
   const t = payload as { type: string; x: number; z: number };
-  if (isSpikeType(t.type) && spikeSoundOnce('retract')) audio.play('trap_spike_down', panAt(t.x, t.z));
+  const at = trapSoundAt(t.type, t.x, t.z);
+  if (isSpikeType(t.type) && at && spikeSoundOnce('retract')) audio.play('trap_spike_down', at);
 });
 events.on('trap_rearmed', (payload) => {
   const t = payload as { type: string; x: number; z: number };
+  const at = trapSoundAt(t.type, t.x, t.z);
+  if (!at) return;
   if (isSpikeType(t.type)) {
-    if (spikeSoundOnce('rearm')) audio.play('trap_rearm', panAt(t.x, t.z));
+    if (spikeSoundOnce('rearm')) audio.play('trap_rearm', at);
   } else if (t.type === 'trap_dart' || t.type === 'trap_gas') {
-    audio.play('trap_rearm', panAt(t.x, t.z));
+    audio.play('trap_rearm', at);
   }
 });
 events.on('trap_gas_cough', () => audio.play('trap_cough')); // 내 기침 — 패닝 없음
@@ -892,7 +908,8 @@ events.on('trap_revealed', (payload) => {
 });
 events.on('trap_whoosh', (payload) => {
   const t = payload as { x: number; z: number };
-  audio.play('trap_whoosh', panAt(t.x, t.z));
+  const at = trapSoundAt('trap_pendulum', t.x, t.z);
+  if (at) audio.play('trap_whoosh', at);
 });
 events.on('trap_parried', (payload) => {
   const t = payload as { x: number; z: number };
@@ -904,12 +921,14 @@ events.on('trap_parried', (payload) => {
 events.on('trap_fired', (payload) => {
   const t = payload as { type: string; x: number; z: number };
   if (isSpikeType(t.type)) {
-    if (spikeSoundOnce('fire')) audio.play('trap_spikes', panAt(t.x, t.z));
+    const at = trapSoundAt(t.type, t.x, t.z);
+    if (at && spikeSoundOnce('fire')) audio.play('trap_spikes', at);
     // 발밑에서 쇠가 솟는다 — 가까울수록 화면이 흔들린다 (피해 유무와 무관)
     const d = Math.hypot(world.player.x - t.x, world.player.z - t.z);
     if (d < 12) stage.triggerCameraKick(0.35 * (1 - d / 12), 120);
   } else if (t.type === 'trap_dart' || t.type === 'trap_dart_auto') {
-    if (spikeSoundOnce('dart')) audio.play('trap_dart', panAt(t.x, t.z));
+    const at = trapSoundAt(t.type, t.x, t.z);
+    if (at && spikeSoundOnce('dart')) audio.play('trap_dart', at);
   } else if (t.type === 'trap_net') {
     audio.play('trap_net', panAt(t.x, t.z));
   } else if (t.type === 'trap_rockfall') {
