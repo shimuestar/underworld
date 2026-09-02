@@ -619,8 +619,20 @@ function frostBurst(world: World, cx: number, cz: number, effects: Record<string
  *  도착하면 blinkTailIframes 만큼 무적 꼬리가 남는다 */
 function castBlink(world: World, effects: Record<string, number>): void {
   const p = world.player;
-  p.blinkDirX = -Math.sin(p.yaw);
-  p.blinkDirZ = -Math.cos(p.yaw);
+  // 이동 입력을 누른 채 시전하면 그 방향으로 사라진다 (뒤로·옆으로 빠지는 그림자).
+  // 아무 방향도 안 누르고 있으면 기존대로 정면 — PlayerMove 와 같은 축 합성
+  const fx = -Math.sin(p.yaw);
+  const fz = -Math.cos(p.yaw);
+  const mx = fx * world.input.moveForward + Math.cos(p.yaw) * world.input.moveX;
+  const mz = fz * world.input.moveForward + -Math.sin(p.yaw) * world.input.moveX;
+  const mLen = Math.hypot(mx, mz);
+  if (mLen > 0.01) {
+    p.blinkDirX = mx / mLen;
+    p.blinkDirZ = mz / mLen;
+  } else {
+    p.blinkDirX = fx;
+    p.blinkDirZ = fz;
+  }
   p.blinkLeft = effects['range'] ?? 10;
   p.blinkTailIframes = effects['iframeTicks'] ?? 0;
   p.blinkShroudAfter = effects['shroudTicks'] ?? 0;

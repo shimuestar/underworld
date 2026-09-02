@@ -2412,6 +2412,34 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.mana.value).toBe(100 - fx['manaCost']!);
   });
 
+  it('그림자 이동: 이동 키를 누른 채 시전하면 그 방향으로 사라진다', () => {
+    Sigils.acquire(world, 'sig_shadowstep');
+    world.mana.value = 100;
+    // 옆걸음(+X 시선 기준 오른쪽 = -Z... 축은 결과로 검증)을 누른 채 시전
+    world.input = { ...Input.emptySnapshot(), castPressed: true, useSkill: 1, moveX: 1 };
+    Projectiles.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    Projectiles.endChannel(world);
+    const dirX = world.player.blinkDirX!;
+    const dirZ = world.player.blinkDirZ!;
+    // 정면(+X)이 아니라 옆(Z 축)으로 향한다
+    expect(Math.abs(dirZ)).toBeGreaterThan(0.9);
+    expect(Math.abs(dirX)).toBeLessThan(0.1);
+    for (let i = 0; i < 60 && (world.player.blinkLeft ?? 0) > 0; i++) {
+      world.input = Input.emptySnapshot();
+      PlayerMove.tick(world, DT);
+    }
+    expect(Math.abs(world.player.z - 6)).toBeGreaterThan(1.2); // 옆으로 갔다 (좁은 테스트 방 — 벽 앞에서 멈춘 거리)
+  });
+
+  it('그림자 이동: 이동 키가 없으면 기존대로 정면이다', () => {
+    Sigils.acquire(world, 'sig_shadowstep');
+    world.mana.value = 100;
+    castSlot(1);
+    expect(world.player.blinkDirX).toBeCloseTo(-Math.sin(world.player.yaw), 5);
+    expect(world.player.blinkDirZ).toBeCloseTo(-Math.cos(world.player.yaw), 5);
+  });
+
   it('그림자 이동: 벽이 먼저면 벽 앞에서 멈춘다', () => {
     Sigils.acquire(world, 'sig_shadowstep');
     world.mana.value = 100;
