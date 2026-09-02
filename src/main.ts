@@ -835,7 +835,7 @@ events.on('prop_hit', (payload) => {
   }
 });
 // ---- 함정 — 예고는 소리·모형 동작으로만 (UI 표시 없음) ----
-// 가시판 소리는 같은 틱에 여러 장이 함께 울리면(자동 순환 4×4) 한 번만 낸다 — 겹치면 뭉개진다
+// 가시판 소리는 같은 틱에 여러 장이 함께 울리면(자동 순환 필드) 한 번만 낸다 — 겹치면 뭉개진다
 const spikeSoundTick: Record<string, number> = {};
 function spikeSoundOnce(kind: string): boolean {
   if (spikeSoundTick[kind] === world.tick) return false;
