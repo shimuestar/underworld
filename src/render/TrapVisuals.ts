@@ -9,6 +9,8 @@ export interface TrapView {
   timer: number;
   dirX: number;
   dirZ: number;
+  /** 진자 주기 카운터 */
+  cycleTick?: number;
 }
 
 const PLATE_LIGHT = 0x7d7568; // 다트 압력판 — 주변 판석보다 밝다
@@ -23,6 +25,13 @@ const OIL = 0x0c0c10; // 번들거리는 검정 — 점액(녹색)과 갈린다
 const OIL_FIRE = 0xff7a1a;
 const OIL_SCORCH = 0x1a1410;
 const GLYPH = 0x9b5de5;
+const GAS = 0x4fc46a;
+const GRATE = 0x2a2a30;
+const SLAB = 0x45403a;
+const CRACK = 0x8a8278;
+const RUBBLE = 0x5a534b;
+const BLADE = 0xb8b8c4;
+const ROD = 0x3a3634;
 
 /** 함정 하나의 모형. group 원점 = 함정 칸 중심, y=0 바닥 */
 export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
@@ -138,6 +147,84 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
       group.add(stroke);
     }
     data['glyphMat'] = mat;
+  } else if (trap.type === 'trap_gas') {
+    // 바닥 쇠창살 — 살 5개. 구름은 반투명 초록 구체 군집(랜턴 빔에 빛난다)
+    const grateMat = new THREE.MeshLambertMaterial({ color: GRATE });
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 1.6), grateMat);
+    frame.position.y = 0.03;
+    group.add(frame);
+    const hole = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.02, 1.3), new THREE.MeshBasicMaterial({ color: 0x030303 }));
+    hole.position.y = 0.065;
+    group.add(hole);
+    for (let i = 0; i < 5; i++) {
+      const slat = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.03, 0.1), grateMat);
+      slat.position.set(0, 0.08, -0.5 + i * 0.25);
+      group.add(slat);
+    }
+    const cloud = new THREE.Group();
+    const cloudMat = new THREE.MeshLambertMaterial({ color: GAS, transparent: true, opacity: 0, depthWrite: false });
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const rr = 0.4 + (i % 3) * 0.5;
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(0.75 + (i % 2) * 0.35, 10, 8), cloudMat);
+      puff.position.set(Math.cos(a) * rr, 0.6 + (i % 3) * 0.45, Math.sin(a) * rr);
+      cloud.add(puff);
+    }
+    cloud.visible = false;
+    group.add(cloud);
+    data['cloud'] = cloud;
+    data['cloudMat'] = cloudMat;
+  } else if (trap.type === 'trap_rockfall') {
+    // 천장의 금 간 슬래브 + 바닥 자갈(tell). 떨어지면 슬래브가 사라지고 잔해 더미가 남는다
+    const slab = new THREE.Group();
+    const slabMesh = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.25, 3.6), new THREE.MeshLambertMaterial({ color: SLAB }));
+    slab.add(slabMesh);
+    for (const [rx, rz, ry] of [[0.3, -0.2, 0.4], [-0.6, 0.5, -0.9]] as const) {
+      const crack = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.03, 0.06), new THREE.MeshLambertMaterial({ color: CRACK }));
+      crack.rotation.y = ry;
+      crack.position.set(rx, -0.14, rz);
+      slab.add(crack);
+    }
+    slab.position.y = 3.87;
+    group.add(slab);
+    data['slab'] = slab;
+    const gravelMat = new THREE.MeshLambertMaterial({ color: RUBBLE });
+    for (let i = 0; i < 5; i++) {
+      const g = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.14), gravelMat);
+      g.position.set(Math.sin(i * 2.1) * 1.1, 0.05, Math.cos(i * 1.7) * 1.1);
+      g.rotation.y = i * 0.9;
+      group.add(g);
+    }
+    const rubble = new THREE.Group();
+    for (let i = 0; i < 8; i++) {
+      const size = 0.55 + (i % 3) * 0.25;
+      const rock = new THREE.Mesh(new THREE.BoxGeometry(size, size * 0.8, size * 0.9), gravelMat);
+      rock.position.set(Math.sin(i * 2.4) * 1.0, size * 0.4 + (i % 2) * 0.35, Math.cos(i * 1.9) * 1.0);
+      rock.rotation.set(i * 0.4, i * 0.8, i * 0.3);
+      rubble.add(rock);
+    }
+    rubble.visible = false;
+    group.add(rubble);
+    data['rubble'] = rubble;
+  } else if (trap.type === 'trap_pendulum') {
+    // 천장 피벗 — 막대 끝의 큰 칼날. 복도 축(dir)에 수직으로 흔들린다
+    const arm = new THREE.Group();
+    arm.position.y = 3.95;
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.6, 8), new THREE.MeshLambertMaterial({ color: ROD }));
+    rod.position.y = -1.3;
+    arm.add(rod);
+    const bladeMat = new THREE.MeshLambertMaterial({ color: BLADE, emissive: 0x303038, emissiveIntensity: 0.35 });
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.55, 0.05), bladeMat);
+    blade.position.y = -2.8;
+    // 칼날 면이 진행 방향을 향하게 — 복도 축이 X 면 날은 Z 로 흔들리니 면을 X 축 정렬
+    if (trap.dirX === 0) blade.rotation.y = Math.PI / 2;
+    arm.add(blade);
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.02), new THREE.MeshLambertMaterial({ color: 0xe8e8f0 }));
+    edge.position.y = -3.08;
+    if (trap.dirX === 0) edge.rotation.y = Math.PI / 2;
+    arm.add(edge);
+    group.add(arm);
+    data['arm'] = arm;
   }
   return group;
 }
@@ -194,6 +281,40 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
     if (mat) {
       mat.opacity = trap.phase === 'spent' ? 0.18 : 0.55 + 0.35 * Math.abs(Math.sin(nowMs / 420));
       mat.color.setHex(trap.phase === 'spent' ? 0x2a1a3a : GLYPH);
+    }
+  } else if (trap.type === 'trap_gas') {
+    const cloud = data['cloud'] as THREE.Group | undefined;
+    const mat = data['cloudMat'] as THREE.MeshLambertMaterial | undefined;
+    if (cloud && mat) {
+      const on = trap.phase === 'firing';
+      // 예고 중엔 살짝 새어 나오고, 도는 동안은 짙고, 끝 1초는 옅어진다
+      const target = on ? Math.min(0.32, 0.32 * Math.min(1, trap.timer / 60)) : trap.phase === 'telegraph' ? 0.1 : 0;
+      mat.opacity += (target - mat.opacity) * 0.15;
+      cloud.visible = mat.opacity > 0.01;
+      cloud.rotation.y = nowMs / 2400;
+      cloud.position.y = 0.1 * Math.sin(nowMs / 900);
+    }
+  } else if (trap.type === 'trap_rockfall') {
+    const slab = data['slab'] as THREE.Group | undefined;
+    const rubble = data['rubble'] as THREE.Group | undefined;
+    const fallen = trap.phase === 'spent';
+    if (slab) {
+      slab.visible = !fallen;
+      // 예고 — 천장이 떨린다
+      const shake = trap.phase === 'telegraph' ? 0.03 : 0;
+      slab.position.x = Math.sin(nowMs / 23) * shake;
+      slab.position.z = Math.cos(nowMs / 31) * shake;
+    }
+    if (rubble) rubble.visible = fallen;
+  } else if (trap.type === 'trap_pendulum') {
+    const arm = data['arm'] as THREE.Group | undefined;
+    if (arm) {
+      // 주기 — 로직의 cycleTick 을 그대로 읽는다 (최저점 = 칸 중심 = 각도 0)
+      const period = 120;
+      const t = ((trap.cycleTick ?? 0) % period) / period;
+      const angle = (70 * Math.PI) / 180 * Math.sin(t * Math.PI * 2);
+      if (trap.dirX !== 0) arm.rotation.x = angle;
+      else arm.rotation.z = angle;
     }
   }
 }

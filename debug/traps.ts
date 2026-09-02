@@ -17,7 +17,7 @@ const wall = new THREE.Mesh(new THREE.BoxGeometry(26, 3.4, 0.6), new THREE.MeshL
 wall.position.set(0, 1.7, -2.6); // 앞면 z=-2.3 = 함정 칸(-0.3) 북쪽 경계 — 노즐이 벽면에서 튀어나온다
 scene.add(wall);
 
-const specimens: { trap: { type: string; phase: string; timer: number; dirX: number; dirZ: number }; x: number; z?: number }[] = [
+const specimens: { trap: { type: string; phase: string; timer: number; dirX: number; dirZ: number; cycleTick?: number }; x: number; z?: number }[] = [
   { trap: { type: 'trap_dart', phase: 'armed', timer: 0, dirX: 0, dirZ: 1 }, x: -8 },
   { trap: { type: 'trap_dart', phase: 'telegraph', timer: 10, dirX: 0, dirZ: 1 }, x: -4 },
   { trap: { type: 'trap_dart', phase: 'spent', timer: 0, dirX: 0, dirZ: 1 }, x: 0 },
@@ -29,6 +29,11 @@ const specimens: { trap: { type: string; phase: string; timer: number; dirX: num
   { trap: { type: 'trap_oil', phase: 'armed', timer: 0, dirX: 0, dirZ: -1 }, x: 0, z: 4.5 },
   { trap: { type: 'trap_oil', phase: 'firing', timer: 200, dirX: 0, dirZ: -1 }, x: 4, z: 4.5 },
   { trap: { type: 'trap_glyph', phase: 'armed', timer: 0, dirX: 0, dirZ: -1 }, x: 8, z: 4.5 },
+  // 3열 — 가스(구름) / 낙석(대기·잔해) / 진자
+  { trap: { type: 'trap_gas', phase: 'firing', timer: 200, dirX: 0, dirZ: -1 }, x: -8, z: 9.5 },
+  { trap: { type: 'trap_rockfall', phase: 'armed', timer: 0, dirX: 0, dirZ: -1 }, x: -3, z: 9.5 },
+  { trap: { type: 'trap_rockfall', phase: 'spent', timer: 0, dirX: 0, dirZ: -1 }, x: 2, z: 9.5 },
+  { trap: { type: 'trap_pendulum', phase: 'firing', timer: 0, dirX: 1, dirZ: 0, cycleTick: 20 }, x: 7, z: 9.5 },
 ];
 const groups = specimens.map((s) => {
   const g = buildTrapGroup(s.trap, 4);
@@ -38,8 +43,8 @@ const groups = specimens.map((s) => {
 });
 
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.05, 100);
-camera.position.set(0, 5.2, 12.5);
-camera.lookAt(0, 0.3, 1.2);
+camera.position.set(0, 6.5, 17.5);
+camera.lookAt(0, 0.8, 3.5);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);

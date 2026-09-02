@@ -2061,7 +2061,13 @@ function getPursuitField(world: World): Map<number, number> {
   ) {
     return pc.field;
   }
-  const field = noiseField(world.level, world.player.x, world.player.z, balance.enemyAi.pursuit.range);
+  // 잔해(낙석)로 막힌 칸은 벽처럼 돌아간다 — 소음 전파와 달리 몸이 지나가야 하는 길이라서
+  const level = world.level;
+  const walkable = {
+    cellSize: level.cellSize,
+    solidAt: (c: number, r: number): boolean => level.solidAt(c, r) || level.pathBlockedAt(c, r),
+  };
+  const field = noiseField(walkable, world.player.x, world.player.z, balance.enemyAi.pursuit.range);
   pursuitCache = { level: world.level, key, tick: world.tick, field };
   return field;
 }

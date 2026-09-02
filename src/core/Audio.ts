@@ -121,7 +121,10 @@ export type SoundName =
   | 'trap_net'
   | 'trap_cut'
   | 'trap_ignite'
-  | 'trap_glyph';
+  | 'trap_glyph'
+  | 'trap_cough'
+  | 'trap_rumble'
+  | 'trap_whoosh';
 
 const MASTER_GAIN = 0.25;
 
@@ -733,6 +736,21 @@ export class GameAudio {
         this.tone(660, 0.3, 'triangle', 0.3, 0.05, 620);
         this.tone(935, 0.35, 'triangle', 0.25, 0.12, 880);
         this.noise(0.25, 0.35, 2600, 0.15);
+        break;
+      case 'trap_cough':
+        // 가스 속 기침 — 짧은 파열 두 번 (적이 듣는다는 뜻)
+        this.noise(0.07, 0.6, 1100);
+        this.noise(0.06, 0.5, 900, 0.14);
+        break;
+      case 'trap_rumble':
+        // 천장이 우르릉 — 낮은 노이즈 + 40Hz 떨림
+        this.noise(0.5, 0.55, 260);
+        this.tone(42, 0.5, 'sine', 0.7, 0, 36);
+        break;
+      case 'trap_whoosh':
+        // 칼날이 지나간다 — 공기를 가르는 스윕
+        this.noise(0.22, 0.5, 700);
+        this.tone(320, 0.2, 'sine', 0.2, 0, 900);
         break;
       case 'prop_fuse':
         // 치익 — 숨은 폭발물의 심지. 이 소리가 나면 도망쳐라

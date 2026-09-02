@@ -156,6 +156,16 @@ function check(path) {
         }
       }
     }
+    // 낙석 잔해는 몸을 영구히 막는다 — 전부 내려와도 S→X·제단이 이어져야 한다
+    const rockCells = new Set((level.entities ?? []).filter((e) => e.type === 'trap_rockfall').map((e) => `${e.cell[1]},${e.cell[0]}`));
+    if (rockCells.size > 0) {
+      const blockedGrid = grid.map((row, r) => [...row].map((ch, c) => (rockCells.has(`${c},${r}`) ? '#' : ch)).join(''));
+      const reach = flood(blockedGrid, rows, cols, [sc, sr], (ch) => !SOLID.has(ch) || OPENABLE.has(ch));
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const ch = at(grid, c, r);
+        if ((ch === 'X' || ch === 'A') && !reach.has(`${c},${r}`)) errors.push(`낙석 잔해가 전부 내려오면 ${ch} [${r},${c}] 에 못 간다`);
+      }
+    }
   }
 
   // 균열 벽 트리거는 실제로 C 를 가리켜야 한다

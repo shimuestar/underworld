@@ -194,6 +194,22 @@ export class Level {
     if (i >= 0) this.props.splice(i, 1);
   }
 
+  /** 경로 차단 칸 — 낙석 잔해처럼 몸은 막되 소리·레이는 통과하는 곳. 적 추격 흐름장이
+   *  solidAt 과 함께 본다 (안 보면 잔해에 몸을 박는다). key = row*4096+col (noiseField 규약) */
+  private readonly pathBlocked = new Set<number>();
+
+  setPathBlocked(col: number, row: number): void {
+    this.pathBlocked.add(row * 4096 + col);
+  }
+
+  clearPathBlocked(col: number, row: number): void {
+    this.pathBlocked.delete(row * 4096 + col);
+  }
+
+  pathBlockedAt(col: number, row: number): boolean {
+    return this.pathBlocked.has(row * 4096 + col);
+  }
+
   /** 셀을 바닥으로 연다 (문 개방 등). 이후 solidAt이 통과를 허용한다 */
   openCell(col: number, row: number): void {
     const line = this.grid[row];

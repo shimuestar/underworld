@@ -513,6 +513,8 @@ for (const name of [
   'trap_parried',
   'trap_ignited',
   'trap_glyph_burst',
+  'trap_gas_cough',
+  'trap_whoosh',
   'ammo_picked',
   'grenade_picked',
   'battery_picked',
@@ -828,7 +830,29 @@ events.on('prop_hit', (payload) => {
 // ---- 함정 — 예고는 소리·모형 동작으로만 (UI 표시 없음) ----
 events.on('trap_telegraph', (payload) => {
   const t = payload as { type: string; x: number; z: number };
+  if (t.type === 'trap_rockfall') {
+    // 천장이 우르릉 — 가까우면 손도 떨린다 (돌이 떨어지기 0.5초 전)
+    audio.play('trap_rumble', panAt(t.x, t.z));
+    const d = Math.hypot(world.player.x - t.x, world.player.z - t.z);
+    if (d < 12) {
+      padRumble('tremble');
+      stage.triggerCameraKick(0.12 * (1 - d / 12), 400);
+    }
+    return;
+  }
   audio.play(t.type === 'trap_spike' ? 'trap_click' : 'trap_hiss', panAt(t.x, t.z));
+});
+events.on('trap_gas_cough', () => audio.play('trap_cough')); // 내 기침 — 패닝 없음
+events.on('trap_whoosh', (payload) => {
+  const t = payload as { x: number; z: number };
+  audio.play('trap_whoosh', panAt(t.x, t.z));
+});
+events.on('trap_parried', (payload) => {
+  const t = payload as { x: number; z: number };
+  audio.play('parry_perfect');
+  padRumble('parry');
+  stage.spawnGuardSparks(t.x, t.z, 1.2, 0xfff0b0, 1.2);
+  showReaction('칼날을 받아냈다!', 1200);
 });
 events.on('trap_fired', (payload) => {
   const t = payload as { type: string; x: number; z: number };
@@ -841,6 +865,18 @@ events.on('trap_fired', (payload) => {
     audio.play('trap_dart', panAt(t.x, t.z));
   } else if (t.type === 'trap_net') {
     audio.play('trap_net', panAt(t.x, t.z));
+  } else if (t.type === 'trap_rockfall') {
+    // 돌이 떨어진다 — 균열 벽 붕괴와 같은 결 (돌·먼지·진동)
+    audio.play('wall_crumble', panAt(t.x, t.z));
+    stage.spawnWallCrumble(t.x, t.z);
+    const d = Math.hypot(world.player.x - t.x, world.player.z - t.z);
+    if (d < 12) {
+      stage.triggerCameraKick(0.6 * (1 - d / 12), 300);
+      padRumble('crumble');
+    }
+    showReaction('천장이 무너졌다 — 잔해가 길을 막는다 (총알은 넘어간다)', 2400);
+  } else if (t.type === 'trap_gas') {
+    audio.play('trap_hiss', panAt(t.x, t.z));
   }
 });
 events.on('trap_disarmed', (payload) => {
@@ -2185,7 +2221,11 @@ function respawnAtAltar(): void {
   for (const prop of world.props) if (prop.blocker) level.removeBlocker(prop.blocker);
   world.props = spawnProps(levelJson.entities, level);
   // 함정도 전부 재무장한다 (spent 포함) — 부활은 골드 전액이라 파밍 악용이 안 된다
-  for (const trap of world.traps) if (trap.blocker) level.removeBlocker(trap.blocker);
+  for (const trap of world.traps) {
+    if (!trap.blocker) continue;
+    level.removeBlocker(trap.blocker);
+    level.clearPathBlocked(trap.col, trap.row); // 잔해가 막던 경로도 되돌린다
+  }
   world.traps = spawnTraps(levelJson.entities, level);
   for (const chest of world.chests) if (chest.blocker) level.removeBlocker(chest.blocker);
   world.chests = spawnChests(levelJson.entities, level);

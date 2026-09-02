@@ -454,3 +454,128 @@ describe('함정 — 저주 문양', () => {
     expect(far.ai).toBe('chase');
   });
 });
+
+describe('함정 — 독가스 배기구', () => {
+  let world: World;
+  beforeEach(() => {
+    world = makeWorld();
+  });
+
+  it('다가가면 쉬익 뒤 구름 — 안에서는 스태미너가 닳고 시야가 흔들리고 기침이 적을 깨운다, 피해 0', () => {
+    const gas = putTrap(world, 'trap_gas', 6, 6);
+    const listener = addEnemy(world, 'goblin_runner', 11, 6); // 5m — 기침 소음 6m 안, 배기구 소음 4m 밖
+    listener.homeYaw = 0;
+    const coughs: number[] = [];
+    world.events.on('trap_gas_cough', () => coughs.push(1));
+    world.stamina.value = 100;
+    tickTraps(world, 1);
+    expect(gas.phase).toBe('telegraph');
+    tickTraps(world, T.trap_gas.telegraphTicks);
+    expect(gas.phase).toBe('firing');
+    tickTraps(world, T.trap_gas.coughIntervalTicks * 2);
+    expect(world.stamina.value).toBeLessThan(100 - T.trap_gas.staminaDrainPerTick * 60);
+    expect(world.player.aimShakeTicks).toBeGreaterThan(0);
+    expect(coughs.length).toBeGreaterThanOrEqual(2);
+    expect(listener.ai).toBe('chase'); // 기침을 들었다
+    expect(world.player.health).toBe(balance.player.healthMax);
+  });
+
+  it('구름 안의 적은 경둔화, 구름이 걷히면 쿨 뒤 재무장', () => {
+    const gas = putTrap(world, 'trap_gas', 30, 6);
+    const e = addEnemy(world, 'goblin_runner', 30.5, 6);
+    tickTraps(world, T.trap_gas.telegraphTicks + 2);
+    expect(e.slowMul).toBe(T.trap_gas.enemySlowMul);
+    tickTraps(world, T.trap_gas.cloudTicks);
+    expect(gas.phase).toBe('cooldown');
+    e.x = 60; // 비켜 서야 재무장 뒤 곧장 다시 밟히지 않는다
+    tickTraps(world, T.trap_gas.cooldownTicks);
+    expect(gas.phase).toBe('armed');
+  });
+});
+
+describe('함정 — 낙석', () => {
+  let world: World;
+  beforeEach(() => {
+    world = makeWorld();
+  });
+
+  it('우르릉 뒤 반경 안 전원 감쇠 피해 — 인접 칸(4m)은 맞고 대각(5.7m)은 안 맞는다. 잔해가 몸·경로를 막는다', () => {
+    const rock = putTrap(world, 'trap_rockfall', 30, 6, 'N');
+    const near = addEnemy(world, 'goblin_runner', 34, 6); // 4m
+    const nearHp = near.health;
+    const diag = addEnemy(world, 'goblin_runner', 34, 10); // 5.66m — 벽 안이지만 판정만 본다
+    const diagHp = diag.health;
+    world.player.x = 30;
+    const before = world.level.props.length;
+    tickTraps(world, 1);
+    expect(rock.phase).toBe('telegraph');
+    tickTraps(world, T.trap_rockfall.telegraphTicks);
+    expect(rock.phase).toBe('spent');
+    expect(world.player.health).toBe(balance.player.healthMax - T.trap_rockfall.damage); // 폭심 — 감쇠 없음
+    const f = 1 - (1 - T.trap_rockfall.damageFalloffMin) * (4 / T.trap_rockfall.damageRadius);
+    expect(nearHp - near.health).toBeCloseTo(T.trap_rockfall.enemyDamage * f, 3);
+    expect(diag.health).toBe(diagHp);
+    expect(world.level.props.length).toBe(before + 1);
+    expect(rock.blocker).toBeTruthy();
+    expect(world.level.pathBlockedAt(rock.col, rock.row)).toBe(true);
+  });
+
+  it('낙석 피해 source 는 trap_rockfall (폭발 결 진동), 막기 불가', () => {
+    putTrap(world, 'trap_rockfall', 6, 6, 'N');
+    world.player.blocking = true;
+    const srcs: string[] = [];
+    world.events.on('player_damaged', (p) => srcs.push((p as { source: string }).source));
+    tickTraps(world, T.trap_rockfall.telegraphTicks + 1);
+    expect(srcs).toEqual(['trap_rockfall']);
+    expect(world.player.health).toBe(balance.player.healthMax - T.trap_rockfall.damage);
+  });
+});
+
+describe('함정 — 진자 칼날', () => {
+  let world: World;
+  beforeEach(() => {
+    world = makeWorld();
+  });
+
+  it('항시 흔들린다 — 서 있으면 반주기마다 한 번씩 맞는다, 몸당 1회', () => {
+    putTrap(world, 'trap_pendulum', 6, 6, 'E');
+    const hits: number[] = [];
+    world.events.on('trap_hit_player', () => hits.push(world.tick));
+    tickTraps(world, T.trap_pendulum.periodTicks);
+    expect(hits).toHaveLength(2); // 두 최저점
+    expect(world.player.health).toBe(balance.player.healthMax - T.trap_pendulum.damage * 2);
+  });
+
+  it('최저점 직전(parryLeadTicks)에 반응을 누르면 완벽 패링 — 피해 0·히트스톱·마나 이벤트', () => {
+    const pend = putTrap(world, 'trap_pendulum', 6, 6, 'E');
+    const parries: string[] = [];
+    world.events.on('parry_attempt', (p) => parries.push((p as { result: string }).result));
+    world.events.on('trap_parried', () => parries.push('trap_parried'));
+    const half = T.trap_pendulum.periodTicks / 2;
+    // 진자는 진폭 끝(half/2)에서 시작 → 첫 최저점까지 half/2 틱. 리드 안(5틱 전)에 누른다
+    const toLowest = half - Math.floor(half / 2);
+    tickTraps(world, toLowest - 6);
+    world.input = { ...Input.emptySnapshot(), reactionPressed: true };
+    tickTraps(world, 1);
+    world.input = Input.emptySnapshot();
+    tickTraps(world, 8);
+    expect(parries).toEqual(['perfect', 'trap_parried']);
+    expect(world.player.health).toBe(balance.player.healthMax);
+    expect(world.freezeTicks).toBeGreaterThan(0);
+    expect(pend.phase).toBe('firing'); // 계속 돈다
+  });
+
+  it('적도 잘린다 — enemyDamage, 보스는 bossDamageMul', () => {
+    putTrap(world, 'trap_pendulum', 30, 6, 'E');
+    const e = addEnemy(world, 'goblin_runner', 30, 6);
+    e.ai = 'chase';
+    const hp = e.health;
+    tickTraps(world, T.trap_pendulum.periodTicks / 2 + 1);
+    expect(hp - e.health).toBeGreaterThanOrEqual(Math.min(hp, T.trap_pendulum.enemyDamage) - 0.001);
+    putTrap(world, 'trap_pendulum', 42, 6, 'E');
+    const boss = addEnemy(world, 'goblin_chieftain', 42, 6);
+    const bhp = boss.health;
+    tickTraps(world, T.trap_pendulum.periodTicks / 2 + 1);
+    expect(bhp - boss.health).toBeCloseTo(T.trap_pendulum.enemyDamage * T.trap_pendulum.bossDamageMul, 3);
+  });
+});

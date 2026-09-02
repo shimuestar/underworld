@@ -13,6 +13,7 @@ import {
   playerBlocks,
   pushEnemy,
   pushPlayer,
+  spendStamina,
   type EnemyState,
   type TrapState,
   type World,
@@ -196,6 +197,114 @@ function tickOil(world: World, trap: TrapState, cfg: TrapCfg): void {
   }
 }
 
+/** 독가스 구름 — 도는 동안 매 틱. 피해는 없다: 시야가 흔들리고 숨이 막히고(스태미너), 기침이 방을 깨운다 */
+function tickGasCloud(world: World, trap: TrapState, cfg: TrapCfg): void {
+  const r = cfg['cloudRadius'] ?? 3;
+  const p = world.player;
+  if (!world.dead && Math.hypot(p.x - trap.x, p.z - trap.z) <= r) {
+    p.aimShakeTicks = Math.max(p.aimShakeTicks ?? 0, cfg['shakeTicks'] ?? 0);
+    p.aimShakeAmp = Math.max(p.aimShakeAmp ?? 0, cfg['shakeAmp'] ?? 0);
+    if (spendStamina(world.stamina, cfg['staminaDrainPerTick'] ?? 0, balance.player.stamina.regenDelayTicks)) {
+      world.events.emit('stamina_empty', {});
+    }
+    const cough = Math.max(1, cfg['coughIntervalTicks'] ?? 60);
+    if (trap.timer % cough === 0) {
+      alertNearbyAt(world, p.x, p.z, cfg['coughNoiseRadius'] ?? 0, balance.enemyAi.noticeDelayTicks);
+      world.events.emit('trap_gas_cough', { id: trap.id, x: p.x, z: p.z });
+    }
+  }
+  for (const enemy of world.enemies) {
+    if (!canTriggerTrap(enemy)) continue;
+    if (Math.hypot(enemy.x - trap.x, enemy.z - trap.z) > r) continue;
+    slowEnemy(enemy, 3, cfg['enemySlowMul'] ?? 1); // 기침하는 고블린 — 매 틱 갱신
+  }
+}
+
+/** 낙석 — 반경 안 전원에 감쇠 피해·바깥으로 밀림. 잔해는 몸을 막는 저지대로 남는다
+ *  (총알·소리는 넘어간다). 적 추격 경로도 막는다 — 안 그러면 잔해에 몸을 박는다 */
+function fireRockfall(world: World, trap: TrapState, cfg: TrapCfg): void {
+  const R = cfg['damageRadius'] ?? 4;
+  const falloff = (d: number): number => 1 - (1 - (cfg['damageFalloffMin'] ?? 1)) * Math.min(1, d / R);
+  const p = world.player;
+  const pd = Math.hypot(p.x - trap.x, p.z - trap.z);
+  if (pd <= R) {
+    hurtPlayer(world, trap, (cfg['damage'] ?? 0) * falloff(pd), {
+      blockable: false, source: 'trap_rockfall',
+      knockback: cfg['playerKnockback'], knockbackTicks: cfg['playerKnockbackTicks'],
+    });
+  }
+  for (const enemy of world.enemies) {
+    if (!enemy.alive) continue; // 천장에서 떨어진다 — 매달린 놈도 맞는다
+    const d = Math.hypot(enemy.x - trap.x, enemy.z - trap.z);
+    if (d > R) continue;
+    hurtEnemy(world, trap, enemy, (cfg['enemyDamage'] ?? 0) * falloff(d), cfg, {
+      distance: (cfg['enemyKnockback'] ?? 0) * falloff(d), ticks: cfg['enemyKnockbackTicks'] ?? 12,
+    });
+  }
+  trap.blocker = world.level.addBlocker(trap.x, trap.z, cfg['rubbleHalf'] ?? 1.5);
+  world.level.setPathBlocked(trap.col, trap.row);
+}
+
+/** 진자 칼날 — 항시 작동. 최저점(칸 중심 통과) 창에서 몸당 1회. 플레이어는 완벽 패링으로 흘릴 수 있다 */
+function tickPendulum(world: World, trap: TrapState, cfg: TrapCfg): void {
+  const period = Math.max(2, Math.round(cfg['periodTicks'] ?? 120));
+  const half = Math.max(1, Math.floor(period / 2));
+  trap.phase = 'firing';
+  // 처음엔 진폭 끝(반주기의 절반 지점)에서 시작 — 층에 들어서자마자 최저점에 서 있는 사고 방지
+  if (trap.cycleTick === undefined) trap.cycleTick = Math.floor(half / 2);
+  trap.cycleTick = (trap.cycleTick + 1) % period;
+  const inHalf = trap.cycleTick % half; // 0 = 최저점
+  const toLowest = inHalf === 0 ? 0 : half - inHalf; // 다음 최저점까지
+  const windowHalf = Math.floor((cfg['hitWindowTicks'] ?? 6) / 2);
+  const inWindow = Math.min(inHalf, half - inHalf) <= windowHalf;
+  const p = world.player;
+  const r = cfg['hitRadius'] ?? 1.2;
+  const near = !world.dead && Math.hypot(p.x - trap.x, p.z - trap.z) <= r;
+
+  // 창 밖 — 리드 안에서 누른 반응은 버퍼로 살려 둔다 (Reaction 의 incoming 규약과 같은 장치)
+  if (!inWindow) {
+    trap.hitIds = undefined;
+    if (near && toLowest <= (cfg['parryLeadTicks'] ?? 0) && world.input.reactionPressed) {
+      p.parryBufferTicks = balance.reaction.parryBufferTicks;
+    }
+    return;
+  }
+  const hit = (trap.hitIds ??= []);
+  // 칼날 진행 방향 — 복도 축(dir)에 수직, 반주기마다 반대로
+  const sign = Math.floor(trap.cycleTick / half) % 2 === 0 ? 1 : -1;
+  const swingX = -trap.dirZ * sign;
+  const swingZ = trap.dirX * sign;
+  if (inHalf === 0) {
+    const pd = Math.hypot(p.x - trap.x, p.z - trap.z);
+    if (pd <= (cfg['whooshRadius'] ?? 0)) world.events.emit('trap_whoosh', { id: trap.id, x: trap.x, z: trap.z });
+  }
+  if (near && !hit.includes(-1)) {
+    hit.push(-1);
+    if (world.input.reactionPressed || (p.parryBufferTicks ?? 0) > 0) {
+      // 완벽 패링 — 피해 0, 히트스톱, 마나(Mana 가 parry_attempt 를 듣는다)
+      p.parryBufferTicks = 0;
+      world.freezeTicks = Math.max(world.freezeTicks, balance.reaction.hitstopPerfectTicks);
+      world.events.emit('parry_attempt', { result: 'perfect', chain: 0, enemyType: 'trap_pendulum' });
+      world.events.emit('trap_parried', { id: trap.id, x: trap.x, z: trap.z });
+    } else {
+      const before = p.health;
+      hurtPlayer(world, trap, cfg['damage'] ?? 0, { blockable: true, source: 'trap_pendulum' });
+      if (p.health < before && (cfg['playerKnockback'] ?? 0) > 0) {
+        pushPlayer(p, swingX, swingZ, cfg['playerKnockback'] ?? 0, cfg['playerKnockbackTicks'] ?? 12);
+      }
+    }
+  }
+  for (const enemy of world.enemies) {
+    if (!canTriggerTrap(enemy) || hit.includes(enemy.id)) continue;
+    if (Math.hypot(enemy.x - trap.x, enemy.z - trap.z) > r) continue;
+    hit.push(enemy.id);
+    hurtEnemy(world, trap, enemy, cfg['enemyDamage'] ?? 0, cfg);
+    if (enemy.alive) {
+      pushEnemy(enemy, swingX, swingZ, cfg['enemyKnockback'] ?? 0, cfg['enemyKnockbackTicks'] ?? 12);
+    }
+  }
+}
+
 /** 작동 뒤 — 장전이 남으면 쿨다운, 다 썼으면 spent */
 function afterFire(world: World, trap: TrapState, cfg: TrapCfg): void {
   if (trap.charges > 0) trap.charges--;
@@ -272,6 +381,12 @@ function fire(world: World, trap: TrapState, cfg: TrapCfg): void {
     case 'trap_glyph':
       fireGlyph(world, trap, cfg);
       break;
+    case 'trap_gas':
+      firingTicks = cfg['cloudTicks'] ?? 0; // 구름이 도는 동안 tick 이 매 틱 효과를 준다
+      break;
+    case 'trap_rockfall':
+      fireRockfall(world, trap, cfg);
+      break;
     default:
       break;
   }
@@ -304,6 +419,10 @@ export function tick(world: World, _dt: number): void {
       tickOil(world, trap, cfg); // 밟는 트리거가 없다 — 불이 트리거다
       continue;
     }
+    if (trap.type === 'trap_pendulum') {
+      tickPendulum(world, trap, cfg); // 트리거 없이 항시 흔들린다
+      continue;
+    }
     switch (trap.phase) {
       case 'armed': {
         const by = victimInRadius(world, trap, cfg['triggerRadius'] ?? 1.2);
@@ -324,6 +443,7 @@ export function tick(world: World, _dt: number): void {
         if (--trap.timer <= 0) fire(world, trap, cfg);
         break;
       case 'firing':
+        if (trap.type === 'trap_gas') tickGasCloud(world, trap, cfg);
         if (--trap.timer <= 0) afterFire(world, trap, cfg);
         break;
       case 'cooldown':

@@ -228,6 +228,22 @@ describe('1구역 층 구성', () => {
         }
       });
 
+      it('낙석 잔해가 전부 내려와도 출구와 제단에 갈 수 있다 — 소프트락 방지', () => {
+        const rocks = new Set(
+          json.entities.filter((e) => e.type === 'trap_rockfall').map((e) => `${e.cell[1]},${e.cell[0]}`),
+        );
+        if (rocks.size === 0) return;
+        const blocked = json.grid.map((row, r) =>
+          [...row].map((ch, c) => (rocks.has(`${c},${r}`) ? '#' : ch)).join(''),
+        );
+        let start: [number, number] = [0, 0];
+        json.grid.forEach((row, r) => { const c = row.indexOf('S'); if (c >= 0) start = [c, r]; });
+        const reach = flood(blocked, start, (ch) => !SOLID.has(ch) || OPENABLE.has(ch));
+        json.grid.forEach((row, r) => [...row].forEach((ch, c) => {
+          if (ch === 'X' || ch === 'A') expect(reach.has(`${c},${r}`)).toBe(true);
+        }));
+      });
+
       it('횃불이 전부 진짜 벽(#)에 붙어 있다 — 문에 걸면 열릴 때 허공에 남는다', () => {
         const floating = json.lighting.torches
           .filter(([row, col]) => !NEIGHBOURS.some(([dc, dr]) => at(grid, col! + dc, row! + dr) === '#'))

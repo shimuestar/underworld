@@ -448,6 +448,49 @@
       ]
     },
     {
+      "type": "trap_pendulum",
+      "cell": [
+        8,
+        20
+      ],
+      "note": "동쪽 1칸 복도 진자 — 관문 앞. 리듬을 읽거나 완벽 패링",
+      "dir": "S"
+    },
+    {
+      "type": "trap_pendulum",
+      "cell": [
+        10,
+        12
+      ],
+      "note": "방 사이 통로 진자 — 쫓아오는 창병이 잘린다",
+      "dir": "E"
+    },
+    {
+      "type": "trap_rockfall",
+      "cell": [
+        12,
+        20
+      ],
+      "note": "관문 지난 복도 낙석 — 내려오면 이 복도는 막힌다 (방 경로로 우회)",
+      "dir": "S"
+    },
+    {
+      "type": "trap_spike",
+      "cell": [
+        16,
+        12
+      ],
+      "note": "큰 홀 가시판"
+    },
+    {
+      "type": "trap_glyph",
+      "cell": [
+        23,
+        8
+      ],
+      "note": "남쪽 방 문양 — 어둠에서만"
+    },
+    {
       "type": "goblin_spear",
       "cell": [
         23,
