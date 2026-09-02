@@ -698,13 +698,17 @@ export class GameAudio {
         break;
       case 'trap_hiss':
         // 다트 함정 예고 — 압축 공기가 새는 쉬익. 이 소리가 나면 몸을 낮추거나 받아쳐라
-        this.noise(0.3, 0.45, 3000);
-        this.tone(2400, 0.28, 'sine', 0.08, 0, 1800);
+        this.noise(0.3, 0.65, 3000);
+        this.tone(2400, 0.28, 'sine', 0.12, 0, 1800);
         break;
       case 'trap_dart':
-        // 다트 발사 — 짧은 채찍질 + 쇳소리
-        this.noise(0.05, 0.6, 2200);
-        this.tone(1300, 0.09, 'triangle', 0.35, 0, 500);
+        // 다트 발사 — 크게: 압축 공기가 터지는 팡 + 채찍질 + 쇠 튕김 + 기계 반동 텅.
+        // 가까이서 더 크게 들리도록 게인을 키웠다 (2026-09-02). 거리 감쇠는 main 이 맡는다
+        this.noise(0.06, 1.3, 2400);
+        this.noise(0.03, 0.9, 5200);
+        this.tone(1500, 0.1, 'triangle', 0.8, 0, 480);
+        this.tone(2400, 0.06, 'sine', 0.4, 0.01, 1800);
+        this.tone(260, 0.09, 'square', 0.55, 0.02, 120);
         break;
       case 'trap_click':
         // 가시판을 밟았다 — 덜컹: 묵직한 돌판이 내려앉는 저음 둥 + 판이 홈에 부딪히는 둔탁한 두 번째 울림.
