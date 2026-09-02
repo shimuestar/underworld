@@ -32,7 +32,11 @@ const OIL_FIRE = 0xff7a1a;
 const OIL_SCORCH = 0x1a1410;
 const GLYPH = 0x9b5de5;
 const GAS = 0x4fc46a;
-const GRATE = 0x2a2a30;
+const STALK = 0x4d6b2e; // 포자 식물 줄기
+const BULB = 0x8fbf4a; // 포자 주머니 — 병든 연두
+const BULB_SPOT = 0x3f5f22;
+const SAC = 0x6f9a3a;
+const PETAL = 0x7fae44;
 const SLAB = 0x45403a;
 const CRACK = 0x8a8278;
 const RUBBLE = 0x5a534b;
@@ -171,19 +175,56 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     }
     data['glyphMat'] = mat;
   } else if (trap.type === 'trap_gas') {
-    // 바닥 쇠창살 — 살 5개. 구름은 반투명 초록 구체 군집(랜턴 빔에 빛난다)
-    const grateMat = new THREE.MeshLambertMaterial({ color: GRATE });
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 1.6), grateMat);
-    frame.position.y = 0.03;
-    group.add(frame);
-    const hole = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.02, 1.3), new THREE.MeshBasicMaterial({ color: 0x030303 }));
-    hole.position.y = 0.065;
-    group.add(hole);
-    for (let i = 0; i < 5; i++) {
-      const slat = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.03, 0.1), grateMat);
-      slat.position.set(0, 0.08, -0.5 + i * 0.25);
-      group.add(slat);
+    // 포자 식물 — 줄기 위에 부풀어 오른 주머니, 둘레에 작은 포자 주머니 셋. 다가가면(예고) 꽃잎이
+    // 벌어지며 개화하고 포자 구름을 뿜는다. 구름은 반투명 초록 구체 군집(랜턴 빔에 빛난다)
+    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.13, 0.7, 8), new THREE.MeshLambertMaterial({ color: STALK }));
+    stalk.position.y = 0.35;
+    group.add(stalk);
+    const bulbMat = new THREE.MeshLambertMaterial({ color: BULB, emissive: 0x9fe060, emissiveIntensity: 0 });
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), bulbMat);
+    bulb.scale.set(1, 1.15, 1);
+    bulb.position.y = 0.98;
+    group.add(bulb);
+    data['bulbMat'] = bulbMat;
+    data['bulb'] = bulb;
+    const spotMat = new THREE.MeshLambertMaterial({ color: BULB_SPOT });
+    for (let i = 0; i < 6; i++) {
+      const a = i * 1.05;
+      const spot = new THREE.Mesh(new THREE.SphereGeometry(0.075, 6, 5), spotMat);
+      spot.position.set(Math.cos(a) * 0.38, 0.98 + Math.sin(i * 1.7) * 0.3, Math.sin(a) * 0.38);
+      group.add(spot);
     }
+    const sacMat = new THREE.MeshLambertMaterial({ color: SAC });
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.4;
+      const sacStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.32, 6), new THREE.MeshLambertMaterial({ color: STALK }));
+      sacStalk.position.set(Math.cos(a) * 0.55, 0.16, Math.sin(a) * 0.55);
+      sacStalk.rotation.z = Math.cos(a) * 0.35;
+      sacStalk.rotation.x = -Math.sin(a) * 0.35;
+      group.add(sacStalk);
+      const sac = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), sacMat);
+      sac.position.set(Math.cos(a) * 0.66, 0.36, Math.sin(a) * 0.66);
+      group.add(sac);
+    }
+    // 꽃잎 4장 — 주머니 꼭대기에 힌지. 닫혀 있다가 예고·분출 중 바깥으로 벌어진다
+    const petals: THREE.Group[] = [];
+    const petalMat = new THREE.MeshLambertMaterial({ color: PETAL });
+    for (let i = 0; i < 4; i++) {
+      // 두 겹 — 바깥(around)은 둘레 배치(y 회전), 안(hinge)은 개폐(x 회전).
+      // 한 그룹에 둘을 같이 걸면 오일러 순서(XYZ) 때문에 옆 꽃잎이 제 축으로 안 기운다
+      const around = new THREE.Group();
+      around.position.y = 1.4;
+      around.rotation.y = (i * Math.PI) / 2;
+      const hinge = new THREE.Group();
+      const petal = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.5), petalMat);
+      petal.position.z = 0.25;
+      hinge.add(petal);
+      hinge.rotation.x = 1.05; // 닫힘 — 꽃받침처럼 주머니 어깨를 감싸 늘어진 상태
+      around.add(hinge);
+      group.add(around);
+      petals.push(hinge);
+    }
+    data['petals'] = petals;
     const cloud = new THREE.Group();
     const cloudMat = new THREE.MeshLambertMaterial({ color: GAS, transparent: true, opacity: 0, depthWrite: false });
     for (let i = 0; i < 8; i++) {
@@ -325,6 +366,20 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
       mat.color.setHex(trap.phase === 'spent' ? 0x2a1a3a : GLYPH);
     }
   } else if (trap.type === 'trap_gas') {
+    // 개화 — 예고·분출 중 꽃잎이 벌어지고 주머니가 부풀며 은은히 빛난다
+    const petals = data['petals'] as THREE.Group[] | undefined;
+    const bulb = data['bulb'] as THREE.Mesh | undefined;
+    const bulbMat = data['bulbMat'] as THREE.MeshLambertMaterial | undefined;
+    const open = trap.phase === 'telegraph' || trap.phase === 'firing';
+    if (petals) {
+      const target = open ? -0.55 : 1.05; // 개화 — 바깥·위로 확 벌어진다
+      for (const h of petals) h.rotation.x += (target - h.rotation.x) * 0.12;
+    }
+    if (bulb) {
+      const swell = open ? 1.22 + 0.06 * Math.sin(nowMs / 90) : 1;
+      bulb.scale.set(swell, 1.15 * swell, swell);
+    }
+    if (bulbMat) bulbMat.emissiveIntensity = trap.phase === 'firing' ? 0.45 + 0.2 * Math.abs(Math.sin(nowMs / 160)) : open ? 0.2 : 0;
     const cloud = data['cloud'] as THREE.Group | undefined;
     const mat = data['cloudMat'] as THREE.MeshLambertMaterial | undefined;
     if (cloud && mat) {

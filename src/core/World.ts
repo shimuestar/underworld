@@ -449,6 +449,17 @@ export function disarmTrap(world: World, trap: TrapState, how: string): void {
   world.events.emit('trap_disarmed', { id: trap.id, type: trap.type, x: trap.x, z: trap.z, how });
 }
 
+/** 함정을 멀리서 건드렸다(총·화살·마법) — 대기 중이면 곧장 예고로 넘긴다. telegraphTicks 는 호출부가 준다.
+ *  포자 식물을 안전한 거리에서 터뜨리거나, 적 옆에서 터뜨려 구름에 몰아넣는 수단 */
+export function provokeTrap(world: World, trap: TrapState, telegraphTicks: number, how: string): void {
+  if (trap.phase !== 'armed') return;
+  trap.triggeredBy = 'player';
+  world.events.emit('trap_triggered', { id: trap.id, type: trap.type, x: trap.x, z: trap.z, by: 'player', how });
+  trap.phase = 'telegraph';
+  trap.timer = Math.max(1, telegraphTicks);
+  world.events.emit('trap_telegraph', { id: trap.id, type: trap.type, x: trap.x, z: trap.z });
+}
+
 /** 반경 안의 안 붙은 기름 웅덩이에 불을 붙인다 — 폭발·화염구·수류탄·불타는 적이 부른다.
  *  burnTicks 는 호출부가 balance 에서 넘긴다 (World 는 데이터를 읽지 않는다) */
 export function igniteOilInRadius(world: World, x: number, z: number, radius: number, burnTicks: number): void {

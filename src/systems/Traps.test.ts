@@ -747,3 +747,33 @@ describe('함정 — 자동 순환 다트 발사기', () => {
     expect(T.trap_dart.telegraphTicks).toBe(30);
   });
 });
+
+describe('함정 — 포자 식물 원거리 도발', () => {
+  it('권총으로 멀리서 맞히면 개화(예고)로 넘어간다 — 총알은 거기서 멈춘다', async () => {
+    const Weapons = await import('./Weapons');
+    const world = makeWorld();
+    const plant = putTrap(world, 'trap_gas', 14, 6); // 8m 앞
+    const behind = addEnemy(world, 'goblin_runner', 20, 6); // 식물 뒤 — 맞으면 안 된다
+    const hp = behind.health;
+    world.player.pitch = -0.08; // 주머니 높이로 살짝 내려 겨눈다
+    const ev: string[] = [];
+    world.events.on('trap_triggered', (p) => ev.push((p as { how?: string }).how ?? '?'));
+    world.input = { ...Input.emptySnapshot(), rangedPressed: true };
+    Weapons.tick(world, DT);
+    expect(plant.phase).toBe('telegraph');
+    expect(ev).toEqual(['pistol']);
+    expect(behind.health).toBe(hp);
+  });
+
+  it('화살이 맞혀도 터진다', () => {
+    const world = makeWorld();
+    const plant = putTrap(world, 'trap_gas', 14, 6);
+    world.projectiles.push({
+      id: 4242, owner: 'player', x: 8, y: 1.0, z: 6, prevX: 8, prevY: 1.0, prevZ: 6,
+      vx: 30, vy: 0, vz: 0, lifeTicks: 90, damage: 10, burnTicks: 0, burnDamagePerTick: 0, radius: 0.1, kind: 'arrow',
+    });
+    for (let i = 0; i < 30 && plant.phase === 'armed'; i++) Projectiles.tick(world, DT);
+    expect(plant.phase).toBe('telegraph');
+    expect(world.projectiles).toHaveLength(0); // 화살은 식물에 박혔다
+  });
+});

@@ -128,7 +128,9 @@ export type SoundName =
   | 'trap_ping'
   | 'trap_spike_down'
   | 'trap_rearm'
-  | 'trap_empty';
+  | 'trap_empty'
+  | 'trap_bloom'
+  | 'trap_spore';
 
 const MASTER_GAIN = 0.25;
 
@@ -774,6 +776,21 @@ export class GameAudio {
         this.tone(660, 0.3, 'triangle', 0.3, 0.05, 620);
         this.tone(935, 0.35, 'triangle', 0.25, 0.12, 880);
         this.noise(0.25, 0.35, 2600, 0.15);
+        break;
+      case 'trap_bloom':
+        // 포자 식물 개화 — 젖은 꽃잎이 삐걱 벌어진다 (위로 미끄러지는 음 + 축축한 스침 + 낮은 부풂)
+        this.tone(220, 0.45, 'sine', 0.38, 0, 520);
+        this.noise(0.4, 0.32, 900);
+        this.tone(88, 0.35, 'triangle', 0.28, 0.05, 120);
+        break;
+      case 'trap_spore':
+        // 포자 분출 — 주머니가 퍽 터지고 포자가 쉬이익 쏟아지며 거품이 보글거린다
+        this.noise(0.08, 1.0, 1400);
+        this.noise(0.75, 0.7, 2600, 0.04);
+        this.tone(170, 0.5, 'sine', 0.45, 0, 60);
+        this.tone(300, 0.05, 'sine', 0.32, 0.2, 340);
+        this.tone(340, 0.05, 'sine', 0.3, 0.35, 380);
+        this.tone(280, 0.05, 'sine', 0.3, 0.5, 320);
         break;
       case 'trap_cough':
         // 가스 속 기침 — 짧은 파열 두 번 (적이 듣는다는 뜻)

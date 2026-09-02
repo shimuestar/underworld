@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -816,6 +816,30 @@ function moveProjectiles(world: World, dt: number): void {
       }
     }
 
+    // 포자 식물 — 화살·마법이 맞으면 터진다 (멀리서 안전하게, 또는 적 옆에서)
+    let hitGasTrap: TrapState | null = null;
+    if (proj.owner === 'player') {
+      const gasCfg = balance.traps.types.trap_gas;
+      for (const trap of world.traps) {
+        if (trap.type !== 'trap_gas' || trap.phase !== 'armed') continue;
+        const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
+          minX: trap.x - gasCfg.hitRadius - proj.radius,
+          minY: -proj.radius,
+          minZ: trap.z - gasCfg.hitRadius - proj.radius,
+          maxX: trap.x + gasCfg.hitRadius + proj.radius,
+          maxY: gasCfg.height + proj.radius,
+          maxZ: trap.z + gasCfg.hitRadius + proj.radius,
+        });
+        if (t !== null && t < hitT) {
+          hitT = t;
+          hitGasTrap = trap;
+          hitNetTrap = null;
+          hitPropTarget = null;
+          hitSurface = 'wall';
+        }
+      }
+    }
+
     // 튀는 구울 머리 — 화살이 맞으면 터진다
     let hitHead: number | null = null;
     // 플레이어 투사체는 종류를 가리지 않고 머리 소품을 맞힌다 — 화살·화염구·서리 공통
@@ -970,6 +994,15 @@ function moveProjectiles(world: World, dt: number): void {
       if (hitHead !== null) {
         breakGhoulHead(world, hitHead, false);
         world.events.emit('arrow_impact', {
+          x: proj.x + dirX * hitT, y: proj.y + dirY * hitT, z: proj.z + dirZ * hitT, hitEnemy: true,
+        });
+        world.projectiles.splice(i, 1);
+        continue;
+      }
+
+      if (hitGasTrap) {
+        provokeTrap(world, hitGasTrap, balance.traps.types.trap_gas.telegraphTicks, proj.kind === 'arrow' ? 'arrow' : 'spell');
+        world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', {
           x: proj.x + dirX * hitT, y: proj.y + dirY * hitT, z: proj.z + dirZ * hitT, hitEnemy: true,
         });
         world.projectiles.splice(i, 1);

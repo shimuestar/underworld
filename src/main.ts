@@ -876,7 +876,11 @@ events.on('trap_telegraph', (payload) => {
     }
     return;
   }
-  // 가스·자동 다트 발사기 — 발판 없이 쉬익 (같은 틱에 여러 개면 한 번, 자동은 10m 감쇠)
+  if (t.type === 'trap_gas') {
+    audio.play('trap_bloom', panAt(t.x, t.z)); // 포자 식물이 벌어진다 — 지금 물러나라
+    return;
+  }
+  // 자동 다트 발사기 — 발판 없이 쉬익 (같은 틱에 여러 개면 한 번, 자동은 10m 감쇠)
   const at = trapSoundAt(t.type, t.x, t.z);
   if (at && spikeSoundOnce('hiss')) audio.play('trap_hiss', at);
 });
@@ -942,7 +946,7 @@ events.on('trap_fired', (payload) => {
     }
     showReaction('천장이 무너졌다 — 잔해가 길을 막는다 (총알은 넘어간다)', 2400);
   } else if (t.type === 'trap_gas') {
-    audio.play('trap_hiss', panAt(t.x, t.z));
+    audio.play('trap_spore', panAt(t.x, t.z)); // 포자가 쏟아진다
   }
 });
 events.on('trap_disarmed', (payload) => {

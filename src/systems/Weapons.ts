@@ -6,7 +6,7 @@
 import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, hitBarrel, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, provokeTrap, hitBarrel, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
 
 /** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
  *  활을 넣으면서 실제로 방패·경직·무기 교체 세 곳이 bowDraw 를 안 지워
@@ -719,6 +719,21 @@ function fire(world: World): void {
     });
     if (t !== null && t < wallT && (!netHit || t < netHit.t)) netHit = { trap, t };
   }
+  // 포자 식물 — 총알이 맞으면 터진다 (멀리서 안전하게 터뜨리는 수단)
+  const gasCfg = balance.traps.types.trap_gas;
+  let gasHit: { trap: TrapState; t: number } | null = null;
+  for (const trap of world.traps) {
+    if (trap.type !== 'trap_gas' || trap.phase !== 'armed') continue;
+    const t = rayVsAabb(p.x, oy, p.z, dx, dy, dz, {
+      minX: trap.x - gasCfg.hitRadius,
+      minY: 0,
+      minZ: trap.z - gasCfg.hitRadius,
+      maxX: trap.x + gasCfg.hitRadius,
+      maxY: gasCfg.height,
+      maxZ: trap.z + gasCfg.hitRadius,
+    });
+    if (t !== null && t < wallT && (!gasHit || t < gasHit.t)) gasHit = { trap, t };
+  }
   // 튀는 구울 머리 — 총알이 맞으면 터진다 (적·통이 더 앞이면 그쪽이 먼저 받는다)
   const hcfg = balance.ghoulHead;
   let headHit: { id: number; t: number; hx: number; hy: number; hz: number } | null = null;
@@ -753,6 +768,20 @@ function fire(world: World): void {
     return;
   }
 
+  if (
+    gasHit &&
+    (!hit || gasHit.t < hit.t) &&
+    (!barrelHit || gasHit.t < barrelHit.t) &&
+    (!propHit || gasHit.t < propHit.t) &&
+    (!netHit || gasHit.t < netHit.t)
+  ) {
+    hit = null; // 식물이 제일 앞 — 터뜨리고 멈춘다
+    barrelHit = null;
+    propHit = null;
+    netHit = null;
+    provokeTrap(world, gasHit.trap, gasCfg.telegraphTicks, 'pistol');
+    hitT = gasHit.t;
+  }
   if (
     netHit &&
     (!hit || netHit.t < hit.t) &&
