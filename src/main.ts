@@ -2069,7 +2069,14 @@ events.on('arrow_shielded', (payload) => {
   stage.stickArrowInShield(info.enemyId);
 });
 events.on('arrow_impact', (payload) => {
-  const hit = payload as { x: number; y: number; z: number; hitEnemy: boolean };
+  const hit = payload as { x: number; y: number; z: number; hitEnemy: boolean; trapShot?: boolean };
+  // 내 화살은 그대로(어디에 박혔든 내가 쏜 것). 함정 다트의 착탄은 자동 장치 규칙 — 10m 밖 무음,
+  // 안에서는 거리 제곱 감쇠 (멀리서 자동 다트가 벽을 두드리는 소리가 층 전체에 울리던 원인)
+  if (hit.trapShot) {
+    const at = trapSoundAt('trap_dart_auto', hit.x, hit.z);
+    if (at) audio.play(hit.hitEnemy ? 'hit_flesh' : 'hit_wall', at);
+    return;
+  }
   audio.play(hit.hitEnemy ? 'hit_flesh' : 'hit_wall');
 });
 let quiverFullUntil = 0;
@@ -3636,6 +3643,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__world = world;
   (window as unknown as Record<string, unknown>).__input = input;
   (window as unknown as Record<string, unknown>).__stage = stage; // 씬 그래프 검증용
+  (window as unknown as Record<string, unknown>).__audio = audio; // 소리 재생 호출 추적용(헤드리스)
 }
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)

@@ -1052,6 +1052,7 @@ function moveProjectiles(world: World, dt: number): void {
         y: proj.y + dirY * hitT,
         z: proj.z + dirZ * hitT,
         hitEnemy: hitEnemy !== null || hitPlayer || hitProjectile !== null,
+        trapShot: proj.trapShot === true, // 함정 다트 착탄 — main 이 자동 장치 규칙(10m 감쇠)으로 재생
       };
       // 허공이 아니라 무언가에 닿았다 — 착탄 연출이 붙어야 한다
       world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', impact);
