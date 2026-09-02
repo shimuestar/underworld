@@ -580,14 +580,28 @@
         transform: scale(1.13);
         filter: brightness(1.3);
       }
-      /* 방금 쓴 칸 — 그 마름모만 번쩍 커졌다 돌아온다 (무엇을 썼는지 한눈에) */
-      @keyframes slot-used {
-        0% { transform: scale(1.5); filter: brightness(2.6); }
-        55% { transform: scale(1.2); filter: brightness(1.6); }
-        100% { transform: scale(1); filter: brightness(1); }
+      /* 방금 쓴 칸 — 굵은 흰 테두리가 세 번 깜빡이며 마름모가 커졌다 돌아온다.
+         셀 className 은 매 프레임 다시 짜이므로(사용 상태 표기) 불변인 frame 에 건다 */
+      @keyframes slot-used-frame {
+        0%, 30%, 60% {
+          border: 3px solid #ffffff;
+          box-shadow: 0 0 16px rgba(255, 255, 255, 0.95);
+          transform: rotate(45deg) scale(1.24);
+          filter: brightness(2);
+        }
+        15%, 45% {
+          border: 1px solid #3a3a44;
+          box-shadow: none;
+          transform: rotate(45deg) scale(1.08);
+          filter: brightness(1.2);
+        }
+        100% {
+          transform: rotate(45deg) scale(1);
+          filter: brightness(1);
+        }
       }
-      .dslot.used {
-        animation: slot-used 0.45s ease-out;
+      .dslot .frame.used {
+        animation: slot-used-frame 0.7s ease-out;
         z-index: 2; /* 커지는 동안 이웃 칸 위로 */
       }
       .dslot {
@@ -676,10 +690,8 @@
         filter: grayscale(0.8) brightness(0.55);
       }
       /* 선택된 칸 — 가운데 클릭(패드 Y)이 쓰는 칸. 금빛 테두리 */
-      .dslot.selected .frame {
-        border-color: #e8c76a;
-        box-shadow: 0 0 7px rgba(232, 199, 106, 0.45);
-      }
+      /* 선택 칸 — 상시 노란 테두리는 '방금 씀' 연출과 헷갈려서 뺐다 (2026-09-02).
+         키 글자 색만 은은하게 남긴다 — 어느 칸이 물릴지는 뭉치 위 이름표가 말해 준다 */
       .dslot.selected .key {
         color: #e8c76a;
       }

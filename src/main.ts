@@ -2784,19 +2784,21 @@ const skillCells = Array.from({ length: balance.skills.quickslots }, (_, i) => {
   return { ...ui, mark };
 });
 
-/** 방금 쓴 칸 번쩍 — 스킬·아이템 공용. 리플로우로 연사에도 애니메이션이 다시 돈다 */
-function flashSlotUsed(cell: HTMLElement): void {
-  cell.classList.remove('used');
-  void cell.offsetWidth;
-  cell.classList.add('used');
+/** 방금 쓴 칸 번쩍 — 스킬·아이템 공용. 셀이 아니라 frame 에 건다:
+ *  셀 className 은 sync 가 매 프레임 다시 짜서 클래스가 그 자리에서 지워진다.
+ *  리플로우로 연사에도 애니메이션이 다시 돈다 */
+function flashSlotUsed(frame: HTMLElement): void {
+  frame.classList.remove('used');
+  void frame.offsetWidth;
+  frame.classList.add('used');
 }
 events.on('cast_spell', (payload) => {
   const i = world.skillSlots.indexOf((payload as { sigil: string }).sigil);
-  if (i >= 0 && skillCells[i]) flashSlotUsed(skillCells[i]!.cell);
+  if (i >= 0 && skillCells[i]) flashSlotUsed(skillCells[i]!.frame);
 });
 events.on('item_used', (payload) => {
   const i = world.quickslots.indexOf((payload as { kind: ItemKind }).kind);
-  if (i >= 0 && quickCells[i]) flashSlotUsed(quickCells[i]!.cell);
+  if (i >= 0 && quickCells[i]) flashSlotUsed(quickCells[i]!.frame);
 });
 
 /** 스킬 퀵슬롯 — 마름모 안은 색 원반과 키 하나뿐이라, 고른 칸의 이름만 뭉치 위에 적는다.
