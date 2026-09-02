@@ -90,14 +90,20 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     plate.position.y = 0.03;
     group.add(plate);
     data['plate'] = plate;
-    // 네 귀의 구멍 — 가시가 나오는 자리 (tell)
-    const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
-    for (const [hx, hz] of [[-1.1, -1.1], [1.1, -1.1], [-1.1, 1.1], [1.1, 1.1]] as const) {
-      const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.02, 8), holeMat);
-      hole.position.set(hx, 0.07, hz);
-      group.add(hole);
+    // 구멍 9개 — 가시가 나올 자리 그대로 (tell: 어디서 솟을지 미리 보인다). 쇠 테두리 + 검은 속
+    const rimMat = new THREE.MeshLambertMaterial({ color: 0x5a5a62 });
+    const holeMat = new THREE.MeshBasicMaterial({ color: 0x030303 });
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.02, 10), rimMat);
+        rim.position.set((i - 1) * 0.9, 0.065, (j - 1) * 0.9);
+        group.add(rim);
+        const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.02, 10), holeMat);
+        hole.position.set((i - 1) * 0.9, 0.075, (j - 1) * 0.9);
+        group.add(hole);
+      }
     }
-    // 가시 9개 — 평소엔 바닥 아래 숨어 있다 (바닥이 가린다)
+    // 가시 9개 — 구멍과 같은 자리. 평소엔 바닥 아래 숨어 있다 (바닥이 가린다)
     const spikes = new THREE.Group();
     const spikeMat = new THREE.MeshLambertMaterial({ color: SPIKE });
     for (let i = 0; i < 3; i++) {
