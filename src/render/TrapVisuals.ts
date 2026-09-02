@@ -25,7 +25,7 @@ const IRON = 0x14121a;
 const IRON_SPENT = 0x4a4a50;
 const BRASS = 0x9a7a3a; // 자동 순환 다트 발사기 노즐 — 밟는 다트(검은 쇠)와 구분
 const SPIKE = 0x9a9aa4;
-const NET_LINE = 0xd8d2b8; // 랜턴에 반짝이는 실
+const NET_LINE = 0xb9b29a; // 랜턴 빔에는 밝게 드러나되 횃불 잔광엔 묻히는 중간 톤 실
 const NET_BUNDLE = 0x2c2418;
 const OIL = 0x0c0c10; // 번들거리는 검정 — 점액(녹색)과 갈린다
 const OIL_FIRE = 0xff7a1a;
@@ -123,12 +123,13 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     group.add(spikes);
     data['spikes'] = spikes;
   } else if (trap.type === 'trap_net') {
-    // 무릎 높이 실선 — dir 에 수직으로 칸을 가로지른다. 약한 자체 발광 = 랜턴에 반짝임
+    // 무릎 높이 실선 — dir 에 수직으로 칸을 가로지른다. 자체 발광 없음: 랜턴 빔이 닿을 때만
+    // 밝은 실이 드러나고, 랜턴을 끄면 어둠(환경광 0.04)에 묻힌다 — 켜서 살피는 이유가 된다
     const px = -trap.dirZ;
     const pz = trap.dirX;
     const line = new THREE.Mesh(
       new THREE.BoxGeometry(trap.dirX !== 0 ? 0.02 : cellSize * 0.96, 0.02, trap.dirX !== 0 ? cellSize * 0.96 : 0.02),
-      new THREE.MeshLambertMaterial({ color: NET_LINE, emissive: NET_LINE, emissiveIntensity: 0.25 }),
+      new THREE.MeshLambertMaterial({ color: NET_LINE }),
     );
     line.position.set(px * 0, 0.45, pz * 0);
     group.add(line);
