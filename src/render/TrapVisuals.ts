@@ -187,12 +187,13 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     group.add(bulb);
     data['bulbMat'] = bulbMat;
     data['bulb'] = bulb;
+    // 반점 — 주머니의 자식으로 붙여 부풀고 쭈그러질 때 함께 움직인다 (로컬 좌표, 주머니 반지름 0.42)
     const spotMat = new THREE.MeshLambertMaterial({ color: BULB_SPOT });
     for (let i = 0; i < 6; i++) {
       const a = i * 1.05;
       const spot = new THREE.Mesh(new THREE.SphereGeometry(0.075, 6, 5), spotMat);
-      spot.position.set(Math.cos(a) * 0.38, 0.98 + Math.sin(i * 1.7) * 0.3, Math.sin(a) * 0.38);
-      group.add(spot);
+      spot.position.set(Math.cos(a) * 0.38, (Math.sin(i * 1.7) * 0.3) / 1.15, Math.sin(a) * 0.38);
+      bulb.add(spot);
     }
     const sacMat = new THREE.MeshLambertMaterial({ color: SAC });
     for (let i = 0; i < 3; i++) {
