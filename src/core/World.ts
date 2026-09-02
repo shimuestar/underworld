@@ -719,6 +719,8 @@ export interface EnemyState {
   /** 화상 잔여 틱 (Projectiles가 피해 적용) */
   burnTicks: number;
   burnDamagePerTick: number;
+  /** 화상 도트 피해 누적 — 피해 숫자를 틱마다 띄우면 도배라, 묶어서 하나로 띄운다 */
+  burnPopAccum?: number;
   /** 서리 — freezeTicks 동안은 완전히 굳는다(이동·회전·공격·돌진 없음). slowTicks 는 빙결을
    *  포함한 전체 지속이라, 빙결이 풀린 뒤 남은 동안 slowMul 배로 느리다 (Projectiles nova → Enemies) */
   freezeTicks?: number;

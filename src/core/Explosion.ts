@@ -66,7 +66,9 @@ export function explodeAt(world: World, x: number, z: number, cfg: ExplosionSpec
       });
     }
 
-    enemy.health -= applyFrostOnHit(world.events, enemy, damage);
+    const dealt = applyFrostOnHit(world.events, enemy, damage);
+    enemy.health -= dealt;
+    world.events.emit('damage_pop', { enemyId: enemy.id, amount: dealt });
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('weapon_kill', { weapon: 'barrel', enemyType: enemy.type });

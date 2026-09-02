@@ -1029,6 +1029,8 @@ export class Stage {
   private descentYaw: number | null = null;
   private readonly tracers: Tracer[] = [];
   private readonly particles: Particle[] = [];
+  /** 피해 숫자 — 맞은 자리 위로 떠올랐다 사라지는 캔버스 스프라이트 */
+  private readonly damagePops: { sprite: THREE.Sprite; y0: number; bornMs: number }[] = [];
   private readonly hands = new HandModel();
   /** 카메라 충격 (처형 등) — 남은 시간과 세기 */
   private camKickUntil = 0;
@@ -1351,6 +1353,12 @@ export class Stage {
       (p.mesh.material as THREE.Material).dispose();
     }
     this.particles.length = 0;
+    for (const p of this.damagePops) {
+      this.scene.remove(p.sprite);
+      p.sprite.material.map?.dispose();
+      p.sprite.material.dispose();
+    }
+    this.damagePops.length = 0;
     while (this.bloodStains.length > 0) this.removeBloodStain(0);
     for (const w of this.sonicWaves) {
       this.scene.remove(w.mesh);
@@ -3771,6 +3779,63 @@ export class Stage {
   }
 
   /** 화상 불티 하나 — 몸 아무 데서나 피어올라 잠깐 떠 있다 사라진다 */
+  /** 피해 숫자 — 맞은 적 머리 위에서 떠올랐다 사라진다. bigAt 이상은 금색·큰 글씨 */
+  spawnDamageNumber(x: number, y: number, z: number, amount: number): void {
+    const cfg = balance.hud.damageNumbers;
+    const shown = Math.round(amount);
+    if (shown < 1) return;
+    const text = String(shown);
+    const big = amount >= cfg.bigAt;
+    const font = "900 64px 'Arial Black', sans-serif";
+    const canvas = document.createElement('canvas');
+    const c2 = canvas.getContext('2d');
+    if (!c2) return;
+    c2.font = font;
+    const w = Math.ceil(c2.measureText(text).width) + 26;
+    canvas.width = w;
+    canvas.height = 88;
+    c2.font = font; // 캔버스 크기를 바꾸면 컨텍스트가 초기화된다
+    c2.textAlign = 'center';
+    c2.textBaseline = 'middle';
+    c2.lineWidth = 10;
+    c2.lineJoin = 'round';
+    c2.strokeStyle = 'rgba(12,9,6,0.9)';
+    c2.strokeText(text, w / 2, 46);
+    c2.fillStyle = big ? '#ffd75e' : '#ffffff';
+    c2.fillText(text, w / 2, 46);
+    const mat = new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(canvas),
+      transparent: true,
+      depthTest: false, // 몸통·벽 모서리에 잘리지 않게 — 락온 마커와 같은 규칙
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.renderOrder = 998;
+    const h = big ? cfg.bigSizeM : cfg.sizeM;
+    sprite.scale.set(h * (w / 88), h, 1);
+    // 연타가 같은 자리에 겹치지 않게 옆으로 살짝 흩는다
+    sprite.position.set(x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5);
+    this.scene.add(sprite);
+    this.damagePops.push({ sprite, y0: y, bornMs: performance.now() });
+  }
+
+  private updateDamagePops(now: number): void {
+    const cfg = balance.hud.damageNumbers;
+    for (let i = this.damagePops.length - 1; i >= 0; i--) {
+      const p = this.damagePops[i]!;
+      const f = (now - p.bornMs) / cfg.ms;
+      if (f >= 1) {
+        this.scene.remove(p.sprite);
+        p.sprite.material.map?.dispose();
+        p.sprite.material.dispose();
+        this.damagePops.splice(i, 1);
+        continue;
+      }
+      const ease = 1 - (1 - f) * (1 - f); // 빠르게 떴다가 끝에서 느려진다
+      p.sprite.position.y = p.y0 + ease * cfg.riseM;
+      p.sprite.material.opacity = f < 0.65 ? 1 : (1 - f) / 0.35;
+    }
+  }
+
   private spawnBurnEmber(x: number, z: number, radius: number, height: number): void {
     const size = 0.035 + Math.random() * 0.045;
     const color = BURN_EMBER_COLORS[Math.floor(Math.random() * BURN_EMBER_COLORS.length)]!;
@@ -4956,6 +5021,7 @@ export class Stage {
     this.updateLightningBeam();
     this.updateTracers();
     this.updateParticles();
+    this.updateDamagePops(performance.now());
     this.updateBloodStains();
     this.updateSonicWaves(performance.now());
     this.updateFuseGlows(performance.now());

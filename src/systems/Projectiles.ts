@@ -1154,7 +1154,11 @@ function applyProjectileHit(
   // 동료 오사는 위력이 줄어든다 — 사고로 보이되 한 방에 죽지는 않게
   const damage =
     proj.owner === 'enemy' ? proj.damage * balance.enemyAi.friendlyFireDamageMul : proj.damage;
-  enemy.health -= applyFrostOnHit(world.events, enemy, damage);
+  const directDealt = applyFrostOnHit(world.events, enemy, damage);
+  enemy.health -= directDealt;
+  if (proj.owner === 'player') {
+    world.events.emit('damage_pop', { enemyId: enemy.id, amount: directDealt });
+  }
   enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
   if (proj.burnDamagePerTick > 0) enemy.burnDamagePerTick = proj.burnDamagePerTick;
   // 맞은 화살은 그 자리에 떨어진다 (적이 죽어도 시체 자리에 남는다).
@@ -1242,7 +1246,11 @@ function explodeFireball(
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     const damage = damageAt(dist);
     // 방어막은 폭발을 막지 못한다 (화염은 사방에서 온다)
-    enemy.health -= applyFrostOnHit(world.events, enemy, damage);
+    const splashDealt = applyFrostOnHit(world.events, enemy, damage);
+    enemy.health -= splashDealt;
+    if (proj.owner === 'player') {
+      world.events.emit('damage_pop', { enemyId: enemy.id, amount: splashDealt });
+    }
     enemy.burnTicks = Math.max(enemy.burnTicks, proj.burnTicks);
     if (proj.burnDamagePerTick > 0) enemy.burnDamagePerTick = proj.burnDamagePerTick;
     if (enemy.health <= 0) {
@@ -1308,7 +1316,11 @@ function implodeBolt(
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     // 적이 쏜 것이면 동료 오사 규칙을 따른다 (사고로 보이되 한 방에 죽지 않게)
     const mul = proj.owner === 'enemy' ? balance.enemyAi.friendlyFireDamageMul : 1;
-    enemy.health -= applyFrostOnHit(world.events, enemy, sp.damage * falloff * mul);
+    const sparkDealt = applyFrostOnHit(world.events, enemy, sp.damage * falloff * mul);
+    enemy.health -= sparkDealt;
+    if (proj.owner === 'player') {
+      world.events.emit('damage_pop', { enemyId: enemy.id, amount: sparkDealt });
+    }
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit(
@@ -1418,7 +1430,9 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
       });
     }
 
-    enemy.health -= applyFrostOnHit(world.events, enemy, damage);
+    const grenadeDealt = applyFrostOnHit(world.events, enemy, damage);
+    enemy.health -= grenadeDealt;
+    world.events.emit('damage_pop', { enemyId: enemy.id, amount: grenadeDealt });
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('weapon_kill', { weapon: 'grenade', enemyType: enemy.type });
@@ -1474,10 +1488,18 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
 }
 
 function applyBurns(world: World): void {
+  const flushEvery = balance.hud.damageNumbers.burnFlushTicks;
   for (const enemy of world.enemies) {
     if (!enemy.alive || enemy.burnTicks <= 0) continue;
     enemy.burnTicks--;
     enemy.health -= enemy.burnDamagePerTick;
+    // 도트 피해 숫자 — 틱마다 띄우면 도배라 flushEvery 틱치를 묶어 하나로
+    enemy.burnPopAccum = (enemy.burnPopAccum ?? 0) + enemy.burnDamagePerTick;
+    const burnDone = enemy.health <= 0 || enemy.burnTicks <= 0;
+    if ((burnDone || world.tick % flushEvery === 0) && enemy.burnPopAccum >= 0.5) {
+      world.events.emit('damage_pop', { enemyId: enemy.id, amount: enemy.burnPopAccum });
+      enemy.burnPopAccum = 0;
+    }
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('spell_kill', { enemyType: enemy.type, burn: true });

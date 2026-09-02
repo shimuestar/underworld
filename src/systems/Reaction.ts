@@ -215,7 +215,9 @@ export function tick(world: World, _dt: number): void {
     if (executePress) world.input.meleePressed = false;
     if (def.boss && def.executeDamage) {
       // 보스 처형 — 즉사가 아니라 큰 타격. 한 번의 스태거는 처형 한 번으로 소모된다
-      enemy.health -= applyFrostOnHit(world.events, enemy, def.executeDamage);
+      const executeDealt = applyFrostOnHit(world.events, enemy, def.executeDamage);
+      enemy.health -= executeDealt;
+      world.events.emit('damage_pop', { enemyId: enemy.id, amount: executeDealt });
       world.freezeTicks = reaction.hitstopExecuteTicks;
       world.executeFocusTicks = reaction.executeFocusTicks;
       world.events.emit('boss_execute', { enemyId: enemy.id, damage: def.executeDamage });

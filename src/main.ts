@@ -469,6 +469,7 @@ for (const name of [
   'brood_pop',
   'enemy_died',
   'enemy_damaged',
+  'damage_pop',
   'enemy_alerted',
   'enemy_windup',
   'enemy_whiffed',
@@ -1179,6 +1180,32 @@ function spawnHitBloodOn(
   const y = (e.jumpY ?? 0) + def.height * (hit.heightFrac ?? 0.55);
   stage.spawnHitBlood(e.x, e.z, y, dirX, dirZ, e.type, hit);
 }
+
+// 피해 숫자 — 플레이어가 입힌 피해가 맞은 적 머리 위로 떠오른다.
+// 경로별 이벤트: damage_pop(화살·주문·폭발·처형·총 처치·화상 묶음) /
+// enemy_damaged(총 비처치 damage·스킬 amount) / melee_hit / bat_recoil(반동 자해)
+function popDamageOn(enemyId: number | undefined, amount: number | undefined): void {
+  if (enemyId === undefined || amount === undefined || amount < 0.5) return;
+  const e = world.enemies.find((en) => en.id === enemyId);
+  if (!e) return;
+  stage.spawnDamageNumber(e.x, enemyDef(e.type).height + (e.jumpY ?? 0) + 0.25, e.z, amount);
+}
+events.on('damage_pop', (payload) => {
+  const d = payload as { enemyId: number; amount: number };
+  popDamageOn(d.enemyId, d.amount);
+});
+events.on('enemy_damaged', (payload) => {
+  const d = payload as { enemyId?: number; amount?: number; damage?: number };
+  popDamageOn(d.enemyId, d.amount ?? d.damage);
+});
+events.on('melee_hit', (payload) => {
+  const d = payload as { enemyId: number; damage?: number };
+  popDamageOn(d.enemyId, d.damage);
+});
+events.on('bat_recoil', (payload) => {
+  const d = payload as { enemyId: number; amount: number };
+  popDamageOn(d.enemyId, d.amount);
+});
 
 // 미니맵 전투 추적 — 내가 때린 적은 잠시 실시간으로 보인다 (권총·스킬·해머 공통)
 events.on('enemy_damaged', (payload) => {

@@ -314,7 +314,8 @@ function resolveHammerHit(world: World, heavy: boolean): void {
       continue; // 깨지는 그 타격까지는 피해가 들어가지 않는다
     }
 
-    enemy.health -= applyFrostOnHit(world.events, enemy, damage);
+    const meleeDealt = applyFrostOnHit(world.events, enemy, damage);
+    enemy.health -= meleeDealt;
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     // 피격음 — 맞은 적 코앞의 동료도 깬다 (권총은 착탄 소음 12m 가 이미 대신한다)
     alertNearbyAt(world, enemy.x, enemy.z, balance.enemyAi.hitNoiseRadius, balance.enemyAi.noticeDelayTicks);
@@ -357,7 +358,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     }
     hitAny = true;
     damagedAny = true;
-    world.events.emit('melee_hit', { enemyId: enemy.id, damage, heavy });
+    world.events.emit('melee_hit', { enemyId: enemy.id, damage: meleeDealt, heavy });
     if (enemy.health <= 0) {
       enemy.alive = false;
       // 근접 처치 — Mana가 melee_kill(비처형)을 구독해 마나를 지급한다
@@ -816,7 +817,8 @@ function fire(world: World): void {
 
   if (zone === 'head') world.events.emit('headshot', { enemyId: hit.enemy.id });
 
-  hit.enemy.health -= applyFrostOnHit(world.events, hit.enemy, damage);
+  const shotDealt = applyFrostOnHit(world.events, hit.enemy, damage);
+  hit.enemy.health -= shotDealt;
   // 피탄 경직 — 잠깐 발이 묶인다. 공격 상태 머신은 그대로 진행되므로
   // 총으로 공격을 끊거나 스턴락할 수는 없다 (패링 게임을 지우지 않는다)
   hit.enemy.flinchTicks = pistol.flinchTicks;
@@ -826,6 +828,7 @@ function fire(world: World): void {
   if (hit.enemy.health <= 0) {
     hit.enemy.alive = false;
     // 총기 처치는 마나 0 — 여기서 마나 이벤트를 발행하지 않는다 (하드 룰)
+    world.events.emit('damage_pop', { enemyId: hit.enemy.id, amount: shotDealt });
     world.events.emit('weapon_kill', { weapon: 'pistol', enemyType: hit.enemy.type, zone });
     if (zone === 'head') {
       // 헤드샷 처치 — 잠깐 시간이 멎고(패링 히트스톱과 같은 결) 크게 터진다
@@ -848,7 +851,7 @@ function fire(world: World): void {
       enemyType: hit.enemy.type,
       health: hit.enemy.health,
       zone,
-      damage,
+      damage: shotDealt,
     });
   }
 }
