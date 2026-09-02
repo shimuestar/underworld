@@ -228,6 +228,15 @@ describe('1구역 층 구성', () => {
         }
       });
 
+      it('배치물 중 통·상자·기믹·함정을 뺀 나머지는 전부 적 정의가 있다 — 층 로드 보스 판정이 던지지 않게', () => {
+        // main.loadFloor 가 같은 필터로 enemyDef 를 부른다. 새 배치 접두(trap_ 등)를 필터에 안 넣으면
+        // 층을 갈아 끼우는 순간 예외가 난다 (2026-09-02 트랩 시험방 진입에서 실측)
+        const rest = json.entities.filter(
+          (e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !e.type.startsWith('trap_'),
+        );
+        for (const e of rest) expect(() => enemyDef(e.type)).not.toThrow();
+      });
+
       it('낙석 잔해가 전부 내려와도 출구와 제단에 갈 수 있다 — 소프트락 방지', () => {
         const rocks = new Set(
           json.entities.filter((e) => e.type === 'trap_rockfall').map((e) => `${e.cell[1]},${e.cell[0]}`),

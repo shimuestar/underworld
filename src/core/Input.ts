@@ -29,6 +29,8 @@ export interface InputSnapshot {
   padLookAxisX: number;
   /** 패드 조준(ADS) — 조준 버튼(기본 LT)을 붙들고 있다. 에임 보정은 이때만 산다 */
   padAiming: boolean;
+  /** 이번 틱에 조준 버튼을 뗐는가 (엣지) — 활을 당긴 채 LT 를 놓으면 쏘지 않고 시위를 내린다 */
+  aimReleased: boolean;
   /** 이번 틱에 락온 토글(R3·키보드 설정 키)이 눌렸는가 (엣지) */
   lockOnPressed: boolean;
   /** 이번 틱에 랜턴 토글 키가 눌렸는가 (엣지) */
@@ -82,6 +84,7 @@ export class Input {
 
   /** 마지막으로 실제 입력이 온 장치. 안내 문구를 키보드/패드 표기 중 무엇으로
    *  띄울지 이걸로 정한다 — 꽂아만 두고 키보드로 노는 사람에겐 키보드를 보여준다 */
+  private prevPadAiming = false; // 조준 해제 엣지(aimReleased) 판정용
   private device: 'kb' | 'pad' = 'kb';
   get usingPad(): boolean {
     return this.device === 'pad' && this.gamepad.connected;
@@ -289,6 +292,8 @@ export class Input {
     // 조준 자체는 레이어와 무관하게 유지된다 — 조준한 채 스킬(RB+버튼)을 끼워 넣어도
     // 줌·견착이 안 풀린다 (2026-09-01 사용자 결정). 발사만 레이어 중에 잠긴다
     const padAiming = pad.held('ranged');
+    const aimReleased = this.prevPadAiming && !padAiming;
+    this.prevPadAiming = padAiming;
 
     // 패드 랜턴 버튼: 짧게 떼면 켜고 끄기, holdTicks 넘게 붙들면 배터리 교체 (한 번만)
     let padLanternTap = false;
@@ -355,6 +360,7 @@ export class Input {
       padMoveActive: Math.abs(axes.moveX) + Math.abs(axes.moveY) > 0,
       padLookAxisX: axes.lookX,
       padAiming,
+      aimReleased,
       lockOnPressed: this.lockOnPresses > 0 || (padPlain && pad.pressed('lockOn')),
       lanternToggle: this.lanternToggles > 0 || padLanternTap,
       batterySwap: this.batterySwaps > 0 || (padPlain && pad.pressed('battery')) || padLanternHold,
@@ -412,6 +418,7 @@ export class Input {
       padMoveActive: false,
       padLookAxisX: 0,
       padAiming: false,
+      aimReleased: false,
       lockOnPressed: false,
       lanternToggle: false,
       batterySwap: false,

@@ -26,6 +26,8 @@ export interface PauseMenuActions {
   loadSave(): void;
   /** 키 설정 열기 — 키보드 화면 또는 패드 화면 */
   openBindings(mode: 'kb' | 'pad'): void;
+  /** 트랩 시험방 — 함정 8종이 깔린 특수 층으로 */
+  trapRoom(): void;
 }
 
 interface MenuItem {
@@ -90,6 +92,12 @@ export class PauseMenu {
         hint: () => '게임패드 버튼을 기능에 건다',
         enabled: () => true,
         run: () => actions.openBindings('pad'),
+      },
+      {
+        label: '6. 트랩 시험방',
+        hint: () => '함정 8종이 한 방에 — 스킬·탄 전부 지급. 나오는 길은 처음부터 시작',
+        enabled: () => true,
+        run: actions.trapRoom,
       },
     ];
 

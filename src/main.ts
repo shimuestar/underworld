@@ -49,10 +49,14 @@ import { allSigilIds, isImplemented, sigilColor, sigilDef } from './core/SigilDa
 import z01f1 from '../data/levels/z01_f1.json';
 import z01f2 from '../data/levels/z01_f2.json';
 import z01f3 from '../data/levels/z01_f3.json';
+import testTraps from '../data/levels/test_traps.json';
 
 // 1구역 층 순서 — 출구에서 E 를 누르면 다음 층으로 내려간다. 마지막 층을 나가면 구역 클리어.
 // 층마다 스폰(S)이 곧 그 층의 입구이고, 출구(X)가 다음 층의 입구로 이어진다
 const ZONE = [z01f1, z01f2, z01f3];
+/** 트랩 시험방 — 층 번호 대역 밖의 특수 층. 일시정지 메뉴(또는 ?traproom)로 들어간다.
+ *  출구는 영구 봉인, 위층 계단 없음 — 나가는 길은 '처음부터 시작' */
+const TRAP_ROOM = 99;
 let floorIndex = 0;
 let levelJson: (typeof ZONE)[number] = ZONE[0]!;
 /** 열쇠로 자물쇠를 딴 층 — 오르내리거나 부활해도 다시 잠기지 않는다 */
@@ -2279,6 +2283,20 @@ events.on('dodge_step', () => stage.triggerParry('normal'));
 events.on('shot_blocked', (payload) => {
   stage.flashShield((payload as { enemyId: number }).enemyId);
 });
+/** 트랩 시험방 — 함정 8종이 한 방에 깔린 특수 층. 시험용이라 스킬·탄·마나를 채워 준다
+ *  (기름 점화용 화염구, 줄 끊기용 화살 등). 진행 층 상태는 얼려 두지만 되돌아오는
+ *  길은 없다 — '처음부터 시작' 으로 나간다 */
+function enterTrapRoom(): void {
+  world.dead = false;
+  loadFloor(TRAP_ROOM);
+  grantAllSkills();
+  world.weapon.grenades = balance.weapons.grenade.ammoMax;
+  world.weapon.arrows = balance.weapons.bow.ammoMax;
+  world.weapon.reserve = balance.weapons.pistol.ammoMax;
+  world.player.health = balance.player.healthMax;
+  showReaction('트랩 시험방 — 스킬·탄 전부 지급. 나가는 길은 일시정지 → 처음부터', 4000);
+}
+
 /** 테스트 — 구현된 스킬을 전부 익힌다. 패시브는 빈 부위에 새겨지고 액티브는 빈 칸에
  *  올라간다(4종이라 칸 4개에 딱 맞는다). 오염 대기는 되돌려 밸런스 검증을 더럽히지 않는다 */
 function grantAllSkills(): number {
@@ -2478,8 +2496,9 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   });
 
   floorIndex = index;
-  minimap.setFloorTitle(`지하 ${index + 1}층`);
-  levelJson = ZONE[index]!;
+  const trapRoom = index === TRAP_ROOM;
+  minimap.setFloorTitle(trapRoom ? '트랩 시험방' : `지하 ${index + 1}층`);
+  levelJson = trapRoom ? (testTraps as unknown as typeof z01f1) : ZONE[index]!;
   traveling = false;
 
   const saved = floorStates.get(index);
@@ -2536,9 +2555,11 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     levelJson.entities.some(
       (e) =>
         e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') &&
+        !e.type.startsWith('trap_') && // 함정은 적이 아니다 — enemyDef 가 던진다
         (enemyDef(e.type).boss || (e as { boss?: boolean }).boss === true),
     ) && !unlockedFloors.has(index);
-  world.canAscend = index > 0;
+  if (trapRoom) world.exitNeedsKey = true; // 시험방 출구는 영구 봉인 — 진행과 섞이지 않는다
+  world.canAscend = index > 0 && !trapRoom;
   world.onEntrancePad = false;
   world.exitOpen = false; // 잠기지 않은 층은 Exit 의 첫 틱이 열어 준다
   world.onExitPad = false;
@@ -3511,6 +3532,11 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
     setPaused(false);
     input.requestLock();
   },
+  trapRoom: () => {
+    enterTrapRoom();
+    setPaused(false);
+    input.requestLock();
+  },
 },
 // 패드가 연결돼 있으면 메뉴 오른쪽에 현재 매핑 다이어그램을 함께 띄운다
 () => (input.gamepad.connected ? padDiagramSvg((a) => input.gamepad.binding(a), -1) : null));
@@ -3562,6 +3588,8 @@ if (import.meta.env.DEV) {
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)
 if (new URLSearchParams(location.search).has('skills')) grantAllSkills();
+// ?traproom — 시작부터 트랩 시험방 (일시정지 메뉴와 같은 곳)
+if (new URLSearchParams(location.search).has('traproom')) enterTrapRoom();
 
 loop.start();
 events.emit('loop_started', { tickRate: balance.loop.tickRate, level: levelJson.id });
