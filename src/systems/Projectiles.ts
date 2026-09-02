@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -793,6 +793,29 @@ function moveProjectiles(world: World, dt: number): void {
       }
     }
 
+    // 그물 덫의 줄 — 화살·마법이 끊으면 해체되고 거기서 멈춘다 (무릎 높이 얇은 상자)
+    let hitNetTrap: TrapState | null = null;
+    if (proj.owner === 'player') {
+      const netCfg = balance.traps.types.trap_net;
+      for (const trap of world.traps) {
+        if (trap.type !== 'trap_net' || trap.phase !== 'armed') continue;
+        const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
+          minX: trap.x - netCfg.hitRadius - proj.radius,
+          minY: 0.3 - proj.radius,
+          minZ: trap.z - netCfg.hitRadius - proj.radius,
+          maxX: trap.x + netCfg.hitRadius + proj.radius,
+          maxY: netCfg.lineHeight + 0.15 + proj.radius,
+          maxZ: trap.z + netCfg.hitRadius + proj.radius,
+        });
+        if (t !== null && t < hitT) {
+          hitT = t;
+          hitNetTrap = trap;
+          hitPropTarget = null;
+          hitSurface = 'wall';
+        }
+      }
+    }
+
     // 튀는 구울 머리 — 화살이 맞으면 터진다
     let hitHead: number | null = null;
     // 플레이어 투사체는 종류를 가리지 않고 머리 소품을 맞힌다 — 화살·화염구·서리 공통
@@ -947,6 +970,15 @@ function moveProjectiles(world: World, dt: number): void {
       if (hitHead !== null) {
         breakGhoulHead(world, hitHead, false);
         world.events.emit('arrow_impact', {
+          x: proj.x + dirX * hitT, y: proj.y + dirY * hitT, z: proj.z + dirZ * hitT, hitEnemy: true,
+        });
+        world.projectiles.splice(i, 1);
+        continue;
+      }
+
+      if (hitNetTrap) {
+        disarmTrap(world, hitNetTrap, proj.kind === 'arrow' ? 'arrow' : 'spell');
+        world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', {
           x: proj.x + dirX * hitT, y: proj.y + dirY * hitT, z: proj.z + dirZ * hitT, hitEnemy: true,
         });
         world.projectiles.splice(i, 1);
@@ -1284,6 +1316,7 @@ function explodeFireball(
   // 화염구도 균열 벽을 1방에 부순다 — 수류탄과 같은 "폭발" 계열만 부순다.
   // 화살·총·해머 같은 물리 타격은 못 부순다 (그쪽엔 이 호출이 없다)
   breakCrackWalls(world, x, z, radius);
+  igniteOilInRadius(world, x, z, radius, balance.traps.types.trap_oil.burnTicks); // 기름 웅덩이에 불
 
   // 폭심에서 멀어질수록 약해진다 (반경 끝에서 explodeFalloffMin 배)
   const damageAt = (dist: number): number =>
@@ -1540,6 +1573,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
 
   // 균열 벽(C) 파괴
   if (grenade.breaksCrackWall) breakCrackWalls(world, proj.x, proj.z, grenade.radius);
+  igniteOilInRadius(world, proj.x, proj.z, grenade.radius, balance.traps.types.trap_oil.burnTicks);
 
   // 소음 — 폭발음은 멀리 퍼진다
   for (const enemy of world.enemies) {

@@ -439,6 +439,26 @@ export function damageProp(
 }
 
 /** 반경 안 기믹을 전부 부순다 — 폭발(수류탄·화염구·통·기믹 폭발) 공용 */
+/** 함정 해체 — 플레이어가 줄을 끊는 등 능동적으로 무력화했다. 이미 쓴/해체된 것은 무시 */
+export function disarmTrap(world: World, trap: TrapState, how: string): void {
+  if (trap.phase === 'spent' || trap.phase === 'disarmed') return;
+  trap.phase = 'disarmed';
+  trap.timer = 0;
+  world.events.emit('trap_disarmed', { id: trap.id, type: trap.type, x: trap.x, z: trap.z, how });
+}
+
+/** 반경 안의 안 붙은 기름 웅덩이에 불을 붙인다 — 폭발·화염구·수류탄·불타는 적이 부른다.
+ *  burnTicks 는 호출부가 balance 에서 넘긴다 (World 는 데이터를 읽지 않는다) */
+export function igniteOilInRadius(world: World, x: number, z: number, radius: number, burnTicks: number): void {
+  for (const trap of world.traps) {
+    if (trap.type !== 'trap_oil' || trap.phase !== 'armed') continue;
+    if (Math.hypot(trap.x - x, trap.z - z) > radius) continue;
+    trap.phase = 'firing';
+    trap.timer = burnTicks;
+    world.events.emit('trap_ignited', { id: trap.id, x: trap.x, z: trap.z });
+  }
+}
+
 export function breakPropsInRadius(world: World, x: number, z: number, radius: number): void {
   for (const prop of world.props) {
     if (!prop.alive) continue;

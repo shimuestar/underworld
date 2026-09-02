@@ -17,6 +17,12 @@ const GROOVE = 0x2a2622;
 const IRON = 0x14121a;
 const IRON_SPENT = 0x4a4a50;
 const SPIKE = 0x9a9aa4;
+const NET_LINE = 0xd8d2b8; // 랜턴에 반짝이는 실
+const NET_BUNDLE = 0x2c2418;
+const OIL = 0x0c0c10; // 번들거리는 검정 — 점액(녹색)과 갈린다
+const OIL_FIRE = 0xff7a1a;
+const OIL_SCORCH = 0x1a1410;
+const GLYPH = 0x9b5de5;
 
 /** 함정 하나의 모형. group 원점 = 함정 칸 중심, y=0 바닥 */
 export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
@@ -86,6 +92,52 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     spikes.position.y = -1.25;
     group.add(spikes);
     data['spikes'] = spikes;
+  } else if (trap.type === 'trap_net') {
+    // 무릎 높이 실선 — dir 에 수직으로 칸을 가로지른다. 약한 자체 발광 = 랜턴에 반짝임
+    const px = -trap.dirZ;
+    const pz = trap.dirX;
+    const line = new THREE.Mesh(
+      new THREE.BoxGeometry(trap.dirX !== 0 ? 0.02 : cellSize * 0.96, 0.02, trap.dirX !== 0 ? cellSize * 0.96 : 0.02),
+      new THREE.MeshLambertMaterial({ color: NET_LINE, emissive: NET_LINE, emissiveIntensity: 0.25 }),
+    );
+    line.position.set(px * 0, 0.45, pz * 0);
+    group.add(line);
+    data['line'] = line;
+    // 천장의 그물 뭉치 — 떨어지면 바닥에 펼쳐진다
+    const bundle = new THREE.Mesh(
+      new THREE.SphereGeometry(0.36, 10, 8),
+      new THREE.MeshLambertMaterial({ color: NET_BUNDLE }),
+    );
+    bundle.position.y = 3.55;
+    group.add(bundle);
+    data['bundle'] = bundle;
+  } else if (trap.type === 'trap_oil') {
+    const mat = new THREE.MeshLambertMaterial({
+      color: OIL, emissive: OIL_FIRE, emissiveIntensity: 0, transparent: true, opacity: 0.9,
+    });
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(1.6, 18), mat);
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.y = 0.02;
+    group.add(pool);
+    data['poolMat'] = mat;
+    const light = new THREE.PointLight(OIL_FIRE, 0, 7, 0);
+    light.position.y = 0.6;
+    group.add(light);
+    data['fireLight'] = light;
+  } else if (trap.type === 'trap_glyph') {
+    // 바닥의 보라 룬 — 무조명 재질(어둠 속에서도 제 빛). 가시성 규칙은 Stage 가 정한다
+    const mat = new THREE.MeshBasicMaterial({ color: GLYPH, transparent: true, opacity: 0.7 });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.9, 24), mat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.03;
+    group.add(ring);
+    for (let i = 0; i < 4; i++) {
+      const stroke = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.01, 0.07), mat);
+      stroke.rotation.y = (i * Math.PI) / 4 + 0.3;
+      stroke.position.y = 0.03;
+      group.add(stroke);
+    }
+    data['glyphMat'] = mat;
   }
   return group;
 }
@@ -113,6 +165,35 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
       const target = trap.phase === 'firing' ? 0 : -1.25;
       // 솟을 때는 순간, 들어갈 때는 스르륵
       spikes.position.y = target > spikes.position.y ? target : spikes.position.y + (target - spikes.position.y) * 0.12;
+    }
+  } else if (trap.type === 'trap_net') {
+    const line = data['line'] as THREE.Mesh | undefined;
+    const bundle = data['bundle'] as THREE.Mesh | undefined;
+    if (line) line.visible = trap.phase === 'armed';
+    if (bundle) {
+      const dropped = trap.phase === 'firing' || trap.phase === 'spent';
+      const targetY = dropped ? 0.12 : 3.55;
+      bundle.position.y += (targetY - bundle.position.y) * (dropped ? 0.35 : 1);
+      // 바닥에 닿으면 펼쳐진다
+      const flat = dropped && bundle.position.y < 0.3;
+      bundle.scale.set(flat ? 2.6 : 1, flat ? 0.28 : 1, flat ? 2.6 : 1);
+    }
+  } else if (trap.type === 'trap_oil') {
+    const mat = data['poolMat'] as THREE.MeshLambertMaterial | undefined;
+    const light = data['fireLight'] as THREE.PointLight | undefined;
+    const burning = trap.phase === 'firing';
+    const flicker = 0.7 + 0.3 * Math.abs(Math.sin(nowMs / 37) * Math.cos(nowMs / 91));
+    if (mat) {
+      mat.emissiveIntensity = burning ? 0.9 * flicker : 0;
+      mat.color.setHex(trap.phase === 'spent' ? OIL_SCORCH : OIL);
+      mat.opacity = trap.phase === 'spent' ? 0.7 : 0.9;
+    }
+    if (light) light.intensity = burning ? 2.4 * flicker : 0;
+  } else if (trap.type === 'trap_glyph') {
+    const mat = data['glyphMat'] as THREE.MeshBasicMaterial | undefined;
+    if (mat) {
+      mat.opacity = trap.phase === 'spent' ? 0.18 : 0.55 + 0.35 * Math.abs(Math.sin(nowMs / 420));
+      mat.color.setHex(trap.phase === 'spent' ? 0x2a1a3a : GLYPH);
     }
   }
 }

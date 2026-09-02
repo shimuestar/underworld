@@ -965,6 +965,7 @@ export class Stage {
   private lanternSpill!: THREE.PointLight;
   /** 랜턴이 켜져 있는가 — 거머리 위장 해제 판정에 쓴다 (setLanternOn 이 갱신) */
   private lanternIsOn = true;
+  private glyphsReadable = false; // 오염 25 — 바닥 저주 문양도 랜턴을 켠 채로 보인다
   /** 얼굴에 붙은 거머리 실물 — 카메라 자식. 흡혈 순간(pulse) 훅 조인다 */
   private faceLeechRig: THREE.Group | null = null;
   private faceLeechSuckAt = 0;
@@ -1513,6 +1514,7 @@ export class Stage {
 
   /** 오염 25 임계 — 벽 문자를 원문으로 교체 */
   setGlyphsReadable(readable: boolean): void {
+    this.glyphsReadable = readable;
     // 해독 전 글리프는 룬 대신 아예 숨긴다 — 벽의 '알 수 없는 글자'를 없앴다.
     // 텍스처는 처음부터 원문으로 구워져 있어 여기선 보이기만 켠다
     this.scene.traverse((obj) => {
@@ -4906,7 +4908,10 @@ export class Stage {
 
   /** 함정 — 배열 전체를 매 프레임 받아 id 로 모형을 캐시한다 (props 와 같은 규약).
    *  spent 도 남긴다(빈 노즐·내려간 가시가 보여야 "썼다"가 읽힌다) — 배열에서 빠질 때만 걷는다 */
-  syncTraps(traps: (TrapView & { id: number; x: number; z: number })[], cellSize: number): void {
+  syncTraps(
+    traps: (TrapView & { id: number; x: number; z: number; revealed?: boolean })[],
+    cellSize: number,
+  ): void {
     const now = performance.now();
     const seen = new Set<number>();
     for (const trap of traps) {
@@ -4919,6 +4924,19 @@ export class Stage {
         this.scene.add(group);
       }
       animateTrap(group, trap, now);
+      if (trap.type === 'trap_glyph') {
+        // 저주 문양은 어둠 속에서만 보인다 — 랜턴을 끄면 드러난다. 오염 25(문양 해독)·
+        // 감지 각인이 알아챈 것은 항상. 터진 자리(spent)는 그을음처럼 남아 있다
+        group.visible = trap.phase === 'spent' || !this.lanternIsOn || this.glyphsReadable || trap.revealed === true;
+      } else if (trap.type === 'trap_oil' && trap.phase === 'firing') {
+        // 불티 — 타는 동안 계속 피어오른다 (화상 적의 불티와 같은 파티클)
+        const data = group.userData as Record<string, unknown>;
+        const next = (data['nextEmberMs'] as number | undefined) ?? 0;
+        if (now >= next) {
+          data['nextEmberMs'] = now + 70;
+          this.spawnBurnEmber(trap.x, trap.z, 1.4, 0.5);
+        }
+      }
     }
     for (const [id, group] of this.trapVisuals) {
       if (seen.has(id)) continue;

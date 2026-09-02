@@ -698,7 +698,17 @@
                      "dartCount": 3, "spreadDeg": 12, "speed": 28, "damage": 8, "dartRadius": 0.12, "dartHeight": 1.0, "lifeTicks": 90 },
       "_spikeNote": "딸깍(판 내려앉음) telegraphTicks 뒤 가시. 플레이어는 막기 불가(아래서 온다) — 회피 무적만. 적은 enemyDamage, 보스는 bossDamageMul. cooldownTicks 뒤 재무장 무한",
       "trap_spike": { "triggerRadius": 1.3, "telegraphTicks": 15, "cooldownTicks": 180, "charges": -1, "noiseRadius": 6,
-                      "hitRadius": 1.6, "damage": 28, "enemyDamage": 45, "bossDamageMul": 0.5, "upTicks": 20 }
+                      "hitRadius": 1.6, "damage": 28, "enemyDamage": 45, "bossDamageMul": 0.5, "upTicks": 20 },
+      "_netNote": "무릎 높이 실선(dir 축에 수직으로 걸림)을 건드리면 천장 그물이 떨어진다. 플레이어는 거미줄 상태(balance.web), 적은 완전 둔화(서리 스택 있는 적은 건너뜀). 해머·총·투사체로 줄을 끊어 해체(lineHeight 판정). 1회용",
+      "trap_net": { "triggerRadius": 1.0, "telegraphTicks": 0, "cooldownTicks": 0, "charges": 1, "noiseRadius": 5,
+                    "hitRadius": 1.1, "lineHeight": 0.45, "enemySlowTicks": 360, "enemySlowMul": 0.4, "dropTicks": 12 },
+      "_oilNote": "번들거리는 검은 웅덩이 — 밟는 동안 둔화(플레이어·적). 불(폭발·화염구·수류탄·불타는 적)이 닿으면 burnTicks 동안 화염 지대: 적은 화상(burn*), 플레이어는 playerDamageIntervalTicks 마다 playerDamagePerHit(막기 불가). chainRadius 안 다른 기름으로 옮겨붙는다. 다 타면 spent",
+      "trap_oil": { "radius": 1.6, "playerSlowMul": 0.55, "enemySlowMul": 0.55, "burnTicks": 360,
+                    "playerDamagePerHit": 4, "playerDamageIntervalTicks": 30, "enemyBurnTicks": 120, "enemyBurnDamagePerTick": 0.15,
+                    "chainRadius": 2.5, "noiseRadius": 7 },
+      "_glyphNote": "바닥의 보라 룬 — 랜턴을 꺼야 보인다(오염 25 이상·감지 각인이면 항상). 밟는 순간 터진다(1회): 플레이어는 오염 pending +corruptionPending 과 시야 흔들림(피해 없음 — 연쇄 유지), 비명이 noiseRadius 안을 깨운다. 적은 enemyStaggerTicks 경직 → 처형 가능 (보스 ×bossStaggerMul)",
+      "trap_glyph": { "triggerRadius": 1.2, "telegraphTicks": 0, "cooldownTicks": 0, "charges": 1, "noiseRadius": 10,
+                      "corruptionPending": 6, "shakeTicks": 60, "shakeAmp": 0.02, "enemyStaggerTicks": 120, "bossStaggerMul": 0.5 }
     }
   },
   "goo": {

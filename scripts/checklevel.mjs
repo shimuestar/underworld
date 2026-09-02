@@ -149,6 +149,12 @@ function check(path) {
         const [dr, dc] = DIRS[e.dir ?? 'N'];
         if (at(grid, c - dc, r - dr) !== '#') errors.push(`다트 [${r},${c}] 의 노즐 벽(-dir) 이 벽이 아니다`);
       }
+      if (e.type === 'trap_net' || e.type === 'trap_pendulum' || e.type === 'trap_rockfall') {
+        const [dr, dc] = DIRS[e.dir ?? 'N'];
+        if (at(grid, c + dr, r + dc) !== '#' || at(grid, c - dr, r - dc) !== '#') {
+          errors.push(`${e.type} [${r},${c}] 통행 축 양옆이 벽이 아니다`);
+        }
+      }
     }
   }
 

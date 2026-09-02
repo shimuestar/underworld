@@ -347,8 +347,15 @@ export function tick(world: World, dt: number): void {
   if (st.exhausted) speed *= stam.exhaustedSpeedMul; // 숨이 차 제대로 못 걷는다
   if (webbed) speed *= balance.web.moveSpeedMul; // 거미줄에 발이 묶인다
   // 점액 장판 — 슬라임이 기어간 자리. 밟는 동안 미끄러워 느리다
-  if (world.gooPuddles?.some((g) => Math.hypot(p.x - g.x, p.z - g.z) <= balance.goo.radius)) {
-    speed *= balance.goo.playerSlowMul;
+  const oil = balance.traps.types.trap_oil;
+  const gooOn = world.gooPuddles?.some((g) => Math.hypot(p.x - g.x, p.z - g.z) <= balance.goo.radius) ?? false;
+  const oilOn = world.traps.some(
+    (t) => t.type === 'trap_oil' && (t.phase === 'armed' || t.phase === 'firing') &&
+      Math.hypot(p.x - t.x, p.z - t.z) <= oil.radius,
+  );
+  // 점액·기름은 둘 다 '바닥 미끄러움' — 겹쳐도 더 센 하나만 (곱하면 못 걷는다)
+  if (gooOn || oilOn) {
+    speed *= Math.min(gooOn ? balance.goo.playerSlowMul : 1, oilOn ? oil.playerSlowMul : 1);
   }
   // 밀리는 동안은 발이 안 붙는다 — 밀림과 이동이 더해지는 구조라 배율로 눌러 준다
   if (shoved) speed *= balance.playerKnockback.moveSpeedMul;

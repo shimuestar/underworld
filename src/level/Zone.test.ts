@@ -220,6 +220,11 @@ describe('1구역 층 구성', () => {
             const [dr, dc] = DIRS[(e as { dir?: string }).dir ?? 'N']!;
             expect(at(json.grid, c - dc, r - dr)).toBe('#');
           }
+          if (e.type === 'trap_net' || e.type === 'trap_pendulum' || e.type === 'trap_rockfall') {
+            const [dr, dc] = DIRS[(e as { dir?: string }).dir ?? 'N']!;
+            expect(at(json.grid, c + dr, r + dc)).toBe('#'); // 통행 축 양옆 벽
+            expect(at(json.grid, c - dr, r - dc)).toBe('#');
+          }
         }
       });
 

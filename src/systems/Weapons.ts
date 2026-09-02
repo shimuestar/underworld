@@ -6,7 +6,7 @@
 import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, hitBarrel, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, hitBarrel, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
 
 /** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
  *  활을 넣으면서 실제로 방패·경직·무기 교체 세 곳이 bowDraw 를 안 지워
@@ -436,6 +436,18 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     damageProp(world, prop, pcfg.hp, 2, 'melee'); // 해머는 한 방 몫(2점) — 일반 기믹이 한 방에 깨진다
     hitAny = true; // 기믹을 깬 것도 헛스윙은 아니다
   }
+  // 그물 덫의 줄 — 부채꼴 안이면 해머가 끊는다 (별도 UI 없는 해체)
+  const netCfg = balance.traps.types.trap_net;
+  for (const trap of world.traps) {
+    if (trap.type !== 'trap_net' || trap.phase !== 'armed') continue;
+    const toX = trap.x - p.x;
+    const toZ = trap.z - p.z;
+    const dist = Math.hypot(toX, toZ);
+    if (dist > range + netCfg.hitRadius || dist === 0) continue;
+    if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
+    disarmTrap(world, trap, 'hammer');
+    hitAny = true;
+  }
 
   // 3타 모두 적중 집계 — 한 대라도 헛치면 끊긴다
   w.comboHits = damagedAny ? (w.comboHits ?? 0) + 1 : 0;
@@ -689,6 +701,21 @@ function fire(world: World): void {
     });
     if (t !== null && t < wallT && (!propHit || t < propHit.t)) propHit = { prop, t };
   }
+  // 그물 덫의 줄 — 무릎 높이 얇은 상자. 총알이 끊으면 해체되고 거기서 멈춘다
+  const netCfg = balance.traps.types.trap_net;
+  let netHit: { trap: TrapState; t: number } | null = null;
+  for (const trap of world.traps) {
+    if (trap.type !== 'trap_net' || trap.phase !== 'armed') continue;
+    const t = rayVsAabb(p.x, oy, p.z, dx, dy, dz, {
+      minX: trap.x - netCfg.hitRadius,
+      minY: 0.3,
+      minZ: trap.z - netCfg.hitRadius,
+      maxX: trap.x + netCfg.hitRadius,
+      maxY: netCfg.lineHeight + 0.15,
+      maxZ: trap.z + netCfg.hitRadius,
+    });
+    if (t !== null && t < wallT && (!netHit || t < netHit.t)) netHit = { trap, t };
+  }
   // 튀는 구울 머리 — 총알이 맞으면 터진다 (적·통이 더 앞이면 그쪽이 먼저 받는다)
   const hcfg = balance.ghoulHead;
   let headHit: { id: number; t: number; hx: number; hy: number; hz: number } | null = null;
@@ -723,6 +750,18 @@ function fire(world: World): void {
     return;
   }
 
+  if (
+    netHit &&
+    (!hit || netHit.t < hit.t) &&
+    (!barrelHit || netHit.t < barrelHit.t) &&
+    (!propHit || netHit.t < propHit.t)
+  ) {
+    hit = null; // 줄이 제일 앞 — 끊고 멈춘다
+    barrelHit = null;
+    propHit = null;
+    disarmTrap(world, netHit.trap, 'pistol');
+    hitT = netHit.t;
+  }
   if (propHit && (!hit || propHit.t < hit.t) && (!barrelHit || propHit.t < barrelHit.t)) {
     hit = null; // 기믹이 제일 앞 — 총알은 여기서 멈춘다
     barrelHit = null;

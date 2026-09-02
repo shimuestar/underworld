@@ -280,3 +280,177 @@ describe('함정 — 소음', () => {
     expect(deaf.ai).toBe('idle');
   });
 });
+
+describe('함정 — 그물 덫', () => {
+  let world: World;
+  beforeEach(() => {
+    world = makeWorld();
+  });
+
+  it('밟으면 플레이어는 거미줄 상태(web_caught 1회), 적은 완전 둔화, 1회용', () => {
+    const trap = putTrap(world, 'trap_net', 6, 6, 'E');
+    const e = addEnemy(world, 'goblin_runner', 6.5, 6);
+    const caught: number[] = [];
+    world.events.on('web_caught', (p) => caught.push((p as { swings: number }).swings));
+    tickTraps(world, 1);
+    expect(caught).toEqual([balance.web.breakSwings]);
+    expect(world.player.webSwingsLeft).toBe(balance.web.breakSwings);
+    expect(e.slowTicks).toBe(T.trap_net.enemySlowTicks);
+    expect(e.slowMul).toBe(T.trap_net.enemySlowMul);
+    expect(trap.phase).toBe('firing'); // 떨어지는 연출 시간
+    tickTraps(world, T.trap_net.dropTicks + 1);
+    expect(trap.phase).toBe('spent');
+    expect(caught).toHaveLength(1); // 한 번만
+  });
+
+  it('서리가 쌓인 적은 함정 둔화가 덮지 않는다 — 서리 콤보를 깎아먹지 않게', () => {
+    putTrap(world, 'trap_net', 30, 6, 'E');
+    const e = addEnemy(world, 'goblin_runner', 30, 6);
+    e.frostStacks = 2;
+    e.slowTicks = 40;
+    e.slowMul = 0.7;
+    tickTraps(world, 1);
+    expect(e.slowTicks).toBe(40);
+    expect(e.slowMul).toBe(0.7);
+  });
+
+  it('해머로 줄을 끊으면 해체된다 — 그 뒤엔 밟아도 안 떨어진다', async () => {
+    const Weapons = await import('./Weapons');
+    const trap = putTrap(world, 'trap_net', 7.6, 6, 'E'); // 정면 1.6m
+    const ev: string[] = [];
+    world.events.on('trap_disarmed', (p) => ev.push((p as { how: string }).how));
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    for (let i = 0; i < 30 && trap.phase === 'armed'; i++) {
+      world.input = Input.emptySnapshot();
+      Weapons.tick(world, DT);
+    }
+    expect(trap.phase).toBe('disarmed');
+    expect(ev).toEqual(['hammer']);
+    world.player.x = 7.6; // 밟아도
+    tickTraps(world, 5);
+    expect(trap.phase).toBe('disarmed');
+    expect(world.player.webSwingsLeft ?? 0).toBe(0);
+  });
+});
+
+describe('함정 — 기름 웅덩이', () => {
+  let world: World;
+  beforeEach(() => {
+    world = makeWorld();
+  });
+
+  it('밟는 것으론 안 터진다 — 폭발이 닿으면 붙고, burnTicks 뒤 다 탄다', async () => {
+    const { explodeAt } = await import('../core/Explosion');
+    const oil = putTrap(world, 'trap_oil', 30, 6);
+    world.player.x = 30;
+    tickTraps(world, 10);
+    expect(oil.phase).toBe('armed');
+    world.player.x = 6;
+    const ev: string[] = [];
+    world.events.on('trap_ignited', () => ev.push('ignite'));
+    explodeAt(world, 33, 6, {
+      radius: 5, damage: 0, damageFalloffMin: 1, enemyKnockback: 0,
+      playerKnockback: 0, playerKnockbackTicks: 0, noiseRadius: 0, fxHeight: 0.5,
+    });
+    expect(oil.phase).toBe('firing');
+    expect(ev).toEqual(['ignite']);
+    tickTraps(world, T.trap_oil.burnTicks);
+    expect(oil.phase).toBe('spent');
+  });
+
+  it('불타는 적이 밟으면 옮겨붙고, 타는 기름은 근처 기름으로 연쇄한다', () => {
+    const a = putTrap(world, 'trap_oil', 30, 6);
+    const b = putTrap(world, 'trap_oil', 32, 6); // chainRadius 2.5 안
+    const far = putTrap(world, 'trap_oil', 50, 6);
+    const e = addEnemy(world, 'goblin_runner', 30, 6);
+    e.burnTicks = 60;
+    tickTraps(world, 1);
+    expect(a.phase).toBe('firing');
+    tickTraps(world, 1);
+    expect(b.phase).toBe('firing');
+    expect(far.phase).toBe('armed');
+  });
+
+  it('화염 지대 — 플레이어는 간격마다 4(막기 불가·source trap_fire), 적은 화상이 붙는다', () => {
+    const oil = putTrap(world, 'trap_oil', 6, 6);
+    oil.phase = 'firing';
+    oil.timer = T.trap_oil.burnTicks;
+    world.player.blocking = true;
+    const srcs: string[] = [];
+    world.events.on('player_damaged', (p) => srcs.push((p as { source: string }).source));
+    const e = addEnemy(world, 'goblin_runner', 6.5, 6);
+    tickTraps(world, T.trap_oil.playerDamageIntervalTicks * 2);
+    expect(srcs.length).toBe(2);
+    expect(srcs[0]).toBe('trap_fire');
+    expect(world.player.health).toBe(balance.player.healthMax - T.trap_oil.playerDamagePerHit * 2);
+    expect(e.burnTicks).toBeGreaterThan(0);
+    expect(e.burnDamagePerTick).toBe(T.trap_oil.enemyBurnDamagePerTick);
+  });
+
+  it('둔화 — 기름 위에서 느리고, 점액과 겹쳐도 더 센 하나만 (곱하지 않는다)', async () => {
+    const PlayerMove = await import('./PlayerMove');
+    world.stamina.value = 100;
+    const run = (oil: boolean, goo: boolean): number => {
+      world.player.x = 20; world.player.z = 6; world.player.prevX = 20; world.player.prevZ = 6;
+      world.traps = oil ? [{ id: 900, type: 'trap_oil', x: 20, z: 6, row: 1, col: 5, phase: 'armed', timer: 0, charges: -1, dirX: 0, dirZ: -1 }] : [];
+      world.gooPuddles = goo ? [{ id: 1, x: 20, z: 6, ticks: 600 }] : [];
+      world.input = { ...Input.emptySnapshot(), moveForward: 1 };
+      for (let i = 0; i < 3; i++) PlayerMove.tick(world, DT);
+      world.input = Input.emptySnapshot();
+      return Math.hypot(world.player.x - 20, world.player.z - 6);
+    };
+    const free = run(false, false);
+    const oiled = run(true, false);
+    const both = run(true, true);
+    expect(oiled).toBeLessThan(free * 0.7);
+    expect(both).toBeCloseTo(Math.min(oiled, run(false, true)), 4); // 하나만
+  });
+});
+
+describe('함정 — 저주 문양', () => {
+  let world: World;
+  beforeEach(() => {
+    world = makeWorld();
+  });
+
+  it('플레이어가 밟으면 오염 pending 만 오르고 피해·연쇄 끊김은 없다, 시야가 흔들린다, 1회용', () => {
+    const g = putTrap(world, 'trap_glyph', 6, 6);
+    const dmg: unknown[] = [];
+    world.events.on('player_damaged', (p) => dmg.push(p));
+    const burst: string[] = [];
+    world.events.on('trap_glyph_burst', (p) => burst.push((p as { victim: string }).victim));
+    tickTraps(world, 1);
+    expect(world.corruption.pending).toBe(T.trap_glyph.corruptionPending);
+    expect(dmg).toHaveLength(0);
+    expect(world.player.aimShakeTicks).toBe(T.trap_glyph.shakeTicks);
+    expect(burst).toEqual(['player']);
+    expect(g.phase).toBe('spent');
+    tickTraps(world, 5);
+    expect(world.corruption.pending).toBe(T.trap_glyph.corruptionPending); // 한 번만
+  });
+
+  it('적이 밟으면 경직 — 처형 대상이 된다. 보스는 절반', () => {
+    putTrap(world, 'trap_glyph', 30, 6);
+    const e = addEnemy(world, 'goblin_runner', 30, 6);
+    e.ai = 'windup';
+    e.attackFreezeTicks = 20;
+    tickTraps(world, 1);
+    expect(e.ai).toBe('staggered');
+    expect(e.timer).toBe(T.trap_glyph.enemyStaggerTicks);
+    expect(e.attackFreezeTicks).toBe(0);
+    putTrap(world, 'trap_glyph', 40, 6);
+    const boss = addEnemy(world, 'goblin_chieftain', 40, 6);
+    tickTraps(world, 1);
+    expect(boss.ai).toBe('staggered');
+    expect(boss.timer).toBe(Math.round(T.trap_glyph.enemyStaggerTicks * T.trap_glyph.bossStaggerMul));
+  });
+
+  it('비명이 10m 안 대기 적을 깨운다', () => {
+    putTrap(world, 'trap_glyph', 6, 6);
+    const far = addEnemy(world, 'goblin_runner', 14, 6); // 8m
+    far.homeYaw = 0;
+    tickTraps(world, 1);
+    expect(far.ai).toBe('chase');
+  });
+});

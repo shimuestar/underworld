@@ -9,6 +9,7 @@ import { enemyDef } from '../core/Entities';
 import {
   alertNearbyAt,
   applyFrostOnHit,
+  igniteOilInRadius,
   playerBlocks,
   pushEnemy,
   pushPlayer,
@@ -108,6 +109,93 @@ function hurtEnemy(
   if (knockback) pushEnemy(enemy, enemy.x - trap.x, enemy.z - trap.z, knockback.distance, knockback.ticks);
 }
 
+/** 함정 둔화 — 서리 스택이 있는 적은 건너뛴다: slowTicks 만료가 서리 겹을 지우므로
+ *  함정 둔화가 서리 볼트 콤보를 깎아먹지 않게. 있는 둔화보다 약하게 덮지도 않는다 */
+function slowEnemy(enemy: EnemyState, ticks: number, mul: number): void {
+  if ((enemy.frostStacks ?? 0) > 0) return;
+  enemy.slowTicks = Math.max(enemy.slowTicks ?? 0, ticks);
+  enemy.slowMul = Math.min(enemy.slowMul ?? 1, mul);
+}
+
+/** 그물 — 밟은 자리 반경 안: 플레이어는 거미줄 상태(기존 탈출 규칙 그대로), 적은 완전 둔화 */
+function fireNet(world: World, trap: TrapState, cfg: TrapCfg): void {
+  const r = cfg['hitRadius'] ?? 1.0;
+  const p = world.player;
+  if (!world.dead && Math.hypot(p.x - trap.x, p.z - trap.z) <= r) {
+    p.webSwingsLeft = balance.web.breakSwings;
+    world.events.emit('web_caught', { swings: p.webSwingsLeft });
+    world.events.emit('trap_hit_player', { id: trap.id, type: trap.type, amount: 0 });
+  }
+  for (const enemy of world.enemies) {
+    if (!canTriggerTrap(enemy)) continue;
+    if (Math.hypot(enemy.x - trap.x, enemy.z - trap.z) > r) continue;
+    slowEnemy(enemy, cfg['enemySlowTicks'] ?? 0, cfg['enemySlowMul'] ?? 1);
+    world.events.emit('trap_hit_enemy', { id: trap.id, type: trap.type, enemyId: enemy.id, amount: 0 });
+  }
+}
+
+/** 저주 문양 — 밟는 순간 터진다. 플레이어: 오염 pending + 시야 흔들림 (피해 없음 — 연쇄 유지).
+ *  적: 경직 → 처형 가능. 어느 쪽이든 비명이 방을 깨운다 */
+function fireGlyph(world: World, trap: TrapState, cfg: TrapCfg): void {
+  const r = cfg['triggerRadius'] ?? 1.2;
+  const p = world.player;
+  if (!world.dead && Math.hypot(p.x - trap.x, p.z - trap.z) <= r) {
+    world.corruption.pending += cfg['corruptionPending'] ?? 0;
+    p.aimShakeTicks = Math.max(p.aimShakeTicks ?? 0, cfg['shakeTicks'] ?? 0);
+    p.aimShakeAmp = Math.max(p.aimShakeAmp ?? 0, cfg['shakeAmp'] ?? 0);
+    world.events.emit('trap_glyph_burst', { id: trap.id, x: trap.x, z: trap.z, victim: 'player' });
+    world.events.emit('trap_hit_player', { id: trap.id, type: trap.type, amount: 0 });
+  }
+  let hitEnemy = false;
+  for (const enemy of world.enemies) {
+    if (!canTriggerTrap(enemy)) continue;
+    if (Math.hypot(enemy.x - trap.x, enemy.z - trap.z) > r) continue;
+    const boss = enemyDef(enemy.type).boss || enemy.floorBoss === true;
+    // 패링 스태거와 같은 필드 — 진행 중이던 공격은 그 자리에서 굳는다 (Reaction 규약)
+    enemy.ai = 'staggered';
+    enemy.timer = Math.round((cfg['enemyStaggerTicks'] ?? 0) * (boss ? (cfg['bossStaggerMul'] ?? 1) : 1));
+    enemy.attackFreezeTicks = 0;
+    enemy.wantsBash = false;
+    hitEnemy = true;
+    world.events.emit('trap_hit_enemy', { id: trap.id, type: trap.type, enemyId: enemy.id, amount: 0 });
+  }
+  if (hitEnemy) world.events.emit('trap_glyph_burst', { id: trap.id, x: trap.x, z: trap.z, victim: 'enemy' });
+}
+
+/** 기름 웅덩이 — 밟는 것으론 안 터진다. 둔화는 매 틱, 불이 붙으면 burnTicks 동안 화염 지대 */
+function tickOil(world: World, trap: TrapState, cfg: TrapCfg): void {
+  if (trap.phase !== 'armed' && trap.phase !== 'firing') return;
+  const r = cfg['radius'] ?? 1.5;
+  const burning = trap.phase === 'firing';
+  for (const enemy of world.enemies) {
+    if (!canTriggerTrap(enemy)) continue;
+    if (Math.hypot(enemy.x - trap.x, enemy.z - trap.z) > r) continue;
+    slowEnemy(enemy, 3, cfg['enemySlowMul'] ?? 1); // 매 틱 갱신 — 나가면 곧 풀린다
+    if (burning) {
+      // 화상은 기존 DoT 파이프라인(Projectiles.applyBurns)이 피해·처치를 맡는다
+      enemy.burnTicks = Math.max(enemy.burnTicks, cfg['enemyBurnTicks'] ?? 0);
+      enemy.burnDamagePerTick = Math.max(enemy.burnDamagePerTick, cfg['enemyBurnDamagePerTick'] ?? 0);
+    } else if (enemy.burnTicks > 0) {
+      // 불타는 적이 기름을 밟았다 — 옮겨붙는다
+      igniteOilInRadius(world, trap.x, trap.z, 0.01, cfg['burnTicks'] ?? 0);
+      return; // 다음 틱부터 화염 지대
+    }
+  }
+  if (!burning) return;
+  const p = world.player;
+  const interval = Math.max(1, cfg['playerDamageIntervalTicks'] ?? 30);
+  if (trap.timer % interval === 0 && Math.hypot(p.x - trap.x, p.z - trap.z) <= r) {
+    hurtPlayer(world, trap, cfg['playerDamagePerHit'] ?? 0, { blockable: false, source: 'trap_fire' });
+  }
+  // 옮겨붙기 — 근처의 안 붙은 기름
+  igniteOilInRadius(world, trap.x, trap.z, cfg['chainRadius'] ?? 0, cfg['burnTicks'] ?? 0);
+  if (--trap.timer <= 0) {
+    trap.phase = 'spent';
+    trap.timer = 0;
+    world.events.emit('trap_spent', { id: trap.id, type: trap.type, x: trap.x, z: trap.z });
+  }
+}
+
 /** 작동 뒤 — 장전이 남으면 쿨다운, 다 썼으면 spent */
 function afterFire(world: World, trap: TrapState, cfg: TrapCfg): void {
   if (trap.charges > 0) trap.charges--;
@@ -177,6 +265,13 @@ function fire(world: World, trap: TrapState, cfg: TrapCfg): void {
       fireSpikes(world, trap, cfg);
       firingTicks = cfg['upTicks'] ?? 0; // 가시가 솟아 있는 시간 — 모형이 따라간다
       break;
+    case 'trap_net':
+      fireNet(world, trap, cfg);
+      firingTicks = cfg['dropTicks'] ?? 0; // 그물이 떨어지는 연출 시간
+      break;
+    case 'trap_glyph':
+      fireGlyph(world, trap, cfg);
+      break;
     default:
       break;
   }
@@ -192,13 +287,23 @@ function fire(world: World, trap: TrapState, cfg: TrapCfg): void {
   }
 }
 
-/** 구독 자리 — 지금은 없음. 이벤트 구독이 필요한 종(기름 점화 등)이 오면 여기 */
-export function init(_world: World): void {}
+/** 구독. 시작 시 1회 — 기름에 불이 붙는 순간(어디서 붙었든) 불길 소리에 방이 깬다 */
+export function init(world: World): void {
+  world.events.on('trap_ignited', (payload) => {
+    const info = payload as { x: number; z: number };
+    const cfg = trapCfg('trap_oil');
+    alertNearbyAt(world, info.x, info.z, cfg?.['noiseRadius'] ?? 0, balance.enemyAi.noticeDelayTicks);
+  });
+}
 
 export function tick(world: World, _dt: number): void {
   for (const trap of world.traps) {
     const cfg = trapCfg(trap.type);
     if (!cfg) continue;
+    if (trap.type === 'trap_oil') {
+      tickOil(world, trap, cfg); // 밟는 트리거가 없다 — 불이 트리거다
+      continue;
+    }
     switch (trap.phase) {
       case 'armed': {
         const by = victimInRadius(world, trap, cfg['triggerRadius'] ?? 1.2);

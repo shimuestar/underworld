@@ -511,6 +511,8 @@ for (const name of [
   'trap_kill',
   'trap_disarmed',
   'trap_parried',
+  'trap_ignited',
+  'trap_glyph_burst',
   'ammo_picked',
   'grenade_picked',
   'battery_picked',
@@ -837,6 +839,32 @@ events.on('trap_fired', (payload) => {
     if (d < 12) stage.triggerCameraKick(0.35 * (1 - d / 12), 120);
   } else if (t.type === 'trap_dart') {
     audio.play('trap_dart', panAt(t.x, t.z));
+  } else if (t.type === 'trap_net') {
+    audio.play('trap_net', panAt(t.x, t.z));
+  }
+});
+events.on('trap_disarmed', (payload) => {
+  const t = payload as { type: string; x: number; z: number; how: string };
+  audio.play('trap_cut', panAt(t.x, t.z));
+  stage.spawnGuardSparks(t.x, t.z, 0.45, 0xfff0b0, 0.6);
+  showReaction(t.type === 'trap_net' ? '줄을 끊었다 — 그물이 늘어진다' : '함정을 해체했다', 1400);
+});
+events.on('trap_ignited', (payload) => {
+  const t = payload as { x: number; z: number };
+  audio.play('trap_ignite', panAt(t.x, t.z));
+  stage.triggerFlash(t.x, 0.8, t.z, 0xff7a1a, 260, 3);
+  const d = Math.hypot(world.player.x - t.x, world.player.z - t.z);
+  if (d < 8) stage.triggerCameraKick(0.25 * (1 - d / 8), 150);
+});
+events.on('trap_glyph_burst', (payload) => {
+  const t = payload as { x: number; z: number; victim: 'player' | 'enemy' };
+  audio.play('trap_glyph', panAt(t.x, t.z));
+  stage.triggerFlash(t.x, 1.2, t.z, 0x9b5de5, 220, 4);
+  if (t.victim === 'player') {
+    padRumble('tremble');
+    showReaction('저주 문양 — 오염이 스민다 (제단에서 정산된다)', 2200);
+  } else {
+    showReaction('문양이 터졌다 — 적이 굳었다! 처형!', 1600);
   }
 });
 events.on('trap_spent', (payload) => {
@@ -2586,6 +2614,7 @@ Exit.init(world); // 보스가 죽으면 열쇠를 떨군다
 Enemies.init(world); // 공격 행동 소음 — 시전·휘두름이 코앞의 적을 깨운다
 GhoulHeads.init(world); // 구울 머리 소품 — 목이 날아가면 통통 튀는 머리가 남는다
 Props.init(world); // 기믹 — 부서지는 순간의 결과 롤(전리품·매복·폭발 심지)을 구독한다
+Traps.init(world); // 함정 — 기름 점화 소음 구독
 const systems = [
   PlayerMove.tick,
   Enemies.tick,

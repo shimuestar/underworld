@@ -117,7 +117,11 @@ export type SoundName =
   | 'trap_hiss'
   | 'trap_dart'
   | 'trap_click'
-  | 'trap_spikes';
+  | 'trap_spikes'
+  | 'trap_net'
+  | 'trap_cut'
+  | 'trap_ignite'
+  | 'trap_glyph';
 
 const MASTER_GAIN = 0.25;
 
@@ -705,6 +709,30 @@ export class GameAudio {
         this.noise(0.09, 0.9, 1800);
         this.tone(180, 0.14, 'sawtooth', 0.5, 0, 95);
         this.tone(1400, 0.16, 'triangle', 0.18, 0.02, 900);
+        break;
+      case 'trap_net':
+        // 그물 — 줄이 툭 끊기고 천장에서 무거운 천이 촤악 떨어진다
+        this.tone(1600, 0.03, 'square', 0.3, 0, 900);
+        this.noise(0.22, 0.6, 1200, 0.08);
+        this.tone(140, 0.16, 'sine', 0.5, 0.2, 70);
+        break;
+      case 'trap_cut':
+        // 줄 끊기 — 짧은 튕김 (해체했다)
+        this.tone(2100, 0.05, 'triangle', 0.4, 0, 700);
+        this.noise(0.03, 0.2, 5000);
+        break;
+      case 'trap_ignite':
+        // 기름에 불 — 훅 하는 공기 + 타닥거리는 시작
+        this.noise(0.35, 0.8, 900);
+        this.tone(90, 0.3, 'sawtooth', 0.35, 0, 60);
+        this.noise(0.12, 0.3, 3200, 0.25);
+        break;
+      case 'trap_glyph':
+        // 저주 문양 — 낮은 웅 위로 불협 종 두 음, 마지막에 비명 결의 노이즈
+        this.tone(110, 0.6, 'sine', 0.5, 0, 95);
+        this.tone(660, 0.3, 'triangle', 0.3, 0.05, 620);
+        this.tone(935, 0.35, 'triangle', 0.25, 0.12, 880);
+        this.noise(0.25, 0.35, 2600, 0.15);
         break;
       case 'prop_fuse':
         // 치익 — 숨은 폭발물의 심지. 이 소리가 나면 도망쳐라
