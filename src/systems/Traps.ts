@@ -38,8 +38,9 @@ export function canTriggerTrap(enemy: EnemyState): boolean {
 
 function victimInRadius(world: World, trap: TrapState, radius: number): 'player' | 'enemy' | null {
   const p = world.player;
-  // 그림자 질주 중엔 무게가 없다 — 판이 눌리지 않는다
-  if (!world.dead && (p.blinkLeft ?? 0) <= 0 && Math.hypot(p.x - trap.x, p.z - trap.z) <= radius) {
+  // 대시(회피)·그림자 질주로 지나가는 몸은 판을 누르지 않는다 — 함정 위를 '넘어가는' 수단
+  const passing = (p.blinkLeft ?? 0) > 0 || p.dodgeTicks > 0;
+  if (!world.dead && !passing && Math.hypot(p.x - trap.x, p.z - trap.z) <= radius) {
     return 'player';
   }
   for (const enemy of world.enemies) {
@@ -54,10 +55,14 @@ function hurtPlayer(
   world: World,
   trap: TrapState,
   raw: number,
-  opt: { blockable: boolean; source: string; knockback?: number; knockbackTicks?: number },
+  opt: {
+    blockable: boolean; source: string; knockback?: number; knockbackTicks?: number;
+    /** 참 = 회피 무적(iframe)도 못 막는다 — 서 있는 가시에 몸을 들이미는 경우 */
+    ignoreIframes?: boolean;
+  },
 ): void {
   const p = world.player;
-  if (world.dead || p.iframeTicks > 0) return;
+  if (world.dead || (p.iframeTicks > 0 && !opt.ignoreIframes)) return;
   let amount = raw;
   let blocked = false;
   if (opt.blockable) {
@@ -349,17 +354,30 @@ function fireDarts(world: World, trap: TrapState, cfg: TrapCfg): void {
   }
 }
 
-/** 가시 — 반경 안 전원. 플레이어는 아래서 오는 공격이라 막을 수 없다 (회피 무적만) */
-function fireSpikes(world: World, trap: TrapState, cfg: TrapCfg): void {
+/** 가시 접촉 — 가시가 서 있는 동안 매 틱. 반경 안에 '들어온' 몸에게 한 번씩 (나갔다 다시 오면 또).
+ *  플레이어는 막기도 대시 무적도 소용없다 — 서 있는 쇠에 몸을 들이민 것. 그림자 이동만 면제.
+ *  hitIds 가 '지금 안에 있고 이미 맞은 몸' 목록이다 (플레이어 = -1) */
+function spikeContact(world: World, trap: TrapState, cfg: TrapCfg): void {
   const r = cfg['hitRadius'] ?? 1.5;
+  const inside = (trap.hitIds ??= []);
   const p = world.player;
-  if (Math.hypot(p.x - trap.x, p.z - trap.z) <= r) {
-    hurtPlayer(world, trap, cfg['damage'] ?? 0, { blockable: false, source: 'trap_spike' });
+  const playerIn =
+    !world.dead && (p.blinkLeft ?? 0) <= 0 && Math.hypot(p.x - trap.x, p.z - trap.z) <= r;
+  if (playerIn && !inside.includes(-1)) {
+    inside.push(-1);
+    hurtPlayer(world, trap, cfg['damage'] ?? 0, { blockable: false, source: 'trap_spike', ignoreIframes: true });
+  } else if (!playerIn && inside.includes(-1)) {
+    inside.splice(inside.indexOf(-1), 1);
   }
   for (const enemy of world.enemies) {
-    if (!canTriggerTrap(enemy)) continue;
-    if (Math.hypot(enemy.x - trap.x, enemy.z - trap.z) > r) continue;
-    hurtEnemy(world, trap, enemy, cfg['enemyDamage'] ?? 0, cfg);
+    const has = inside.includes(enemy.id);
+    const enemyIn = canTriggerTrap(enemy) && Math.hypot(enemy.x - trap.x, enemy.z - trap.z) <= r;
+    if (enemyIn && !has) {
+      inside.push(enemy.id);
+      hurtEnemy(world, trap, enemy, cfg['enemyDamage'] ?? 0, cfg);
+    } else if (!enemyIn && has) {
+      inside.splice(inside.indexOf(enemy.id), 1);
+    }
   }
 }
 
@@ -371,8 +389,9 @@ function fire(world: World, trap: TrapState, cfg: TrapCfg): void {
       fireDarts(world, trap, cfg);
       break;
     case 'trap_spike':
-      fireSpikes(world, trap, cfg);
-      firingTicks = cfg['upTicks'] ?? 0; // 가시가 솟아 있는 시간 — 모형이 따라간다
+      trap.hitIds = [];
+      spikeContact(world, trap, cfg); // 솟는 순간 위에 있던 몸
+      firingTicks = cfg['upTicks'] ?? 0; // 가시가 서 있는 시간 — 이 동안 들어오면 맞는다
       break;
     case 'trap_net':
       fireNet(world, trap, cfg);
@@ -458,7 +477,9 @@ export function tick(world: World, _dt: number): void {
         break;
       case 'firing':
         if (trap.type === 'trap_gas') tickGasCloud(world, trap, cfg);
+        if (trap.type === 'trap_spike') spikeContact(world, trap, cfg);
         if (--trap.timer <= 0) {
+          trap.hitIds = undefined;
           // 작동이 끝난다 — 가시가 들어가고, 구름이 걷힌다 (소리는 main 이 종별로)
           world.events.emit('trap_retract', { id: trap.id, type: trap.type, x: trap.x, z: trap.z });
           afterFire(world, trap, cfg);

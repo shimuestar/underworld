@@ -98,17 +98,77 @@ describe('함정 — 가시 압력판', () => {
     expect(trap.phase).toBe('firing');
   });
 
-  it('회피 무적(iframe) 중에는 안 맞는다, 피해 source 는 trap_spike', () => {
-    putTrap(world, 'trap_spike', 6, 6);
+  it('밟고 1초 안에 벗어나면(뛰기·대시) 안 맞는다 — 가시는 빈 판 위로 솟는다', () => {
+    const trap = putTrap(world, 'trap_spike', 6, 6);
+    tickTraps(world, 1);
+    expect(trap.phase).toBe('telegraph');
+    world.player.x = 6 + T.trap_spike.hitRadius + 0.5; // 뛰어서 벗어났다
+    tickTraps(world, T.trap_spike.telegraphTicks);
+    expect(trap.phase).toBe('firing');
+    expect(world.player.health).toBe(balance.player.healthMax);
+  });
+
+  it('대시(회피)·그림자 이동으로 지나가는 몸은 판을 누르지 않는다', () => {
+    const trap = putTrap(world, 'trap_spike', 6, 6);
+    world.player.dodgeTicks = 4;
+    tickTraps(world, 3);
+    expect(trap.phase).toBe('armed');
+    world.player.dodgeTicks = 0;
+    world.player.blinkLeft = 5;
+    tickTraps(world, 3);
+    expect(trap.phase).toBe('armed');
+    world.player.blinkLeft = 0;
+    tickTraps(world, 1);
+    expect(trap.phase).toBe('telegraph'); // 그냥 걸으면 눌린다
+  });
+
+  it('서 있는 가시에 들어가면 대시 무적도 소용없다(몸당 1회, 나갔다 오면 또), 그림자 이동만 면제', () => {
+    const trap = putTrap(world, 'trap_spike', 30, 6);
+    const trigger = addEnemy(world, 'goblin_runner', 30, 6);
+    trigger.ai = 'chase';
+    tickTraps(world, T.trap_spike.telegraphTicks + 1);
+    expect(trap.phase).toBe('firing');
     const sources: string[] = [];
     world.events.on('player_damaged', (p) => sources.push((p as { source: string }).source));
-    world.player.iframeTicks = 999;
-    tickTraps(world, T.trap_spike.telegraphTicks + 1);
-    expect(world.player.health).toBe(balance.player.healthMax);
-    world.player.iframeTicks = 0;
-    // 재무장 뒤 다시 밟는다
-    tickTraps(world, T.trap_spike.upTicks + T.trap_spike.cooldownTicks + T.trap_spike.telegraphTicks + 2);
+    // 대시 무적을 켜고 들어간다 — 그래도 맞는다
+    world.player.iframeTicks = 8;
+    world.player.x = 30;
+    tickTraps(world, 5);
     expect(sources).toEqual(['trap_spike']);
+    // 서 있어도 더는 안 맞는다
+    tickTraps(world, 30);
+    expect(sources).toHaveLength(1);
+    // 나갔다 다시 들어오면 또
+    world.player.x = 6;
+    tickTraps(world, 2);
+    world.player.x = 30;
+    tickTraps(world, 2);
+    expect(sources).toHaveLength(2);
+    // 그림자 이동으로 통과 — 면제
+    world.player.x = 6;
+    tickTraps(world, 2);
+    world.player.blinkLeft = 3;
+    world.player.x = 30;
+    tickTraps(world, 2);
+    expect(sources).toHaveLength(2);
+  });
+
+  it('회수 중(cooldown)에는 밟아도 피해·재트리거가 없고, 걸쇠가 물린 뒤에야 다시 밟힌다', () => {
+    const trap = putTrap(world, 'trap_spike', 6, 6);
+    world.player.x = 6;
+    tickTraps(world, T.trap_spike.telegraphTicks + 1); // 솟음 — 1회 피해
+    const hp = world.player.health;
+    world.player.x = 20;
+    tickTraps(world, T.trap_spike.upTicks); // 5초 뒤 회수 시작
+    expect(trap.phase).toBe('cooldown');
+    world.player.x = 6; // 들어가는 도중 밟는다
+    tickTraps(world, T.trap_spike.cooldownTicks - 1);
+    expect(world.player.health).toBe(hp);
+    expect(trap.phase).toBe('cooldown');
+    tickTraps(world, 1); // 걸쇠 철컥 — armed
+    expect(trap.phase).toBe('armed');
+    tickTraps(world, 1); // 서 있으니 다시 눌린다
+    expect(trap.phase).toBe('telegraph');
   });
 
   it('적도 걸린다 — enemyDamage, 피해 숫자, 처치는 trap_kill + enemy_died(마나 없음), 쿨 뒤 재무장', () => {
