@@ -186,7 +186,9 @@ export function spawnTraps(placements: EntityPlacement[], level: Level): TrapSta
       continue;
     }
     const { dirX, dirZ } = dirVector((placement as { dir?: string }).dir);
+    const phase = (placement as { phase?: number }).phase;
     traps.push({
+      ...(typeof phase === 'number' ? { phaseOffset: phase } : {}),
       id: nextTrapId++,
       type: placement.type,
       x: (col + 0.5) * level.cellSize,

@@ -380,8 +380,10 @@ export interface TrapState {
   dirX: number;
   dirZ: number;
   triggeredBy?: 'player' | 'enemy';
-  /** 진자 — 주기 카운터 */
+  /** 진자·자동 가시판 — 주기 카운터 */
   cycleTick?: number;
+  /** 자동 순환 함정의 시작 위상(틱). 배치 phase 플래그 — 없으면 종별 기본 규칙 */
+  phaseOffset?: number;
   /** 이번 작동에서 이미 맞은 몸 (플레이어 = -1) */
   hitIds?: number[];
   /** 함정 감지 각인이 알아챈 함정 */

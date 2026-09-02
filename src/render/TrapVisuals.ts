@@ -19,6 +19,7 @@ const REVEAL = 0x7d5cff;
 
 const PLATE_LIGHT = 0x7d7568; // 다트 압력판 — 주변 판석보다 밝다
 const PLATE_DARK = 0x3b3733; // 가시판 — 주변보다 어둡다
+const PLATE_RUST = 0x6e3a2c; // 자동 순환 가시판 — 녹슨 붉은색으로 구분
 const GROOVE = 0x2a2622;
 const IRON = 0x14121a;
 const IRON_SPENT = 0x4a4a50;
@@ -82,10 +83,10 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
       nozzleMats.push(mat);
     }
     data['nozzleMats'] = nozzleMats;
-  } else if (trap.type === 'trap_spike') {
+  } else if (trap.type === 'trap_spike' || trap.type === 'trap_spike_auto') {
     const plate = new THREE.Mesh(
       new THREE.BoxGeometry(3.0, 0.06, 3.0),
-      new THREE.MeshLambertMaterial({ color: PLATE_DARK }),
+      new THREE.MeshLambertMaterial({ color: trap.type === 'trap_spike_auto' ? PLATE_RUST : PLATE_DARK }),
     );
     plate.position.y = 0.03;
     group.add(plate);
@@ -265,7 +266,7 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
         m.color.setHex(spent ? IRON_SPENT : IRON);
       }
     }
-  } else if (trap.type === 'trap_spike') {
+  } else if (trap.type === 'trap_spike' || trap.type === 'trap_spike_auto') {
     if (plate) plate.position.y = trap.phase === 'telegraph' ? 0.0 : 0.03;
     const spikes = data['spikes'] as THREE.Group | undefined;
     if (spikes) {
@@ -274,7 +275,12 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
       if (trap.phase === 'firing') {
         spikes.position.y = 0;
       } else if (trap.phase === 'cooldown') {
-        const cd = Math.max(1, balance.traps.types.trap_spike.cooldownTicks);
+        const cd = Math.max(
+          1,
+          trap.type === 'trap_spike_auto'
+            ? balance.traps.types.trap_spike_auto.cooldownTicks
+            : balance.traps.types.trap_spike.cooldownTicks,
+        );
         const progress = 1 - Math.max(0, Math.min(1, trap.timer / cd));
         spikes.position.y = -1.25 * progress;
       } else {

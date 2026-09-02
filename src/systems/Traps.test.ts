@@ -675,3 +675,48 @@ describe('함정 감지 각인', () => {
     expect(world.modifiers.revealTrapsRadius).toBe(0);
   });
 });
+
+describe('함정 — 자동 순환 가시판', () => {
+  it('밟지 않아도 내려감→덜컹→가시→회수를 돌고, 서 있는 가시에 닿으면 맞는다', () => {
+    const world = makeWorld();
+    const a = putTrap(world, 'trap_spike_auto', 30, 6);
+    const c = T.trap_spike_auto;
+    const ev: string[] = [];
+    for (const n of ['trap_telegraph', 'trap_fired', 'trap_retract', 'trap_rearmed'] as const) {
+      world.events.on(n, () => ev.push(n));
+    }
+    // (row+col) = 1+7 = 8 → 짝 → 위상 0: 처음 downTicks 동안 내려가 있다
+    tickTraps(world, c.downTicks);
+    expect(ev).toEqual(['trap_telegraph']);
+    expect(a.phase).toBe('telegraph');
+    tickTraps(world, c.telegraphTicks);
+    expect(ev).toEqual(['trap_telegraph', 'trap_fired']);
+    expect(a.phase).toBe('firing');
+    // 서 있는 가시로 걸어 들어간다 — 맞는다
+    world.player.x = 30;
+    tickTraps(world, 2);
+    expect(world.player.health).toBe(balance.player.healthMax - c.damage);
+    world.player.x = 6;
+    tickTraps(world, c.upTicks);
+    expect(a.phase).toBe('cooldown');
+    expect(ev.at(-1)).toBe('trap_retract');
+    tickTraps(world, c.cooldownTicks);
+    expect(a.phase).toBe('armed');
+    expect(ev.at(-1)).toBe('trap_rearmed');
+  });
+
+  it('인접 판은 반주기 어긋난다 — 한쪽이 서 있을 때 다른 쪽은 내려가 있다', () => {
+    const world = makeWorld();
+    const even = putTrap(world, 'trap_spike_auto', 30, 6); // (1,7) 짝
+    const odd = putTrap(world, 'trap_spike_auto', 34, 6); // (1,8) 홀
+    const c = T.trap_spike_auto;
+    tickTraps(world, c.downTicks + c.telegraphTicks + 10);
+    expect(even.phase).toBe('firing');
+    expect(odd.phase).not.toBe('firing');
+    // 배치 phase 플래그가 있으면 그것이 우선
+    const forced = putTrap(world, 'trap_spike_auto', 38, 6);
+    forced.phaseOffset = 0;
+    tickTraps(world, 1);
+    expect(forced.cycleTick).toBe(1);
+  });
+});

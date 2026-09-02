@@ -310,6 +310,52 @@ function tickPendulum(world: World, trap: TrapState, cfg: TrapCfg): void {
   }
 }
 
+/** 자동 순환 가시판 — 트리거 없이 내려감→덜컹→가시→회수를 돈다. 위상은 phaseOffset,
+ *  없으면 (row+col) 짝홀로 반주기 어긋난다 — 인접 판이 서로 반대라 안전한 판을 골라 건넌다.
+ *  phase·timer 는 일반 가시판과 같은 뜻으로 채워 모형·소리(이벤트)를 그대로 쓴다 */
+function tickAutoSpike(world: World, trap: TrapState, cfg: TrapCfg): void {
+  const down = Math.max(1, Math.round(cfg['downTicks'] ?? 60));
+  const tele = Math.max(0, Math.round(cfg['telegraphTicks'] ?? 0));
+  const up = Math.max(1, Math.round(cfg['upTicks'] ?? 60));
+  const retract = Math.max(0, Math.round(cfg['cooldownTicks'] ?? 0));
+  const cycle = down + tele + up + retract;
+  if (trap.cycleTick === undefined) {
+    trap.cycleTick =
+      ((trap.phaseOffset ?? ((trap.row + trap.col) % 2) * Math.floor(cycle / 2)) % cycle + cycle) % cycle;
+    trap.phase = 'armed';
+  }
+  trap.cycleTick = (trap.cycleTick + 1) % cycle;
+  const t = trap.cycleTick;
+  const at = { id: trap.id, type: trap.type, x: trap.x, z: trap.z };
+  let phase: TrapState['phase'];
+  if (t < down) {
+    phase = 'armed';
+    trap.timer = down - t;
+  } else if (t < down + tele) {
+    phase = 'telegraph';
+    trap.timer = down + tele - t;
+  } else if (t < down + tele + up) {
+    phase = 'firing';
+    trap.timer = down + tele + up - t;
+  } else {
+    phase = 'cooldown';
+    trap.timer = cycle - t; // 회수 잔여 — 모형이 이 값으로 천천히 내려간다
+  }
+  if (phase !== trap.phase) {
+    const prev = trap.phase;
+    trap.phase = phase;
+    if (phase === 'telegraph') world.events.emit('trap_telegraph', at);
+    else if (phase === 'firing') {
+      trap.hitIds = [];
+      world.events.emit('trap_fired', { ...at, dirX: trap.dirX, dirZ: trap.dirZ });
+    } else if (phase === 'cooldown') {
+      trap.hitIds = undefined;
+      world.events.emit('trap_retract', at);
+    } else if (phase === 'armed' && prev === 'cooldown') world.events.emit('trap_rearmed', at);
+  }
+  if (phase === 'firing') spikeContact(world, trap, cfg);
+}
+
 /** 작동 뒤 — 장전이 남으면 쿨다운, 다 썼으면 spent */
 function afterFire(world: World, trap: TrapState, cfg: TrapCfg): void {
   if (trap.charges > 0) trap.charges--;
@@ -409,7 +455,9 @@ function fire(world: World, trap: TrapState, cfg: TrapCfg): void {
     default:
       break;
   }
-  alertNearbyAt(world, trap.x, trap.z, cfg['noiseRadius'] ?? 0, balance.enemyAi.noticeDelayTicks);
+  if ((cfg['noiseRadius'] ?? 0) > 0) {
+    alertNearbyAt(world, trap.x, trap.z, cfg['noiseRadius'] ?? 0, balance.enemyAi.noticeDelayTicks);
+  }
   world.events.emit('trap_fired', {
     id: trap.id, type: trap.type, x: trap.x, z: trap.z, dirX: trap.dirX, dirZ: trap.dirZ,
   });
@@ -454,6 +502,10 @@ export function tick(world: World, _dt: number): void {
     }
     if (trap.type === 'trap_pendulum') {
       tickPendulum(world, trap, cfg); // 트리거 없이 항시 흔들린다
+      continue;
+    }
+    if (trap.type === 'trap_spike_auto') {
+      tickAutoSpike(world, trap, cfg); // 트리거 없이 순환한다
       continue;
     }
     switch (trap.phase) {

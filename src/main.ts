@@ -835,6 +835,14 @@ events.on('prop_hit', (payload) => {
   }
 });
 // ---- 함정 — 예고는 소리·모형 동작으로만 (UI 표시 없음) ----
+// 가시판 소리는 같은 틱에 여러 장이 함께 울리면(자동 순환 4×4) 한 번만 낸다 — 겹치면 뭉개진다
+const spikeSoundTick: Record<string, number> = {};
+function spikeSoundOnce(kind: string): boolean {
+  if (spikeSoundTick[kind] === world.tick) return false;
+  spikeSoundTick[kind] = world.tick;
+  return true;
+}
+const isSpikeType = (type: string): boolean => type === 'trap_spike' || type === 'trap_spike_auto';
 events.on('trap_telegraph', (payload) => {
   const t = payload as { type: string; x: number; z: number };
   if (t.type === 'trap_rockfall') {
@@ -847,11 +855,11 @@ events.on('trap_telegraph', (payload) => {
     }
     return;
   }
-  if (t.type === 'trap_spike') {
+  if (isSpikeType(t.type)) {
     // 묵직한 판 침강 — 내가 밟았으면 발밑 진동도 온다
-    audio.play('trap_click', panAt(t.x, t.z));
+    if (spikeSoundOnce('tele')) audio.play('trap_click', panAt(t.x, t.z));
     const trap = world.traps.find((tr) => tr.id === (payload as { id: number }).id);
-    if (trap?.triggeredBy === 'player') padRumble('heavy');
+    if (trap?.type === 'trap_spike' && trap.triggeredBy === 'player') padRumble('heavy');
     return;
   }
   audio.play('trap_hiss', panAt(t.x, t.z));
@@ -859,11 +867,13 @@ events.on('trap_telegraph', (payload) => {
 // 작동이 끝나고 다시 장전되는 과정도 들린다 — 가시가 들어가고(회수), 래칫이 걸린다(재장전)
 events.on('trap_retract', (payload) => {
   const t = payload as { type: string; x: number; z: number };
-  if (t.type === 'trap_spike') audio.play('trap_spike_down', panAt(t.x, t.z));
+  if (isSpikeType(t.type) && spikeSoundOnce('retract')) audio.play('trap_spike_down', panAt(t.x, t.z));
 });
 events.on('trap_rearmed', (payload) => {
   const t = payload as { type: string; x: number; z: number };
-  if (t.type === 'trap_spike' || t.type === 'trap_dart' || t.type === 'trap_gas') {
+  if (isSpikeType(t.type)) {
+    if (spikeSoundOnce('rearm')) audio.play('trap_rearm', panAt(t.x, t.z));
+  } else if (t.type === 'trap_dart' || t.type === 'trap_gas') {
     audio.play('trap_rearm', panAt(t.x, t.z));
   }
 });
@@ -890,8 +900,8 @@ events.on('trap_parried', (payload) => {
 });
 events.on('trap_fired', (payload) => {
   const t = payload as { type: string; x: number; z: number };
-  if (t.type === 'trap_spike') {
-    audio.play('trap_spikes', panAt(t.x, t.z));
+  if (isSpikeType(t.type)) {
+    if (spikeSoundOnce('fire')) audio.play('trap_spikes', panAt(t.x, t.z));
     // 발밑에서 쇠가 솟는다 — 가까울수록 화면이 흔들린다 (피해 유무와 무관)
     const d = Math.hypot(world.player.x - t.x, world.player.z - t.z);
     if (d < 12) stage.triggerCameraKick(0.35 * (1 - d / 12), 120);
