@@ -3799,7 +3799,7 @@ export class Stage {
     const cfg = balance.hud.xpPop;
     this.spawnFloatText(x, y, z, `✦ +${Math.round(amount)}`, {
       sizeM: cfg.sizeM,
-      color: '#e9f2e3', // HUD XP 표기(#cfd8c9)보다 살짝 밝게 — 월드 그늘에서 죽지 않게
+      color: '#58e06a', // 경험치 = 녹색 (2026-09-02 사용자 지정)
       ms: cfg.ms,
     });
   }
@@ -3809,7 +3809,7 @@ export class Stage {
     const cfg = balance.hud.xpPop; // '같은 연출' — XP 와 크기·시간·움직임을 공유한다
     this.spawnFloatText(x, y, z, `◆ +${Math.round(amount)}`, {
       sizeM: cfg.sizeM,
-      color: '#ffcc3a', // HUD 골드 표기와 같은 금색
+      color: '#ffe135', // 골드 = 노란색 (2026-09-02 사용자 지정)
       ms: cfg.ms,
     });
   }
