@@ -1005,6 +1005,14 @@ events.on('trap_fired', (payload) => {
 });
 events.on('trap_disarmed', (payload) => {
   const t = payload as { type: string; x: number; z: number; how: string };
+  if (t.type === 'trap_gas_auto') {
+    // 포자 군락을 짓밟았다 — 축축한 퍽, 포자가 한 번 흩날리고 끝
+    audio.play('trap_squash', panAt(t.x, t.z));
+    stage.spawnGuardSparks(t.x, t.z, 0.5, 0x9ccf3c, 0.5);
+    stage.triggerFlash(t.x, 0.6, t.z, 0x9ccf3c, 180, 2.5);
+    showReaction('포자 군락을 짓밟았다 — 더는 뿜지 않는다', 1600);
+    return;
+  }
   audio.play('trap_cut', panAt(t.x, t.z));
   stage.spawnGuardSparks(t.x, t.z, 0.45, 0xfff0b0, 0.6);
   showReaction(t.type === 'trap_net' ? '줄을 끊었다 — 그물이 늘어진다' : '함정을 해체했다', 1400);

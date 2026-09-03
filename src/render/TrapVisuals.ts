@@ -295,6 +295,7 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
       const puff = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), puffMat);
       puff.position.set(px, r * 1.4, pz);
       puff.scale.set(1, 0.9, 1);
+      puff.userData['r'] = r; // 짓밟힌 모습(납작)을 그릴 때 제 반지름 기준으로 내려앉힌다
       group.add(puff);
       const hole = new THREE.Mesh(new THREE.SphereGeometry(r * 0.28, 8, 6), holeMat);
       hole.position.set(0, r * 0.95, 0);
@@ -318,6 +319,27 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     mycelium.rotation.x = -Math.PI / 2;
     mycelium.position.y = 0.015;
     group.add(mycelium);
+    // 짓밟힌 자리 — 터진 포자 얼룩 + 흩어진 껍질 조각 (disarmed 에서만 보인다)
+    const splat = new THREE.Mesh(
+      new THREE.CircleGeometry(1.25, 14),
+      new THREE.MeshLambertMaterial({ color: 0x5f6f2a, transparent: true, opacity: 0.7 }),
+    );
+    splat.rotation.x = -Math.PI / 2;
+    splat.position.y = 0.02;
+    splat.visible = false;
+    group.add(splat);
+    data['splat'] = splat;
+    const shards = new THREE.Group();
+    const shardMat = new THREE.MeshLambertMaterial({ color: 0x5a5066 });
+    for (let i = 0; i < 7; i++) {
+      const shard = new THREE.Mesh(new THREE.BoxGeometry(0.22 + (i % 3) * 0.08, 0.03, 0.16 + (i % 2) * 0.1), shardMat);
+      shard.position.set(Math.sin(i * 2.5) * 1.0, 0.03, Math.cos(i * 1.8) * 1.0);
+      shard.rotation.set(0, i * 0.9, (i % 2) * 0.4 - 0.2);
+      shards.add(shard);
+    }
+    shards.visible = false;
+    group.add(shards);
+    data['shards'] = shards;
     const { cloud, mat: cloudMat } = buildSporeCloud(GAS_AUTO);
     group.add(cloud);
     data['cloud'] = cloud;
@@ -504,6 +526,7 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
     const holeMat = data['holeMat'] as THREE.MeshLambertMaterial | undefined;
     const trembling = trap.phase === 'telegraph';
     const burst = trap.phase === 'firing';
+    const crushed = trap.phase === 'disarmed'; // 짓밟혔다 — 납작하게 터진 자실체, 얼룩과 껍질 조각
     const baseX = (data['baseX'] as number | undefined) ?? (data['baseX'] = group.position.x);
     const baseZ = (data['baseZ'] as number | undefined) ?? (data['baseZ'] = group.position.z);
     group.position.x = (baseX as number) + (trembling ? (Math.random() - 0.5) * 0.06 : 0);
@@ -511,13 +534,25 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
     if (puffs) {
       const swell = trembling ? 1.15 + 0.08 * Math.abs(Math.sin(nowMs / 40)) : burst ? 1.22 + 0.05 * Math.sin(nowMs / 180) : 1;
       for (const pf of puffs) {
-        pf.scale.x += (swell - pf.scale.x) * 0.15;
+        const r = (pf.userData['r'] as number | undefined) ?? 0.3;
+        const sx = crushed ? 1.35 : swell;
+        const sy = crushed ? 0.16 : swell * 0.9;
+        const y = crushed ? r * 0.6 : r * 1.4;
+        pf.scale.x += (sx - pf.scale.x) * 0.18;
         pf.scale.z = pf.scale.x;
-        pf.scale.y += (swell * 0.9 - pf.scale.y) * 0.15;
+        pf.scale.y += (sy - pf.scale.y) * 0.18;
+        pf.position.y += (y - pf.position.y) * 0.18;
       }
     }
-    if (puffMat) puffMat.emissiveIntensity = burst ? 0.18 : trembling ? 0.1 : 0;
-    if (holeMat) holeMat.emissiveIntensity = burst ? 0.7 + 0.3 * Math.abs(Math.sin(nowMs / 140)) : trembling ? 0.35 : 0;
+    if (puffMat) {
+      puffMat.emissiveIntensity = crushed ? 0 : burst ? 0.18 : trembling ? 0.1 : 0;
+      puffMat.color.setHex(crushed ? 0x4a4054 : PUFF);
+    }
+    if (holeMat) holeMat.emissiveIntensity = crushed ? 0 : burst ? 0.7 + 0.3 * Math.abs(Math.sin(nowMs / 140)) : trembling ? 0.35 : 0;
+    const splat = data['splat'] as THREE.Mesh | undefined;
+    if (splat) splat.visible = crushed;
+    const shards = data['shards'] as THREE.Group | undefined;
+    if (shards) shards.visible = crushed;
     animateSporeCloud(data, trap, nowMs);
   } else if (trap.type === 'trap_rockfall') {
     const slab = data['slab'] as THREE.Group | undefined;

@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, provokeTrapsInRadius, breakRubbleInRadius } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, provokeTrapsInRadius, breakRubbleInRadius, disarmTrapsInRadius } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -467,11 +467,13 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
   }
   // 매 틱 쌓는다 — 피해 타(pulse)와 무관하게 "닿아 있는 시간"이 기준이다
   if (zapTarget) zapBarrel(world, zapTarget, 1);
-  // 포자 식물 — 빔이 닿으면 터진다 (모든 공격이 터뜨린다). 빔은 거기서 막힌다
+  // 포자 식물 — 빔이 닿으면 터진다 (모든 공격이 터뜨린다). 자동 군락은 빔에 망가진다. 빔은 거기서 막힌다
   if (damaging) {
-    const gasCfg = balance.traps.types.trap_gas;
     for (const trap of world.traps) {
-      if (trap.type !== 'trap_gas' || trap.phase !== 'armed') continue;
+      const isPlant = trap.type === 'trap_gas' && trap.phase === 'armed';
+      const isCluster = trap.type === 'trap_gas_auto' && trap.phase !== 'disarmed';
+      if (!isPlant && !isCluster) continue;
+      const gasCfg = balance.traps.types[trap.type as 'trap_gas' | 'trap_gas_auto'];
       const t = rayVsAabb(ox, oy, oz, hx0, slopeY, hz0, {
         minX: trap.x - gasCfg.hitRadius,
         minY: 0,
@@ -484,7 +486,8 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
       maxT = t;
       surface = null;
       axis = null;
-      provokeTrap(world, trap, gasCfg.telegraphTicks, 'beam');
+      if (isCluster) disarmTrap(world, trap, 'beam');
+      else provokeTrap(world, trap, gasCfg.telegraphTicks, 'beam');
     }
   }
 
@@ -836,12 +839,15 @@ function moveProjectiles(world: World, dt: number): void {
       }
     }
 
-    // 포자 식물 — 화살·마법이 맞으면 터진다 (멀리서 안전하게, 또는 적 옆에서)
+    // 포자 식물 — 화살·마법이 맞으면 터진다 (멀리서 안전하게, 또는 적 옆에서).
+    // 자동 군락 — 마법만 망가뜨린다; 화살은 부드러운 자실체를 못 부수고 그냥 지나간다
     let hitGasTrap: TrapState | null = null;
     if (proj.owner === 'player') {
-      const gasCfg = balance.traps.types.trap_gas;
       for (const trap of world.traps) {
-        if (trap.type !== 'trap_gas' || trap.phase !== 'armed') continue;
+        const isPlant = trap.type === 'trap_gas' && trap.phase === 'armed';
+        const isCluster = trap.type === 'trap_gas_auto' && trap.phase !== 'disarmed' && proj.kind !== 'arrow';
+        if (!isPlant && !isCluster) continue;
+        const gasCfg = balance.traps.types[trap.type as 'trap_gas' | 'trap_gas_auto'];
         const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
           minX: trap.x - gasCfg.hitRadius - proj.radius,
           minY: -proj.radius,
@@ -1021,7 +1027,8 @@ function moveProjectiles(world: World, dt: number): void {
       }
 
       if (hitGasTrap) {
-        provokeTrap(world, hitGasTrap, balance.traps.types.trap_gas.telegraphTicks, proj.kind === 'arrow' ? 'arrow' : 'spell');
+        if (hitGasTrap.type === 'trap_gas_auto') disarmTrap(world, hitGasTrap, 'spell');
+        else provokeTrap(world, hitGasTrap, balance.traps.types.trap_gas.telegraphTicks, proj.kind === 'arrow' ? 'arrow' : 'spell');
         world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', {
           x: proj.x + dirX * hitT, y: proj.y + dirY * hitT, z: proj.z + dirZ * hitT, hitEnemy: true,
         });
@@ -1373,6 +1380,7 @@ function explodeFireball(
   igniteOilInRadius(world, x, z, radius, balance.traps.types.trap_oil.burnTicks); // 기름 웅덩이에 불
   provokeTrapsInRadius(world, x, z, radius, 'trap_gas', balance.traps.types.trap_gas.telegraphTicks, 'fireball');
   if (balance.traps.types.trap_rockfall.rubbleBreakable) breakRubbleInRadius(world, x, z, radius); // 낙석 잔해를 치운다
+  disarmTrapsInRadius(world, x, z, radius, 'trap_gas_auto', balance.traps.types.trap_gas_auto.hitRadius, 'fireball'); // 포자 군락을 짓밟는다
 
   // 폭심에서 멀어질수록 약해진다 (반경 끝에서 explodeFalloffMin 배)
   const damageAt = (dist: number): number =>
@@ -1632,6 +1640,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
   igniteOilInRadius(world, proj.x, proj.z, grenade.radius, balance.traps.types.trap_oil.burnTicks);
   provokeTrapsInRadius(world, proj.x, proj.z, grenade.radius, 'trap_gas', balance.traps.types.trap_gas.telegraphTicks, 'grenade');
   if (balance.traps.types.trap_rockfall.rubbleBreakable) breakRubbleInRadius(world, proj.x, proj.z, grenade.radius); // 낙석 잔해를 치운다
+  disarmTrapsInRadius(world, proj.x, proj.z, grenade.radius, 'trap_gas_auto', balance.traps.types.trap_gas_auto.hitRadius, 'grenade'); // 포자 군락을 짓밟는다
 
   // 소음 — 폭발음은 멀리 퍼진다
   for (const enemy of world.enemies) {

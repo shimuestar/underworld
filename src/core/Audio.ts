@@ -7,6 +7,7 @@ export type SoundName =
   | 'grunt_fire'
   | 'poison_refresh'
   | 'burn_refresh'
+  | 'trap_squash'
   | 'telegraph_blue'
   | 'telegraph_red'
   | 'telegraph_purple'
@@ -1040,6 +1041,13 @@ export class GameAudio {
         this.tone(330, 0.13, 'triangle', 0.3, 0.01, 200);
         this.tone(96, 0.15, 'sine', 0.45, 0, 68);
         this.noise(0.045, 0.3, 1500, 0.11);
+        break;
+      case 'trap_squash':
+        // 포자 군락이 짓밟힌다 — 축축한 퍽(자실체 터짐) + 질척한 스침 + 낮은 받침
+        this.noise(0.05, 1.0, 900);
+        this.tone(140, 0.18, 'sine', 0.5, 0, 60);
+        this.noise(0.25, 0.4, 2200, 0.03);
+        this.tone(420, 0.08, 'triangle', 0.3, 0.02, 200);
         break;
       case 'poison_refresh':
         // 독이 다시 번진다 — 축축한 두 박자 하강(울렁) + 짧은 거품 + 낮은 받침. "처음부터 다시"

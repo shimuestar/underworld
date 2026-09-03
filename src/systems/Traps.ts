@@ -653,7 +653,7 @@ export function tick(world: World, _dt: number): void {
       continue;
     }
     if (trap.type === 'trap_gas_auto') {
-      tickAutoGas(world, trap, cfg); // 트리거 없이 주기마다 뿜는다
+      if (trap.phase !== 'disarmed') tickAutoGas(world, trap, cfg); // 트리거 없이 주기마다 뿜는다 — 망가지면 멈춘다
       continue;
     }
     switch (trap.phase) {

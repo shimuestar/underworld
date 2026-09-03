@@ -448,6 +448,18 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     provokeTrap(world, trap, gasHitCfg.telegraphTicks, 'hammer');
     hitAny = true;
   }
+  // 자동 포자 군락 — 해머로 짓밟으면 망가진다 (더는 뿜지 않는다). 총알·화살로는 안 된다
+  const clusterCfg = balance.traps.types.trap_gas_auto;
+  for (const trap of world.traps) {
+    if (trap.type !== 'trap_gas_auto' || trap.phase === 'disarmed') continue;
+    const toX = trap.x - p.x;
+    const toZ = trap.z - p.z;
+    const dist = Math.hypot(toX, toZ);
+    if (dist > range + clusterCfg.hitRadius || dist === 0) continue;
+    if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
+    disarmTrap(world, trap, 'hammer');
+    hitAny = true;
+  }
   // 그물 덫의 줄 — 부채꼴 안이면 해머가 끊는다 (별도 UI 없는 해체)
   const netCfg = balance.traps.types.trap_net;
   for (const trap of world.traps) {

@@ -468,6 +468,15 @@ export function disarmTrap(world: World, trap: TrapState, how: string): void {
   world.events.emit('trap_disarmed', { id: trap.id, type: trap.type, x: trap.x, z: trap.z, how });
 }
 
+/** 반경 안 특정 종의 함정을 망가뜨린다 — 폭발이 자동 포자 군락을 짓밟는 데 쓴다. pad = 함정 몸 반지름(호출부가 데이터에서 준다) */
+export function disarmTrapsInRadius(world: World, x: number, z: number, radius: number, type: string, pad: number, how: string): void {
+  for (const trap of world.traps) {
+    if (trap.type !== type) continue;
+    if (Math.hypot(trap.x - x, trap.z - z) > radius + pad) continue;
+    disarmTrap(world, trap, how);
+  }
+}
+
 /** 함정을 처음 상태로 되살린다 — 시험방 레버 등. 잔해 차단·경로 막힘도 함께 걷는다 */
 export function resetTrap(world: World, trap: TrapState, charges: number): void {
   if (trap.blocker) {

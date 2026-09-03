@@ -16,6 +16,7 @@ import {
   pushPlayer,
   type World,
   breakRubbleInRadius,
+  disarmTrapsInRadius,
 } from './World';
 
 export interface ExplosionSpec {
@@ -52,6 +53,7 @@ export function explodeAt(world: World, x: number, z: number, cfg: ExplosionSpec
   igniteOilInRadius(world, x, z, cfg.radius, balance.traps.types.trap_oil.burnTicks); // 기름 웅덩이에 불
   provokeTrapsInRadius(world, x, z, cfg.radius, 'trap_gas', balance.traps.types.trap_gas.telegraphTicks, 'explosion'); // 포자 식물도 터진다
   if (balance.traps.types.trap_rockfall.rubbleBreakable) breakRubbleInRadius(world, x, z, cfg.radius); // 낙석 잔해도 날아간다
+  disarmTrapsInRadius(world, x, z, cfg.radius, 'trap_gas_auto', balance.traps.types.trap_gas_auto.hitRadius, 'explosion'); // 포자 군락은 짓밟힌다
 
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;

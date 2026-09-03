@@ -819,6 +819,75 @@ describe('함정 — 자동 순환 포자 군락', () => {
   });
 });
 
+describe('함정 — 자동 순환 포자 군락: 망가뜨리기', () => {
+  it('해머 부채꼴에 들면 망가진다(trap_disarmed hammer) — 그 뒤로는 다시 뿜지 않는다', async () => {
+    const Weapons = await import('./Weapons');
+    const world = makeWorld();
+    const a = putTrap(world, 'trap_gas_auto', 7.6, 6); // 정면 1.6m
+    const ev: string[] = [];
+    world.events.on('trap_disarmed', (p) => ev.push((p as { how: string }).how));
+    world.events.on('trap_fired', (p) => ev.push('fired:' + (p as { type: string }).type));
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    for (let i = 0; i < 30 && a.phase !== 'disarmed'; i++) {
+      world.input = Input.emptySnapshot();
+      Weapons.tick(world, DT);
+    }
+    expect(a.phase).toBe('disarmed');
+    expect(ev).toEqual(['hammer']);
+    const c = T.trap_gas_auto;
+    tickTraps(world, (c.idleTicks + c.telegraphTicks + c.cloudTicks) * 2);
+    expect(a.phase).toBe('disarmed');
+    expect(ev).toEqual(['hammer']); // 다시 뿜지 않았다
+  });
+
+  it('권총 총알은 못 부순다 — 군락을 지나 뒤의 적을 맞힌다', async () => {
+    const Weapons = await import('./Weapons');
+    const world = makeWorld();
+    const a = putTrap(world, 'trap_gas_auto', 14, 6);
+    const behind = addEnemy(world, 'goblin_runner', 20, 6);
+    const hp = behind.health;
+    world.player.pitch = -0.08;
+    world.input = { ...Input.emptySnapshot(), rangedPressed: true };
+    Weapons.tick(world, DT);
+    expect(a.phase).not.toBe('disarmed');
+    expect(behind.health).toBeLessThan(hp); // 총알이 군락을 통과했다
+  });
+
+  it('화살도 못 부순다 — 그냥 지나간다', () => {
+    const world = makeWorld();
+    const a = putTrap(world, 'trap_gas_auto', 14, 6);
+    world.projectiles.push({
+      id: 4243, owner: 'player', x: 8, y: 0.6, z: 6, prevX: 8, prevY: 0.6, prevZ: 6,
+      vx: 30, vy: 0, vz: 0, lifeTicks: 90, damage: 10, burnTicks: 0, burnDamagePerTick: 0, radius: 0.1, kind: 'arrow',
+    });
+    for (let i = 0; i < 30; i++) Projectiles.tick(world, DT);
+    expect(a.phase).not.toBe('disarmed');
+    expect(world.projectiles).toHaveLength(1); // 박히지 않고 계속 난다
+  });
+
+  it('폭발(explodeAt) 반경 안이면 망가진다 — 밖은 멀쩡. 구름 중이었으면 구름도 그친다', async () => {
+    const { explodeAt } = await import('../core/Explosion');
+    const world = makeWorld();
+    const near = putTrap(world, 'trap_gas_auto', 30, 6);
+    const far = putTrap(world, 'trap_gas_auto', 50, 6);
+    const c = T.trap_gas_auto;
+    tickTraps(world, c.idleTicks + c.telegraphTicks + 5); // near 는 위상 0 → 뿜는 중
+    expect(near.phase).toBe('firing');
+    explodeAt(world, 33, 6, { radius: 3, damage: 0, damageFalloffMin: 1, enemyKnockback: 0, playerKnockback: 0, playerKnockbackTicks: 0, noiseRadius: 0, fxHeight: 0.5 });
+    expect(near.phase).toBe('disarmed');
+    expect(far.phase).not.toBe('disarmed');
+    // 구름 안에 들어가도 독이 들지 않는다 — 망가진 군락은 효과가 없다
+    world.player.x = 30;
+    tickTraps(world, 5);
+    expect(world.player.dots?.poison).toBeUndefined();
+    // 레버 리셋이면 처음부터 다시 돈다
+    resetTrap(world, near, -1);
+    tickTraps(world, 1);
+    expect(near.phase).toBe('cooldown');
+  });
+});
+
 describe('함정 — 자동 순환 다트 발사기', () => {
   it('트리거 없이 idle → 예고 → 발사를 돈다, 위상 플래그가 있으면 그것부터', () => {
     const world = makeWorld();
