@@ -986,13 +986,15 @@ function moveProjectiles(world: World, dt: number): void {
         });
       }
 
-      // 수류탄 — 벽·천장은 튕기고, 바닥에 닿거나 몸(·폭발통·부술 것)에 맞으면 터진다
+      // 수류탄 — 벽·천장만 튕기고, 그 밖의 모든 것(바닥·몸·폭발통·기믹·포자 식물·군락·그물 줄)에 닿으면 즉시 터진다.
+      // 포자 식물에 던진 수류탄이 벽처럼 튕겨 돌아오던 문제(2026-09-03) — 함정 몸도 '몸'이다
       if (proj.kind === 'grenade') {
         proj.x += dirX * hitT;
         proj.y += dirY * hitT;
         proj.z += dirZ * hitT;
         const bodyHit =
-          hitEnemy !== null || hitPlayer || hitBarrelTarget !== null || hitPropTarget !== null || hitProjectile !== null || hitHead !== null;
+          hitEnemy !== null || hitPlayer || hitBarrelTarget !== null || hitPropTarget !== null || hitProjectile !== null || hitHead !== null ||
+          hitGasTrap !== null || hitNetTrap !== null;
         // 금 간 벽(C)에는 튕기지 않고 부딪히는 즉시 터진다 — 튕기는 수류탄으로
         // 균열 벽을 맞히기가 고역이라, 벽 쪽이 받아 준다
         if (!bodyHit && hitSurface === 'wall') {

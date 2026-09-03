@@ -932,6 +932,35 @@ describe('함정 — 포자 식물 원거리 도발', () => {
     expect(behind.health).toBe(hp);
   });
 
+  it('수류탄은 식물에 닿으면 튕기지 않고 그 자리에서 터진다 — 폭발이 식물을 개화시킨다', () => {
+    const world = makeWorld();
+    const plant = putTrap(world, 'trap_gas', 14, 6);
+    const ev: string[] = [];
+    for (const n of ['grenade_bounce', 'explosion'] as const) world.events.on(n, () => ev.push(n));
+    world.projectiles.push({
+      id: 4244, owner: 'player', x: 8, y: 1.0, z: 6, prevX: 8, prevY: 1.0, prevZ: 6,
+      vx: 30, vy: 0, vz: 0, lifeTicks: 100, damage: 0, burnTicks: 0, burnDamagePerTick: 0, radius: 0.15, kind: 'grenade',
+    });
+    for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(ev).toEqual(['explosion']); // 튕김 없이 곧장
+    expect(world.projectiles).toHaveLength(0);
+    expect(plant.phase).toBe('telegraph');
+  });
+
+  it('수류탄은 자동 군락에 닿아도 튕기지 않고 터진다 — 군락은 망가진다', () => {
+    const world = makeWorld();
+    const cluster = putTrap(world, 'trap_gas_auto', 14, 6);
+    const ev: string[] = [];
+    for (const n of ['grenade_bounce', 'explosion'] as const) world.events.on(n, () => ev.push(n));
+    world.projectiles.push({
+      id: 4245, owner: 'player', x: 8, y: 0.8, z: 6, prevX: 8, prevY: 0.8, prevZ: 6,
+      vx: 30, vy: 0, vz: 0, lifeTicks: 100, damage: 0, burnTicks: 0, burnDamagePerTick: 0, radius: 0.15, kind: 'grenade',
+    });
+    for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(ev).toEqual(['explosion']);
+    expect(cluster.phase).toBe('disarmed');
+  });
+
   it('화살이 맞혀도 터진다', () => {
     const world = makeWorld();
     const plant = putTrap(world, 'trap_gas', 14, 6);
