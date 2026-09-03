@@ -441,10 +441,11 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
   } else if (trap.type === 'trap_pendulum') {
     const arm = data['arm'] as THREE.Group | undefined;
     if (arm) {
-      // 주기 — 로직의 cycleTick 을 그대로 읽는다 (최저점 = 칸 중심 = 각도 0)
-      const period = 120;
+      // 주기·진폭 — 로직과 같은 데이터를 읽는다 (최저점 = 칸 중심 = 각도 0)
+      const pcfg = balance.traps.types.trap_pendulum;
+      const period = Math.max(2, pcfg.periodTicks);
       const t = ((trap.cycleTick ?? 0) % period) / period;
-      const angle = (70 * Math.PI) / 180 * Math.sin(t * Math.PI * 2);
+      const angle = (pcfg.swingDeg * Math.PI) / 180 * Math.sin(t * Math.PI * 2);
       if (trap.dirX !== 0) arm.rotation.x = angle;
       else arm.rotation.z = angle;
     }
