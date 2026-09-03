@@ -480,6 +480,17 @@ export function provokeTrap(world: World, trap: TrapState, telegraphTicks: numbe
   world.events.emit('trap_telegraph', { id: trap.id, type: trap.type, x: trap.x, z: trap.z });
 }
 
+/** 반경 안의 대기 중인 포자 식물을 전부 건드린다 — 폭발(수류탄·화염구·폭발통)이 부른다 */
+export function provokeTrapsInRadius(
+  world: World, x: number, z: number, radius: number, type: string, telegraphTicks: number, how: string,
+): void {
+  for (const trap of world.traps) {
+    if (trap.type !== type || trap.phase !== 'armed') continue;
+    if (Math.hypot(trap.x - x, trap.z - z) > radius) continue;
+    provokeTrap(world, trap, telegraphTicks, how);
+  }
+}
+
 /** 반경 안의 안 붙은 기름 웅덩이에 불을 붙인다 — 폭발·화염구·수류탄·불타는 적이 부른다.
  *  burnTicks 는 호출부가 balance 에서 넘긴다 (World 는 데이터를 읽지 않는다) */
 export function igniteOilInRadius(world: World, x: number, z: number, radius: number, burnTicks: number): void {

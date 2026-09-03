@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, provokeTrapsInRadius } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -467,6 +467,26 @@ function castBeam(world: World, effects: Record<string, number>, damaging = true
   }
   // 매 틱 쌓는다 — 피해 타(pulse)와 무관하게 "닿아 있는 시간"이 기준이다
   if (zapTarget) zapBarrel(world, zapTarget, 1);
+  // 포자 식물 — 빔이 닿으면 터진다 (모든 공격이 터뜨린다). 빔은 거기서 막힌다
+  if (damaging) {
+    const gasCfg = balance.traps.types.trap_gas;
+    for (const trap of world.traps) {
+      if (trap.type !== 'trap_gas' || trap.phase !== 'armed') continue;
+      const t = rayVsAabb(ox, oy, oz, hx0, slopeY, hz0, {
+        minX: trap.x - gasCfg.hitRadius,
+        minY: 0,
+        minZ: trap.z - gasCfg.hitRadius,
+        maxX: trap.x + gasCfg.hitRadius,
+        maxY: gasCfg.height,
+        maxZ: trap.z + gasCfg.hitRadius,
+      });
+      if (t === null || t >= maxT) continue;
+      maxT = t;
+      surface = null;
+      axis = null;
+      provokeTrap(world, trap, gasCfg.telegraphTicks, 'beam');
+    }
+  }
 
   const candidates: { enemy: EnemyState; t: number }[] = [];
   for (const enemy of world.enemies) {
@@ -1351,6 +1371,7 @@ function explodeFireball(
   // 화살·총·해머 같은 물리 타격은 못 부순다 (그쪽엔 이 호출이 없다)
   breakCrackWalls(world, x, z, radius);
   igniteOilInRadius(world, x, z, radius, balance.traps.types.trap_oil.burnTicks); // 기름 웅덩이에 불
+  provokeTrapsInRadius(world, x, z, radius, 'trap_gas', balance.traps.types.trap_gas.telegraphTicks, 'fireball');
 
   // 폭심에서 멀어질수록 약해진다 (반경 끝에서 explodeFalloffMin 배)
   const damageAt = (dist: number): number =>
@@ -1608,6 +1629,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
   // 균열 벽(C) 파괴
   if (grenade.breaksCrackWall) breakCrackWalls(world, proj.x, proj.z, grenade.radius);
   igniteOilInRadius(world, proj.x, proj.z, grenade.radius, balance.traps.types.trap_oil.burnTicks);
+  provokeTrapsInRadius(world, proj.x, proj.z, grenade.radius, 'trap_gas', balance.traps.types.trap_gas.telegraphTicks, 'grenade');
 
   // 소음 — 폭발음은 멀리 퍼진다
   for (const enemy of world.enemies) {

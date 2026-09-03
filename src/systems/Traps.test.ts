@@ -858,3 +858,53 @@ describe('함정 — 재생성 레버 (시험방)', () => {
     expect(world.pulledLevers.size).toBe(0); // 1회성 목록에 들지 않는다
   });
 });
+
+describe('함정 — 포자 식물은 모든 공격에 터진다', () => {
+  it('해머 부채꼴에 맞으면 개화(예고)로', async () => {
+    const Weapons = await import('./Weapons');
+    const world = makeWorld();
+    const plant = putTrap(world, 'trap_gas', 7.6, 6); // 정면 1.6m
+    const ev: string[] = [];
+    world.events.on('trap_triggered', (p) => ev.push((p as { how?: string }).how ?? '?'));
+    world.input = { ...Input.emptySnapshot(), meleePressed: true };
+    Weapons.tick(world, DT);
+    for (let i = 0; i < 30 && plant.phase === 'armed'; i++) {
+      world.input = Input.emptySnapshot();
+      Weapons.tick(world, DT);
+    }
+    expect(plant.phase).toBe('telegraph');
+    expect(ev).toEqual(['hammer']);
+  });
+
+  it('폭발(explodeAt) 반경 안이면 터진다', async () => {
+    const { explodeAt } = await import('../core/Explosion');
+    const world = makeWorld();
+    const plant = putTrap(world, 'trap_gas', 30, 6);
+    const far = putTrap(world, 'trap_gas', 50, 6);
+    explodeAt(world, 33, 6, {
+      radius: 5, damage: 0, damageFalloffMin: 1, enemyKnockback: 0,
+      playerKnockback: 0, playerKnockbackTicks: 0, noiseRadius: 0, fxHeight: 0.5,
+    });
+    expect(plant.phase).toBe('telegraph');
+    expect(far.phase).toBe('armed');
+  });
+});
+
+describe('함정 — 포자 식물: 뇌창(빔)에도 터진다', () => {
+  it('빔이 식물에 닿으면 개화(예고)로', async () => {
+    const { allSigilIds, sigilDef } = await import('../core/SigilData');
+    const world = makeWorld();
+    const beamId = allSigilIds().find((id) => sigilDef(id).cast === 'beam');
+    expect(beamId).toBeTruthy();
+    Sigils.acquire(world, beamId!);
+    world.mana.value = 100;
+    const plant = putTrap(world, 'trap_gas', 12, 6); // 정면 6m
+    world.player.pitch = -0.1;
+    const slot = world.skillSlots.indexOf(beamId!) + 1;
+    world.input = { ...Input.emptySnapshot(), castPressed: true, useSkill: slot };
+    Projectiles.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    Projectiles.endChannel(world);
+    expect(plant.phase).toBe('telegraph');
+  });
+});

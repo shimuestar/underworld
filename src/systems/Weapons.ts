@@ -436,6 +436,18 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     damageProp(world, prop, pcfg.hp, 2, 'melee'); // 해머는 한 방 몫(2점) — 일반 기믹이 한 방에 깨진다
     hitAny = true; // 기믹을 깬 것도 헛스윙은 아니다
   }
+  // 포자 식물 — 해머로 치면 터진다 (모든 공격이 터뜨린다는 규칙)
+  const gasHitCfg = balance.traps.types.trap_gas;
+  for (const trap of world.traps) {
+    if (trap.type !== 'trap_gas' || trap.phase !== 'armed') continue;
+    const toX = trap.x - p.x;
+    const toZ = trap.z - p.z;
+    const dist = Math.hypot(toX, toZ);
+    if (dist > range + gasHitCfg.hitRadius || dist === 0) continue;
+    if ((facingX * toX + facingZ * toZ) / dist < arcCos) continue;
+    provokeTrap(world, trap, gasHitCfg.telegraphTicks, 'hammer');
+    hitAny = true;
+  }
   // 그물 덫의 줄 — 부채꼴 안이면 해머가 끊는다 (별도 UI 없는 해체)
   const netCfg = balance.traps.types.trap_net;
   for (const trap of world.traps) {
