@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { World, type EnemyState, type TrapState } from '../core/World';
+import { World, type EnemyState, type TrapState, resetTrap } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Projectiles from './Projectiles';
@@ -612,6 +612,35 @@ describe('함정 — 낙석', () => {
     expect(world.level.props.length).toBe(before + 1);
     expect(rock.blocker).toBeTruthy();
     expect(world.level.pathBlockedAt(rock.col, rock.row)).toBe(true);
+  });
+
+  it('잔해는 폭발로 부서진다 — 반경이 잔해 상자에 닿으면 차단·경로 막힘이 풀리고, 밖이면 그대로. 함정은 spent 유지', async () => {
+    const { explodeAt } = await import('../core/Explosion');
+    const rock = putTrap(world, 'trap_rockfall', 30, 6, 'N');
+    world.player.x = 30; // 밟는다
+    tickTraps(world, T.trap_rockfall.telegraphTicks + 1);
+    expect(rock.phase).toBe('spent');
+    expect(rock.blocker).toBeDefined();
+    expect(world.level.pathBlockedAt(rock.col, rock.row)).toBe(true);
+    const ev: string[] = [];
+    world.events.on('trap_rubble_broken', () => ev.push('broken'));
+    const spec = { radius: 3, damage: 0, damageFalloffMin: 1, enemyKnockback: 0, playerKnockback: 0, playerKnockbackTicks: 0, noiseRadius: 0, fxHeight: 0.5 };
+    world.player.x = 6;
+    explodeAt(world, 50, 6, spec); // 잔해 가장자리(31.7)에서 18m — 밖
+    expect(rock.blocker).toBeDefined();
+    expect(ev).toEqual([]);
+    explodeAt(world, 34, 6, spec); // 가장자리에서 2.3m — 반경 3 안 (중심 거리 4 로 재면 밖 — 상자 기준이라 부서진다)
+    expect(rock.blocker).toBeUndefined();
+    expect(rock.rubbleBroken).toBe(true);
+    expect(rock.phase).toBe('spent'); // 다시 떨어지지 않는다
+    expect(world.level.pathBlockedAt(rock.col, rock.row)).toBe(false);
+    expect(ev).toEqual(['broken']);
+    explodeAt(world, 30, 6, spec); // 이미 부서진 잔해 — 조용
+    expect(ev).toEqual(['broken']);
+    // 시험방 레버 리셋 — 부서진 표시도 지워지고 다시 떨어질 수 있다
+    resetTrap(world, rock, 1);
+    expect(rock.rubbleBroken).toBeUndefined();
+    expect(rock.phase).toBe('armed');
   });
 
   it('낙석 피해 source 는 trap_rockfall (폭발 결 진동), 막기 불가', () => {

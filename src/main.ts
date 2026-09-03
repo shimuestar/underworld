@@ -530,6 +530,7 @@ for (const name of [
   'burn_tick',
   'burn_ended',
   'trap_reset',
+  'trap_rubble_broken',
   'ammo_picked',
   'grenade_picked',
   'battery_picked',
@@ -909,6 +910,18 @@ events.on('trap_rearmed', (payload) => {
   }
 });
 events.on('trap_gas_cough', () => audio.play('trap_cough')); // 내 기침 — 패닝 없음
+// 낙석 잔해가 폭발에 부서졌다 — 붕괴와 같은 결(돌·먼지·진동)로 한 번 더, 길이 열렸다고 알린다
+events.on('trap_rubble_broken', (payload) => {
+  const t = payload as { x: number; z: number };
+  audio.play('wall_crumble', panAt(t.x, t.z));
+  stage.spawnWallCrumble(t.x, t.z);
+  const d = Math.hypot(world.player.x - t.x, world.player.z - t.z);
+  if (d < 12) {
+    stage.triggerCameraKick(0.3 * (1 - d / 12), 200);
+    padRumble('crumble');
+  }
+  showReaction('잔해가 부서졌다 — 길이 열렸다', 2000);
+});
 // 지속 피해 상태(독·화염) — 걸리는 순간 알리고(초기 피해는 player_damaged 가 이미 붉게 알린다), 풀리면 알린다.
 // 도트 틱은 붉은 화면·진동 없이 '윽' 신음만 — 깎일 때마다 귀로 세게 (2026-09-03)
 const dotSeconds = (payload: unknown): number => Math.round(((payload as { ticks: number }).ticks ?? 0) / 60);
@@ -970,7 +983,7 @@ events.on('trap_fired', (payload) => {
       stage.triggerCameraKick(0.6 * (1 - d / 12), 300);
       padRumble('crumble');
     }
-    showReaction('천장이 무너졌다 — 잔해가 길을 막는다 (총알은 넘어간다)', 2400);
+    showReaction('천장이 무너졌다 — 잔해가 길을 막는다 (총알은 넘어간다 · 폭발로 부술 수 있다)', 2600);
   } else if (t.type === 'trap_gas') {
     audio.play('trap_spore', panAt(t.x, t.z)); // 포자가 쏟아진다
   }

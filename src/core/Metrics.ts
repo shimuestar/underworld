@@ -132,6 +132,7 @@ export class Metrics {
     events.on('trap_hit_enemy', () => this.trapHitsEnemy++);
     events.on('trap_kill', () => this.trapKills++);
     events.on('trap_disarmed', () => this.trapDisarms++);
+    events.on('trap_rubble_broken', () => this.trapDisarms++); // 잔해 폭파도 함정 무력화의 하나
     events.on('trap_parried', () => this.trapParried++);
     events.on('player_damaged', (payload) => {
       const src = (payload as { source?: string }).source;

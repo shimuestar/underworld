@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, provokeTrapsInRadius } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, provokeTrapsInRadius, breakRubbleInRadius } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -1372,6 +1372,7 @@ function explodeFireball(
   breakCrackWalls(world, x, z, radius);
   igniteOilInRadius(world, x, z, radius, balance.traps.types.trap_oil.burnTicks); // 기름 웅덩이에 불
   provokeTrapsInRadius(world, x, z, radius, 'trap_gas', balance.traps.types.trap_gas.telegraphTicks, 'fireball');
+  if (balance.traps.types.trap_rockfall.rubbleBreakable) breakRubbleInRadius(world, x, z, radius); // 낙석 잔해를 치운다
 
   // 폭심에서 멀어질수록 약해진다 (반경 끝에서 explodeFalloffMin 배)
   const damageAt = (dist: number): number =>
@@ -1630,6 +1631,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
   if (grenade.breaksCrackWall) breakCrackWalls(world, proj.x, proj.z, grenade.radius);
   igniteOilInRadius(world, proj.x, proj.z, grenade.radius, balance.traps.types.trap_oil.burnTicks);
   provokeTrapsInRadius(world, proj.x, proj.z, grenade.radius, 'trap_gas', balance.traps.types.trap_gas.telegraphTicks, 'grenade');
+  if (balance.traps.types.trap_rockfall.rubbleBreakable) breakRubbleInRadius(world, proj.x, proj.z, grenade.radius); // 낙석 잔해를 치운다
 
   // 소음 — 폭발음은 멀리 퍼진다
   for (const enemy of world.enemies) {

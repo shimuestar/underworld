@@ -14,6 +14,8 @@ export interface TrapView {
   cycleTick?: number;
   /** 함정 감지 각인이 알아챘다 — 보랏빛으로 드러난다 */
   revealed?: boolean;
+  /** 낙석 잔해가 폭발로 부서졌다 — 낮은 자갈 더미만 남는다 */
+  rubbleBroken?: boolean;
 }
 const REVEAL = 0x7d5cff;
 
@@ -285,6 +287,18 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     rubble.visible = false;
     group.add(rubble);
     data['rubble'] = rubble;
+    // 폭발로 부서진 잔해 — 넓게 흩어진 낮은 자갈. 몸이 지나갈 수 있어 보여야 한다
+    const broken = new THREE.Group();
+    for (let i = 0; i < 12; i++) {
+      const size = 0.2 + (i % 4) * 0.09;
+      const chip = new THREE.Mesh(new THREE.BoxGeometry(size, size * 0.5, size * 0.8), gravelMat);
+      chip.position.set(Math.sin(i * 2.7) * 1.45, size * 0.25, Math.cos(i * 2.2) * 1.45);
+      chip.rotation.set(0, i * 1.1, 0);
+      broken.add(chip);
+    }
+    broken.visible = false;
+    group.add(broken);
+    data['brokenRubble'] = broken;
   } else if (trap.type === 'trap_pendulum') {
     // 천장 피벗 — 막대 끝의 큰 칼날. 복도 축(dir)에 수직으로 흔들린다
     const arm = new THREE.Group();
@@ -437,7 +451,10 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
       slab.position.x = Math.sin(nowMs / 23) * shake;
       slab.position.z = Math.cos(nowMs / 31) * shake;
     }
-    if (rubble) rubble.visible = fallen;
+    const broken = data['brokenRubble'] as THREE.Group | undefined;
+    const shattered = trap.rubbleBroken === true;
+    if (rubble) rubble.visible = fallen && !shattered;
+    if (broken) broken.visible = fallen && shattered;
   } else if (trap.type === 'trap_pendulum') {
     const arm = data['arm'] as THREE.Group | undefined;
     if (arm) {

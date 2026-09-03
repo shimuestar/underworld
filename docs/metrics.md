@@ -62,7 +62,7 @@ zone_cleared    { tick }
 | `traps.hitsPlayer` | `trap_hit_player` | 함정 피해를 플레이어가 받은 횟수 (다트 포함) |
 | `traps.hitsEnemy` | `trap_hit_enemy` | 함정 피해를 적이 받은 횟수 — 유도 플레이 지표 |
 | `traps.kills` | `trap_kill` | 함정으로 죽은 적 (마나 없음 — 총 처치와 같은 결) |
-| `traps.disarms` | `trap_disarmed` | 플레이어가 해체한 함정(그물 줄 끊기 등) |
+| `traps.disarms` | `trap_disarmed` · `trap_rubble_broken` | 플레이어가 무력화한 함정(그물 줄 끊기·낙석 잔해 폭파) |
 | `traps.parried` | `trap_parried` | 진자 칼날 완벽 패링 |
 | `traps.deaths` | `player_died` 직전 `player_damaged.source` 가 `trap_*`/`poison`/`burn`, 또는 `poison_tick`/`burn_tick` | 함정(독·화염 도트 포함)으로 죽은 횟수 |
 | `damageTakenTotal` (기존) | `player_damaged` + `poison_tick` + `burn_tick` | 도트는 player_damaged 를 안 내므로 따로 합산 |

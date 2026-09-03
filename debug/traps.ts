@@ -17,7 +17,7 @@ const wall = new THREE.Mesh(new THREE.BoxGeometry(26, 3.4, 0.6), new THREE.MeshL
 wall.position.set(0, 1.7, -2.6); // 앞면 z=-2.3 = 함정 칸(-0.3) 북쪽 경계 — 노즐이 벽면에서 튀어나온다
 scene.add(wall);
 
-const specimens: { trap: { type: string; phase: string; timer: number; dirX: number; dirZ: number; cycleTick?: number; revealed?: boolean }; x: number; z?: number }[] = [
+const specimens: { trap: { type: string; phase: string; timer: number; dirX: number; dirZ: number; cycleTick?: number; revealed?: boolean; rubbleBroken?: boolean }; x: number; z?: number }[] = [
   { trap: { type: 'trap_dart', phase: 'armed', timer: 0, dirX: 0, dirZ: 1, revealed: true }, x: -8 }, // 감지 발광 표본
   { trap: { type: 'trap_dart', phase: 'telegraph', timer: 10, dirX: 0, dirZ: 1 }, x: -4 },
   { trap: { type: 'trap_dart', phase: 'spent', timer: 0, dirX: 0, dirZ: 1 }, x: 0 },
@@ -33,6 +33,7 @@ const specimens: { trap: { type: string; phase: string; timer: number; dirX: num
   { trap: { type: 'trap_gas', phase: 'firing', timer: 200, dirX: 0, dirZ: -1 }, x: -8, z: 9.5 },
   { trap: { type: 'trap_rockfall', phase: 'armed', timer: 0, dirX: 0, dirZ: -1 }, x: -3, z: 9.5 },
   { trap: { type: 'trap_rockfall', phase: 'spent', timer: 0, dirX: 0, dirZ: -1 }, x: 2, z: 9.5 },
+  { trap: { type: 'trap_rockfall', phase: 'spent', timer: 0, dirX: 0, dirZ: -1, rubbleBroken: true }, x: 12, z: 9.5 }, // 폭발로 부서진 잔해
   { trap: { type: 'trap_pendulum', phase: 'firing', timer: 0, dirX: 1, dirZ: 0, cycleTick: 20 }, x: 7, z: 9.5 },
 ];
 const groups = specimens.map((s) => {

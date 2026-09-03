@@ -407,6 +407,8 @@ export interface TrapState {
   revealed?: boolean;
   /** 낙석 잔해 차단 블록 */
   blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** 낙석 잔해가 폭발로 부서졌다 — spent 는 그대로(다시 안 떨어진다), 차단만 풀린 상태. 낮은 자갈 더미로 그린다 */
+  rubbleBroken?: boolean;
 }
 
 /** 전리품 낙하점 — 플레이어 '반대쪽' 호(±arcDeg/2)로만 떨어진다. 죽인·부순·연 자리에서
@@ -473,6 +475,7 @@ export function resetTrap(world: World, trap: TrapState, charges: number): void 
     world.level.clearPathBlocked(trap.col, trap.row);
     trap.blocker = undefined;
   }
+  trap.rubbleBroken = undefined;
   trap.phase = 'armed';
   trap.timer = 0;
   trap.charges = charges;
@@ -480,6 +483,23 @@ export function resetTrap(world: World, trap: TrapState, charges: number): void 
   trap.cycleTick = undefined;
   trap.triggeredBy = undefined;
   world.events.emit('trap_reset', { id: trap.id, type: trap.type, x: trap.x, z: trap.z });
+}
+
+/** 낙석 잔해를 폭발로 치운다 — 폭발 반경이 잔해 상자(가장 가까운 점)에 닿으면 몸 차단·적 경로 막힘이 풀린다.
+ *  함정 자체는 spent 그대로(다시 떨어지지 않는다). 수류탄·화염구·폭발통·기믹 폭발 공용 — 호출부가 rubbleBreakable 을 본다 */
+export function breakRubbleInRadius(world: World, x: number, z: number, radius: number): void {
+  for (const trap of world.traps) {
+    if (trap.type !== 'trap_rockfall' || !trap.blocker || trap.rubbleBroken) continue;
+    const b = trap.blocker;
+    const dx = Math.max(b.minX - x, 0, x - b.maxX);
+    const dz = Math.max(b.minZ - z, 0, z - b.maxZ);
+    if (Math.hypot(dx, dz) > radius) continue;
+    world.level.removeBlocker(b);
+    world.level.clearPathBlocked(trap.col, trap.row);
+    trap.blocker = undefined;
+    trap.rubbleBroken = true;
+    world.events.emit('trap_rubble_broken', { id: trap.id, type: trap.type, x: trap.x, z: trap.z });
+  }
 }
 
 /** 함정을 멀리서 건드렸다(총·화살·마법) — 대기 중이면 곧장 예고로 넘긴다. telegraphTicks 는 호출부가 준다.

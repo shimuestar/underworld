@@ -44,7 +44,7 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
 | `trap_spike_auto` | 中 | 없음(자동 순환) | 30틱 덜컹 | 서 있는 가시 접촉 28 | 45 | 내려감 90 → 덜컹 30 → 가시 120 → 회수 45 반복 | 안전한 판(반대 위상) 골라 건너기 |
 | `trap_gas` (포자 식물) | 中 | 근접 1.5 **또는 원거리 피격**(총·화살·마법) | 30틱 개화(꽃잎 벌어짐·개화음) | 포자 구름: 시야 흔들림·스태미너 급감·기침 소음, 피해 0 | 경둔화 0.7 | 5초 구름, 8초 뒤 다시 핀다 | 멀리서 터뜨리기·벗어나기·적을 구름에 몰기 |
 | `trap_glyph` | 中 | 밟기 1.2 | 없음 | 오염 +6·시야 흔들림(피해 0) | **경직 2초 → 처형**(보스 ×0.5) | 1회 | 랜턴 끄고 보기 |
-| `trap_rockfall` | 高 | 판 1.3 | 30틱 우르릉·천장 떨림 | 40 감쇠·넉백 | 60 감쇠·넉백 | 1회 | 예고 듣고 빠지기 |
+| `trap_rockfall` | 高 | 판 1.3 | 30틱 우르릉·천장 떨림 | 40 감쇠·넉백 | 60 감쇠·넉백 | 1회 · 잔해는 **폭발로 부숨** | 예고 듣고 빠지기·대시 무적 / 잔해는 수류탄·화염구로 치우기 |
 | `trap_pendulum` | 高 | 항시 | 휭(14m) | 45·넉백 / **완벽 패링 가능** | 55(보스 ×0.3) | 2초 주기 | 리듬·패링 |
 
 세부 규칙:
@@ -81,6 +81,9 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
 - **문양** — 가시성 = `랜턴 꺼짐 || 오염 ≥ 25(문양 해독) || revealed`. 적 경직은 패링 스태거와 같은 필드
   (`ai='staggered'`, `timer`, `attackFreezeTicks=0`, `wantsBash=false`) → Reaction 처형 대상.
 - **낙석** — 잔해 = `Level.addBlocker`(몸) + `Level.setPathBlocked`(적 추격 흐름장이 벽으로 본다).
+  **잔해 폭파**(2026-09-03, `rubbleBreakable`) — 폭발(수류탄·화염구·폭발통·기믹 폭발) 반경이 잔해 상자의 가장 가까운 점에 닿으면
+  `breakRubbleInRadius`(World 헬퍼)가 차단·경로 막힘을 걷고 `rubbleBroken` 을 세운다 → `trap_rubble_broken`(붕괴 소리·먼지·진동,
+  "길이 열렸다"). 함정은 spent 그대로(다시 안 떨어짐), 모형은 낮은 자갈 더미. 총·화살·해머로는 안 부서진다 — 돌아가기 vs 자원 쓰기.
   총알·소음은 넘어간다. 배치 검증: 잔해가 전부 내려와도 S→X·제단 연결 유지(소프트락 방지).
 - **진자** — `cycleTick` 주기. 최저점 창(±`hitWindowTicks/2`) 안 몸당 1회(`hitIds`). 최저점 `parryLeadTicks`
   전에 누른 반응은 `parryBufferTicks` 로 살려 두고, 타격 틱에 `reactionPressed || parryBufferTicks` 면
@@ -100,7 +103,7 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
 `trap_triggered {id,type,x,z,by}` · `trap_telegraph` · `trap_fired {…,dirX,dirZ}` · `trap_spent` ·
 `trap_hit_player {id,type,amount}` · `trap_hit_enemy {…,enemyId,amount}` · `trap_kill {enemyType,trapType}` ·
 `trap_disarmed {…,how}` · `trap_ignited` · `trap_glyph_burst {…,victim}` · `trap_gas_cough` · `trap_whoosh` ·
-`trap_parried` · `trap_revealed`. 플레이어 피해 `source`: `trap_spike / trap_dart / trap_fire / trap_rockfall(폭발 결 진동) / trap_pendulum`.
+`trap_parried` · `trap_revealed` · `trap_rubble_broken`. 플레이어 피해 `source`: `trap_spike / trap_dart / trap_fire / trap_rockfall(폭발 결 진동) / trap_pendulum`.
 Metrics 는 `docs/metrics.md` 함정 표.
 
 ## 6. 데이터·배치
@@ -115,4 +118,4 @@ Metrics 는 `docs/metrics.md` 함정 표.
 
 - 진자 타이밍에 반응을 눌렀는데 4.6m 안에 windup 중인 적이 있으면 Reaction 실패 경직(20틱) — 의도된 긴장.
 - 히트스톱은 systems 전체를 멈추므로 진자도 멈춘다 (자연스럽다).
-- 낙석 잔해는 영구 — 배치 검증이 연결성을 보장하지만, 새 층을 짤 때 반드시 `check_traps` 를 통과시킬 것.
+- 낙석 잔해는 폭발로만 치울 수 있다(수류탄 1개 또는 화염구 마나) — 배치 검증이 연결성을 보장하지만, 새 층을 짤 때 반드시 `check_traps` 를 통과시킬 것.
