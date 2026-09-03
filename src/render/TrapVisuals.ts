@@ -212,9 +212,12 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
   } else if (trap.type === 'trap_gas') {
     // 포자 식물 — 줄기 위에 부풀어 오른 주머니, 둘레에 작은 포자 주머니 셋. 다가가면(예고) 꽃잎이
     // 벌어지며 개화하고 포자 구름을 뿜는다. 구름은 반투명 초록 구체 군집(랜턴 빔에 빛난다)
-    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.13, 0.7, 8), new THREE.MeshLambertMaterial({ color: STALK }));
+    const stalkMat = new THREE.MeshLambertMaterial({ color: STALK });
+    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.13, 0.7, 8), stalkMat);
     stalk.position.y = 0.35;
     group.add(stalk);
+    data['stalkMat'] = stalkMat;
+    data['stalk'] = stalk;
     const bulbMat = new THREE.MeshLambertMaterial({ color: BULB, emissive: 0x9fe060, emissiveIntensity: 0 });
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), bulbMat);
     bulb.scale.set(1, 1.15, 1);
@@ -224,6 +227,7 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     data['bulb'] = bulb;
     // 반점 — 주머니의 자식으로 붙여 부풀고 쭈그러질 때 함께 움직인다 (로컬 좌표, 주머니 반지름 0.42)
     const spotMat = new THREE.MeshLambertMaterial({ color: BULB_SPOT });
+    data['spotMat'] = spotMat;
     for (let i = 0; i < 6; i++) {
       const a = i * 1.05;
       const spot = new THREE.Mesh(new THREE.SphereGeometry(0.075, 6, 5), spotMat);
@@ -231,9 +235,10 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
       bulb.add(spot);
     }
     const sacMat = new THREE.MeshLambertMaterial({ color: SAC });
+    data['sacMat'] = sacMat;
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2 + 0.4;
-      const sacStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.32, 6), new THREE.MeshLambertMaterial({ color: STALK }));
+      const sacStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.32, 6), stalkMat);
       sacStalk.position.set(Math.cos(a) * 0.55, 0.16, Math.sin(a) * 0.55);
       sacStalk.rotation.z = Math.cos(a) * 0.35;
       sacStalk.rotation.x = -Math.sin(a) * 0.35;
@@ -275,6 +280,16 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     residue.visible = false;
     group.add(residue);
     data['residue'] = residue;
+    // 타 죽은 자리 — 검은 그을음 (disarmed 에서만). 포자 자국(residue)과 다르다: 터지지 않고 죽었다
+    const scorch = new THREE.Mesh(
+      new THREE.CircleGeometry(0.95, 14),
+      new THREE.MeshLambertMaterial({ color: 0x141110, transparent: true, opacity: 0.85 }),
+    );
+    scorch.rotation.x = -Math.PI / 2;
+    scorch.position.y = 0.018;
+    scorch.visible = false;
+    group.add(scorch);
+    data['scorch'] = scorch;
     const { cloud, mat: cloudMat } = buildSporeCloud(GAS);
     group.add(cloud);
     data['cloud'] = cloud;
@@ -491,6 +506,7 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
     const bulbMat = data['bulbMat'] as THREE.MeshLambertMaterial | undefined;
     const residue = data['residue'] as THREE.Mesh | undefined;
     const spent = trap.phase === 'spent';
+    const dead = trap.phase === 'disarmed'; // 폭발·화염구에 타 죽었다 — 터지지 않은 채 검게 그을려 꺾인다
     const trembling = trap.phase === 'telegraph';
     const burst = trap.phase === 'firing';
     // 떨림 — 배치 좌표를 기억해 두고 그 주위로 흔든다 (첫 호출 = 아직 흔들기 전)
@@ -499,25 +515,37 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
     group.position.x = (baseX as number) + (trembling ? (Math.random() - 0.5) * 0.07 : 0);
     group.position.z = (baseZ as number) + (trembling ? (Math.random() - 0.5) * 0.07 : 0);
     if (petals) {
-      const target = burst ? -0.55 : spent ? 1.5 : 1.05; // 터짐 — 바깥으로 / 시듦 — 축 늘어짐
+      const target = burst ? -0.55 : dead ? 1.75 : spent ? 1.5 : 1.05; // 터짐 — 바깥으로 / 시듦·죽음 — 축 늘어짐
       for (const h of petals) h.rotation.x += (target - h.rotation.x) * 0.12;
     }
-    // 시들면 꽃잎 힌지도 쭈그러진 주머니 꼭대기로 내려앉고 색이 바랜다
+    // 시들면 꽃잎 힌지도 쭈그러진 주머니 꼭대기로 내려앉고 색이 바랜다. 타 죽으면 더 낮게, 검게
     const arounds = data['petalArounds'] as THREE.Group[] | undefined;
-    if (arounds) for (const a of arounds) a.position.y += ((spent ? 0.92 : 1.4) - a.position.y) * 0.1;
+    if (arounds) for (const a of arounds) a.position.y += ((dead ? 0.7 : spent ? 0.92 : 1.4) - a.position.y) * 0.1;
     const petalMat = data['petalMat'] as THREE.MeshLambertMaterial | undefined;
-    if (petalMat) petalMat.color.setHex(spent ? 0x4f5f33 : PETAL);
+    if (petalMat) petalMat.color.setHex(dead ? 0x2e2620 : spent ? 0x4f5f33 : PETAL);
     if (bulb) {
-      const swell = trembling ? 1.12 + 0.1 * Math.abs(Math.sin(nowMs / 45)) : burst ? 1.25 : spent ? 0.55 : 1;
-      const targetY = spent ? 0.4 : 1.15 * swell;
-      bulb.scale.set(swell, spent ? bulb.scale.y + (targetY - bulb.scale.y) * 0.1 : targetY, swell);
-      if (spent) bulb.position.y += (0.72 - bulb.position.y) * 0.1; // 쭈그러져 내려앉는다
+      const swell = trembling ? 1.12 + 0.1 * Math.abs(Math.sin(nowMs / 45)) : burst ? 1.25 : dead ? 0.42 : spent ? 0.55 : 1;
+      const targetY = dead ? 0.3 : spent ? 0.4 : 1.15 * swell;
+      const settling = spent || dead;
+      bulb.scale.set(swell, settling ? bulb.scale.y + (targetY - bulb.scale.y) * 0.1 : targetY, swell);
+      if (settling) bulb.position.y += ((dead ? 0.6 : 0.72) - bulb.position.y) * 0.1; // 쭈그러져 내려앉는다
     }
     if (bulbMat) {
       bulbMat.emissiveIntensity = burst ? 0.45 + 0.2 * Math.abs(Math.sin(nowMs / 160)) : trembling ? 0.25 : 0;
-      bulbMat.color.setHex(spent ? 0x4a5a2e : 0x8fbf4a);
+      bulbMat.color.setHex(dead ? 0x2b2622 : spent ? 0x4a5a2e : 0x8fbf4a);
     }
+    // 줄기·곁주머니 — 타 죽으면 검게 그을리고 줄기가 꺾인다
+    const stalkMat = data['stalkMat'] as THREE.MeshLambertMaterial | undefined;
+    if (stalkMat) stalkMat.color.setHex(dead ? 0x2a231c : STALK);
+    const sacMat = data['sacMat'] as THREE.MeshLambertMaterial | undefined;
+    if (sacMat) sacMat.color.setHex(dead ? 0x2f2822 : SAC);
+    const spotMat = data['spotMat'] as THREE.MeshLambertMaterial | undefined;
+    if (spotMat) spotMat.color.setHex(dead ? 0x1c1814 : BULB_SPOT);
+    const stalk = data['stalk'] as THREE.Mesh | undefined;
+    if (stalk) stalk.rotation.z += ((dead ? 0.38 : 0) - stalk.rotation.z) * 0.1;
     if (residue) residue.visible = spent;
+    const scorch = data['scorch'] as THREE.Mesh | undefined;
+    if (scorch) scorch.visible = dead;
     animateSporeCloud(data, trap, nowMs);
   } else if (trap.type === 'trap_gas_auto') {
     // 쉼 — 가라앉아 잠잠. 예고 — 부풀며 바르르. 뿜는 중 — 크게 부푼 채 숨구멍이 빛나며 맥동

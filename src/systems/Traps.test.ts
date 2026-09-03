@@ -932,7 +932,7 @@ describe('함정 — 포자 식물 원거리 도발', () => {
     expect(behind.health).toBe(hp);
   });
 
-  it('수류탄은 식물에 닿으면 튕기지 않고 그 자리에서 터진다 — 폭발이 식물을 개화시킨다', () => {
+  it('수류탄은 식물에 닿으면 튕기지 않고 그 자리에서 터진다 — 폭발에 식물은 타 죽는다', () => {
     const world = makeWorld();
     const plant = putTrap(world, 'trap_gas', 14, 6);
     const ev: string[] = [];
@@ -944,7 +944,7 @@ describe('함정 — 포자 식물 원거리 도발', () => {
     for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
     expect(ev).toEqual(['explosion']); // 튕김 없이 곧장
     expect(world.projectiles).toHaveLength(0);
-    expect(plant.phase).toBe('telegraph');
+    expect(plant.phase).toBe('disarmed');
   });
 
   it('수류탄은 자동 군락에 닿아도 튕기지 않고 터진다 — 군락은 망가진다', () => {
@@ -1090,17 +1090,40 @@ describe('함정 — 포자 식물은 모든 공격에 터진다', () => {
     expect(ev).toEqual(['hammer']);
   });
 
-  it('폭발(explodeAt) 반경 안이면 터진다', async () => {
+  it('폭발(explodeAt) 반경 안이면 터지지 않고 타 죽는다(disarmed) — 다가가도 안 터지고, 밖은 멀쩡', async () => {
     const { explodeAt } = await import('../core/Explosion');
     const world = makeWorld();
     const plant = putTrap(world, 'trap_gas', 30, 6);
     const far = putTrap(world, 'trap_gas', 50, 6);
+    const ev: string[] = [];
+    world.events.on('trap_disarmed', (p) => ev.push((p as { how: string }).how));
     explodeAt(world, 33, 6, {
       radius: 5, damage: 0, damageFalloffMin: 1, enemyKnockback: 0,
       playerKnockback: 0, playerKnockbackTicks: 0, noiseRadius: 0, fxHeight: 0.5,
     });
-    expect(plant.phase).toBe('telegraph');
+    expect(plant.phase).toBe('disarmed');
+    expect(ev).toEqual(['explosion']);
     expect(far.phase).toBe('armed');
+    world.player.x = 30; // 죽은 식물 옆에 서도 포자는 없다
+    tickTraps(world, 90);
+    expect(plant.phase).toBe('disarmed');
+    expect(world.player.dots?.poison).toBeUndefined();
+  });
+
+  it('화염구 직격 — 식물은 타 죽고 화염구는 거기서 터진다', () => {
+    const world = makeWorld();
+    const plant = putTrap(world, 'trap_gas', 14, 6);
+    const ev: string[] = [];
+    world.events.on('explosion', () => ev.push('explosion'));
+    world.events.on('trap_disarmed', (p) => ev.push((p as { how: string }).how));
+    world.projectiles.push({
+      id: 4246, owner: 'player', x: 8, y: 1.0, z: 6, prevX: 8, prevY: 1.0, prevZ: 6,
+      vx: 30, vy: 0, vz: 0, lifeTicks: 90, damage: 10, burnTicks: 0, burnDamagePerTick: 0, radius: 0.2, kind: 'fireball',
+    });
+    for (let i = 0; i < 30 && world.projectiles.length > 0; i++) Projectiles.tick(world, DT);
+    expect(world.projectiles).toHaveLength(0);
+    expect(plant.phase).toBe('disarmed');
+    expect(ev).toEqual(['explosion', 'fireball']);
   });
 });
 

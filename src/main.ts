@@ -1005,6 +1005,14 @@ events.on('trap_fired', (payload) => {
 });
 events.on('trap_disarmed', (payload) => {
   const t = payload as { type: string; x: number; z: number; how: string };
+  if (t.type === 'trap_gas') {
+    // 포자 식물이 폭발·화염구에 타 죽었다 — 터지지 않는다. 불길 소리 + 주황 섬광
+    audio.play('trap_ignite', panAt(t.x, t.z));
+    stage.spawnGuardSparks(t.x, t.z, 0.5, 0xff8a2a, 0.5);
+    stage.triggerFlash(t.x, 0.8, t.z, 0xff7a1a, 200, 2.5);
+    showReaction('포자 식물이 타 죽었다 — 포자는 나오지 않는다', 1600);
+    return;
+  }
   if (t.type === 'trap_gas_auto') {
     // 포자 군락을 짓밟았다 — 축축한 퍽, 포자가 한 번 흩날리고 끝
     audio.play('trap_squash', panAt(t.x, t.z));

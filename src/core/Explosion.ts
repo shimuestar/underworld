@@ -11,7 +11,6 @@ import {
   breakPropsInRadius,
   igniteBarrel,
   igniteOilInRadius,
-  provokeTrapsInRadius,
   pushEnemy,
   pushPlayer,
   type World,
@@ -51,7 +50,7 @@ export function explodeAt(world: World, x: number, z: number, cfg: ExplosionSpec
   breakHeadsInRadius(world, x, z, cfg.radius); // 구울 머리 소품도 터진다
   breakPropsInRadius(world, x, z, cfg.radius); // 기믹도 연쇄로 부서진다 (각자 결과를 굴린다)
   igniteOilInRadius(world, x, z, cfg.radius, balance.traps.types.trap_oil.burnTicks); // 기름 웅덩이에 불
-  provokeTrapsInRadius(world, x, z, cfg.radius, 'trap_gas', balance.traps.types.trap_gas.telegraphTicks, 'explosion'); // 포자 식물도 터진다
+  disarmTrapsInRadius(world, x, z, cfg.radius, 'trap_gas', balance.traps.types.trap_gas.hitRadius, 'explosion'); // 포자 식물은 터지지 않고 타 죽는다
   if (balance.traps.types.trap_rockfall.rubbleBreakable) breakRubbleInRadius(world, x, z, cfg.radius); // 낙석 잔해도 날아간다
   disarmTrapsInRadius(world, x, z, cfg.radius, 'trap_gas_auto', balance.traps.types.trap_gas_auto.hitRadius, 'explosion'); // 포자 군락은 짓밟힌다
 

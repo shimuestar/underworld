@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, provokeTrapsInRadius, breakRubbleInRadius, disarmTrapsInRadius } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -1029,11 +1029,18 @@ function moveProjectiles(world: World, dt: number): void {
       }
 
       if (hitGasTrap) {
-        if (hitGasTrap.type === 'trap_gas_auto') disarmTrap(world, hitGasTrap, 'spell');
-        else provokeTrap(world, hitGasTrap, balance.traps.types.trap_gas.telegraphTicks, proj.kind === 'arrow' ? 'arrow' : 'spell');
-        world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', {
-          x: proj.x + dirX * hitT, y: proj.y + dirY * hitT, z: proj.z + dirZ * hitT, hitEnemy: true,
-        });
+        const gx = proj.x + dirX * hitT;
+        const gy = proj.y + dirY * hitT;
+        const gz = proj.z + dirZ * hitT;
+        if (hitGasTrap.type === 'trap_gas_auto') {
+          disarmTrap(world, hitGasTrap, 'spell');
+        } else if (proj.kind === 'fireball' && proj.owner === 'player') {
+          // 화염구 직격 — 식물은 터지지 않고 타 죽는다. 화염구는 거기서 터진다 (폭발이 반경 안 식물·군락을 함께 처리)
+          explodeFireball(world, proj, gx, gy, gz, null);
+        } else {
+          provokeTrap(world, hitGasTrap, balance.traps.types.trap_gas.telegraphTicks, proj.kind === 'arrow' ? 'arrow' : 'spell');
+        }
+        world.events.emit(proj.kind === 'arrow' ? 'arrow_impact' : 'spell_impact', { x: gx, y: gy, z: gz, hitEnemy: true });
         world.projectiles.splice(i, 1);
         continue;
       }
@@ -1380,7 +1387,7 @@ function explodeFireball(
   // 화살·총·해머 같은 물리 타격은 못 부순다 (그쪽엔 이 호출이 없다)
   breakCrackWalls(world, x, z, radius);
   igniteOilInRadius(world, x, z, radius, balance.traps.types.trap_oil.burnTicks); // 기름 웅덩이에 불
-  provokeTrapsInRadius(world, x, z, radius, 'trap_gas', balance.traps.types.trap_gas.telegraphTicks, 'fireball');
+  disarmTrapsInRadius(world, x, z, radius, 'trap_gas', balance.traps.types.trap_gas.hitRadius, 'fireball'); // 포자 식물은 타 죽는다 (터지지 않는다)
   if (balance.traps.types.trap_rockfall.rubbleBreakable) breakRubbleInRadius(world, x, z, radius); // 낙석 잔해를 치운다
   disarmTrapsInRadius(world, x, z, radius, 'trap_gas_auto', balance.traps.types.trap_gas_auto.hitRadius, 'fireball'); // 포자 군락을 짓밟는다
 
@@ -1640,7 +1647,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
   // 균열 벽(C) 파괴
   if (grenade.breaksCrackWall) breakCrackWalls(world, proj.x, proj.z, grenade.radius);
   igniteOilInRadius(world, proj.x, proj.z, grenade.radius, balance.traps.types.trap_oil.burnTicks);
-  provokeTrapsInRadius(world, proj.x, proj.z, grenade.radius, 'trap_gas', balance.traps.types.trap_gas.telegraphTicks, 'grenade');
+  disarmTrapsInRadius(world, proj.x, proj.z, grenade.radius, 'trap_gas', balance.traps.types.trap_gas.hitRadius, 'grenade'); // 포자 식물은 타 죽는다 (터지지 않는다)
   if (balance.traps.types.trap_rockfall.rubbleBreakable) breakRubbleInRadius(world, proj.x, proj.z, grenade.radius); // 낙석 잔해를 치운다
   disarmTrapsInRadius(world, proj.x, proj.z, grenade.radius, 'trap_gas_auto', balance.traps.types.trap_gas_auto.hitRadius, 'grenade'); // 포자 군락을 짓밟는다
 
