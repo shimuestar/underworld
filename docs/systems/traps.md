@@ -58,6 +58,8 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
   (`player_damaged`, source `poison`/`burn`, 막기 불가) 뒤 `*DurationTicks` 동안 `*Total` 이 `*TickIntervalTicks` 마다 깎인다
   (`poison_tick`/`burn_tick` — 붉은 화면·진동 없이 **'윽' 신음**만: `grunt`/`grunt_fire`). 원인 안에 서 있으면 시간만 매 틱 갱신되고
   박자(`next`)는 그대로 흐른다 — 초기 피해 반복 없음. 회피 무적·그림자 이동 중엔 새로 걸리지 않는다. 부활 시 씻긴다.
+  **재시작 알림** — 이미 걸린 채 다시 닿았고 남은 시간이 `traps.dotRefreshMinDrainTicks`(1초) 이상 줄어든 뒤였으면
+  `poison_refreshed`/`burn_refreshed`(재시작 소리 + 아이콘 세 번 깜빡임 + 안내). 원인 안에 서 있는 동안은 나지 않는다.
   - 독: 포자 구름, 30초. HUD `#buff-poison`, 체력 바 병든 녹색.
   - 화염(2026-09-03): 불붙은 기름 웅덩이, `trap_oil.playerBurn*`(6 + 4초 12). HUD `#buff-burn` 불꽃 아이콘, 체력 바 주황(독보다 우선).
 - **포자 식물** (2026-09-02 재설계) — 배기구 대신 식물. 근접하면 **1초 바르르 떨며** 개화 뒤 분출, **한 번 터지면 끝**(시든 주머니·늘어진
@@ -67,9 +69,9 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
   소리: 개화 `trap_bloom`, 분출 `trap_spore`.
 - **자동 순환 포자 군락**(2026-09-03) — 말불버섯 무리(잿빛 보라 자실체 넷·검은 숨구멍·사마귀 돌기·균사 바닥), 포자 식물과 형태·색이
   다르다. `idleTicks → telegraphTicks → cloudTicks` 반복 — 구름은 일반 포자(5초)보다 짧은 3.5초, 걷힌 뒤 정확히 5초(쉼 4.5 + 예고 0.5) 만에
-  다시 뿜는다. 구름 효과·독 상태는 `tickGasCloud` 공용. armed 상태가 없어 총·화살·폭발로 안 터진다. 위상 `phase`/짝홀·소리 감쇠는 다른
-  자동 장치와 같다. 이벤트 `trap_telegraph`(부풂) · `trap_fired`(뿜기) · `trap_retract`(걷힘).
-- **자동 순환 장치의 소리**(자동 가시판·자동 다트·진자·자동 포자 군락) — `balance.traps.autoSound`: reach(10m) 밖은 무음, 안에서는
+  다시 뿜는다. 구름 효과·독 상태는 `tickGasCloud` 공용. armed 상태가 없어 총·화살·폭발로 안 터진다. 위상 `phase`/짝홀은 다른
+  자동 장치와 같지만 **소리(개화·분출)는 10m 감쇠를 쓰지 않는다** — 구름은 위험하니 매 분출이 멀리서도 들린다. 이벤트 `trap_telegraph`(부풂) · `trap_fired`(뿜기) · `trap_retract`(걷힘).
+- **자동 순환 장치의 소리**(자동 가시판·자동 다트·진자 — 포자 군락은 예외) — `balance.traps.autoSound`: reach(10m) 밖은 무음, 안에서는
   `(1 - d/reach)^curve` 로 줄어든다(경계에서 거의 안 들리고 바로 옆에서 제 크기). 밟는 함정은 일반 공간 음향.
 - **자동 순환 다트 발사기** — 발판 없이 `-dir` 벽의 황동 노즐만. `idleTicks → telegraphTicks → 발사` 반복. 위상 `phase`/짝홀 규칙은
   자동 가시판과 같다 — 복도에 줄지어 놓고 위상을 30틱씩 어긋내면 순차 발사 회랑.

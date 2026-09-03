@@ -909,6 +909,24 @@ describe('함정 — 포자 식물: 1초 떨림, 1회성, 독 상태', () => {
     expect(world.player.dots?.poison).toBeUndefined();
   });
 
+  it('독이 든 채 1초 넘게 나가 있다가 다시 닿으면 poison_refreshed 가 한 번 난다 — 구름 안에 서 있는 동안은 나지 않는다', () => {
+    const world = makeWorld();
+    const plant = putTrap(world, 'trap_gas', 6, 6);
+    const c = T.trap_gas;
+    const ev: string[] = [];
+    world.events.on('poison_refreshed', () => ev.push('refreshed'));
+    tickTraps(world, c.telegraphTicks + 2);
+    tickTraps(world, 120); // 구름 안에 2초 — 매 틱 갱신되지만 알림은 없다
+    expect(ev).toEqual([]);
+    world.player.x = 30;
+    tickTraps(world, balance.traps.dotRefreshMinDrainTicks + 5);
+    world.player.x = 6;
+    tickTraps(world, 3);
+    expect(ev).toEqual(['refreshed']);
+    expect(world.player.dots?.poison?.ticks).toBe(c.poisonDurationTicks);
+    expect(plant.phase).toBe('firing');
+  });
+
   it('한 번 터진 식물은 끝이다 — spent, 다시 다가가도 안 터진다', () => {
     const world = makeWorld();
     const plant = putTrap(world, 'trap_gas', 6, 6);

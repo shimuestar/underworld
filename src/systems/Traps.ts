@@ -218,7 +218,13 @@ function applyDot(world: World, trap: TrapState, kind: DotKind, spec: DotSpec): 
   const dots = (p.dots ??= {});
   const cur = dots[kind];
   if (cur && cur.ticks > 0) {
+    // 다시 닿았다 — 시간을 처음부터. 눈에 띄게 줄어든 뒤였으면 알린다(재시작 소리·아이콘 깜빡임);
+    // 구름·불길 안에 서 있는 동안은 매 틱 1씩만 줄어 알림이 나지 않는다
+    const drained = duration - cur.ticks;
     cur.ticks = Math.max(cur.ticks, duration);
+    if (drained >= balance.traps.dotRefreshMinDrainTicks) {
+      world.events.emit(`${kind}_refreshed`, { ticks: duration, total: spec.total });
+    }
     return;
   }
   if (p.iframeTicks > 0 || (p.blinkLeft ?? 0) > 0) return;

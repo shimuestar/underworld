@@ -464,6 +464,15 @@
       #buff-burn svg {
         display: block;
       }
+      /* 디버프 재시작 — 세 번 크게 깜빡인다 (독·화염 공용, id 맥동보다 우선) */
+      #buff-poison.refresh,
+      #buff-burn.refresh {
+        animation: buff-refresh 0.25s ease-in-out 3;
+      }
+      @keyframes buff-refresh {
+        0%, 100% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 4px rgba(255, 255, 255, 0.2); }
+        50% { transform: scale(1.35); filter: brightness(2.1); box-shadow: 0 0 14px rgba(255, 255, 255, 0.85); }
+      }
       #buff-food .buff-cd {
         position: absolute;
         inset: 0;

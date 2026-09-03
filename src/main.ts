@@ -529,6 +529,8 @@ for (const name of [
   'burn_applied',
   'burn_tick',
   'burn_ended',
+  'poison_refreshed',
+  'burn_refreshed',
   'trap_reset',
   'trap_rubble_broken',
   'ammo_picked',
@@ -886,8 +888,9 @@ events.on('trap_telegraph', (payload) => {
     return;
   }
   if (t.type === 'trap_gas' || t.type === 'trap_gas_auto') {
-    const at = trapSoundAt(t.type, t.x, t.z); // 포자 식물이 벌어진다 / 군락이 부푼다 — 지금 물러나라 (자동은 10m 감쇠)
-    if (at) audio.play('trap_bloom', at);
+    // 포자 식물이 벌어진다 / 군락이 부푼다 — 지금 물러나라. 자동 군락도 10m 감쇠를 쓰지 않는다:
+    // 구름은 위험하니 매번 멀리서도 들려야 한다 (자동 가시·다트의 딸깍과 다른 결)
+    audio.play('trap_bloom', panAt(t.x, t.z));
     return;
   }
   // 자동 다트 발사기 — 발판 없이 쉬익 (같은 틱에 여러 개면 한 번, 자동은 10m 감쇠)
@@ -936,6 +939,17 @@ events.on('burn_applied', (payload) => {
 });
 events.on('burn_tick', () => audio.play('grunt_fire'));
 events.on('burn_ended', () => showReaction('불이 꺼졌다', 1200));
+// 이미 걸린 채 다시 닿았다 — 시간이 처음부터. 재시작 소리 + 아이콘 깜빡임 (구름·불길 안에 서 있는 동안은 나지 않는다)
+events.on('poison_refreshed', (payload) => {
+  audio.play('poison_refresh');
+  flashBuffIcon(buffPoisonEl);
+  showReaction(`독이 다시 퍼졌다 — ${dotSeconds(payload)}초 처음부터`, 1600);
+});
+events.on('burn_refreshed', (payload) => {
+  audio.play('burn_refresh');
+  flashBuffIcon(buffBurnEl);
+  showReaction(`불이 다시 붙었다 — ${dotSeconds(payload)}초 처음부터`, 1400);
+});
 let trapRevealHintShown = false;
 events.on('trap_revealed', (payload) => {
   const t = payload as { x: number; z: number };
@@ -986,8 +1000,7 @@ events.on('trap_fired', (payload) => {
     }
     showReaction('천장이 무너졌다 — 잔해가 길을 막는다 (총알은 넘어간다 · 폭발로 부술 수 있다)', 2600);
   } else if (t.type === 'trap_gas' || t.type === 'trap_gas_auto') {
-    const at = trapSoundAt(t.type, t.x, t.z); // 포자가 쏟아진다 (자동 군락은 10m 감쇠)
-    if (at) audio.play('trap_spore', at);
+    audio.play('trap_spore', panAt(t.x, t.z)); // 포자가 쏟아진다 — 매 분출, 자동 군락도 일반 공간 음향
   }
 });
 events.on('trap_disarmed', (payload) => {
@@ -2988,6 +3001,13 @@ buffBurnEl.insertAdjacentHTML(
 );
 const buffBurnCd = buffBurnEl.querySelector<HTMLElement>('.buff-cd')!;
 const buffBurnSec = buffBurnEl.querySelector<HTMLElement>('.buff-sec')!;
+/** 디버프 아이콘 깜빡임 — 상태가 다시 시작됐다. 클래스를 떼고 리플로우로 애니메이션을 처음부터 다시 돌린다 */
+function flashBuffIcon(el: HTMLElement): void {
+  el.classList.remove('refresh');
+  void el.offsetWidth;
+  el.classList.add('refresh');
+  window.setTimeout(() => el.classList.remove('refresh'), 800);
+}
 /** 지속 피해 디버프 아이콘 — 남은 시간만큼 밝은 부채꼴이 시계 방향으로 줄어든다 + 남은 초 */
 function syncDotIcon(el: HTMLElement, cd: HTMLElement, sec: HTMLElement, dot: DotState | undefined): void {
   if (!dot || dot.ticks <= 0 || world.dead) {

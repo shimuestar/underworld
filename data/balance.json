@@ -694,6 +694,8 @@
   "traps": {
     "_autoSoundNote": "자동 순환 함정(자동 가시판·자동 다트·진자) 소리 감쇠 — reach(m) 밖은 무음, 안에서는 (1 - d/reach)^curve 배. 항시 도는 장치가 층 전체에 울리면 소음이다",
     "autoSound": { "reach": 10, "curve": 2 },
+    "_dotRefreshNote": "독·화염 상태가 이미 걸린 채 다시 닿았을 때 — 남은 시간이 이 틱 이상 줄어든 뒤였다면 *_refreshed 알림(재시작 소리·아이콘 깜빡임). 구름·불길 안에 서 있는 동안은 매 틱 갱신돼도 알리지 않는다",
+    "dotRefreshMinDrainTicks": 60,
     "types": {
       "_dartNote": "압력판을 밟으면 -dir 쪽 벽의 노즐에서 dir 방향으로 다트 dartCount 발이 부채꼴로 난다. 적 소유·반사 가능(패링→마나)·trapShot(오사 감쇄 없음). 장전 charges 회 유한 — 마나 파밍 방지",
       "trap_dart": { "triggerRadius": 1.3, "telegraphTicks": 30, "cooldownTicks": 90, "charges": 2, "noiseRadius": 8,
@@ -724,7 +726,7 @@
                     "poisonInitial": 6, "poisonTotal": 12, "poisonDurationTicks": 1800, "poisonTickIntervalTicks": 30,
                     "cloudTicks": 300, "cloudRadius": 3.0, "shakeTicks": 20, "shakeAmp": 0.010, "staminaDrainPerTick": 0.5,
                     "coughIntervalTicks": 60, "coughNoiseRadius": 6, "enemySlowMul": 0.7 },
-      "_gasAutoNote": "자동 순환 포자 군락(2026-09-03) — 말불버섯 무리(포자 식물과 다른 형태·색). 트리거 없이 idleTicks(쉼) → telegraphTicks(부풀며 떨림·개화음) → cloudTicks(포자 구름) 를 반복한다. 구름은 일반 포자 식물(300)보다 짧고(210 = 3.5초), 걷힌 뒤 idle+telegraph = 300틱(5초) 만에 다시 뿜는다. armed 상태가 없어 총·화살·폭발로 안 터진다. 위상은 phase/짝홀 규칙, 소리는 autoSound 감쇠. 독 상태 수치는 일반 포자와 같게 뒀다(따로 조절 가능). 소음 없음(항시 도는 장치)",
+      "_gasAutoNote": "자동 순환 포자 군락(2026-09-03) — 말불버섯 무리(포자 식물과 다른 형태·색). 트리거 없이 idleTicks(쉼) → telegraphTicks(부풀며 떨림·개화음) → cloudTicks(포자 구름) 를 반복한다. 구름은 일반 포자 식물(300)보다 짧고(210 = 3.5초), 걷힌 뒤 idle+telegraph = 300틱(5초) 만에 다시 뿜는다. armed 상태가 없어 총·화살·폭발로 안 터진다. 위상은 phase/짝홀 규칙. 소리(개화·분출)는 autoSound 감쇠가 아니라 일반 공간 음향 — 구름은 위험하니 매번 멀리서도 들려야 한다. 독 상태 수치는 일반 포자와 같게 뒀다(따로 조절 가능). 소음 없음(항시 도는 장치)",
       "trap_gas_auto": { "idleTicks": 270, "telegraphTicks": 30, "cloudTicks": 210, "charges": -1, "noiseRadius": 0,
                          "poisonInitial": 6, "poisonTotal": 12, "poisonDurationTicks": 1800, "poisonTickIntervalTicks": 30,
                          "cloudRadius": 3.0, "shakeTicks": 20, "shakeAmp": 0.010, "staminaDrainPerTick": 0.5,

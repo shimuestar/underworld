@@ -5,6 +5,8 @@
 export type SoundName =
   | 'grunt'
   | 'grunt_fire'
+  | 'poison_refresh'
+  | 'burn_refresh'
   | 'telegraph_blue'
   | 'telegraph_red'
   | 'telegraph_purple'
@@ -787,10 +789,10 @@ export class GameAudio {
         this.tone(88, 0.35, 'triangle', 0.28, 0.05, 120);
         break;
       case 'trap_spore':
-        // 포자 분출 — 주머니가 퍽 터지고 포자가 쉬이익 쏟아지며 거품이 보글거린다
-        this.noise(0.08, 1.0, 1400);
-        this.noise(0.75, 0.7, 2600, 0.04);
-        this.tone(170, 0.5, 'sine', 0.45, 0, 60);
+        // 포자 분출 — 주머니가 퍽 터지고 포자가 쉬이익 쏟아지며 거품이 보글거린다 (2026-09-03 키움 — 매 분출이 들려야 한다)
+        this.noise(0.08, 1.3, 1400);
+        this.noise(0.75, 0.95, 2600, 0.04);
+        this.tone(170, 0.5, 'sine', 0.6, 0, 60);
         this.tone(300, 0.05, 'sine', 0.32, 0.2, 340);
         this.tone(340, 0.05, 'sine', 0.3, 0.35, 380);
         this.tone(280, 0.05, 'sine', 0.3, 0.5, 320);
@@ -1038,6 +1040,19 @@ export class GameAudio {
         this.tone(330, 0.13, 'triangle', 0.3, 0.01, 200);
         this.tone(96, 0.15, 'sine', 0.45, 0, 68);
         this.noise(0.045, 0.3, 1500, 0.11);
+        break;
+      case 'poison_refresh':
+        // 독이 다시 번진다 — 축축한 두 박자 하강(울렁) + 짧은 거품 + 낮은 받침. "처음부터 다시"
+        this.tone(520, 0.12, 'triangle', 0.5, 0, 380);
+        this.tone(440, 0.16, 'triangle', 0.5, 0.13, 300);
+        this.noise(0.1, 0.25, 1800, 0.05);
+        this.tone(95, 0.3, 'sine', 0.35, 0.1, 70);
+        break;
+      case 'burn_refresh':
+        // 불이 다시 붙는다 — 퍽 점화 + 짧은 불길 쉬익
+        this.noise(0.06, 0.8, 1200);
+        this.noise(0.3, 0.45, 4200, 0.04);
+        this.tone(240, 0.22, 'sawtooth', 0.35, 0, 130);
         break;
       case 'grunt_fire':
         // 윽 + 치직 — 화염 도트 틱. 같은 신음에 짧은 고역 크래클(살 타는 결)을 얹는다
