@@ -619,6 +619,10 @@ for (const name of [
   'door_unlocked',
   'door_opened',
   'door_needs_lever',
+  'door_closing',
+  'door_closed',
+  'door_blocked',
+  'door_reopened',
   'lever_pulled',
 ]) {
   events.on(name, (payload) => console.log(`[events] ${name}`, payload));
@@ -2622,6 +2626,29 @@ events.on('door_opened', (payload) => {
   stage.openDoor(at.row, at.col, opened?.swingDir ?? 1);
   minimap.rebuildBase();
 });
+// 닫기 — 되밀리는 소리로 시작해 다 닫히면 쿵·철컥. 다시 열 때는 채널 없이 미닫이 소리만
+events.on('door_closing', () => {
+  audio.play('door_slide');
+  padRumble('interact');
+});
+events.on('door_closed', (payload) => {
+  const at = payload as { row: number; col: number; x: number; z: number };
+  audio.play('door_close', panAt(at.x, at.z));
+  padRumble('interact');
+  stage.setDoorSwing(at.row, at.col, 0);
+  minimap.rebuildBase(); // 다시 벽으로 그린다
+});
+let doorBlockedUntil = 0;
+events.on('door_blocked', () => {
+  if (performance.now() < doorBlockedUntil) return;
+  doorBlockedUntil = performance.now() + 1500;
+  audio.play('shop_deny');
+  showReaction('문틈에 뭔가 걸려 있다 — 비워야 닫힌다', 1600);
+});
+events.on('door_reopened', () => {
+  audio.play('door_slide');
+  padRumble('interact');
+});
 /** 층을 갈아 끼운다 — 처음 밟는 층은 새로 짓고, 와 본 층은 얼려 둔 그대로 되살린다.
  *  들고 있던 것(체력·마나·탄약·스킬·가방·골드·오염·열쇠)은 전부 따라간다 */
 function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): void {
@@ -2867,7 +2894,7 @@ function simulate(dt: number): void {
   // 바뀌면 빠져나올 방법이 없다 (문 앞에서 물리면 연타가 전부 먹히던 버그)
   if (!world.dead && !world.uiOpen && world.grappleEnemyId === null) {
     const interactable =
-      (world.doorInView !== null && !world.doorInView.byLever) ||
+      (world.doorInView !== null && (!world.doorInView.byLever || world.doorInView.unlockedOnce === true)) ||
       world.leverInView !== null ||
       world.chestInView !== null ||
       (world.altarInView && !world.altarEnteredThisApproach) ||
@@ -3240,7 +3267,7 @@ function render(alpha: number): void {
   // 문 여닫힘 — 진행률을 경첩 회전각으로 바꾼다. 틱 사이는 alpha 로 보간한다
   // (0.75초에 걸쳐 도니 보간이 없으면 계단처럼 끊긴다)
   for (const door of world.doors) {
-    if (door.opened || door.slide <= 0) continue;
+    if ((door.opened && !door.closing) || door.slide <= 0) continue; // 닫히는 중은 되밀리는 그림을 그린다
     stage.setDoorSwing(
       door.row,
       door.col,
@@ -3583,7 +3610,7 @@ function render(alpha: number): void {
   } else if (nearDoor) {
     // 진행 게이지를 프롬프트 안에 그려 준다 — 손 동작만으로는 얼마나 남았는지 모른다
     const frac = Door.channelFrac(world);
-    if (world.doorInView!.byLever) {
+    if (world.doorInView!.byLever && !world.doorInView!.unlockedOnce) {
       altarPrompt!.textContent = '관문 — 손으로는 안 열린다. 어딘가의 레버를 찾아야 한다';
     } else if (frac > 0) {
       altarPrompt!.textContent = `잠금을 푸는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%`;

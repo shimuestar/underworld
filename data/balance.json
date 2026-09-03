@@ -555,7 +555,9 @@
     "leverRadius": 2.2,
     "facingArcDeg": 100,
     "openTicks": 150,
-    "slideTicks": 45
+    "slideTicks": 45,
+    "_closeNote": "열린 문은 문 앞에서 E 로 다시 닫는다(2026-09-03) — closeTicks 동안 되밀리고 다 닫힌 틱에 셀이 다시 벽이 된다(적 추격·소음이 막힌다). 문 칸에 몸(플레이어·적)이 있으면 시작이 거부되고(door_blocked), 닫히는 중에 들어오면 그 자리에서 멈춰 기다린다. 한 번 자물쇠가 풀린 문(관문 포함)은 닫은 뒤 채널 없이 E 한 번에 다시 밀려 열린다(door_reopened)",
+    "closeTicks": 45
   },
 
   "altar": {

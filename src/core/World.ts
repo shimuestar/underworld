@@ -358,6 +358,12 @@ export interface DoorState {
   /** 렌더 보간용 직전 값 */
   prevSlide: number;
   opened: boolean;
+  /** 닫히는 중 — slide 가 1 → 0 으로 되밀린다. 0 이 되는 틱에 셀이 다시 벽이 된다 (opened 는 그때 false) */
+  closing?: boolean;
+  /** 한 번 자물쇠가 풀렸다 — 닫은 뒤 다시 열 때는 채널 없이 바로 밀린다 (부서진 자물쇠) */
+  unlockedOnce?: boolean;
+  /** 열려 있는 동안 세워 둔 석조 문틀 차단 — 닫힐 때 걷는다 */
+  frameBlockers?: { minX: number; maxX: number; minZ: number; maxZ: number }[];
 }
 
 /** 기믹(파괴물) 하나 — 항아리·궤짝·뼈 무더기·석관·광차. 부수면 결과(전리품/매복/폭발

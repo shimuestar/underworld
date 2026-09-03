@@ -219,6 +219,13 @@ export class Level {
     this.grid[row] = line.slice(0, col) + '.' + line.slice(col + 1);
   }
 
+  /** 문을 다시 닫는다 — 셀에 문 글자를 되돌려 solid 로 만든다 (openCell 의 역) */
+  closeCell(col: number, row: number, ch = 'D'): void {
+    const line = this.grid[row];
+    if (!line || col < 0 || col >= line.length) return;
+    this.grid[row] = line.slice(0, col) + ch + line.slice(col + 1);
+  }
+
   charAt(col: number, row: number): string {
     return this.grid[row]?.[col] ?? '#';
   }
@@ -581,18 +588,37 @@ function buildMedievalDoor(
 
 /** 문이 열려도 문틀은 몸도 레이도 막는다 — 셀을 통째로 열어 두면 석조 문설주를
  *  몸이 뚫고 지나가고, 화살·마법도 돌기둥을 통과해 날아온다 (2026-08-27 실측) */
-export function addDoorFrameBlockers(level: Level, col: number, row: number): void {
+export function addDoorFrameBlockers(
+  level: Level,
+  col: number,
+  row: number,
+): { minX: number; maxX: number; minZ: number; maxZ: number }[] {
   const cs = level.cellSize;
   const x = (col + 0.5) * cs;
   const z = (row + 0.5) * cs;
   const alongX = level.charAt(col - 1, row) === '#' || level.charAt(col + 1, row) === '#';
   const jamb = (cs - DOOR_OPEN_WIDTH) / 2;
+  const rects: { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
   for (const side of [-1, 1]) {
     const off = side * (cs / 2 - jamb / 2);
     const rect = alongX
       ? level.addBlocker(x + off, z, jamb / 2, cs / 2)
       : level.addBlocker(x, z + off, cs / 2, jamb / 2);
     level.rayBlockers.push(rect);
+    rects.push(rect);
+  }
+  return rects;
+}
+
+/** 문이 다시 닫혔다 — 문틀 차단을 걷는다 (셀 자체가 다시 벽이 되므로 따로 막을 게 없다) */
+export function removeDoorFrameBlockers(
+  level: Level,
+  rects: { minX: number; maxX: number; minZ: number; maxZ: number }[],
+): void {
+  for (const rect of rects) {
+    level.removeBlocker(rect);
+    const i = level.rayBlockers.indexOf(rect);
+    if (i >= 0) level.rayBlockers.splice(i, 1);
   }
 }
 

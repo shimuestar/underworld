@@ -9,6 +9,7 @@ export type SoundName =
   | 'burn_refresh'
   | 'trap_squash'
   | 'net_snag'
+  | 'door_close'
   | 'telegraph_blue'
   | 'telegraph_red'
   | 'telegraph_purple'
@@ -1102,6 +1103,14 @@ export class GameAudio {
         this.tone(210, 0.06, 'square', 0.55);
         this.tone(140, 0.09, 'square', 0.45, 0.06);
         this.noise(0.18, 0.35, 1200, 0.02);
+        break;
+      case 'door_close':
+        // 문이 되밀려 닫힌다 — 돌 갈림 뒤 묵직한 쿵 + 걸쇠 철컥
+        this.noise(0.45, 0.35, 260);
+        this.noise(0.08, 0.9, 500, 0.4);
+        this.tone(90, 0.28, 'sine', 0.6, 0.4, 55);
+        this.tone(1500, 0.05, 'square', 0.2, 0.52);
+        this.noise(0.05, 0.3, 3000, 0.53);
         break;
       case 'door_slide':
         // 잠금이 풀리고 돌 문이 갈리며 옆으로 밀린다

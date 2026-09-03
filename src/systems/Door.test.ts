@@ -6,6 +6,7 @@ import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { alertNearbyAt, World, type EnemyState } from '../core/World';
 import { addDoorFrameBlockers, Level } from '../level/GridLoader';
+import { spawnEnemyAt } from '../level/Spawner';
 import * as Door from './Door';
 import * as Lever from './Lever';
 import * as Sigils from './Sigils';
@@ -234,11 +235,11 @@ describe('미닫이', () => {
     expect(world.doors[0]!.opened).toBe(true);
   });
 
-  it('열린 문은 다시 안내 대상이 되지 않는다', () => {
+  it('열린 문은 닫기 대상으로 다시 안내된다 — 채널 게이지는 0', () => {
     unlock(world);
     idle(world, CFG.slideTicks);
     Door.tick(world, DT);
-    expect(world.doorInView).toBeNull();
+    expect(world.doorInView).toBe(world.doors[0]);
     expect(Door.channelFrac(world)).toBe(0);
   });
 
@@ -447,5 +448,73 @@ describe('문은 당기지 않고 민다', () => {
     press(world);
     idle(world, CFG.openTicks);
     expect(world.doors[0]!.swingDir).toBe(1);
+  });
+});
+
+describe('닫기', () => {
+  function openFully(w: World): void {
+    press(w);
+    idle(w, CFG.openTicks - 1);
+    idle(w, CFG.slideTicks + 1);
+    expect(w.doors[0]!.opened).toBe(true);
+    w.player.x = 19; // 문 칸(x 20~24) 밖, 반경(3.6) 안에서 문을 본다
+  }
+
+  it('열린 문 앞에서 E 를 누르면 closeTicks 동안 되밀려 닫히고, 다 닫힌 틱에 셀이 다시 벽이 된다', () => {
+    openFully(world);
+    const ev: string[] = [];
+    for (const n of ['door_closing', 'door_closed'] as const) world.events.on(n, () => ev.push(n));
+    press(world);
+    expect(world.doors[0]!.closing).toBe(true);
+    expect(ev).toEqual(['door_closing']);
+    idle(world, CFG.closeTicks - 1);
+    expect(world.doors[0]!.opened).toBe(true); // 아직 — 반쯤 닫힌 문은 지나갈 수 있다
+    expect(world.level.solidAt(5, 2)).toBe(false);
+    idle(world, 1);
+    expect(world.doors[0]!.opened).toBe(false);
+    expect(world.doors[0]!.slide).toBe(0);
+    expect(world.level.solidAt(5, 2)).toBe(true); // 다시 벽 — 적 추격·소음이 막힌다
+    expect(world.level.charAt(5, 2)).toBe('D');
+    expect(ev).toEqual(['door_closing', 'door_closed']);
+    Door.tick(world, DT);
+    expect(world.doorInView).toBe(world.doors[0]); // 닫힌 문은 다시 열기 대상
+  });
+
+  it('문 칸에 몸이 있으면 안 닫힌다 — 시작은 거부(door_blocked), 닫히는 중이면 그 자리에서 기다린다', () => {
+    openFully(world);
+    const g = spawnEnemyAt('goblin_runner', 22, 10, 9001); // 문 칸 한가운데
+    world.enemies.push(g);
+    const ev: string[] = [];
+    world.events.on('door_blocked', () => ev.push('blocked'));
+    press(world);
+    expect(world.doors[0]!.closing ?? false).toBe(false);
+    expect(ev).toEqual(['blocked']);
+    g.x = 30; // 비켜났다
+    press(world);
+    expect(world.doors[0]!.closing).toBe(true);
+    idle(world, 10);
+    const mid = world.doors[0]!.slide;
+    g.x = 22; // 다시 문틈으로
+    idle(world, 20);
+    expect(world.doors[0]!.slide).toBe(mid); // 멈춰 기다린다
+    expect(world.doors[0]!.opened).toBe(true);
+    g.x = 30;
+    idle(world, CFG.closeTicks);
+    expect(world.doors[0]!.opened).toBe(false);
+  });
+
+  it('닫은 문은 채널 없이 E 한 번에 다시 밀려 열린다 — 자물쇠는 이미 부서졌다', () => {
+    openFully(world);
+    press(world);
+    idle(world, CFG.closeTicks + 1);
+    expect(world.doors[0]!.opened).toBe(false);
+    const ev: string[] = [];
+    for (const n of ['door_reopened', 'door_unlocked', 'door_channel_started'] as const) world.events.on(n, () => ev.push(n));
+    press(world);
+    expect(ev).toEqual(['door_reopened']);
+    idle(world, CFG.slideTicks);
+    expect(world.doors[0]!.opened).toBe(true);
+    expect(world.level.solidAt(5, 2)).toBe(false);
+    expect(world.doors[0]!.frameBlockers).toHaveLength(2);
   });
 });
