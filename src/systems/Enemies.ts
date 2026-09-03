@@ -63,6 +63,12 @@ export function tick(world: World, dt: number): void {
       handleSplit(world, enemy); // 슬라임 분열 — 어디서 어떻게 죽었든 여기서 한 번만 가른다
       continue;
     }
+    // 죽은 척인데 이미 깨어 있다 — 피격·폭발·함정이 idle→chase 로만 넘기고 feigning 을 안 지워
+    // 누운 채 돌아다니며 공격하던 버그(2026-09-03). 어떤 경로로 깼든 일어나는 건 여기서 한 번에
+    if (enemy.feigning && enemy.ai !== 'idle') {
+      enemy.feigning = false;
+      world.events.emit('ghoul_rise', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    }
     // 감전 누적은 전기가 닿아 있는 동안만 산다 — 유예가 다하면 처음부터 다시 쌓아야 한다.
     // "끊기지 않고 2.5초" 라는 규칙이 이 유예로 표현된다
     if ((enemy.shockGrace ?? 0) > 0) enemy.shockGrace = (enemy.shockGrace ?? 0) - 1;

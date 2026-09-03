@@ -8,6 +8,7 @@ import { Input } from '../core/Input';
 import { World, type EnemyState, type TrapState, resetTrap, provokeTrap } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
+import * as Enemies from './Enemies';
 import * as Projectiles from './Projectiles';
 import * as Reaction from './Reaction';
 import * as Sigils from './Sigils';
@@ -862,6 +863,26 @@ describe('함정 — 자동 순환 포자 군락: 망가뜨리기', () => {
     resetTrap(world, near, -1);
     tickTraps(world, 1);
     expect(near.phase).toBe('cooldown');
+  });
+});
+
+describe('죽은 척 구울 — 피격으로 깨면 일어난다', () => {
+  it('폭발이 idle→chase 로 넘긴 죽은 척 구울은 다음 Enemies 틱에 feigning 이 풀리고 ghoul_rise 가 난다 (누운 채 돌아다니던 버그)', async () => {
+    const { explodeAt } = await import('../core/Explosion');
+    const world = makeWorld();
+    const ghoul = addEnemy(world, 'ghoul', 30, 6);
+    ghoul.ai = 'idle';
+    ghoul.feigning = true;
+    const rises: number[] = [];
+    world.events.on('ghoul_rise', (p) => rises.push((p as { enemyId: number }).enemyId));
+    explodeAt(world, 31, 6, { radius: 3, damage: 1, damageFalloffMin: 1, enemyKnockback: 0, playerKnockback: 0, playerKnockbackTicks: 0, noiseRadius: 0, fxHeight: 0.5 });
+    expect(ghoul.ai).toBe('chase');
+    expect(ghoul.feigning).toBe(true); // 폭발 자체는 자세를 모른다
+    Enemies.tick(world, DT);
+    expect(ghoul.feigning).toBe(false);
+    expect(rises).toEqual([ghoul.id]);
+    Enemies.tick(world, DT);
+    expect(rises).toHaveLength(1); // 한 번만
   });
 });
 
