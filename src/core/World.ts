@@ -453,6 +453,22 @@ export function disarmTrap(world: World, trap: TrapState, how: string): void {
   world.events.emit('trap_disarmed', { id: trap.id, type: trap.type, x: trap.x, z: trap.z, how });
 }
 
+/** 함정을 처음 상태로 되살린다 — 시험방 레버 등. 잔해 차단·경로 막힘도 함께 걷는다 */
+export function resetTrap(world: World, trap: TrapState, charges: number): void {
+  if (trap.blocker) {
+    world.level.removeBlocker(trap.blocker);
+    world.level.clearPathBlocked(trap.col, trap.row);
+    trap.blocker = undefined;
+  }
+  trap.phase = 'armed';
+  trap.timer = 0;
+  trap.charges = charges;
+  trap.hitIds = undefined;
+  trap.cycleTick = undefined;
+  trap.triggeredBy = undefined;
+  world.events.emit('trap_reset', { id: trap.id, type: trap.type, x: trap.x, z: trap.z });
+}
+
 /** 함정을 멀리서 건드렸다(총·화살·마법) — 대기 중이면 곧장 예고로 넘긴다. telegraphTicks 는 호출부가 준다.
  *  포자 식물을 안전한 거리에서 터뜨리거나, 적 옆에서 터뜨려 구름에 몰아넣는 수단 */
 export function provokeTrap(world: World, trap: TrapState, telegraphTicks: number, how: string): void {

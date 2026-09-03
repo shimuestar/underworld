@@ -824,3 +824,37 @@ describe('함정 — 포자 식물: 1초 떨림, 1회성, 독 상태', () => {
     expect(plant.phase).toBe('spent');
   });
 });
+
+describe('함정 — 재생성 레버 (시험방)', () => {
+  it('당기면 터진 포자 식물이 다시 서고, 레버는 다시 당길 수 있다', async () => {
+    const Lever = await import('./Lever');
+    const level = new Level({
+      id: 'leverrange', name: 'leverrange', cellSize: 4, ceiling: 4,
+      grid: ['#'.repeat(20), '#S' + '.'.repeat(17) + '#', '#'.repeat(20)],
+      lighting: { ambient: 0.04, torches: [] },
+      triggers: [{ type: 'lever', cell: [1, 4], resets: [1, 3] }],
+    });
+    const world = makeWorld();
+    world.level = level;
+    expect(level.levers).toHaveLength(1); // opens 없는 레버도 등록된다
+    const plant = putTrap(world, 'trap_gas', 14, 6); // (1,3)
+    plant.phase = 'spent';
+    plant.charges = 0;
+    const ev: string[] = [];
+    world.events.on('lever_pulled', (p) => ev.push((p as { resets?: { type: string } }).resets?.type ?? 'door'));
+    world.events.on('trap_reset', () => ev.push('reset'));
+    // 레버(1,4 → x 18) 앞 1.5m 에서 마주 본다 (+X 시선)
+    world.player.x = 16.5;
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    Lever.tick(world, DT);
+    expect(ev).toEqual(['trap_gas', 'reset']);
+    expect(plant.phase).toBe('armed');
+    expect(plant.charges).toBe(T.trap_gas.charges);
+    // 다시 터뜨리고 다시 당긴다 — 재사용
+    plant.phase = 'spent';
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    Lever.tick(world, DT);
+    expect(plant.phase).toBe('armed');
+    expect(world.pulledLevers.size).toBe(0); // 1회성 목록에 들지 않는다
+  });
+});

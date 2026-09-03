@@ -20,6 +20,8 @@ export interface TriggerDef {
   type: string;
   cell: number[];
   opens?: number[];
+  /** 레버가 되살리는 함정의 칸 — 시험방처럼 1회성 함정을 다시 세울 때 (재사용 레버) */
+  resets?: number[];
   spawns?: string;
   note?: string;
 }
@@ -148,7 +150,7 @@ export class Level {
 
     this.glyphs = def.glyphs ?? [];
     this.levers = (def.triggers ?? []).filter(
-      (trigger) => trigger.type === 'lever' && trigger.opens,
+      (trigger) => trigger.type === 'lever' && (trigger.opens || trigger.resets),
     );
 
     // 문은 격자에서 직접 찾는다. D 는 손으로, G 는 레버로 열린다.

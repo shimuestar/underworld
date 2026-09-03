@@ -204,7 +204,20 @@
       "phase": 120
     }
   ],
-  "triggers": [],
+  "triggers": [
+    {
+      "type": "lever",
+      "cell": [
+        6,
+        12
+      ],
+      "resets": [
+        6,
+        11
+      ],
+      "note": "포자 식물 재생성 레버 — 터진 식물을 다시 세운다 (재사용)"
+    }
+  ],
   "lighting": {
     "ambient": 0.1,
     "torches": [

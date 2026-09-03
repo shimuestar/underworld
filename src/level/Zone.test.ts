@@ -284,6 +284,7 @@ describe('1구역 층 구성', () => {
       it('레버가 여는 대상이 실제 관문이다', () => {
         for (const t of json.triggers ?? []) {
           if (t.type !== 'lever') continue;
+          if ((t as { resets?: number[] }).resets) continue; // 함정 재생성 레버(시험방용)는 관문을 열지 않는다
           const opens = (t as { opens?: number[] }).opens!;
           expect(at(grid, opens[1]!, opens[0]!)).toBe('G');
         }

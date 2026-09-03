@@ -178,6 +178,13 @@ function check(path) {
   // ④ 레버가 여는 대상
   for (const t of level.triggers ?? []) {
     if (t.type !== 'lever') continue;
+    if (t.resets) {
+      // 함정 재생성 레버 — 가리키는 칸에 함정 배치가 있어야 한다
+      const [rr, rc] = t.resets;
+      const has = (level.entities ?? []).some((e) => e.type.startsWith('trap_') && e.cell[0] === rr && e.cell[1] === rc);
+      if (!has) errors.push(`재생성 레버 [${t.cell}] 가 가리키는 [${rr},${rc}] 에 함정이 없다`);
+      continue;
+    }
     const [r, c] = t.opens ?? [];
     if (r === undefined) { errors.push(`레버 [${t.cell}] 에 opens 가 없다`); continue; }
     const target = at(grid, c, r);

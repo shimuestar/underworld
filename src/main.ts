@@ -525,6 +525,7 @@ for (const name of [
   'poison_applied',
   'poison_tick',
   'poison_ended',
+  'trap_reset',
   'ammo_picked',
   'grenade_picked',
   'battery_picked',
@@ -2531,9 +2532,18 @@ events.on('door_unlocked', (payload) => {
 });
 events.on('lever_pulled', (payload) => {
   padRumble('interact');
-  const info = payload as { lever: { row: number; col: number } };
+  const info = payload as { lever: { row: number; col: number }; resets?: { type: string } };
   audio.play('lever_pull');
   stage.pullLever(info.lever.row, info.lever.col);
+  if (info.resets) {
+    // 함정 재생성 레버(시험방) — 손잡이는 잠시 뒤 제자리로, 다시 당길 수 있다
+    afterMs(600, () => stage.resetLever(info.lever.row, info.lever.col));
+    showReaction(
+      info.resets.type === 'trap_gas' ? '레버를 당겼다 — 포자 식물이 다시 핀다' : '레버를 당겼다 — 함정이 다시 서린다',
+      2200,
+    );
+    return;
+  }
   showReaction('레버를 당겼다 — 어딘가에서 관문이 갈리며 열린다', 3200);
 });
 let needsLeverUntil = 0;

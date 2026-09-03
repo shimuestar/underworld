@@ -1546,6 +1546,12 @@ export class Stage {
     if (handle) handle.rotation.z = -0.5;
   }
 
+  /** 재사용 레버 — 당긴 손잡이가 제자리로 돌아온다 */
+  resetLever(row: number, col: number): void {
+    const handle = this.scene.getObjectByName(`lever-${row}-${col}`);
+    if (handle) handle.rotation.z = 0;
+  }
+
   /** 문 개방 — 다 밀린 판을 씬에서 걷어낸다 (이미 벽 속이라 화면은 그대로) */
   /** 다 열렸다 — 문짝은 활짝 열린 채로 남는다 (사라지면 문을 연 느낌이 안 난다) */
   openDoor(row: number, col: number, dir = 1): void {

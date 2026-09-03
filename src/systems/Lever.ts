@@ -7,7 +7,7 @@
 // 잠금만 풀어 주고 미닫이·개방은 Door 가 이어서 돌린다 (문 파이프라인은 하나다).
 
 import { balance } from '../core/Balance';
-import { unlockDoor, type World } from '../core/World';
+import { resetTrap, unlockDoor, type World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   const cfg = balance.door;
@@ -35,6 +35,17 @@ export function tick(world: World, _dt: number): void {
     world.leverInView = { row, col };
 
     if (!world.input.interactPressed) continue;
+
+    // 함정 재생성 레버 — 한 번 쓴 함정을 다시 세운다 (재사용, pulledLevers 에 넣지 않는다)
+    if (lever.resets) {
+      const [tr, tc] = lever.resets;
+      const trap = world.traps.find((t) => t.row === tr && t.col === tc);
+      if (!trap) continue;
+      const types = balance.traps.types as unknown as Record<string, { charges?: number } | undefined>;
+      world.events.emit('lever_pulled', { lever: { row, col }, resets: { row: tr, col: tc, type: trap.type } });
+      resetTrap(world, trap, types[trap.type]?.charges ?? -1); // 당김 → 재생성 순서로 알린다
+      return;
+    }
 
     const [doorRow, doorCol] = lever.opens!;
     if (doorRow === undefined || doorCol === undefined) continue;
