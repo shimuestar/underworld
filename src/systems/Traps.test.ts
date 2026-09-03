@@ -886,6 +886,34 @@ describe('죽은 척 구울 — 피격으로 깨면 일어난다', () => {
   });
 });
 
+describe('죽은 척 구울 — 누운 몸을 맞힌다', () => {
+  it('화살이 누운 몸(발에서 정면으로 뻗은 낮은 상자)을 맞히고, 서 있을 때의 머리 높이는 빈 공간이다', () => {
+    const world = makeWorld();
+    const ghoul = addEnemy(world, 'ghoul', 30, 6);
+    ghoul.ai = 'idle';
+    ghoul.feigning = true;
+    ghoul.yaw = Math.PI / 2; // 정면 = (-sin, -cos) = (-1, 0) → 몸이 -X(플레이어 쪽)으로 누워 있다
+    const hp = ghoul.health;
+    // 서 있을 때 가슴 높이로 발 위치를 노린 화살 — 누운 몸 위 빈 공간을 지난다
+    world.projectiles.push({
+      id: 4300, owner: 'player', x: 22, y: 1.3, z: 6, prevX: 22, prevY: 1.3, prevZ: 6,
+      vx: 30, vy: 0, vz: 0, lifeTicks: 20, damage: 10, burnTicks: 0, burnDamagePerTick: 0, radius: 0.1, kind: 'arrow',
+    });
+    for (let i = 0; i < 20; i++) Projectiles.tick(world, DT);
+    expect(ghoul.health).toBe(hp);
+    // 낮게 — 누운 몸(발에서 -X 로 1.67m)을 맞힌다
+    world.projectiles.push({
+      id: 4301, owner: 'player', x: 22, y: 0.3, z: 6, prevX: 22, prevY: 0.3, prevZ: 6,
+      vx: 30, vy: 0, vz: 0, lifeTicks: 20, damage: 10, burnTicks: 0, burnDamagePerTick: 0, radius: 0.1, kind: 'arrow',
+    });
+    for (let i = 0; i < 20 && ghoul.health === hp; i++) Projectiles.tick(world, DT);
+    expect(ghoul.health).toBeLessThan(hp);
+    expect(ghoul.ai).not.toBe('idle'); // 깼다 — 다음 Enemies 틱에 일어난다
+    Enemies.tick(world, DT);
+    expect(ghoul.feigning).toBe(false);
+  });
+});
+
 describe('함정 — 자동 순환 다트 발사기', () => {
   it('트리거 없이 idle → 예고 → 발사를 돈다, 위상 플래그가 있으면 그것부터', () => {
     const world = makeWorld();

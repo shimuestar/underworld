@@ -3,7 +3,7 @@
 // 시전 시 cast_spell 이벤트 발행 → Mana가 연쇄를 리셋한다.
 
 import { balance } from '../core/Balance';
-import { barrierUp, enemyDef, shieldBlocksProjectile } from '../core/Entities';
+import { barrierUp, enemyDef, shieldBlocksProjectile, enemyHitBox } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
 import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius } from '../core/World';
@@ -918,17 +918,8 @@ function moveProjectiles(world: World, dt: number): void {
       for (const enemy of world.enemies) {
         if (!enemy.alive) continue;
         const def = enemyDef(enemy.type);
-        const pad = proj.radius;
-        // 공중의 적(천장 거머리·도약 중) — 몸이 뜬 만큼(jumpY) 피격 박스도 떠 있어야 맞는다
-        const yBase = enemy.jumpY ?? 0;
-        const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, {
-          minX: enemy.x - def.radius - pad,
-          minY: yBase - pad,
-          minZ: enemy.z - def.radius - pad,
-          maxX: enemy.x + def.radius + pad,
-          maxY: yBase + def.height + pad,
-          maxZ: enemy.z + def.radius + pad,
-        });
+        // 공중의 적은 jumpY 만큼 뜬 기둥, 죽은 척(엎어진 구울)은 정면으로 누운 낮은 상자 — Entities.enemyHitBox
+        const t = rayVsAabb(proj.x, proj.y, proj.z, dirX, dirY, dirZ, enemyHitBox(enemy, def, proj.radius));
         if (t !== null && t < hitT) {
           hitT = t;
           hitEnemy = enemy;

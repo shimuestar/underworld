@@ -376,3 +376,34 @@ export function enemyDef(type: string): EnemyDef {
   if (!def) throw new Error(`entities.json에 없는 적 타입: ${type}`);
   return def as EnemyDef;
 }
+
+/** 적 피격 상자(AABB) — 총알·화살·마법 공용. 서 있으면 발 위치의 기둥(공중이면 jumpY 만큼 떠서).
+ *  죽은 척(엎어짐)이면 몸이 정면(-sin yaw, -cos yaw)으로 키만큼 누워 있으니 발에서 그쪽으로 뻗은
+ *  낮은 상자다 — 기둥을 그대로 쓰면 보이는 몸을 쏴도 빈 공간만 맞아 반응이 없다(2026-09-03) */
+export function enemyHitBox(
+  enemy: { x: number; z: number; yaw: number; feigning?: boolean; jumpY?: number },
+  def: { radius: number; height: number },
+  pad: number,
+): { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number } {
+  if (enemy.feigning) {
+    const hx = enemy.x - Math.sin(enemy.yaw) * def.height * 0.9;
+    const hz = enemy.z - Math.cos(enemy.yaw) * def.height * 0.9;
+    return {
+      minX: Math.min(enemy.x, hx) - def.radius - pad,
+      minY: -pad,
+      minZ: Math.min(enemy.z, hz) - def.radius - pad,
+      maxX: Math.max(enemy.x, hx) + def.radius + pad,
+      maxY: def.radius * 1.4 + pad,
+      maxZ: Math.max(enemy.z, hz) + def.radius + pad,
+    };
+  }
+  const yBase = enemy.jumpY ?? 0;
+  return {
+    minX: enemy.x - def.radius - pad,
+    minY: yBase - pad,
+    minZ: enemy.z - def.radius - pad,
+    maxX: enemy.x + def.radius + pad,
+    maxY: yBase + def.height + pad,
+    maxZ: enemy.z + def.radius + pad,
+  };
+}

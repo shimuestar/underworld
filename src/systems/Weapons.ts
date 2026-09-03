@@ -4,7 +4,7 @@
 //    두 자원 경제를 분리하는 유일한 규칙이다 — docs/systems/combat.md §5.
 
 import { balance } from '../core/Balance';
-import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile } from '../core/Entities';
+import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, enemyHitBox } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, provokeTrap, hitBarrel, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
 
@@ -684,15 +684,8 @@ function fire(world: World): void {
     if (!enemy.alive) continue;
     const def = enemyDef(enemy.type);
     // 공중의 적(천장 거머리·도약 중) — 몸이 뜬 만큼(jumpY) 피격 박스도 떠 있어야 맞는다
-    const yBase = enemy.jumpY ?? 0;
-    const t = rayVsAabb(p.x, oy, p.z, dx, dy, dz, {
-      minX: enemy.x - def.radius,
-      minY: yBase,
-      minZ: enemy.z - def.radius,
-      maxX: enemy.x + def.radius,
-      maxY: yBase + def.height,
-      maxZ: enemy.z + def.radius,
-    });
+    // 공중은 jumpY 만큼 뜬 기둥, 죽은 척은 정면으로 누운 낮은 상자 — Entities.enemyHitBox
+    const t = rayVsAabb(p.x, oy, p.z, dx, dy, dz, enemyHitBox(enemy, def, 0));
     if (t !== null && t < wallT && (!hit || t < hit.t)) hit = { enemy, t };
   }
 
