@@ -34,6 +34,11 @@ const OIL_FIRE = 0xff7a1a;
 const OIL_SCORCH = 0x1a1410;
 const GLYPH = 0x9b5de5;
 const GAS = 0x4fc46a;
+const GAS_AUTO = 0x9ccf3c; // 자동 군락의 구름 — 조금 누런 연두 (식물 구름과 구분)
+const PUFF = 0x8a7a9a; // 말불버섯 자실체 — 잿빛 보라
+const PUFF_HOLE = 0x1e1626;
+const PUFF_BASE = 0xb8a98a; // 밑동·사마귀 돌기 — 바랜 황갈
+const PUFF_MAT = 0x3a2f44; // 군락 아래 균사 깔린 바닥
 const STALK = 0x4d6b2e; // 포자 식물 줄기
 const BULB = 0x8fbf4a; // 포자 주머니 — 병든 연두
 const BULB_SPOT = 0x3f5f22;
@@ -46,6 +51,34 @@ const BLADE = 0xb8b8c4;
 const ROD = 0x3a3634;
 
 /** 함정 하나의 모형. group 원점 = 함정 칸 중심, y=0 바닥 */
+/** 포자 구름 — 반투명 구체 군집 (포자 식물·자동 군락 공용). 랜턴 빔에 빛난다 */
+function buildSporeCloud(color: number): { cloud: THREE.Group; mat: THREE.MeshLambertMaterial } {
+  const cloud = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0, depthWrite: false });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const rr = 0.4 + (i % 3) * 0.5;
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.75 + (i % 2) * 0.35, 10, 8), mat);
+    puff.position.set(Math.cos(a) * rr, 0.6 + (i % 3) * 0.45, Math.sin(a) * rr);
+    cloud.add(puff);
+  }
+  cloud.visible = false;
+  return { cloud, mat };
+}
+
+/** 구름 농도 — 도는 동안 짙고(끝 1초는 옅어진다), 예고 중엔 살짝 샌다 */
+function animateSporeCloud(data: Record<string, unknown>, trap: TrapView, nowMs: number): void {
+  const cloud = data['cloud'] as THREE.Group | undefined;
+  const mat = data['cloudMat'] as THREE.MeshLambertMaterial | undefined;
+  if (!cloud || !mat) return;
+  const on = trap.phase === 'firing';
+  const target = on ? Math.min(0.32, 0.32 * Math.min(1, trap.timer / 60)) : trap.phase === 'telegraph' ? 0.1 : 0;
+  mat.opacity += (target - mat.opacity) * 0.15;
+  cloud.visible = mat.opacity > 0.01;
+  cloud.rotation.y = nowMs / 2400;
+  cloud.position.y = 0.1 * Math.sin(nowMs / 900);
+}
+
 export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
   const group = new THREE.Group();
   const data: Record<string, unknown> = {};
@@ -242,16 +275,50 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     residue.visible = false;
     group.add(residue);
     data['residue'] = residue;
-    const cloud = new THREE.Group();
-    const cloudMat = new THREE.MeshLambertMaterial({ color: GAS, transparent: true, opacity: 0, depthWrite: false });
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      const rr = 0.4 + (i % 3) * 0.5;
-      const puff = new THREE.Mesh(new THREE.SphereGeometry(0.75 + (i % 2) * 0.35, 10, 8), cloudMat);
-      puff.position.set(Math.cos(a) * rr, 0.6 + (i % 3) * 0.45, Math.sin(a) * rr);
-      cloud.add(puff);
+    const { cloud, mat: cloudMat } = buildSporeCloud(GAS);
+    group.add(cloud);
+    data['cloud'] = cloud;
+    data['cloudMat'] = cloudMat;
+  } else if (trap.type === 'trap_gas_auto') {
+    // 자동 순환 포자 군락 — 말불버섯 무리. 짧은 밑동 위 둥근 자실체 넷(크기 다름), 꼭대기에 검은 숨구멍,
+    // 표면에 사마귀 돌기. 쉼 동안은 잠잠하고, 예고 때 부풀며 떨고, 뿜는 동안 숨구멍이 빛난다.
+    // 포자 식물(줄기·주머니·꽃잎, 연두)과 형태·색이 다르다 — 자동 장치임을 한눈에
+    const puffs: THREE.Mesh[] = [];
+    const puffMat = new THREE.MeshLambertMaterial({ color: PUFF, emissive: 0xd8e850, emissiveIntensity: 0 });
+    const holeMat = new THREE.MeshLambertMaterial({ color: PUFF_HOLE, emissive: 0xc8ff40, emissiveIntensity: 0 });
+    const baseMat = new THREE.MeshLambertMaterial({ color: PUFF_BASE });
+    const specs = [[0, 0, 0.5], [0.62, 0.3, 0.32], [-0.5, 0.5, 0.27], [0.15, -0.66, 0.24]] as const; // x, z, 반지름
+    for (const [px, pz, r] of specs) {
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.75, r * 0.5, 8), baseMat);
+      base.position.set(px, r * 0.25, pz);
+      group.add(base);
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), puffMat);
+      puff.position.set(px, r * 1.4, pz);
+      puff.scale.set(1, 0.9, 1);
+      group.add(puff);
+      const hole = new THREE.Mesh(new THREE.SphereGeometry(r * 0.28, 8, 6), holeMat);
+      hole.position.set(0, r * 0.95, 0);
+      hole.scale.set(1, 0.45, 1);
+      puff.add(hole);
+      for (let i = 0; i < 5; i++) {
+        const a = i * 1.26 + r * 10;
+        const wart = new THREE.Mesh(new THREE.SphereGeometry(r * 0.13, 5, 4), baseMat);
+        wart.position.set(Math.cos(a) * r * 0.85, Math.sin(i * 1.9) * r * 0.5, Math.sin(a) * r * 0.85);
+        puff.add(wart);
+      }
+      puffs.push(puff);
     }
-    cloud.visible = false;
+    data['puffs'] = puffs;
+    data['puffMat'] = puffMat;
+    data['holeMat'] = holeMat;
+    const mycelium = new THREE.Mesh(
+      new THREE.CircleGeometry(1.0, 14),
+      new THREE.MeshLambertMaterial({ color: PUFF_MAT, transparent: true, opacity: 0.8 }),
+    );
+    mycelium.rotation.x = -Math.PI / 2;
+    mycelium.position.y = 0.015;
+    group.add(mycelium);
+    const { cloud, mat: cloudMat } = buildSporeCloud(GAS_AUTO);
     group.add(cloud);
     data['cloud'] = cloud;
     data['cloudMat'] = cloudMat;
@@ -429,17 +496,29 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
       bulbMat.color.setHex(spent ? 0x4a5a2e : 0x8fbf4a);
     }
     if (residue) residue.visible = spent;
-    const cloud = data['cloud'] as THREE.Group | undefined;
-    const mat = data['cloudMat'] as THREE.MeshLambertMaterial | undefined;
-    if (cloud && mat) {
-      const on = trap.phase === 'firing';
-      // 예고 중엔 살짝 새어 나오고, 도는 동안은 짙고, 끝 1초는 옅어진다
-      const target = on ? Math.min(0.32, 0.32 * Math.min(1, trap.timer / 60)) : trap.phase === 'telegraph' ? 0.1 : 0;
-      mat.opacity += (target - mat.opacity) * 0.15;
-      cloud.visible = mat.opacity > 0.01;
-      cloud.rotation.y = nowMs / 2400;
-      cloud.position.y = 0.1 * Math.sin(nowMs / 900);
+    animateSporeCloud(data, trap, nowMs);
+  } else if (trap.type === 'trap_gas_auto') {
+    // 쉼 — 가라앉아 잠잠. 예고 — 부풀며 바르르. 뿜는 중 — 크게 부푼 채 숨구멍이 빛나며 맥동
+    const puffs = data['puffs'] as THREE.Mesh[] | undefined;
+    const puffMat = data['puffMat'] as THREE.MeshLambertMaterial | undefined;
+    const holeMat = data['holeMat'] as THREE.MeshLambertMaterial | undefined;
+    const trembling = trap.phase === 'telegraph';
+    const burst = trap.phase === 'firing';
+    const baseX = (data['baseX'] as number | undefined) ?? (data['baseX'] = group.position.x);
+    const baseZ = (data['baseZ'] as number | undefined) ?? (data['baseZ'] = group.position.z);
+    group.position.x = (baseX as number) + (trembling ? (Math.random() - 0.5) * 0.06 : 0);
+    group.position.z = (baseZ as number) + (trembling ? (Math.random() - 0.5) * 0.06 : 0);
+    if (puffs) {
+      const swell = trembling ? 1.15 + 0.08 * Math.abs(Math.sin(nowMs / 40)) : burst ? 1.22 + 0.05 * Math.sin(nowMs / 180) : 1;
+      for (const pf of puffs) {
+        pf.scale.x += (swell - pf.scale.x) * 0.15;
+        pf.scale.z = pf.scale.x;
+        pf.scale.y += (swell * 0.9 - pf.scale.y) * 0.15;
+      }
     }
+    if (puffMat) puffMat.emissiveIntensity = burst ? 0.18 : trembling ? 0.1 : 0;
+    if (holeMat) holeMat.emissiveIntensity = burst ? 0.7 + 0.3 * Math.abs(Math.sin(nowMs / 140)) : trembling ? 0.35 : 0;
+    animateSporeCloud(data, trap, nowMs);
   } else if (trap.type === 'trap_rockfall') {
     const slab = data['slab'] as THREE.Group | undefined;
     const rubble = data['rubble'] as THREE.Group | undefined;

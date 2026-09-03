@@ -853,7 +853,7 @@ function spikeSoundOnce(kind: string): boolean {
 }
 const isSpikeType = (type: string): boolean => type === 'trap_spike' || type === 'trap_spike_auto';
 const isAutoTrap = (type: string): boolean =>
-  type === 'trap_spike_auto' || type === 'trap_dart_auto' || type === 'trap_pendulum';
+  type === 'trap_spike_auto' || type === 'trap_dart_auto' || type === 'trap_pendulum' || type === 'trap_gas_auto';
 /** 함정 소리 위치 — 밟는 함정은 일반 공간 음향(멀리서도 최소 볼륨), 자동 순환 장치는
  *  reach 밖 무음·안에서는 거리 제곱 감쇠 (null = 안 들린다) */
 function trapSoundAt(type: string, x: number, z: number): { pan: number; vol: number } | null {
@@ -885,8 +885,9 @@ events.on('trap_telegraph', (payload) => {
     }
     return;
   }
-  if (t.type === 'trap_gas') {
-    audio.play('trap_bloom', panAt(t.x, t.z)); // 포자 식물이 벌어진다 — 지금 물러나라
+  if (t.type === 'trap_gas' || t.type === 'trap_gas_auto') {
+    const at = trapSoundAt(t.type, t.x, t.z); // 포자 식물이 벌어진다 / 군락이 부푼다 — 지금 물러나라 (자동은 10m 감쇠)
+    if (at) audio.play('trap_bloom', at);
     return;
   }
   // 자동 다트 발사기 — 발판 없이 쉬익 (같은 틱에 여러 개면 한 번, 자동은 10m 감쇠)
@@ -984,8 +985,9 @@ events.on('trap_fired', (payload) => {
       padRumble('crumble');
     }
     showReaction('천장이 무너졌다 — 잔해가 길을 막는다 (총알은 넘어간다 · 폭발로 부술 수 있다)', 2600);
-  } else if (t.type === 'trap_gas') {
-    audio.play('trap_spore', panAt(t.x, t.z)); // 포자가 쏟아진다
+  } else if (t.type === 'trap_gas' || t.type === 'trap_gas_auto') {
+    const at = trapSoundAt(t.type, t.x, t.z); // 포자가 쏟아진다 (자동 군락은 10m 감쇠)
+    if (at) audio.play('trap_spore', at);
   }
 });
 events.on('trap_disarmed', (payload) => {

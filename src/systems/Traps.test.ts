@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { World, type EnemyState, type TrapState, resetTrap } from '../core/World';
+import { World, type EnemyState, type TrapState, resetTrap, provokeTrap } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Projectiles from './Projectiles';
@@ -776,6 +776,46 @@ describe('함정 — 자동 순환 가시판', () => {
     forced.phaseOffset = 0;
     tickTraps(world, 1);
     expect(forced.cycleTick).toBe(1);
+  });
+});
+
+describe('함정 — 자동 순환 포자 군락', () => {
+  it('트리거 없이 쉼→부풂→구름을 돌고, 구름이 걷힌 뒤 5초(쉼+예고) 만에 다시 뿜는다. 구름은 일반 포자보다 짧다', () => {
+    const world = makeWorld();
+    const a = putTrap(world, 'trap_gas_auto', 30, 6); // (1,7) 짝 → 위상 0
+    const c = T.trap_gas_auto;
+    const ev: string[] = [];
+    for (const n of ['trap_telegraph', 'trap_fired', 'trap_retract'] as const) world.events.on(n, () => ev.push(n));
+    expect(c.cloudTicks).toBeLessThan(T.trap_gas.cloudTicks);
+    expect(c.idleTicks + c.telegraphTicks).toBe(300); // 걷힌 뒤 정확히 5초
+    tickTraps(world, c.idleTicks);
+    expect(a.phase).toBe('telegraph');
+    expect(ev).toEqual(['trap_telegraph']);
+    tickTraps(world, c.telegraphTicks);
+    expect(a.phase).toBe('firing');
+    expect(ev.at(-1)).toBe('trap_fired');
+    // 구름 안에 들어간다 — 독이 든다 (포자 식물과 같은 효과)
+    world.player.x = 30;
+    tickTraps(world, 2);
+    expect(world.player.dots?.poison?.ticks).toBe(c.poisonDurationTicks);
+    world.player.x = 6;
+    tickTraps(world, c.cloudTicks - 2);
+    expect(a.phase).toBe('cooldown');
+    expect(ev.at(-1)).toBe('trap_retract');
+    tickTraps(world, c.idleTicks + c.telegraphTicks);
+    expect(a.phase).toBe('firing'); // 다시 뿜는다
+  });
+
+  it('총·화살·폭발로는 터뜨릴 수 없다 — armed 상태가 없어 provoke 가 안 먹고, 배치 phase 가 위상을 정한다', () => {
+    const world = makeWorld();
+    const a = putTrap(world, 'trap_gas_auto', 30, 6);
+    tickTraps(world, 5);
+    provokeTrap(world, a, 30, 'pistol');
+    expect(a.phase).toBe('cooldown');
+    const forced = putTrap(world, 'trap_gas_auto', 38, 6);
+    forced.phaseOffset = T.trap_gas_auto.idleTicks - 1;
+    tickTraps(world, 1);
+    expect(forced.phase).toBe('telegraph');
   });
 });
 

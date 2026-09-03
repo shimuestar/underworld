@@ -454,6 +454,41 @@ function tickAutoDart(world: World, trap: TrapState, cfg: TrapCfg): void {
   }
 }
 
+/** 자동 순환 포자 군락 — 트리거 없이 쉼(cooldown) → 부풀며 떨림(telegraph) → 구름(firing) 을 돈다.
+ *  구름이 도는 동안은 포자 식물과 같은 효과(독·시야·스태미너·기침·적 둔화). armed 가 없어 provoke 가 안 먹는다 */
+function tickAutoGas(world: World, trap: TrapState, cfg: TrapCfg): void {
+  const idle = Math.max(1, Math.round(cfg['idleTicks'] ?? 270));
+  const tele = Math.max(0, Math.round(cfg['telegraphTicks'] ?? 30));
+  const cloud = Math.max(1, Math.round(cfg['cloudTicks'] ?? 210));
+  const cycle = idle + tele + cloud;
+  if (trap.cycleTick === undefined) {
+    trap.cycleTick =
+      ((trap.phaseOffset ?? ((trap.row + trap.col) % 2) * Math.floor(cycle / 2)) % cycle + cycle) % cycle;
+    trap.phase = 'cooldown';
+  }
+  trap.cycleTick = (trap.cycleTick + 1) % cycle;
+  const t = trap.cycleTick;
+  const at = { id: trap.id, type: trap.type, x: trap.x, z: trap.z };
+  let phase: TrapState['phase'];
+  if (t < idle) {
+    phase = 'cooldown';
+    trap.timer = idle - t;
+  } else if (t < idle + tele) {
+    phase = 'telegraph';
+    trap.timer = idle + tele - t;
+  } else {
+    phase = 'firing';
+    trap.timer = cycle - t; // 구름 잔여 — 모형이 끝 1초를 옅게 그린다
+  }
+  if (phase !== trap.phase) {
+    trap.phase = phase;
+    if (phase === 'telegraph') world.events.emit('trap_telegraph', at);
+    else if (phase === 'firing') world.events.emit('trap_fired', { ...at, dirX: trap.dirX, dirZ: trap.dirZ });
+    else world.events.emit('trap_retract', at); // 구름이 걷혔다
+  }
+  if (phase === 'firing') tickGasCloud(world, trap, cfg);
+}
+
 /** 작동 뒤 — 장전이 남으면 쿨다운, 다 썼으면 spent */
 function afterFire(world: World, trap: TrapState, cfg: TrapCfg): void {
   if (trap.charges > 0) trap.charges--;
@@ -609,6 +644,10 @@ export function tick(world: World, _dt: number): void {
     }
     if (trap.type === 'trap_dart_auto') {
       tickAutoDart(world, trap, cfg); // 트리거 없이 주기마다 쏜다
+      continue;
+    }
+    if (trap.type === 'trap_gas_auto') {
+      tickAutoGas(world, trap, cfg); // 트리거 없이 주기마다 뿜는다
       continue;
     }
     switch (trap.phase) {
