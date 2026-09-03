@@ -124,7 +124,9 @@ function slowEnemy(enemy: EnemyState, ticks: number, mul: number): void {
   enemy.slowMul = Math.min(enemy.slowMul ?? 1, mul);
 }
 
-/** 그물 — 밟은 자리 반경 안: 플레이어는 거미줄 상태(기존 탈출 규칙 그대로), 적은 완전 둔화 */
+/** 그물 — 밟은 자리 반경 안: 플레이어는 거미줄 상태(기존 탈출 규칙 그대로), 적은 그물에 걸린다 —
+ *  staggered 규약(이동·공격 정지·노란 발광·처형 가능)으로 enemyNetTicks 동안 굳고, 몸에 거미줄 고치(nettedTicks).
+ *  둔화가 아니라 진짜 '걸림'이다 (2026-09-03 — 둔화 40% 로는 슬라임이 그냥 지나가는 것처럼 보였다). 서리 스택과 무관 */
 function fireNet(world: World, trap: TrapState, cfg: TrapCfg): void {
   const r = cfg['hitRadius'] ?? 1.0;
   const p = world.player;
@@ -136,8 +138,33 @@ function fireNet(world: World, trap: TrapState, cfg: TrapCfg): void {
   for (const enemy of world.enemies) {
     if (!canTriggerTrap(enemy)) continue;
     if (Math.hypot(enemy.x - trap.x, enemy.z - trap.z) > r) continue;
-    slowEnemy(enemy, cfg['enemySlowTicks'] ?? 0, cfg['enemySlowMul'] ?? 1);
+    const boss = enemyDef(enemy.type).boss || enemy.floorBoss === true;
+    const ticks = Math.max(1, Math.round((cfg['enemyNetTicks'] ?? 240) * (boss ? (cfg['bossNetMul'] ?? 1) : 1)));
+    // 패링 스태거와 같은 필드 — 진행 중이던 공격은 그 자리에서 굳는다 (Reaction 규약)
+    enemy.ai = 'staggered';
+    enemy.timer = ticks;
+    enemy.nettedTicks = ticks;
+    enemy.attackFreezeTicks = 0;
+    enemy.wantsBash = false;
+    if (enemy.ai === 'staggered') enemy.kbTicks = 0;
     world.events.emit('trap_hit_enemy', { id: trap.id, type: trap.type, enemyId: enemy.id, amount: 0 });
+    world.events.emit('trap_net_caught', { id: trap.id, enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, ticks });
+  }
+}
+
+/** 그물에 걸린 적 — 시간이 다 되면 찢고 나온다. 다른 이유로 경직이 풀렸으면(처형·튕겨나감) 고치도 걷는다 */
+function tickNetted(world: World): void {
+  for (const enemy of world.enemies) {
+    if ((enemy.nettedTicks ?? 0) <= 0) continue;
+    enemy.nettedTicks = (enemy.nettedTicks ?? 0) - 1;
+    // 만료를 먼저 본다 — Enemies 가 같은 틱 앞 순서에서 staggered 타이머를 0 으로 내려 recover 로 넘기므로,
+    // ai 를 먼저 보면 정상 만료가 "다른 이유로 풀림"으로 오판돼 찢는 소리가 안 난다
+    if (enemy.nettedTicks <= 0 && enemy.alive) {
+      enemy.nettedTicks = 0;
+      world.events.emit('trap_net_torn', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+      continue;
+    }
+    if (!enemy.alive || enemy.ai !== 'staggered') enemy.nettedTicks = 0; // 처형·튕겨나감 — 고치만 조용히 걷는다
   }
 }
 
@@ -602,6 +629,7 @@ export function init(world: World): void {
 export function tick(world: World, _dt: number): void {
   revealTraps(world);
   tickDots(world);
+  tickNetted(world);
   for (const trap of world.traps) {
     const cfg = trapCfg(trap.type);
     if (!cfg) continue;

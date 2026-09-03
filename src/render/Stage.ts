@@ -301,6 +301,8 @@ interface EnemyVisual {
   ice?: THREE.Group;
   /** 결정이 이번에 나타난 시각 — 나타나며 크게 잡혔다 제 크기로 줄어드는 팝 */
   iceShownMs?: number;
+  /** 거미줄 고치 — 그물에 걸린 동안만 보인다 (처음 걸릴 때 만든다) */
+  web?: THREE.Mesh;
   /** 몸통+머리 서브그룹 — 공격 모션(기울임/내지름)의 피벗 (발 기준) */
   torso: THREE.Group;
   /** 머리 상자 — 헤드샷 때 젖혀진다 (거미는 머리가 따로 없어 undefined) */
@@ -2996,6 +2998,26 @@ export class Stage {
       if (frozen && !visual.ice) {
         visual.ice = makeIceShards(enemyDef(enemy.type));
         visual.torso.add(visual.ice);
+      }
+      // 그물에 걸렸다 — 몸을 감싼 거미줄 고치(와이어프레임 구). 버둥거리듯 잔떨림
+      const netted = (enemy.nettedTicks ?? 0) > 0;
+      if (netted && !visual.web) {
+        const dw = enemyDef(enemy.type);
+        const web = new THREE.Mesh(
+          new THREE.IcosahedronGeometry(1, 1),
+          new THREE.MeshBasicMaterial({ color: 0xe8e4d0, wireframe: true, transparent: true, opacity: 0.85 }),
+        );
+        web.scale.set(dw.radius * 1.35, dw.height * 0.56, dw.radius * 1.35);
+        web.position.y = dw.height * 0.5;
+        visual.web = web;
+        visual.torso.add(web);
+      }
+      if (visual.web) {
+        visual.web.visible = netted;
+        if (netted) {
+          visual.web.rotation.y = Math.sin(now / 90) * 0.08;
+          visual.web.rotation.z = Math.cos(now / 70) * 0.05;
+        }
       }
       // 결정은 완전 빙결 동안만 — 깨지는 순간 파편으로 튀고(spawnThaw), 둔화 단계는 틴트만 남는다.
       // 나타나는 순간엔 1.7배로 잡혔다가 220ms 에 걸쳐 제 크기로 조여든다 — "쩍" 하고 굳는 팝

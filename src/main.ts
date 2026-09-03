@@ -512,6 +512,8 @@ for (const name of [
   'trap_spent',
   'trap_hit_player',
   'trap_hit_enemy',
+  'trap_net_caught',
+  'trap_net_torn',
   'trap_kill',
   'trap_disarmed',
   'trap_parried',
@@ -1001,6 +1003,16 @@ events.on('trap_fired', (payload) => {
   } else if (t.type === 'trap_gas' || t.type === 'trap_gas_auto') {
     audio.play('trap_spore', panAt(t.x, t.z)); // 포자가 쏟아진다 — 매 분출, 자동 군락도 일반 공간 음향
   }
+});
+// 적이 그물에 걸렸다 — 끈적한 걸림음 + 안내(처형 기회). 찢고 나올 때는 줄 끊는 소리
+events.on('trap_net_caught', (payload) => {
+  const t = payload as { x: number; z: number };
+  audio.play('net_snag', panAt(t.x, t.z));
+  showReaction('적이 그물에 걸렸다 — 굳은 동안 처형할 수 있다', 1800);
+});
+events.on('trap_net_torn', (payload) => {
+  const t = payload as { x: number; z: number };
+  audio.play('trap_cut', panAt(t.x, t.z));
 });
 events.on('trap_disarmed', (payload) => {
   const t = payload as { type: string; x: number; z: number; how: string };

@@ -37,7 +37,7 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
 |---|---|---|---|---|---|---|---|
 | `trap_dart` | 低 | 판 1.3 | 30틱 덜컹·판 침강·노즐 붉음(가시판과 같은 결) | 8×3 화살(방패 완전 차단) | 8 풀피해(오사 감쇄 없음) | 90틱 / 2회 | 반사(마나 15)·방어·회피 |
 | `trap_dart_auto` | 低 | 없음(자동 순환) | 30틱 쉬익·황동 노즐 붉음 | 8×3 화살 | 8 | 쉼 120 → 예고 30 → 발사 반복 | 박자 읽고 지나가기·반사 |
-| `trap_net` | 低 | 줄 1.0 | 없음(낙하 12틱 연출) | 거미줄 상태 | 완전 둔화 6초 | 1회 | 해머·총·투사체로 줄 끊기 |
+| `trap_net` | 低 | 줄 1.0 | 없음(낙하 12틱 연출) | 거미줄 상태 | **그물에 걸림 4초**(이동·공격 정지, 처형 가능; 보스 2초) | 1회 | 해머·총·투사체로 줄 끊기 / 적 유도 |
 | `trap_oil` | 低→中 | 불 | — | 둔화 0.55 / 불붙으면 **화염 상태**(6 + 4초 동안 12) | 둔화 / 화상 | 다 타면 spent | 유도 후 점화 |
 | `trap_spike` | 中 | 판 1.3 | 60틱 덜컹·판 내려앉음 | 28 **막기·대시 무적 불가** | 45(보스 ×0.5) | 5초 노출 → 45틱 회수 / 무한 | 1초 안에 뛰어 벗어나기·대시로 넘기·그림자 이동 |
 | `trap_spike_auto` | 中 | 없음(자동 순환) | 30틱 덜컹 | 서 있는 가시 접촉 28 | 45 | 내려감 90 → 덜컹 30 → 가시 120 → 회수 45 반복 | 안전한 판(반대 위상) 골라 건너기 |
@@ -84,6 +84,10 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
   같은 틱에 여러 장이 울리면 main 이 종류별로 한 번만 소리를 낸다.
 - **다트** — `ProjectileState.trapShot`. 적 소유지만 `friendlyFireDamageMul` 을 받지 않고, 적을 맞히면
   `damage_pop`·처치 `trap_kill`. `casterId` 없음 → 반사되면 속도 반전(Reaction 기존 경로).
+- **그물에 걸린 적**(2026-09-03) — 둔화가 아니라 `staggered`(이동·공격 정지·노란 발광·처형 가능) `enemyNetTicks` + `nettedTicks`
+  (Stage 가 몸에 와이어프레임 거미줄 고치를 씌운다). 보스 ×`bossNetMul`. 서리 스택과 무관하게 걸린다. 시간이 다 되면
+  `trap_net_torn`(줄 끊는 소리), 처형·튕겨나감으로 경직이 먼저 풀리면 고치만 조용히 걷힌다. 걸리는 순간 `trap_net_caught`(걸림음·안내).
+  예전 "완전 둔화 40%"는 슬라임이 그냥 지나가는 것처럼 보였다.
 - **그물** — 해체 판정: 해머 부채꼴(`Weapons`), 권총 히트스캔·플레이어 투사체(y 0.3~lineHeight+0.15 상자)
   → `disarmTrap` → `trap_disarmed {how}`.
 - **기름** — 점화 훅 `igniteOilInRadius`: `Explosion.explodeAt`, 화염구 폭발, 수류탄, 불타는 적 통과,
@@ -112,7 +116,7 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
 
 `trap_triggered {id,type,x,z,by}` · `trap_telegraph` · `trap_fired {…,dirX,dirZ}` · `trap_spent` ·
 `trap_hit_player {id,type,amount}` · `trap_hit_enemy {…,enemyId,amount}` · `trap_kill {enemyType,trapType}` ·
-`trap_disarmed {…,how}` · `trap_ignited` · `trap_gas_cough` · `trap_whoosh` ·
+`trap_disarmed {…,how}` · `trap_net_caught {enemyId,ticks}` · `trap_net_torn {enemyId}` · `trap_ignited` · `trap_gas_cough` · `trap_whoosh` ·
 `trap_parried` · `trap_revealed` · `trap_rubble_broken`. 플레이어 피해 `source`: `trap_spike / trap_dart / trap_fire / trap_rockfall(폭발 결 진동) / trap_pendulum`.
 Metrics 는 `docs/metrics.md` 함정 표.
 

@@ -906,6 +906,8 @@ export interface EnemyState {
   wantsCharge?: boolean;
   /** 피탄 경직 잔여 틱 — 발이 묶인다 (공격 진행은 막지 않는다. 총알용) */
   flinchTicks?: number;
+  /** 그물에 걸린 잔여 틱 — staggered 와 함께 건다(Traps.fireNet). 몸에 거미줄 고치가 씌워지고, 0 이 되면 찢고 나온다 */
+  nettedTicks?: number;
   /** 강한 타격 경직 — 공격 중이라도 그 상태 그대로 굳는다 (해머용) */
   attackFreezeTicks?: number;
   /** 알아챈 직후 멈칫 — 이 틱 동안 몸만 돌리고 이동·공격을 하지 않는다.

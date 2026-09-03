@@ -8,6 +8,7 @@ export type SoundName =
   | 'poison_refresh'
   | 'burn_refresh'
   | 'trap_squash'
+  | 'net_snag'
   | 'telegraph_blue'
   | 'telegraph_red'
   | 'telegraph_purple'
@@ -1033,6 +1034,13 @@ export class GameAudio {
         this.tone(330, 0.13, 'triangle', 0.3, 0.01, 200);
         this.tone(96, 0.15, 'sine', 0.45, 0, 68);
         this.noise(0.045, 0.3, 1500, 0.11);
+        break;
+      case 'net_snag':
+        // 적이 그물에 걸렸다 — 끈적한 툭(줄이 감기는 노이즈) + 짧은 하강 톤 + 버둥거림 잔음
+        this.noise(0.06, 0.7, 1600);
+        this.tone(520, 0.14, 'triangle', 0.4, 0.01, 260);
+        this.noise(0.22, 0.28, 900, 0.08);
+        this.tone(140, 0.2, 'sine', 0.35, 0.05, 90);
         break;
       case 'trap_squash':
         // 포자 군락이 짓밟힌다 — 축축한 퍽(자실체 터짐) + 질척한 스침 + 낮은 받침

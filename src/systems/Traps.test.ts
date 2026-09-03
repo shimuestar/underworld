@@ -352,31 +352,55 @@ describe('함정 — 그물 덫', () => {
     world = makeWorld();
   });
 
-  it('밟으면 플레이어는 거미줄 상태(web_caught 1회), 적은 완전 둔화, 1회용', () => {
+  it('밟으면 플레이어는 거미줄 상태(web_caught 1회), 적은 그물에 걸려 굳는다(staggered·nettedTicks), 1회용', () => {
     const trap = putTrap(world, 'trap_net', 6, 6, 'E');
     const e = addEnemy(world, 'goblin_runner', 6.5, 6);
     const caught: number[] = [];
     world.events.on('web_caught', (p) => caught.push((p as { swings: number }).swings));
+    const ev: string[] = [];
+    world.events.on('trap_net_caught', () => ev.push('caught'));
+    world.events.on('trap_net_torn', () => ev.push('torn'));
     tickTraps(world, 1);
     expect(caught).toEqual([balance.web.breakSwings]);
     expect(world.player.webSwingsLeft).toBe(balance.web.breakSwings);
-    expect(e.slowTicks).toBe(T.trap_net.enemySlowTicks);
-    expect(e.slowMul).toBe(T.trap_net.enemySlowMul);
+    expect(e.ai).toBe('staggered'); // 이동·공격 정지, 처형 가능
+    expect(e.timer).toBe(T.trap_net.enemyNetTicks);
+    expect(e.nettedTicks).toBe(T.trap_net.enemyNetTicks);
+    expect(ev).toEqual(['caught']);
     expect(trap.phase).toBe('firing'); // 떨어지는 연출 시간
     tickTraps(world, T.trap_net.dropTicks + 1);
     expect(trap.phase).toBe('spent');
     expect(caught).toHaveLength(1); // 한 번만
+    // 시간이 다 되면 찢고 나온다 (Enemies 가 staggered 타이머를 굴리지만, 고치는 Traps 가 센다)
+    tickTraps(world, T.trap_net.enemyNetTicks);
+    expect(e.nettedTicks).toBe(0);
+    expect(ev).toEqual(['caught', 'torn']);
   });
 
-  it('서리가 쌓인 적은 함정 둔화가 덮지 않는다 — 서리 콤보를 깎아먹지 않게', () => {
+  it('슬라임도 걸린다 — 서리 스택과 무관. 보스는 절반', () => {
+    putTrap(world, 'trap_net', 30, 6, 'E');
+    const slime = addEnemy(world, 'slime', 30, 6);
+    slime.frostStacks = 2;
+    slime.slowTicks = 40;
+    tickTraps(world, 1);
+    expect(slime.ai).toBe('staggered');
+    expect(slime.nettedTicks).toBe(T.trap_net.enemyNetTicks);
+    putTrap(world, 'trap_net', 50, 6, 'E');
+    const boss = addEnemy(world, 'slime_mother', 50, 6);
+    tickTraps(world, 1);
+    expect(boss.nettedTicks).toBe(Math.round(T.trap_net.enemyNetTicks * T.trap_net.bossNetMul));
+  });
+
+  it('처형 등으로 경직이 먼저 풀리면 고치도 걷힌다 — torn 알림은 없다', () => {
     putTrap(world, 'trap_net', 30, 6, 'E');
     const e = addEnemy(world, 'goblin_runner', 30, 6);
-    e.frostStacks = 2;
-    e.slowTicks = 40;
-    e.slowMul = 0.7;
+    const ev: string[] = [];
+    world.events.on('trap_net_torn', () => ev.push('torn'));
     tickTraps(world, 1);
-    expect(e.slowTicks).toBe(40);
-    expect(e.slowMul).toBe(0.7);
+    e.ai = 'chase';
+    tickTraps(world, 1);
+    expect(e.nettedTicks).toBe(0);
+    expect(ev).toEqual([]);
   });
 
   it('해머로 줄을 끊으면 해체된다 — 그 뒤엔 밟아도 안 떨어진다', async () => {
