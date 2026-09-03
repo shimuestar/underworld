@@ -3490,7 +3490,12 @@ function render(alpha: number): void {
   } else if (nearChest) {
     altarPrompt!.textContent = `${IK} — 보물상자를 연다`;
   } else if (nearLever) {
-    altarPrompt!.textContent = `${IK} — 레버를 당긴다 (보스 아레나 북쪽 관문이 열린다)`;
+    const leverDef = world.level.levers.find(
+      (l) => l.cell[0] === world.leverInView!.row && l.cell[1] === world.leverInView!.col,
+    );
+    altarPrompt!.textContent = leverDef?.resets
+      ? `${IK} — 레버를 당긴다 (터진 포자 식물을 다시 심는다)`
+      : `${IK} — 레버를 당긴다 (보스 아레나 북쪽 관문이 열린다)`;
   } else if (nearDoor) {
     // 진행 게이지를 프롬프트 안에 그려 준다 — 손 동작만으로는 얼마나 남았는지 모른다
     const frac = Door.channelFrac(world);
