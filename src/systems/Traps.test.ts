@@ -908,3 +908,26 @@ describe('함정 — 포자 식물: 뇌창(빔)에도 터진다', () => {
     expect(plant.phase).toBe('telegraph');
   });
 });
+
+describe('함정 — 진자 소리', () => {
+  it('한 주기에 휭 2번(최저점)·삐걱 2번(양 끝)이 번갈아 난다 — 14m 안에서만', () => {
+    const world = makeWorld();
+    putTrap(world, 'trap_pendulum', 10, 6, 'E'); // 플레이어(6) 에서 4m
+    const ev: string[] = [];
+    world.events.on('trap_whoosh', () => ev.push('whoosh'));
+    world.events.on('trap_creak', () => ev.push('creak'));
+    tickTraps(world, T.trap_pendulum.periodTicks);
+    expect(ev.filter((e) => e === 'whoosh')).toHaveLength(2);
+    expect(ev.filter((e) => e === 'creak')).toHaveLength(2);
+    // 번갈아 — 같은 소리가 연달아 나지 않는다
+    for (let i = 1; i < ev.length; i++) expect(ev[i]).not.toBe(ev[i - 1]);
+    // 멀면 조용
+    const far = makeWorld();
+    putTrap(far, 'trap_pendulum', 30, 6, 'E'); // 24m
+    const evFar: string[] = [];
+    far.events.on('trap_whoosh', () => evFar.push('w'));
+    far.events.on('trap_creak', () => evFar.push('c'));
+    tickTraps(far, T.trap_pendulum.periodTicks);
+    expect(evFar).toHaveLength(0);
+  });
+});

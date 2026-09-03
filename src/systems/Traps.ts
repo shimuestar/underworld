@@ -311,6 +311,11 @@ function tickPendulum(world: World, trap: TrapState, cfg: TrapCfg): void {
   const p = world.player;
   const r = cfg['hitRadius'] ?? 1.2;
   const near = !world.dead && Math.hypot(p.x - trap.x, p.z - trap.z) <= r;
+  // 진폭 끝(방향이 바뀌는 순간) — 쇠사슬이 삐걱인다. 최저점의 '휭'과 번갈아 나 움직임이 내내 들린다
+  if (inHalf === Math.floor(half / 2)) {
+    const pd = Math.hypot(p.x - trap.x, p.z - trap.z);
+    if (pd <= (cfg['whooshRadius'] ?? 0)) world.events.emit('trap_creak', { id: trap.id, x: trap.x, z: trap.z });
+  }
 
   // 창 밖 — 리드 안에서 누른 반응은 버퍼로 살려 둔다 (Reaction 의 incoming 규약과 같은 장치)
   if (!inWindow) {

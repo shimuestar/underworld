@@ -519,6 +519,7 @@ for (const name of [
   'trap_glyph_burst',
   'trap_gas_cough',
   'trap_whoosh',
+  'trap_creak',
   'trap_revealed',
   'trap_retract',
   'trap_rearmed',
@@ -924,6 +925,11 @@ events.on('trap_whoosh', (payload) => {
   const t = payload as { x: number; z: number };
   const at = trapSoundAt('trap_pendulum', t.x, t.z);
   if (at) audio.play('trap_whoosh', at);
+});
+events.on('trap_creak', (payload) => {
+  const t = payload as { x: number; z: number };
+  const at = trapSoundAt('trap_pendulum', t.x, t.z);
+  if (at) audio.play('trap_creak', at);
 });
 events.on('trap_parried', (payload) => {
   const t = payload as { x: number; z: number };
