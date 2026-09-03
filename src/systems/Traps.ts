@@ -141,34 +141,6 @@ function fireNet(world: World, trap: TrapState, cfg: TrapCfg): void {
   }
 }
 
-/** 저주 문양 — 밟는 순간 터진다. 플레이어: 오염 pending + 시야 흔들림 (피해 없음 — 연쇄 유지).
- *  적: 경직 → 처형 가능. 어느 쪽이든 비명이 방을 깨운다 */
-function fireGlyph(world: World, trap: TrapState, cfg: TrapCfg): void {
-  const r = cfg['triggerRadius'] ?? 1.2;
-  const p = world.player;
-  if (!world.dead && Math.hypot(p.x - trap.x, p.z - trap.z) <= r) {
-    world.corruption.pending += cfg['corruptionPending'] ?? 0;
-    p.aimShakeTicks = Math.max(p.aimShakeTicks ?? 0, cfg['shakeTicks'] ?? 0);
-    p.aimShakeAmp = Math.max(p.aimShakeAmp ?? 0, cfg['shakeAmp'] ?? 0);
-    world.events.emit('trap_glyph_burst', { id: trap.id, x: trap.x, z: trap.z, victim: 'player' });
-    world.events.emit('trap_hit_player', { id: trap.id, type: trap.type, amount: 0 });
-  }
-  let hitEnemy = false;
-  for (const enemy of world.enemies) {
-    if (!canTriggerTrap(enemy)) continue;
-    if (Math.hypot(enemy.x - trap.x, enemy.z - trap.z) > r) continue;
-    const boss = enemyDef(enemy.type).boss || enemy.floorBoss === true;
-    // 패링 스태거와 같은 필드 — 진행 중이던 공격은 그 자리에서 굳는다 (Reaction 규약)
-    enemy.ai = 'staggered';
-    enemy.timer = Math.round((cfg['enemyStaggerTicks'] ?? 0) * (boss ? (cfg['bossStaggerMul'] ?? 1) : 1));
-    enemy.attackFreezeTicks = 0;
-    enemy.wantsBash = false;
-    hitEnemy = true;
-    world.events.emit('trap_hit_enemy', { id: trap.id, type: trap.type, enemyId: enemy.id, amount: 0 });
-  }
-  if (hitEnemy) world.events.emit('trap_glyph_burst', { id: trap.id, x: trap.x, z: trap.z, victim: 'enemy' });
-}
-
 /** 기름 웅덩이 — 밟는 것으론 안 터진다. 둔화는 매 틱, 불이 붙으면 burnTicks 동안 화염 지대 */
 function tickOil(world: World, trap: TrapState, cfg: TrapCfg): void {
   if (trap.phase !== 'armed' && trap.phase !== 'firing') return;
@@ -581,9 +553,6 @@ function fire(world: World, trap: TrapState, cfg: TrapCfg): void {
     case 'trap_net':
       fireNet(world, trap, cfg);
       firingTicks = cfg['dropTicks'] ?? 0; // 그물이 떨어지는 연출 시간
-      break;
-    case 'trap_glyph':
-      fireGlyph(world, trap, cfg);
       break;
     case 'trap_gas':
       firingTicks = cfg['cloudTicks'] ?? 0; // 구름이 도는 동안 tick 이 매 틱 효과를 준다

@@ -28,7 +28,6 @@ const specimens: { trap: { type: string; phase: string; timer: number; dirX: num
   { trap: { type: 'trap_net', phase: 'spent', timer: 0, dirX: 1, dirZ: 0 }, x: -4, z: 4.5 },
   { trap: { type: 'trap_oil', phase: 'armed', timer: 0, dirX: 0, dirZ: -1 }, x: 0, z: 4.5 },
   { trap: { type: 'trap_oil', phase: 'firing', timer: 200, dirX: 0, dirZ: -1 }, x: 4, z: 4.5 },
-  { trap: { type: 'trap_glyph', phase: 'armed', timer: 0, dirX: 0, dirZ: -1 }, x: 8, z: 4.5 },
   { trap: { type: 'trap_gas_auto', phase: 'cooldown', timer: 100, dirX: 0, dirZ: -1 }, x: 12, z: 4.5 }, // 자동 군락 — 쉼
   { trap: { type: 'trap_gas_auto', phase: 'firing', timer: 150, dirX: 0, dirZ: -1 }, x: 17, z: 4.5 }, // 자동 군락 — 뿜는 중
   { trap: { type: 'trap_gas_auto', phase: 'disarmed', timer: 0, dirX: 0, dirZ: -1 }, x: 12, z: 9.5 }, // 자동 군락 — 짓밟힘

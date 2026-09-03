@@ -32,7 +32,6 @@ const NET_BUNDLE = 0x2c2418;
 const OIL = 0x0c0c10; // 번들거리는 검정 — 점액(녹색)과 갈린다
 const OIL_FIRE = 0xff7a1a;
 const OIL_SCORCH = 0x1a1410;
-const GLYPH = 0x9b5de5;
 const GAS = 0x4fc46a;
 const GAS_AUTO = 0x9ccf3c; // 자동 군락의 구름 — 조금 누런 연두 (식물 구름과 구분)
 const PUFF = 0x8a7a9a; // 말불버섯 자실체 — 잿빛 보라
@@ -195,20 +194,6 @@ export function buildTrapGroup(trap: TrapView, cellSize: number): THREE.Group {
     light.position.y = 0.6;
     group.add(light);
     data['fireLight'] = light;
-  } else if (trap.type === 'trap_glyph') {
-    // 바닥의 보라 룬 — 무조명 재질(어둠 속에서도 제 빛). 가시성 규칙은 Stage 가 정한다
-    const mat = new THREE.MeshBasicMaterial({ color: GLYPH, transparent: true, opacity: 0.7 });
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.9, 24), mat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.03;
-    group.add(ring);
-    for (let i = 0; i < 4; i++) {
-      const stroke = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.01, 0.07), mat);
-      stroke.rotation.y = (i * Math.PI) / 4 + 0.3;
-      stroke.position.y = 0.03;
-      group.add(stroke);
-    }
-    data['glyphMat'] = mat;
   } else if (trap.type === 'trap_gas') {
     // 포자 식물 — 줄기 위에 부풀어 오른 주머니, 둘레에 작은 포자 주머니 셋. 다가가면(예고) 꽃잎이
     // 벌어지며 개화하고 포자 구름을 뿜는다. 구름은 반투명 초록 구체 군집(랜턴 빔에 빛난다)
@@ -492,12 +477,6 @@ export function animateTrap(group: THREE.Group, trap: TrapView, nowMs: number): 
       mat.opacity = trap.phase === 'spent' ? 0.7 : 0.9;
     }
     if (light) light.intensity = burning ? 2.4 * flicker : 0;
-  } else if (trap.type === 'trap_glyph') {
-    const mat = data['glyphMat'] as THREE.MeshBasicMaterial | undefined;
-    if (mat) {
-      mat.opacity = trap.phase === 'spent' ? 0.18 : 0.55 + 0.35 * Math.abs(Math.sin(nowMs / 420));
-      mat.color.setHex(trap.phase === 'spent' ? 0x2a1a3a : GLYPH);
-    }
   } else if (trap.type === 'trap_gas') {
     // 예고 — 1초간 바르르 떨며 부풀고, 터지면(firing) 꽃잎이 벌어지고 빛난다.
     // 한 번 터진 자리(spent)는 시든 주머니 + 늘어진 꽃잎 + 바닥 포자 자국으로 남는다

@@ -501,53 +501,6 @@ describe('함정 — 기름 웅덩이', () => {
   });
 });
 
-describe('함정 — 저주 문양', () => {
-  let world: World;
-  beforeEach(() => {
-    world = makeWorld();
-  });
-
-  it('플레이어가 밟으면 오염 pending 만 오르고 피해·연쇄 끊김은 없다, 시야가 흔들린다, 1회용', () => {
-    const g = putTrap(world, 'trap_glyph', 6, 6);
-    const dmg: unknown[] = [];
-    world.events.on('player_damaged', (p) => dmg.push(p));
-    const burst: string[] = [];
-    world.events.on('trap_glyph_burst', (p) => burst.push((p as { victim: string }).victim));
-    tickTraps(world, 1);
-    expect(world.corruption.pending).toBe(T.trap_glyph.corruptionPending);
-    expect(dmg).toHaveLength(0);
-    expect(world.player.aimShakeTicks).toBe(T.trap_glyph.shakeTicks);
-    expect(burst).toEqual(['player']);
-    expect(g.phase).toBe('spent');
-    tickTraps(world, 5);
-    expect(world.corruption.pending).toBe(T.trap_glyph.corruptionPending); // 한 번만
-  });
-
-  it('적이 밟으면 경직 — 처형 대상이 된다. 보스는 절반', () => {
-    putTrap(world, 'trap_glyph', 30, 6);
-    const e = addEnemy(world, 'goblin_runner', 30, 6);
-    e.ai = 'windup';
-    e.attackFreezeTicks = 20;
-    tickTraps(world, 1);
-    expect(e.ai).toBe('staggered');
-    expect(e.timer).toBe(T.trap_glyph.enemyStaggerTicks);
-    expect(e.attackFreezeTicks).toBe(0);
-    putTrap(world, 'trap_glyph', 40, 6);
-    const boss = addEnemy(world, 'goblin_chieftain', 40, 6);
-    tickTraps(world, 1);
-    expect(boss.ai).toBe('staggered');
-    expect(boss.timer).toBe(Math.round(T.trap_glyph.enemyStaggerTicks * T.trap_glyph.bossStaggerMul));
-  });
-
-  it('비명이 10m 안 대기 적을 깨운다', () => {
-    putTrap(world, 'trap_glyph', 6, 6);
-    const far = addEnemy(world, 'goblin_runner', 14, 6); // 8m
-    far.homeYaw = 0;
-    tickTraps(world, 1);
-    expect(far.ai).toBe('chase');
-  });
-});
-
 describe('함정 — 독가스 배기구', () => {
   let world: World;
   beforeEach(() => {

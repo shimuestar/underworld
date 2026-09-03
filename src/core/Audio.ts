@@ -126,7 +126,6 @@ export type SoundName =
   | 'trap_net'
   | 'trap_cut'
   | 'trap_ignite'
-  | 'trap_glyph'
   | 'trap_cough'
   | 'trap_rumble'
   | 'trap_whoosh'
@@ -775,13 +774,6 @@ export class GameAudio {
         this.noise(0.35, 0.8, 900);
         this.tone(90, 0.3, 'sawtooth', 0.35, 0, 60);
         this.noise(0.12, 0.3, 3200, 0.25);
-        break;
-      case 'trap_glyph':
-        // 저주 문양 — 낮은 웅 위로 불협 종 두 음, 마지막에 비명 결의 노이즈
-        this.tone(110, 0.6, 'sine', 0.5, 0, 95);
-        this.tone(660, 0.3, 'triangle', 0.3, 0.05, 620);
-        this.tone(935, 0.35, 'triangle', 0.25, 0.12, 880);
-        this.noise(0.25, 0.35, 2600, 0.15);
         break;
       case 'trap_bloom':
         // 포자 식물 개화 — 젖은 꽃잎이 삐걱 벌어진다 (위로 미끄러지는 음 + 축축한 스침 + 낮은 부풂)

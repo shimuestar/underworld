@@ -516,7 +516,6 @@ for (const name of [
   'trap_disarmed',
   'trap_parried',
   'trap_ignited',
-  'trap_glyph_burst',
   'trap_gas_cough',
   'trap_whoosh',
   'trap_creak',
@@ -1031,17 +1030,6 @@ events.on('trap_ignited', (payload) => {
   stage.triggerFlash(t.x, 0.8, t.z, 0xff7a1a, 260, 3);
   const d = Math.hypot(world.player.x - t.x, world.player.z - t.z);
   if (d < 8) stage.triggerCameraKick(0.25 * (1 - d / 8), 150);
-});
-events.on('trap_glyph_burst', (payload) => {
-  const t = payload as { x: number; z: number; victim: 'player' | 'enemy' };
-  audio.play('trap_glyph', panAt(t.x, t.z));
-  stage.triggerFlash(t.x, 1.2, t.z, 0x9b5de5, 220, 4);
-  if (t.victim === 'player') {
-    padRumble('tremble');
-    showReaction('저주 문양 — 오염이 스민다 (제단에서 정산된다)', 2200);
-  } else {
-    showReaction('문양이 터졌다 — 적이 굳었다! 처형!', 1600);
-  }
 });
 events.on('trap_spent', (payload) => {
   const t = payload as { type: string; x: number; z: number };

@@ -965,7 +965,6 @@ export class Stage {
   private lanternSpill!: THREE.PointLight;
   /** 랜턴이 켜져 있는가 — 거머리 위장 해제 판정에 쓴다 (setLanternOn 이 갱신) */
   private lanternIsOn = true;
-  private glyphsReadable = false; // 오염 25 — 바닥 저주 문양도 랜턴을 켠 채로 보인다
   /** 얼굴에 붙은 거머리 실물 — 카메라 자식. 흡혈 순간(pulse) 훅 조인다 */
   private faceLeechRig: THREE.Group | null = null;
   private faceLeechSuckAt = 0;
@@ -1514,7 +1513,6 @@ export class Stage {
 
   /** 오염 25 임계 — 벽 문자를 원문으로 교체 */
   setGlyphsReadable(readable: boolean): void {
-    this.glyphsReadable = readable;
     // 해독 전 글리프는 룬 대신 아예 숨긴다 — 벽의 '알 수 없는 글자'를 없앴다.
     // 텍스처는 처음부터 원문으로 구워져 있어 여기선 보이기만 켠다
     this.scene.traverse((obj) => {
@@ -4930,11 +4928,7 @@ export class Stage {
         this.scene.add(group);
       }
       animateTrap(group, trap, now);
-      if (trap.type === 'trap_glyph') {
-        // 저주 문양은 어둠 속에서만 보인다 — 랜턴을 끄면 드러난다. 오염 25(문양 해독)·
-        // 감지 각인이 알아챈 것은 항상. 터진 자리(spent)는 그을음처럼 남아 있다
-        group.visible = trap.phase === 'spent' || !this.lanternIsOn || this.glyphsReadable || trap.revealed === true;
-      } else if (trap.type === 'trap_net') {
+      if (trap.type === 'trap_net') {
         // 그물의 실은 랜턴 빔이 닿을 때만 드러난다 — 꺼져 있으면 거의 투명, 켜졌어도 빔 밖이면 희미.
         // 횃불 잔광만으로 보이던 문제(2026-09-02)의 답: 재질이 아니라 가시성 자체를 빔에 묶는다
         const line = (group.userData as Record<string, unknown>)['line'] as THREE.Mesh | undefined;

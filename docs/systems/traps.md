@@ -13,7 +13,6 @@
 세 자원과 얽힌다:
 - 함정 피해는 `player_damaged` → **마나 연쇄가 끊긴다** (밟은 대가)
 - 다트는 **패링·반사 가능** → 받아치면 마나 (반응 버튼 = 마나 수입 정체성)
-- 저주 문양은 **오염 pending** (제단에서 정산되는 숨은 장기 비용)
 
 예고는 **소리·모형 동작으로만** 한다 (UI 링·조준선 금지 — 텔레그래프 규칙). 함정마다
 랜턴 아래서 알아볼 tell 이 있고, `함정 감지` 각인만 은은한 보라 발광을 얹는다.
@@ -44,7 +43,6 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
 | `trap_spike_auto` | 中 | 없음(자동 순환) | 30틱 덜컹 | 서 있는 가시 접촉 28 | 45 | 내려감 90 → 덜컹 30 → 가시 120 → 회수 45 반복 | 안전한 판(반대 위상) 골라 건너기 |
 | `trap_gas` (포자 식물) | 中 | 근접 1.5 **또는 원거리 피격**(총·화살·서리·뇌창·해머) · **폭발·화염구는 죽임** | 30틱 개화(꽃잎 벌어짐·개화음) | 포자 구름: 시야 흔들림·스태미너 급감·기침 소음, 피해 0 | 경둔화 0.7 | 5초 구름, 8초 뒤 다시 핀다 | 멀리서 터뜨리기·벗어나기·적을 구름에 몰기 |
 | `trap_gas_auto` (포자 군락) | 中 | 없음(자동 순환) | 30틱 부풀며 떨림·개화음 | 포자 구름 3.5초(독 상태) | 경둔화 0.7 | 쉼 4.5초 → 예고 0.5초 → 구름 3.5초 반복 (걷힌 뒤 5초 만에 다시) · **해머·폭발·마법으로 망가짐**(총·화살 X) | 걷힌 5초 틈에 지나가기 / 해머로 짓밟기·수류탄 |
-| `trap_glyph` | 中 | 밟기 1.2 | 없음 | 오염 +6·시야 흔들림(피해 0) | **경직 2초 → 처형**(보스 ×0.5) | 1회 | 랜턴 끄고 보기 |
 | `trap_rockfall` | 高 | 판 1.3 | 30틱 우르릉·천장 떨림 | 40 감쇠·넉백 | 60 감쇠·넉백 | 1회 · 잔해는 **폭발로 부숨** | 예고 듣고 빠지기·대시 무적 / 잔해는 수류탄·화염구로 치우기 |
 | `trap_pendulum` | 高 | 항시 | 휭(14m) | 45·넉백 / **완벽 패링 가능** | 55(보스 ×0.3) | 2초 주기 | 리듬·패링 |
 
@@ -91,7 +89,6 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
 - **기름** — 점화 훅 `igniteOilInRadius`: `Explosion.explodeAt`, 화염구 폭발, 수류탄, 불타는 적 통과,
   타는 기름의 `chainRadius` 연쇄. 적 화상은 기존 `Projectiles.applyBurns` 가 피해·처치를 맡는다.
   둔화는 점액과 **겹쳐도 더 센 하나만**(PlayerMove).
-- **문양** — 가시성 = `랜턴 꺼짐 || 오염 ≥ 25(문양 해독) || revealed`. 적 경직은 패링 스태거와 같은 필드
   (`ai='staggered'`, `timer`, `attackFreezeTicks=0`, `wantsBash=false`) → Reaction 처형 대상.
 - **낙석** — 잔해 = `Level.addBlocker`(몸) + `Level.setPathBlocked`(적 추격 흐름장이 벽으로 본다).
   **잔해 폭파**(2026-09-03, `rubbleBreakable`) — 폭발(수류탄·화염구·폭발통·기믹 폭발) 반경이 잔해 상자의 가장 가까운 점에 닿으면
@@ -109,13 +106,13 @@ disarmed ◀── 플레이어가 능동 해체 (그물 줄 끊기)
 
 `Modifiers.revealTrapsRadius`(기본 0). `Traps.tick` 첫머리에서 반경 안 미spent 함정을 `revealed=true` 로 —
 `trap_revealed` 1회(띵), 이후 보라 점광 명멸. 한 번 알아챈 것은 각인을 빼도 잊지 않는다.
-저주 문양은 revealed 면 랜턴을 켠 채로도 보인다.
+
 
 ## 5. 이벤트 계약
 
 `trap_triggered {id,type,x,z,by}` · `trap_telegraph` · `trap_fired {…,dirX,dirZ}` · `trap_spent` ·
 `trap_hit_player {id,type,amount}` · `trap_hit_enemy {…,enemyId,amount}` · `trap_kill {enemyType,trapType}` ·
-`trap_disarmed {…,how}` · `trap_ignited` · `trap_glyph_burst {…,victim}` · `trap_gas_cough` · `trap_whoosh` ·
+`trap_disarmed {…,how}` · `trap_ignited` · `trap_gas_cough` · `trap_whoosh` ·
 `trap_parried` · `trap_revealed` · `trap_rubble_broken`. 플레이어 피해 `source`: `trap_spike / trap_dart / trap_fire / trap_rockfall(폭발 결 진동) / trap_pendulum`.
 Metrics 는 `docs/metrics.md` 함정 표.
 
@@ -125,7 +122,7 @@ Metrics 는 `docs/metrics.md` 함정 표.
 - 배치: 레벨 JSON `entities` `{type:'trap_*', cell, dir?, note?}`. 생성은 `/tmp/lv/genlevel2.py` `trap()`.
 - 검증(세 곳 동일): 바닥 칸 / 계단 8m 밖 / 제단 10m 밖 / 다트 `-dir` 칸 벽 / 그물·진자·낙석 통행 축 양옆 벽 /
   낙석 연결성 — `check_traps`(genlevel2) · `scripts/checklevel.mjs` · `Zone.test.ts`.
-- 층별: 1층 다트 2·그물 2·기름 3 (배우는 층) / 2층 가시 2·문양 2·가스 2·다트 1 / 3층 진자 2·낙석 1·가시·문양.
+- 층별: 1층 다트 2·그물 2·기름 3 (배우는 층) / 2층 가시 2·가스 2·다트 1 / 3층 진자 2·낙석 1·가시. (저주 문양은 2026-09-03 폐기 — 재미가 없었다)
 
 ## 7. 알려진 긴장
 

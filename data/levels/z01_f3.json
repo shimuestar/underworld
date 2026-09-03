@@ -483,14 +483,6 @@
       "note": "큰 홀 가시판"
     },
     {
-      "type": "trap_glyph",
-      "cell": [
-        23,
-        8
-      ],
-      "note": "남쪽 방 문양 — 어둠에서만"
-    },
-    {
       "type": "goblin_spear",
       "cell": [
         23,
