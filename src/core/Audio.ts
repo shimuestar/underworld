@@ -804,17 +804,19 @@ export class GameAudio {
         this.tone(42, 0.5, 'sine', 0.7, 0, 36);
         break;
       case 'trap_whoosh':
-        // 칼날이 지나간다 — 공기를 가르는 스윕 (조금 길게 — 다음 삐걱까지 이어지게)
-        this.noise(0.32, 0.55, 700);
-        this.noise(0.18, 0.3, 1600, 0.06);
-        this.tone(320, 0.28, 'sine', 0.22, 0, 900);
+        // 칼날이 지나간다 — 공기를 가르는 스윕. 작다는 피드백에 크게 (2026-09-03)
+        this.noise(0.34, 1.3, 700);
+        this.noise(0.2, 0.8, 1600, 0.06);
+        this.tone(320, 0.3, 'sine', 0.55, 0, 900);
+        this.tone(120, 0.3, 'triangle', 0.4, 0, 70);
         break;
       case 'trap_creak':
-        // 진폭 끝 — 무거운 쇠사슬이 방향을 바꾸며 삐걱인다 (낮은 긁힘 + 높은 삐이 + 사슬 짤랑)
-        this.tone(180, 0.4, 'sawtooth', 0.22, 0, 135);
-        this.tone(1250, 0.26, 'triangle', 0.14, 0.03, 880);
-        this.noise(0.3, 0.2, 620);
-        this.noise(0.05, 0.3, 4200, 0.28);
+        // 진폭 끝 — 무거운 쇠사슬이 방향을 바꾸며 삐걱인다 (낮은 긁힘 + 높은 삐이 + 사슬 짤랑). 크게
+        this.tone(180, 0.42, 'sawtooth', 0.6, 0, 135);
+        this.tone(1250, 0.28, 'triangle', 0.38, 0.03, 880);
+        this.noise(0.32, 0.55, 620);
+        this.noise(0.06, 0.7, 4200, 0.28);
+        this.tone(90, 0.3, 'sine', 0.45, 0.02, 70);
         break;
       case 'trap_ping':
         // 함정 감지 — 맑은 두 음 (각인이 알아챘다)
