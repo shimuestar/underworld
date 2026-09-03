@@ -59,12 +59,25 @@ export interface PlayerState {
   blinkShroudAfter?: number;
   aimShakeTicks?: number;
   aimShakeAmp?: number;
-  /** 독 상태 — 남은 틱 / 틱당 피해(누적해 간격마다 적용) / 아직 적용 안 된 누적분 */
-  poisonTicks?: number;
-  poisonPerTick?: number;
-  poisonAccum?: number;
+  /** 지속 피해 상태(독·화염) — 종류별 하나. 걸려 있는 동안만 키가 있다 (Traps.tickDots 가 진행) */
+  dots?: Partial<Record<DotKind, DotState>>;
   /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */
   webLastDodgeTicks?: number;
+}
+
+/** 지속 피해(도트) 종류 — 독(포자 구름)·화염(불붙은 기름). 이벤트는 `${kind}_applied/_tick/_ended` */
+export type DotKind = 'poison' | 'burn';
+export interface DotState {
+  /** 남은 틱 — 원인 안에 서 있으면 매 틱 duration 으로 갱신된다 */
+  ticks: number;
+  /** 전체 길이(HUD 부채꼴 분모) */
+  duration: number;
+  /** 틱당 피해 — accum 에 쌓아 interval 마다 한 번에 깎는다 (한 번에 '윽') */
+  perTick: number;
+  accum: number;
+  interval: number;
+  /** 다음 적용까지 남은 틱 — 시간이 갱신돼도 박자는 흔들리지 않는다 */
+  next: number;
 }
 
 export interface SigilState {

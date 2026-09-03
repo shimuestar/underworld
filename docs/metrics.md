@@ -64,6 +64,7 @@ zone_cleared    { tick }
 | `traps.kills` | `trap_kill` | 함정으로 죽은 적 (마나 없음 — 총 처치와 같은 결) |
 | `traps.disarms` | `trap_disarmed` | 플레이어가 해체한 함정(그물 줄 끊기 등) |
 | `traps.parried` | `trap_parried` | 진자 칼날 완벽 패링 |
-| `traps.deaths` | `player_died` 직전 `player_damaged.source` 가 `trap_*` | 함정으로 죽은 횟수 |
+| `traps.deaths` | `player_died` 직전 `player_damaged.source` 가 `trap_*`/`poison`/`burn`, 또는 `poison_tick`/`burn_tick` | 함정(독·화염 도트 포함)으로 죽은 횟수 |
+| `damageTakenTotal` (기존) | `player_damaged` + `poison_tick` + `burn_tick` | 도트는 player_damaged 를 안 내므로 따로 합산 |
 
 시스템(`src/systems/Traps.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).

@@ -135,16 +135,20 @@ export class Metrics {
     events.on('trap_parried', () => this.trapParried++);
     events.on('player_damaged', (payload) => {
       const src = (payload as { source?: string }).source;
-      this.lastDamageWasTrap = typeof src === 'string' && src.startsWith('trap_');
+      // 독·화염 초기 피해도 함정 피해다 (source 가 상태 이름)
+      this.lastDamageWasTrap =
+        typeof src === 'string' && (src.startsWith('trap_') || src === 'poison' || src === 'burn');
     });
     events.on('player_died', () => {
       if (this.lastDamageWasTrap) this.trapDeaths++;
     });
-    events.on('poison_tick', (payload) => {
-      // 독 도트 — player_damaged 를 안 쓰므로 여기서 받은 피해에 합산 (독 사망도 함정 사망으로 친다)
-      this.damageTakenTotal += (payload as { amount: number }).amount;
-      this.lastDamageWasTrap = true;
-    });
+    for (const dot of ['poison_tick', 'burn_tick'] as const) {
+      events.on(dot, (payload) => {
+        // 독·화염 도트 — player_damaged 를 안 쓰므로 여기서 받은 피해에 합산 (도트 사망도 함정 사망으로 친다)
+        this.damageTakenTotal += (payload as { amount: number }).amount;
+        this.lastDamageWasTrap = true;
+      });
+    }
     events.on('shield_broken', () => this.shieldsBroken++);
     events.on('xp_gained', (payload) => {
       this.xpGained += (payload as { amount: number }).amount;

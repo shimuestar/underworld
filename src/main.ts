@@ -5,7 +5,7 @@ import { Metrics } from './core/Metrics';
 import { DebugOverlay } from './render/DebugOverlay';
 import { Input } from './core/Input';
 import { Loop } from './core/Loop';
-import { World, type ItemKind } from './core/World';
+import { World, type ItemKind, type DotState } from './core/World';
 import { countOf, initInventory, spillInventoryToGrave, itemColor, itemDef } from './core/Inventory';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
@@ -526,6 +526,9 @@ for (const name of [
   'poison_applied',
   'poison_tick',
   'poison_ended',
+  'burn_applied',
+  'burn_tick',
+  'burn_ended',
   'trap_reset',
   'ammo_picked',
   'grenade_picked',
@@ -906,12 +909,19 @@ events.on('trap_rearmed', (payload) => {
   }
 });
 events.on('trap_gas_cough', () => audio.play('trap_cough')); // 내 기침 — 패닝 없음
-// 독 — 걸리는 순간 알리고(초기 피해는 player_damaged 가 이미 붉게 알린다), 풀리면 알린다.
-// 도트 틱은 조용히 — 짧은 초록 기침 정도만 (붉은 화면·진동 도배 방지)
-events.on('poison_applied', () => {
-  showReaction('독에 중독됐다 — 30초 동안 체력이 조금씩 깎인다', 2600);
+// 지속 피해 상태(독·화염) — 걸리는 순간 알리고(초기 피해는 player_damaged 가 이미 붉게 알린다), 풀리면 알린다.
+// 도트 틱은 붉은 화면·진동 없이 '윽' 신음만 — 깎일 때마다 귀로 세게 (2026-09-03)
+const dotSeconds = (payload: unknown): number => Math.round(((payload as { ticks: number }).ticks ?? 0) / 60);
+events.on('poison_applied', (payload) => {
+  showReaction(`독에 중독됐다 — ${dotSeconds(payload)}초 동안 체력이 조금씩 깎인다`, 2600);
 });
+events.on('poison_tick', () => audio.play('grunt'));
 events.on('poison_ended', () => showReaction('독이 풀렸다', 1400));
+events.on('burn_applied', (payload) => {
+  showReaction(`불이 붙었다 — ${dotSeconds(payload)}초 동안 타며 체력이 깎인다`, 2200);
+});
+events.on('burn_tick', () => audio.play('grunt_fire'));
+events.on('burn_ended', () => showReaction('불이 꺼졌다', 1200));
 let trapRevealHintShown = false;
 events.on('trap_revealed', (payload) => {
   const t = payload as { x: number; z: number };
@@ -2275,6 +2285,7 @@ function respawnAtAltar(): void {
   p.prevX = point.x;
   p.prevZ = point.z;
   p.health = balance.player.healthMax;
+  p.dots = {}; // 독·화염도 씻긴다
   p.stunTicks = 0;
   p.dodgeTicks = 0;
   p.iframeTicks = 0;
@@ -2373,6 +2384,7 @@ function enterTrapRoom(): void {
   world.weapon.arrows = balance.weapons.bow.ammoMax;
   world.weapon.reserve = balance.weapons.pistol.ammoMax;
   world.player.health = balance.player.healthMax;
+  world.player.dots = {};
   showReaction('트랩 시험방 — 스킬·탄 전부 지급. 나가는 길은 일시정지 → 처음부터', 4000);
 }
 
@@ -2951,6 +2963,28 @@ buffPoisonEl.insertAdjacentHTML(
 );
 const buffPoisonCd = buffPoisonEl.querySelector<HTMLElement>('.buff-cd')!;
 const buffPoisonSec = buffPoisonEl.querySelector<HTMLElement>('.buff-sec')!;
+// 화염 디버프 아이콘 — 불꽃 픽토그램 (바깥 주황 혀 + 안쪽 노란 심)
+const buffBurnEl = document.getElementById('buff-burn')!;
+buffBurnEl.insertAdjacentHTML(
+  'afterbegin',
+  '<svg width="22" height="22" viewBox="0 0 22 22">' +
+    '<path d="M11 1.5 C13.2 5.5 16.5 7.5 16.5 12.2 A5.5 5.5 0 0 1 5.5 12.2 C5.5 9.4 7.6 8.2 8.2 5.6 C9.2 7.2 10.4 7.4 11 1.5Z" fill="#ff8a2a"/>' +
+    '<path d="M11 9.5 C12.3 11.6 13.8 12.3 13.8 14.4 A2.8 2.8 0 0 1 8.2 14.4 C8.2 12.6 9.9 12 11 9.5Z" fill="#ffd25a"/></svg>',
+);
+const buffBurnCd = buffBurnEl.querySelector<HTMLElement>('.buff-cd')!;
+const buffBurnSec = buffBurnEl.querySelector<HTMLElement>('.buff-sec')!;
+/** 지속 피해 디버프 아이콘 — 남은 시간만큼 밝은 부채꼴이 시계 방향으로 줄어든다 + 남은 초 */
+function syncDotIcon(el: HTMLElement, cd: HTMLElement, sec: HTMLElement, dot: DotState | undefined): void {
+  if (!dot || dot.ticks <= 0 || world.dead) {
+    el.classList.remove('on');
+    return;
+  }
+  el.classList.add('on');
+  const remainDeg = Math.min(360, (dot.ticks / dot.duration) * 360);
+  cd.style.background =
+    `conic-gradient(transparent 0deg ${remainDeg}deg, rgba(0, 0, 0, 0.72) ${remainDeg}deg 360deg)`;
+  sec.textContent = String(Math.ceil(dot.ticks / 60));
+}
 const buffFoodEl = document.getElementById('buff-food')!;
 buffFoodEl.insertAdjacentHTML('afterbegin', itemIconSvg('food', 22));
 const buffFoodCd = buffFoodEl.querySelector<HTMLElement>('.buff-cd')!;
@@ -3355,9 +3389,11 @@ function render(alpha: number): void {
     world.foodRegenTicks > 0 && p.health < balance.player.healthMax && !world.dead,
   );
   // 체력은 붉은 계열 — 낮아지면 더 밝은 경고색으로 (2026-08-29 녹색에서 교체)
-  // 중독 중엔 체력 바가 병든 녹색으로 물든다 (저체력 경고색보다 우선하지 않는다)
+  // 불타는 중엔 주황, 중독 중엔 병든 녹색으로 물든다 (저체력 경고색보다 우선하지 않는다)
+  const burning = (p.dots?.burn?.ticks ?? 0) > 0;
+  const poisoned = (p.dots?.poison?.ticks ?? 0) > 0;
   hpFill.style.background =
-    hpFrac <= 0.25 ? '#ff4838' : (p.poisonTicks ?? 0) > 0 ? '#6f9a3a' : '#c22e2e';
+    hpFrac <= 0.25 ? '#ff4838' : burning ? '#e0762a' : poisoned ? '#6f9a3a' : '#c22e2e';
   // 바 안 숫자 — '남은 양 / 최대치'. 바뀔 때만 써서 리플로우를 아낀다
   const hpText = `${Math.ceil(Math.max(0, p.health))} / ${balance.player.healthMax}`;
   const hpNum = document.getElementById('status-hp-num')!;
@@ -3400,18 +3436,9 @@ function render(alpha: number): void {
   } else {
     buffFoodEl.classList.remove('on');
   }
-  // 독 디버프 — 남은 시간 부채꼴 + 남은 초. 도트는 poison_tick 이 따로 알린다
-  const poisonLeft = p.poisonTicks ?? 0;
-  if (poisonLeft > 0 && !world.dead) {
-    buffPoisonEl.classList.add('on');
-    const total = balance.traps.types.trap_gas.poisonDurationTicks;
-    const remainDeg = Math.min(360, (poisonLeft / total) * 360);
-    buffPoisonCd.style.background =
-      `conic-gradient(transparent 0deg ${remainDeg}deg, rgba(0, 0, 0, 0.72) ${remainDeg}deg 360deg)`;
-    buffPoisonSec.textContent = String(Math.ceil(poisonLeft / 60));
-  } else {
-    buffPoisonEl.classList.remove('on');
-  }
+  // 독·화염 디버프 — 남은 시간 부채꼴 + 남은 초 (오른쪽 정렬 묶음). 도트 소리는 *_tick 이 따로 낸다
+  syncDotIcon(buffPoisonEl, buffPoisonCd, buffPoisonSec, p.dots?.poison);
+  syncDotIcon(buffBurnEl, buffBurnCd, buffBurnSec, p.dots?.burn);
   // 랜턴 — HP·마나 바 아래의 얇은 실선 게이지. 오른쪽에 % 와 예비 전지 개수
   const battFrac = Math.max(0, Math.min(1, world.lantern.battery / balance.lantern.batteryMax));
   const battPct = Math.round(battFrac * 100);

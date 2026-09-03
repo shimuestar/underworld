@@ -437,20 +437,48 @@ describe('함정 — 기름 웅덩이', () => {
     expect(far.phase).toBe('armed');
   });
 
-  it('화염 지대 — 플레이어는 간격마다 4(막기 불가·source trap_fire), 적은 화상이 붙는다', () => {
+  it('화염 지대 — 플레이어는 화염 상태(초기 피해 1회·막기 불가·도트), 적은 화상이 붙는다', () => {
     const oil = putTrap(world, 'trap_oil', 6, 6);
     oil.phase = 'firing';
     oil.timer = T.trap_oil.burnTicks;
     world.player.blocking = true;
+    const c = T.trap_oil;
     const srcs: string[] = [];
     world.events.on('player_damaged', (p) => srcs.push((p as { source: string }).source));
+    const ev: string[] = [];
+    world.events.on('burn_applied', () => ev.push('applied'));
+    world.events.on('burn_ended', () => ev.push('ended'));
+    let dot = 0;
+    world.events.on('burn_tick', (p) => (dot += (p as { amount: number }).amount));
     const e = addEnemy(world, 'goblin_runner', 6.5, 6);
-    tickTraps(world, T.trap_oil.playerDamageIntervalTicks * 2);
-    expect(srcs.length).toBe(2);
-    expect(srcs[0]).toBe('trap_fire');
-    expect(world.player.health).toBe(balance.player.healthMax - T.trap_oil.playerDamagePerHit * 2);
+    tickTraps(world, 60); // 불길 안에 1초 — 첫 틱에 붙고, 이후 59틱은 갱신
+    expect(srcs).toEqual(['burn']); // 초기 피해는 막기 무시, 서 있어도 반복되지 않는다
+    expect(ev).toEqual(['applied']);
+    expect(world.player.dots?.burn?.ticks).toBe(c.playerBurnDurationTicks); // 불 속에선 매 틱 꽉 찬 채
+    expect(dot).toBeGreaterThan(0); // 불 속에 서 있어도 도트는 박자대로 흐른다
     expect(e.burnTicks).toBeGreaterThan(0);
-    expect(e.burnDamagePerTick).toBe(T.trap_oil.enemyBurnDamagePerTick);
+    expect(e.burnDamagePerTick).toBe(c.enemyBurnDamagePerTick);
+    // 불길을 벗어나면 남은 시간 동안 playerBurnTotal 이 더 흘러 꺼진다 (머문 59틱치는 그 위에)
+    world.player.x = 30;
+    tickTraps(world, c.playerBurnDurationTicks + 5);
+    const perTick = c.playerBurnTotal / c.playerBurnDurationTicks;
+    expect(dot).toBeCloseTo(c.playerBurnTotal + 59 * perTick, 1);
+    expect(ev).toEqual(['applied', 'ended']);
+    expect(world.player.dots?.burn).toBeUndefined();
+    expect(world.player.health).toBeCloseTo(balance.player.healthMax - c.playerBurnInitial - dot, 3);
+  });
+
+  it('화염 상태 — 대시 무적·그림자 이동 중에는 새로 붙지 않는다', () => {
+    const oil = putTrap(world, 'trap_oil', 6, 6);
+    oil.phase = 'firing';
+    oil.timer = T.trap_oil.burnTicks;
+    world.player.iframeTicks = 5;
+    tickTraps(world, 3);
+    expect(world.player.dots?.burn).toBeUndefined();
+    expect(world.player.health).toBe(balance.player.healthMax);
+    world.player.iframeTicks = 0;
+    tickTraps(world, 1);
+    expect(world.player.dots?.burn?.ticks).toBe(T.trap_oil.playerBurnDurationTicks);
   });
 
   it('둔화 — 기름 위에서 느리고, 점액과 겹쳐도 더 센 하나만 (곱하지 않는다)', async () => {
@@ -799,16 +827,17 @@ describe('함정 — 포자 식물: 1초 떨림, 1회성, 독 상태', () => {
     // 구름 안에 계속 있어도 초기 피해는 다시 없다 (시간만 갱신된다)
     tickTraps(world, 60);
     expect(dmg).toHaveLength(1);
-    expect(world.player.poisonTicks).toBe(c.poisonDurationTicks); // 매 틱 갱신 — 꽉 찬 채
-    // 구름을 나와 30초를 채운다 — 나온 뒤의 도트 총량 ≈ poisonTotal (머문 60틱치는 그 위에 조금 더)
+    expect(world.player.dots?.poison?.ticks).toBe(c.poisonDurationTicks); // 매 틱 갱신 — 꽉 찬 채
+    // 구름 안에 서 있어도 독은 박자대로 흐른다 — 60틱이면 간격 두 번(60틱치)이 이미 깎였다
+    const perTick = c.poisonTotal / c.poisonDurationTicks;
+    expect(dot).toBeCloseTo(60 * perTick, 3);
+    // 구름을 나와 30초를 채운다 — 나온 뒤의 도트 총량 = poisonTotal (시간이 꽉 찬 채 나왔으니)
     const dotBefore = dot;
     world.player.x = 30;
     tickTraps(world, c.poisonDurationTicks + 5);
-    // 머문 60틱 동안 쌓인 누적분(시간은 갱신됐지만 독은 계속 흐른다)이 그 위에 더해진다
-    const perTick = c.poisonTotal / c.poisonDurationTicks;
-    expect(dot - dotBefore).toBeCloseTo(c.poisonTotal + 60 * perTick, 1);
+    expect(dot - dotBefore).toBeCloseTo(c.poisonTotal, 1);
     expect(ev).toEqual(['applied', 'ended']);
-    expect(world.player.poisonTicks ?? 0).toBe(0);
+    expect(world.player.dots?.poison).toBeUndefined();
   });
 
   it('한 번 터진 식물은 끝이다 — spent, 다시 다가가도 안 터진다', () => {

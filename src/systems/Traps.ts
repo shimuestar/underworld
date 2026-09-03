@@ -17,6 +17,7 @@ import {
   type EnemyState,
   type TrapState,
   type World,
+  type DotKind,
 } from '../core/World';
 
 let nextTrapProjId = 870000; // 매복(850000)·상자 골드(900000) 대역 사이
@@ -189,9 +190,14 @@ function tickOil(world: World, trap: TrapState, cfg: TrapCfg): void {
   }
   if (!burning) return;
   const p = world.player;
-  const interval = Math.max(1, cfg['playerDamageIntervalTicks'] ?? 30);
-  if (trap.timer % interval === 0 && Math.hypot(p.x - trap.x, p.z - trap.z) <= r) {
-    hurtPlayer(world, trap, cfg['playerDamagePerHit'] ?? 0, { blockable: false, source: 'trap_fire' });
+  if (!world.dead && Math.hypot(p.x - trap.x, p.z - trap.z) <= r) {
+    // 불이 옮겨붙는다 — 화염 상태(초기 피해 뒤 도트). 서 있는 동안은 시간만 갱신된다
+    applyDot(world, trap, 'burn', {
+      initial: cfg['playerBurnInitial'] ?? 0,
+      total: cfg['playerBurnTotal'] ?? 0,
+      duration: cfg['playerBurnDurationTicks'] ?? 240,
+      interval: cfg['playerBurnTickIntervalTicks'] ?? 30,
+    });
   }
   // 옮겨붙기 — 근처의 안 붙은 기름
   igniteOilInRadius(world, trap.x, trap.z, cfg['chainRadius'] ?? 0, cfg['burnTicks'] ?? 0);
@@ -202,48 +208,56 @@ function tickOil(world: World, trap: TrapState, cfg: TrapCfg): void {
   }
 }
 
-/** 독 — 포자에 닿았다. 처음이면 즉시 피해(막기 불가, 연쇄 끊김) 뒤 지속 피해가 시작되고,
- *  이미 중독 중이면 시간만 갱신된다 (초기 피해 반복 없음 — 구름 안에 서 있어도 누적 타격은 아니다) */
-function applyPoison(world: World, trap: TrapState, cfg: TrapCfg): void {
+/** 지속 피해 상태(독·화염) 공통 — 처음이면 즉시 피해(막기 불가, 연쇄 끊김) 뒤 도트가 시작되고,
+ *  이미 걸려 있으면 시간만 갱신된다 (초기 피해 반복 없음 — 구름·불길 안에 서 있어도 누적 타격은 아니다).
+ *  회피 무적·그림자 이동 중에는 새로 걸리지 않는다 (불길을 대시로 가르는 건 컨셉대로 무사) */
+interface DotSpec { initial: number; total: number; duration: number; interval: number }
+function applyDot(world: World, trap: TrapState, kind: DotKind, spec: DotSpec): void {
   const p = world.player;
-  const duration = Math.max(1, Math.round(cfg['poisonDurationTicks'] ?? 1800));
-  if ((p.poisonTicks ?? 0) > 0) {
-    p.poisonTicks = Math.max(p.poisonTicks ?? 0, duration);
+  const duration = Math.max(1, Math.round(spec.duration));
+  const dots = (p.dots ??= {});
+  const cur = dots[kind];
+  if (cur && cur.ticks > 0) {
+    cur.ticks = Math.max(cur.ticks, duration);
     return;
   }
-  p.poisonTicks = duration;
-  p.poisonPerTick = (cfg['poisonTotal'] ?? 0) / duration;
-  p.poisonAccum = 0;
-  hurtPlayer(world, trap, cfg['poisonInitial'] ?? 0, { blockable: false, source: 'poison' });
-  world.events.emit('poison_applied', { ticks: duration, total: cfg['poisonTotal'] ?? 0 });
+  if (p.iframeTicks > 0 || (p.blinkLeft ?? 0) > 0) return;
+  const interval = Math.max(1, Math.round(spec.interval));
+  dots[kind] = { ticks: duration, duration, perTick: spec.total / duration, accum: 0, interval, next: interval };
+  hurtPlayer(world, trap, spec.initial, { blockable: false, source: kind });
+  world.events.emit(`${kind}_applied`, { ticks: duration, total: spec.total });
 }
 
-/** 독 진행 — 간격마다 누적분을 깎는다. player_damaged 를 쓰지 않는다(붉은 화면·진동 도배 방지) */
-function tickPoison(world: World): void {
+/** 도트 진행 — interval 마다 누적분을 한 번에 깎는다(그때마다 '윽'). player_damaged 를 쓰지 않는다
+ *  (붉은 화면·진동 도배 방지 — main 이 `${kind}_tick` 에 신음만 얹는다). 박자는 시간 갱신과 무관하다 */
+function tickDots(world: World): void {
   const p = world.player;
-  if ((p.poisonTicks ?? 0) <= 0 || world.dead) return;
-  const cfg = trapCfg('trap_gas');
-  const interval = Math.max(1, Math.round(cfg?.['poisonTickIntervalTicks'] ?? 30));
-  p.poisonTicks = (p.poisonTicks ?? 0) - 1;
-  p.poisonAccum = (p.poisonAccum ?? 0) + (p.poisonPerTick ?? 0);
-  const last = p.poisonTicks <= 0;
-  if (p.poisonTicks % interval === 0 || last) {
-    const amount = p.poisonAccum ?? 0;
-    p.poisonAccum = 0;
-    if (amount > 0) {
-      p.health -= amount;
-      world.events.emit('poison_tick', { amount, health: p.health });
-      if (p.health <= 0) {
-        p.health = 0;
-        world.dead = true;
-        world.events.emit('player_died', { tick: world.tick });
+  if (!p.dots || world.dead) return;
+  for (const kind of Object.keys(p.dots) as DotKind[]) {
+    const d = p.dots[kind];
+    if (!d || d.ticks <= 0) continue;
+    d.ticks--;
+    d.accum += d.perTick;
+    const last = d.ticks <= 0;
+    if (--d.next <= 0 || last) {
+      d.next = d.interval;
+      const amount = d.accum;
+      d.accum = 0;
+      if (amount > 0) {
+        p.health -= amount;
+        world.events.emit(`${kind}_tick`, { amount, health: p.health });
+        if (p.health <= 0) {
+          p.health = 0;
+          world.dead = true;
+          world.events.emit('player_died', { tick: world.tick });
+          return;
+        }
       }
     }
-  }
-  if (last) {
-    p.poisonTicks = 0;
-    p.poisonPerTick = 0;
-    world.events.emit('poison_ended', {});
+    if (last) {
+      delete p.dots[kind];
+      world.events.emit(`${kind}_ended`, {});
+    }
   }
 }
 
@@ -252,7 +266,12 @@ function tickGasCloud(world: World, trap: TrapState, cfg: TrapCfg): void {
   const r = cfg['cloudRadius'] ?? 3;
   const p = world.player;
   if (!world.dead && Math.hypot(p.x - trap.x, p.z - trap.z) <= r) {
-    applyPoison(world, trap, cfg);
+    applyDot(world, trap, 'poison', {
+      initial: cfg['poisonInitial'] ?? 0,
+      total: cfg['poisonTotal'] ?? 0,
+      duration: cfg['poisonDurationTicks'] ?? 1800,
+      interval: cfg['poisonTickIntervalTicks'] ?? 30,
+    });
     p.aimShakeTicks = Math.max(p.aimShakeTicks ?? 0, cfg['shakeTicks'] ?? 0);
     p.aimShakeAmp = Math.max(p.aimShakeAmp ?? 0, cfg['shakeAmp'] ?? 0);
     if (spendStamina(world.stamina, cfg['staminaDrainPerTick'] ?? 0, balance.player.stamina.regenDelayTicks)) {
@@ -572,7 +591,7 @@ export function init(world: World): void {
 
 export function tick(world: World, _dt: number): void {
   revealTraps(world);
-  tickPoison(world);
+  tickDots(world);
   for (const trap of world.traps) {
     const cfg = trapCfg(trap.type);
     if (!cfg) continue;

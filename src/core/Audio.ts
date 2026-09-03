@@ -3,6 +3,8 @@
 // AudioBufferSourceNode/오실레이터는 매번 새로 만든다 (레이턴시 최소화).
 
 export type SoundName =
+  | 'grunt'
+  | 'grunt_fire'
   | 'telegraph_blue'
   | 'telegraph_red'
   | 'telegraph_purple'
@@ -1029,6 +1031,21 @@ export class GameAudio {
         this.tone(420, 0.1, 'square', 0.8, 0, 260);
         this.tone(1240, 0.07, 'triangle', 0.5);
         this.noise(0.06, 0.5, 2400);
+        break;
+      case 'grunt':
+        // 윽 — 짧게 앓는 소리 (독 도트 틱마다). 목청(피치 떨어지는 톤) + 콧소리 배음 + 끝의 'ㄱ' 막힘
+        this.tone(165, 0.17, 'sawtooth', 0.5, 0, 100);
+        this.tone(330, 0.13, 'triangle', 0.3, 0.01, 200);
+        this.tone(96, 0.15, 'sine', 0.45, 0, 68);
+        this.noise(0.045, 0.3, 1500, 0.11);
+        break;
+      case 'grunt_fire':
+        // 윽 + 치직 — 화염 도트 틱. 같은 신음에 짧은 고역 크래클(살 타는 결)을 얹는다
+        this.tone(175, 0.17, 'sawtooth', 0.5, 0, 108);
+        this.tone(350, 0.13, 'triangle', 0.3, 0.01, 215);
+        this.tone(96, 0.15, 'sine', 0.45, 0, 68);
+        this.noise(0.045, 0.3, 1500, 0.11);
+        this.noise(0.12, 0.28, 5200, 0.02);
         break;
       case 'player_hurt':
         // 피격 — 둔탁한 충격 + 낮은 신음조

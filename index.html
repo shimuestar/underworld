@@ -427,6 +427,43 @@
       #buff-poison svg {
         display: block;
       }
+      /* 화염 디버프 — 같은 틀, 주황·노랑 결. 불길에서 나온 뒤 4초 동안 부채꼴이 줄어든다 */
+      #buff-burn {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        padding: 3px;
+        box-sizing: border-box;
+        border: 1px solid #8a4a1e;
+        border-radius: 6px;
+        background: rgba(30, 8, 0, 0.6);
+        display: none;
+        animation: burn-pulse 0.55s ease-in-out infinite;
+      }
+      #buff-burn.on {
+        display: block;
+      }
+      @keyframes burn-pulse {
+        0%, 100% { box-shadow: 0 0 4px rgba(255, 140, 40, 0.4); }
+        50% { box-shadow: 0 0 11px rgba(255, 170, 60, 0.9); }
+      }
+      #buff-burn .buff-cd {
+        position: absolute;
+        inset: 0;
+        border-radius: 5px;
+        pointer-events: none;
+      }
+      #buff-burn .buff-sec {
+        position: absolute;
+        right: 1px;
+        bottom: -1px;
+        font: bold 10px/1 monospace;
+        color: #ffd9a0;
+        text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+      }
+      #buff-burn svg {
+        display: block;
+      }
       #buff-food .buff-cd {
         position: absolute;
         inset: 0;
@@ -991,7 +1028,7 @@
     <div id="sigil-toast"><div class="name"></div><div class="sub"></div></div>
     <div id="web-overlay"></div>
     <div id="status">
-      <div id="buffs"><div class="buff-group buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div></div><div class="buff-group debuffs"><div id="buff-poison"><div class="buff-cd"></div><span class="buff-sec"></span></div></div></div>
+      <div id="buffs"><div class="buff-group buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div></div><div class="buff-group debuffs"><div id="buff-poison"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-burn"><div class="buff-cd"></div><span class="buff-sec"></span></div></div></div>
       <div id="status-bars">
         <div id="status-hp"><div id="status-hp-fill"></div><span class="bar-num" id="status-hp-num"></span></div>
         <div id="status-mana"><div id="status-mana-fill"></div><span class="bar-num" id="status-mana-num"></span></div>
