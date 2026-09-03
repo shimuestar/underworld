@@ -361,11 +361,20 @@
       }
       /* 버프 아이콘 줄 — 상태 바 위. 남은 시간은 시계 방향으로 줄어드는 밝은 부채꼴
          (buff-cd 의 conic-gradient 각도를 main 이 매 프레임 갱신) + 남은 초 숫자 */
+      /* 상태 줄 — 왼쪽 무리는 버프(음식 등), 오른쪽 무리는 디버프(독 등). 서로 섞이지 않게 양끝 정렬 */
       #buffs {
         display: flex;
-        justify-content: center;
-        gap: 6px;
+        justify-content: space-between;
+        align-items: flex-end;
         margin-bottom: 5px;
+        min-height: 30px;
+      }
+      #buffs .buff-group {
+        display: flex;
+        gap: 6px;
+      }
+      #buffs .buff-group.debuffs {
+        justify-content: flex-end;
       }
       #buff-food {
         position: relative;
@@ -982,7 +991,7 @@
     <div id="sigil-toast"><div class="name"></div><div class="sub"></div></div>
     <div id="web-overlay"></div>
     <div id="status">
-      <div id="buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-poison"><div class="buff-cd"></div><span class="buff-sec"></span></div></div>
+      <div id="buffs"><div class="buff-group buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div></div><div class="buff-group debuffs"><div id="buff-poison"><div class="buff-cd"></div><span class="buff-sec"></span></div></div></div>
       <div id="status-bars">
         <div id="status-hp"><div id="status-hp-fill"></div><span class="bar-num" id="status-hp-num"></span></div>
         <div id="status-mana"><div id="status-mana-fill"></div><span class="bar-num" id="status-mana-num"></span></div>
