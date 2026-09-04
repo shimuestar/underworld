@@ -68,6 +68,12 @@ export interface PlayerState {
   recoilRecoverRate?: number;
   /** 밀린 양 중 되돌아오는 비율 — 나머지는 남아 연사하면 조준이 기어오른다 */
   recoilRecoverFrac?: number;
+  /** 활 당김 흔들림 — Weapons 가 매 틱 폭(rad)을 주고 PlayerMove 가 느린 파형으로 얹는다. 0 이면 오프셋이 제자리로 돌아온다 */
+  aimSwayAmp?: number;
+  swayYaw?: number;
+  swayPitch?: number;
+  swayPhase?: number;
+  swaySeed?: number;
   /** 지속 피해 상태(독·화염) — 종류별 하나. 걸려 있는 동안만 키가 있다 (Traps.tickDots 가 진행) */
   dots?: Partial<Record<DotKind, DotState>>;
   /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */
@@ -745,6 +751,9 @@ export interface WeaponState {
   bowDraw?: number;
   /** 권총 연사 열 — 발마다 쌓이고 틱마다 식는다. 반동 폭이 (1 + heat×heatMul)배 (balance.weapons.pistol.recoil) */
   recoilHeat?: number;
+  /** 활 — 당기기 시작한 뒤 흐른 틱(상한 없음, 카메라 확대용) / 세게 당긴 채 버틴 틱(당김 흔들림의 유지 시간) */
+  bowDrawTotal?: number;
+  bowHoldTicks?: number;
   /** 시위를 내린 뒤 잠금 — 좌클릭을 뗄 때까지 다시 안 당겨진다.
    *  없으면 취소한 다음 틱에 곧바로 다시 당겨져 취소가 취소가 아니게 된다 */
   bowDrawLocked?: boolean;

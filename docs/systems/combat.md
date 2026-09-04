@@ -637,3 +637,12 @@ melee_kill      { enemyType }
 | 활 | `pitchDegMin~Max` / `yawDegMin~Max` | 당김 비율(0~1)로 보간 — 강하게 당겨 쏠수록 크게 | `weapons.bow.recoil` |
 
 테스트: `src/systems/Recoil.test.ts`.
+
+### 활 당김 흔들림·확대 (2026-09-04)
+
+- **흔들림** — `Weapons.updateBowSway` 가 매 틱 폭을 센다: 세기(`bowDraw/maxDrawTicks`)가 `sway.startFrac` 아래면 0(짧게·적당히
+  당기면 안 흔들린다), 그 위에서는 (세기를 0→1 로 편 값)^`strengthPow` × 유지 시간(`bowHoldTicks`/`rampTicks`, 상한 1 로
+  `ampStartDeg`→`ampMaxDeg`). `PlayerMove` 가 그 폭 안에서 두 사인의 합으로 조준을 느리게 떠돌게 한다(`player.swayYaw/Pitch`).
+  놓으면 폭 0 → `recoverRate` 비율로 제자리. 데이터 `weapons.bow.sway`.
+- **확대** — `bowDrawTotal`(당기기 시작한 뒤 틱, 상한 없음)/`zoom.rampTicks` 를 목표로 `Stage.setAimZoom` 의 두 번째 소스가 FOV 를
+  `zoom.fovScale` 까지 좁힌다. 조준(ADS) 줌과 곱해진다. 데이터 `weapons.bow.zoom`.

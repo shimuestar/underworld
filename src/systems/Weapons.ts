@@ -31,6 +31,7 @@ export function tick(world: World, _dt: number): void {
   if (w.cooldown > 0) w.cooldown--;
   // 반동 열 — 연사가 끊기면 식는다 (권총 반동 폭의 배율)
   if ((w.recoilHeat ?? 0) > 0) w.recoilHeat = Math.max(0, (w.recoilHeat ?? 0) - pistol.recoil.heatDecayPerTick);
+  updateBowSway(world); // 당김 흔들림·확대의 재료 — 직전 틱의 활 상태로 매 틱 다시 센다 (당기고 있지 않으면 0)
   if (w.meleeCooldown > 0) w.meleeCooldown--;
   if ((w.meleeBufferTicks ?? 0) > 0) w.meleeBufferTicks = (w.meleeBufferTicks ?? 0) - 1;
   // 연속타 유지 시간 — 끊기면 1타부터 다시
@@ -557,6 +558,35 @@ function drawBow(world: World): void {
   // 최소 당김(8/36)이 이미 0.22 라 damageMin(18)이 영영 안 나온다 — 두 값이
   // 따로 놀지 않게 minDrawTicks~maxDrawTicks 구간을 0~1 로 편다
   loose(world, (draw - bow.minDrawTicks) / (bow.maxDrawTicks - bow.minDrawTicks));
+}
+
+/** 활 당김 흔들림 — 세게 당긴 채(startFrac 이상) 버틴 시간만큼 폭이 자란다(rampTicks 에서 상한).
+ *  폭 = (ampStart→ampMax by 유지 시간) × 세기^strengthPow. 짧게·적당히 당기면 0 — 정직하게 당긴 만큼만 값을 치른다.
+ *  bowDrawTotal 은 확대(카메라)용으로 당기기 시작한 뒤 흐른 틱을 상한 없이 센다. 실제 파형은 PlayerMove 가 얹는다 */
+function updateBowSway(world: World): void {
+  const w = world.weapon;
+  const p = world.player;
+  const bow = balance.weapons.bow;
+  const sw = bow.sway;
+  const draw = w.ranged === 'bow' ? (w.bowDraw ?? 0) : 0;
+  if (draw <= 0) {
+    w.bowDrawTotal = 0;
+    w.bowHoldTicks = 0;
+    p.aimSwayAmp = 0;
+    return;
+  }
+  w.bowDrawTotal = (w.bowDrawTotal ?? 0) + 1;
+  const strength = Math.min(1, draw / bow.maxDrawTicks);
+  const s = Math.max(0, (strength - sw.startFrac) / (1 - sw.startFrac));
+  if (s <= 0) {
+    w.bowHoldTicks = 0;
+    p.aimSwayAmp = 0;
+    return;
+  }
+  w.bowHoldTicks = (w.bowHoldTicks ?? 0) + 1;
+  const hold = Math.min(1, w.bowHoldTicks / sw.rampTicks);
+  const ampDeg = (sw.ampStartDeg + (sw.ampMaxDeg - sw.ampStartDeg) * hold) * Math.pow(s, sw.strengthPow);
+  p.aimSwayAmp = (ampDeg * Math.PI) / 180;
 }
 
 /** 반동을 예약한다 — 위로 pitchDeg, 좌우로 ±yawDeg 안에서 무작위(rad 로 바꿔 쌓는다). PlayerMove 가 다음 틱

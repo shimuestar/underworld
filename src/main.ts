@@ -3569,7 +3569,16 @@ function render(alpha: number): void {
   // 조준(LT) 연출 — 십자선 + 부드러운 FOV 줌 (누르고 있다는 게 몸에 온다)
   const aiming = input.usingPad && world.input.padAiming && !world.dead && !world.uiOpen;
   crosshairEl.classList.toggle('aim', aiming);
-  stage.setAimZoom(aiming, balance.input.gamepad.ads.fovScale, balance.input.gamepad.ads.zoomLerp);
+  // 활 당김 확대 — 당긴 시간만큼 아주 조금 다가간다 (상한 1). 놓으면 bowDrawTotal 이 0 이 되어 스르르 돌아온다
+  const bowZoom = balance.weapons.bow.zoom;
+  const bowZoomTarget =
+    world.weapon.ranged === 'bow' && !world.dead && !world.uiOpen
+      ? Math.min(1, (world.weapon.bowDrawTotal ?? 0) / bowZoom.rampTicks)
+      : 0;
+  stage.setAimZoom(
+    aiming, balance.input.gamepad.ads.fovScale, balance.input.gamepad.ads.zoomLerp,
+    bowZoomTarget, bowZoom.fovScale, bowZoom.lerp,
+  );
 
   // 패드 에임 어시스트 표적 표시 — 물고 있으면 조준점이 커지고 붉어진다.
   // 어시스트 자체는 스틱을 젓는 동안만 끌지만, 표시는 표적 위면 항상 — "걸리고 있다"의 증거

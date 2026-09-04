@@ -1309,13 +1309,18 @@ export class Stage {
   private readonly alertAt = new Map<number, number>();
   /** 조준(ADS) 줌 진행도 0~1 — setAimZoom 이 매 프레임 목표로 수렴시킨다 */
   private aimZoomFrac = 0;
+  /** 활 당김 확대 진행도 0~1 — 당긴 시간(bowDrawTotal/rampTicks)을 목표로 수렴 (2026-09-04) */
+  private bowZoomFrac = 0;
 
-  /** 조준 줌 — FOV 를 좁혀 "겨눴다"가 몸에 온다. 떼면 스르르 돌아온다 */
-  setAimZoom(aiming: boolean, fovScale: number, lerp: number): void {
+  /** 조준 줌 — FOV 를 좁혀 "겨눴다"가 몸에 온다. 떼면 스르르 돌아온다.
+   *  활 당김 확대(bowTarget 0~1, bowFovScale 까지)는 두 번째 소스 — 둘은 곱해진다 */
+  setAimZoom(aiming: boolean, fovScale: number, lerp: number, bowTarget = 0, bowFovScale = 1, bowLerp = 1): void {
     const target = aiming ? 1 : 0;
     this.aimZoomFrac += (target - this.aimZoomFrac) * lerp;
     if (Math.abs(this.aimZoomFrac - target) < 0.002) this.aimZoomFrac = target;
-    const fov = 75 * (1 - (1 - fovScale) * this.aimZoomFrac);
+    this.bowZoomFrac += (bowTarget - this.bowZoomFrac) * bowLerp;
+    if (Math.abs(this.bowZoomFrac - bowTarget) < 0.002) this.bowZoomFrac = bowTarget;
+    const fov = 75 * (1 - (1 - fovScale) * this.aimZoomFrac) * (1 - (1 - bowFovScale) * this.bowZoomFrac);
     if (Math.abs(this.camera.fov - fov) > 0.01) {
       this.camera.fov = fov;
       this.camera.updateProjectionMatrix();

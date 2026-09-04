@@ -249,6 +249,38 @@ export function tick(world: World, dt: number): void {
     p.recoilYaw = (p.recoilYaw ?? 0) + kickYaw * frac;
   }
 
+  // 활 당김 흔들림 — Weapons 가 준 폭(aimSwayAmp)으로 조준이 느리게 떠돈다 (두 사인의 합, |오프셋| ≤ 폭).
+  // 매 틱 오프셋의 '차이'만 얹으므로 마우스 입력과 겹쳐도 어긋나지 않고, 폭이 0 이 되면 recoverRate 로 제자리에 온다.
+  // 파형 계수(0.65/0.35 …)는 모양 상수 — 폭·속도·상한은 balance.weapons.bow.sway
+  const swayAmp = p.aimSwayAmp ?? 0;
+  const sw = balance.weapons.bow.sway;
+  if (swayAmp > 0) {
+    if (!p.swayPhase) {
+      p.swayPhase = 0;
+      p.swaySeed = Math.random() * Math.PI * 2; // 당길 때마다 다른 위상 — 외워서 보정하지 못하게
+    }
+    p.swayPhase += 1;
+    const t = p.swayPhase;
+    const seed = p.swaySeed ?? 0;
+    const targetYaw = swayAmp * (0.65 * Math.sin(sw.freqA * t + seed) + 0.35 * Math.sin(sw.freqB * t * 1.9 + seed * 0.7));
+    const targetPitch =
+      swayAmp * (0.55 * Math.sin(sw.freqA * t * 0.8 + seed + 2.1) + 0.45 * Math.sin(sw.freqB * t + seed * 1.3 + 0.6));
+    p.yaw += targetYaw - (p.swayYaw ?? 0);
+    p.pitch = Math.max(-pitchMax, Math.min(pitchMax, p.pitch + targetPitch - (p.swayPitch ?? 0)));
+    p.swayYaw = targetYaw;
+    p.swayPitch = targetPitch;
+  } else if ((p.swayYaw ?? 0) !== 0 || (p.swayPitch ?? 0) !== 0) {
+    p.swayPhase = 0;
+    const backYaw = (p.swayYaw ?? 0) * sw.recoverRate;
+    const backPitch = (p.swayPitch ?? 0) * sw.recoverRate;
+    p.swayYaw = (p.swayYaw ?? 0) - backYaw;
+    p.swayPitch = (p.swayPitch ?? 0) - backPitch;
+    p.yaw -= backYaw;
+    p.pitch = Math.max(-pitchMax, Math.min(pitchMax, p.pitch - backPitch));
+    if (Math.abs(p.swayYaw) < 1e-6) p.swayYaw = 0;
+    if (Math.abs(p.swayPitch) < 1e-6) p.swayPitch = 0;
+  }
+
   // 초음파 비명(박쥐) — 조준이 잔떨림에 실려 흔들린다. 시선 입력 뒤에 얹어
   // 조준 자체를 어긋나게 한다 (연출이 아니라 실제 탄착이 흔들린다)
   if ((p.aimShakeTicks ?? 0) > 0) {
