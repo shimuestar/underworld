@@ -204,10 +204,10 @@ const BURN_EMBER_LIFE_MS = 520;
 const BURN_EMBER_COLORS = [0xff8a2a, 0xffc04a, 0xff5a1a];
 const FIREBALL_COLOR = 0xff7733;
 const GROUND_ITEM_COLOR = 0xe8c76a; // 바닥 각인 — 어둠 속 금색 발광
-// 빛 기둥 — 바닥에 놓인 아이템·주머니 위로 솟는 얇은 반투명 기둥 (멀리서도 "저기 뭐가 있다"). 가산 혼합, 위로 갈수록 가늘다
-const PILLAR_HEIGHT = 2.6;
-const PILLAR_RADIUS = 0.13;
-const PILLAR_OPACITY = 0.2;
+// 빛 선 — 바닥에 놓인 아이템·주머니 위로 솟는 밝은 실선 (멀리서도 "저기 뭐가 있다"). 2026-09-04: 굵은 반투명 기둥 → 얇은 밝은 선, 길이 절반
+const PILLAR_HEIGHT = 1.3;
+const PILLAR_RADIUS = 0.014;
+const PILLAR_OPACITY = 0.85;
 // 바닥 모형 색 — HUD 아이콘과 어긋나지 않게 balance.items.kinds 를 그대로 읽는다
 const POTION_COLOR = itemColor('potion'); // HP 포션 — 붉은 약병
 const MANA_POTION_COLOR = itemColor('mana'); // 마나 물약 — 푸른 약병
@@ -4644,10 +4644,10 @@ export class Stage {
         : kind === 'pouch' ? (tier === 'boss' ? GOLD_COLOR : 0xd9a15c)
         : sigilId ? sigilColor(sigilId) : GROUND_ITEM_COLOR;
       const pillar = new THREE.Mesh(
-        new THREE.CylinderGeometry(PILLAR_RADIUS * 0.35, PILLAR_RADIUS, PILLAR_HEIGHT, 10, 1, true),
+        new THREE.CylinderGeometry(PILLAR_RADIUS, PILLAR_RADIUS, PILLAR_HEIGHT, 6, 1, false),
         new THREE.MeshBasicMaterial({
           color: pillarColor, transparent: true, opacity: PILLAR_OPACITY,
-          blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending, depthWrite: false,
         }),
       );
       pillar.name = 'pillar';
@@ -4794,7 +4794,7 @@ export class Stage {
         pillar.position.y = PILLAR_HEIGHT / 2 - bob;
         const pm = pillar.material as THREE.MeshBasicMaterial;
         const focus = item.kind === 'pouch' && item.id === focusPouchId;
-        pm.opacity = focus ? PILLAR_OPACITY * 2 : PILLAR_OPACITY * (0.8 + 0.2 * Math.sin(now / 700 + item.id));
+        pm.opacity = focus ? 1 : PILLAR_OPACITY * (0.85 + 0.15 * Math.sin(now / 700 + item.id));
       }
       const gem = group.getObjectByName('gem');
       // 빨려드는 동안은 빠르게 회전하고 살짝 작아진다 (몸으로 들어가는 느낌)
