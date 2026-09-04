@@ -7,6 +7,7 @@ import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { addItem, countOf, initInventory } from '../core/Inventory';
 import { World, type GroundItemState, type LootEntry } from '../core/World';
+import { enemyDef } from '../core/Entities';
 import { Level } from '../level/GridLoader';
 import * as Loot from './Loot';
 import * as Sigils from './Sigils';
@@ -112,9 +113,22 @@ describe('주머니 드랍', () => {
     expect(pouches).toHaveLength(1);
     expect(world.groundItems.filter((g) => g.kind !== 'pouch')).toHaveLength(0); // 아이템이 따로 흩어지지 않는다
     const p = pouches[0]!;
-    expect(p.x).toBeGreaterThan(14); // 플레이어(10) 반대쪽
+    // 시체에서 튀어올라 안착점으로 — 처음엔 시체 자리, 중간엔 적 머리 높이, 끝엔 반대쪽(+X) 바닥
+    expect(p.x).toBe(14);
+    expect(p.y).toBe(L.pouch.launchY);
+    expect(p.originX!).toBeGreaterThan(14); // 플레이어(10) 반대쪽으로 떨어질 자리
+    const landing = { x: p.originX!, z: p.originZ! };
+    tickLoot(world, L.pouch.settleTicks / 2);
+    const head = enemyDef('goblin_runner').height;
+    expect(p.y!).toBeGreaterThan(head * 0.85);
+    expect(p.x).toBeGreaterThan(14);
+    expect(p.x).toBeLessThan(landing.x);
+    tickLoot(world, L.pouch.settleTicks / 2);
+    expect(p.y).toBeUndefined();
+    expect(p.x).toBe(landing.x);
+    expect(p.z).toBe(landing.z);
+    expect(p.noMagnetTicks).toBe(0);
     expect(kindsOf(p.pouchItems!)).toEqual(expect.arrayContaining(['potion', 'mana', 'food', 'gold']));
-    expect(p.noMagnetTicks).toBe(L.pouch.settleTicks);
     expect(p.pouchOwner).toBe('goblin_runner');
     expect(p.pouchTier).toBe('normal');
     expect(ev).toEqual([expect.objectContaining({ merged: false })]);
@@ -136,7 +150,8 @@ describe('주머니 드랍', () => {
     expect(pouches).toHaveLength(1);
     expect(pouches[0]!.pouchItems!.find((e) => e.kind === 'potion')!.count).toBe(2);
     expect(pouches[0]!.pouchOwner).toBe('goblin_runner');
-    expect(pouches[0]!.noMagnetTicks).toBe(L.pouch.settleTicks); // 다시 안착
+    expect(pouches[0]!.noMagnetTicks).toBe(L.pouch.settleTicks); // 다시 안착 — 제자리에서 살짝 뛴다
+    expect(pouches[0]!.bounceY0).toBe(L.pouch.mergeHop);
     world.events.emit('enemy_died', { enemyType: 'goblin_chieftain', x: 14.2, z: 10.3 });
     pouches = world.groundItems.filter((g) => g.kind === 'pouch');
     expect(pouches).toHaveLength(1);

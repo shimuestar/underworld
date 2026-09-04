@@ -81,18 +81,27 @@ export function dropPouch(world: World, enemyType: string, x: number, z: number)
     if (boss) near.pouchTier = 'boss';
     if (near.pouchOwner !== enemyType) near.pouchOwner = undefined; // 섞였다 — '전리품 주머니'
     near.noMagnetTicks = cfg.settleTicks;
+    // 받아 담는 그림 — 제자리에서 살짝 뛰었다 내려앉는다
+    near.bounceFromX = near.x;
+    near.bounceFromZ = near.z;
+    near.originX = near.x;
+    near.originZ = near.z;
+    near.bounceY0 = cfg.mergeHop;
+    near.y = 0;
     world.events.emit('pouch_dropped', {
       id: near.id, x: near.x, z: near.z, owner: near.pouchOwner, tier: near.pouchTier ?? 'normal',
       entries: items.length, merged: true,
     });
     return near;
   }
-  // 플레이어 반대쪽으로 떨어진다 — 시체에서 내 발밑으로 직행하지 않는다 (공통 드랍 규칙)
+  // 플레이어 반대쪽으로 떨어진다 — 시체에서 내 발밑으로 직행하지 않는다 (공통 드랍 규칙).
+  // 바닥에 '짠' 나타나지 않고 시체에서 적 머리 높이까지 튀어올랐다가 settleTicks 동안 그 자리로 떨어진다 (tick 이 굴린다)
   const at = scatterAwayFromPlayer(world, x, z, cfg.scatterRadius, balance.pickups.awayArcDeg);
   const pouch: GroundItemState = {
-    id: nextLootId++, kind: 'pouch', x: at.x, z: at.z,
+    id: nextLootId++, kind: 'pouch', x, z, y: cfg.launchY,
     pouchItems: entries, pouchTier: boss ? 'boss' : 'normal', pouchOwner: enemyType,
     noMagnetTicks: cfg.settleTicks,
+    bounceFromX: x, bounceFromZ: z, originX: at.x, originZ: at.z, bounceY0: enemyDef(enemyType).height,
   };
   world.groundItems.push(pouch);
   world.events.emit('pouch_dropped', {
@@ -171,6 +180,20 @@ export function container(world: World): Container | null {
   return { ref, entries: (chest.chestItems ??= []), x: chest.x, z: chest.z, title: titleOf(world, ref), tier: 'normal' };
 }
 
+/** 주머니 비행 — 시체(bounceFrom)에서 안착점(origin)으로 옮겨 가며, launchY 에서 정점(bounceY0 = 적 키)까지
+ *  올라갔다 바닥으로 떨어지는 포물선. t = 안착 진행률 */
+function flyPouch(item: GroundItemState, settleTicks: number, launchY: number): void {
+  const t = Math.min(1, Math.max(0, 1 - (item.noMagnetTicks ?? 0) / Math.max(1, settleTicks)));
+  const fromX = item.bounceFromX ?? item.x;
+  const fromZ = item.bounceFromZ ?? item.z;
+  const toX = item.originX ?? item.x;
+  const toZ = item.originZ ?? item.z;
+  const peak = item.bounceY0 ?? launchY;
+  item.x = fromX + (toX - fromX) * t;
+  item.z = fromZ + (toZ - fromZ) * t;
+  item.y = launchY * (1 - t) + (peak - launchY * 0.5) * Math.sin(Math.PI * t);
+}
+
 /** 매 틱 — 안착 대기 카운트다운, 바라보는 주머니 판정, E 로 열기.
  *  상자(Chest.tick, 이 앞에서 돈다)가 대상이면 주머니는 양보한다 — 대상 우선순위 상자 > 주머니 > 바닥 아이템 */
 export function tick(world: World, _dt: number): void {
@@ -186,8 +209,17 @@ export function tick(world: World, _dt: number): void {
     if (item.kind !== 'pouch') continue;
     if ((item.noMagnetTicks ?? 0) > 0) {
       item.noMagnetTicks = (item.noMagnetTicks ?? 0) - 1; // 안착 중 — Pickups 는 주머니를 건너뛰므로 여기서 센다
+      if (item.bounceFromX !== undefined) flyPouch(item, cfg.settleTicks, cfg.launchY);
       if (item.noMagnetTicks === 0) {
         // 툭 — 자루가 바닥에 닿았다 (소리·먼지는 main). 병합으로 다시 안착해도 다시 난다
+        if (item.bounceFromX !== undefined) {
+          item.x = item.originX ?? item.x;
+          item.z = item.originZ ?? item.z;
+          item.y = undefined;
+          item.bounceFromX = undefined;
+          item.bounceFromZ = undefined;
+          item.bounceY0 = undefined;
+        }
         world.events.emit('pouch_landed', { id: item.id, x: item.x, z: item.z, tier: item.pouchTier ?? 'normal' });
       }
       continue;

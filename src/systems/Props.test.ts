@@ -168,7 +168,7 @@ describe('기믹 — 파괴 롤과 판정', () => {
     Math.random = orig;
     const pouch = world.groundItems.find((g) => g.kind === 'pouch');
     expect(pouch).toBeTruthy();
-    expect(pouch!.x).toBeGreaterThan(10); // 반대쪽(+X)으로 밀려 떨어졌다
+    expect(pouch!.originX!).toBeGreaterThan(10); // 반대쪽(+X)으로 떨어질 자리 (시체에서 튀어올라 그리로 간다)
     expect(pouch!.noMagnetTicks).toBe(balance.loot.pouch.settleTicks);
   });
 
