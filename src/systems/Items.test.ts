@@ -79,10 +79,10 @@ beforeEach(() => {
 });
 
 describe('가방 칸', () => {
-  it('요청대로 5×2 = 10칸, 퀵슬롯 4칸 (HUD 마름모 넷)', () => {
+  it('5×4 = 20칸 (2026-09-04 요청으로 5×2 에서 확장), 퀵슬롯 4칸 (HUD 마름모 넷)', () => {
     expect(CFG.cols).toBe(5);
-    expect(CFG.rows).toBe(2);
-    expect(world.inventory).toHaveLength(10);
+    expect(CFG.rows).toBe(4);
+    expect(world.inventory).toHaveLength(20);
     expect(world.quickslots).toHaveLength(4);
     expect(world.quickslots.length).toBeGreaterThanOrEqual(ITEM_KINDS.length); // 종류가 셋이라 남는다
     expect(world.inventory.every((s) => s === null)).toBe(true);
@@ -120,11 +120,13 @@ describe('가방 칸', () => {
   });
 
   it('덜 찬 무더기가 있으면 칸이 다 차 있어도 자리가 있다', () => {
-    // 10칸을 전부 쓰되 마지막 무더기만 한 개 모자라게 채운다
+    // 칸을 전부 쓰되 마지막 무더기만 한 개 모자라게 채운다 (칸 수는 데이터 — 5×4 면 6·6·8칸)
     const per = CFG.stackMax;
-    for (let i = 0; i < per * 3; i++) addItem(world, 'potion'); // 3칸 꽉
-    for (let i = 0; i < per * 3; i++) addItem(world, 'mana'); // 3칸 꽉
-    for (let i = 0; i < per * 4 - 1; i++) addItem(world, 'food'); // 3칸 꽉 + 1칸 덜 참
+    const slots = world.inventory.length;
+    const third = Math.floor(slots / 3);
+    for (let i = 0; i < per * third; i++) addItem(world, 'potion'); // third칸 꽉
+    for (let i = 0; i < per * third; i++) addItem(world, 'mana'); // third칸 꽉
+    for (let i = 0; i < per * (slots - 2 * third) - 1; i++) addItem(world, 'food'); // 나머지 칸 꽉 + 마지막 1칸 덜 참
     expect(world.inventory.includes(null)).toBe(false); // 칸은 전부 찼지만
     expect(hasRoom(world, 'food')).toBe(true); // 덜 찬 무더기에 한 개 더 들어간다
     expect(hasRoom(world, 'potion')).toBe(false); // 다른 종류는 들어갈 데가 없다

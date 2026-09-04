@@ -19,9 +19,17 @@ import { balance } from '../core/Balance';
 import { itemIcon } from './ItemIcons';
 import type { ItemKind, World } from '../core/World';
 
-const CELL = 'width:64px;height:64px;box-sizing:border-box;position:relative;';
+const CELL_PX = 64;
+const GAP_PX = 8;
+const CELL = `width:${CELL_PX}px;height:${CELL_PX}px;box-sizing:border-box;position:relative;`;
 /** 칸(64px) 안에서 숫자·번호와 부딪히지 않는 크기 */
 const ICON_PX = 28;
+/** 두 열 사이 간격 — 가방 5×4 격자(352px) | 퀵슬롯 십자(208px) */
+const COLUMN_GAP_PX = 28;
+/** 창 폭 고정 — 안내 문장 길이에 따라 창이 늘고 줄지 않게 (LootUI 와 같은 규약). 352 + 28 + 208 + 여백 26×2 */
+const PANEL_PX = 640;
+/** 퀵슬롯 십자 — HUD 마름모 넷과 같은 자리(위 1·오른쪽 2·아래 3·왼쪽 4, 시계 방향). grid-area 'row / col' */
+const CROSS_AREAS = ['1 / 2', '2 / 3', '3 / 2', '2 / 1'];
 
 export class InventoryUI {
   private readonly root: HTMLDivElement;
@@ -87,18 +95,40 @@ export class InventoryUI {
   }
 
   private rebuild(): void {
+    const world = this.world;
     const panel = document.createElement('div');
     panel.style.cssText =
-      'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;min-width:640px;';
+      `background:#15151b;border:1px solid #3a3a44;padding:20px 26px;width:${PANEL_PX}px;box-sizing:border-box;`;
 
-    panel.appendChild(this.buildQuickslots());
-    panel.appendChild(this.buildBag());
+    // 머리줄 — 창 이름과, 가방을 안 거치는 자원(골드·화살)을 한눈에 (루팅 창의 가방 열과 같은 표기)
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;';
+    const title = document.createElement('div');
+    title.textContent = '가방';
+    title.style.cssText = 'color:#e8c76a;font-size:15px;';
+    const counters = document.createElement('div');
+    counters.style.cssText = 'color:#cfd2da;display:flex;gap:18px;';
+    const gold = document.createElement('span');
+    gold.textContent = `◆ ${world.gold}`;
+    gold.style.color = '#e8c76a';
+    const arrows = document.createElement('span');
+    arrows.textContent = `화살 ${world.weapon.arrows ?? 0}/${balance.weapons.bow.ammoMax}`;
+    counters.append(gold, arrows);
+    head.append(title, counters);
+    panel.appendChild(head);
+
+    // 본문 — 왼쪽 가방 격자(5×4), 오른쪽 퀵슬롯 십자. 가방이 넷 줄이 되며(2026-09-04) 위아래로 쌓던 배치를 옆으로 눕혔다
+    const columns = document.createElement('div');
+    columns.style.cssText = `display:flex;gap:${COLUMN_GAP_PX}px;align-items:flex-start;`;
+    columns.appendChild(this.buildBag());
+    columns.appendChild(this.buildQuickslots());
+    panel.appendChild(columns);
 
     // 보관 주머니 — 가방을 비워 두고 싶을 때. 넣어 둔 것은 층을 오가도·죽어도 그 자리에 남는다
     const stash = document.createElement('button');
     stash.textContent = '주머니 내려놓기 (P / 패드 Y) — 여기에 아이템을 보관한다';
     stash.style.cssText =
-      'margin-top:14px;padding:6px 14px;border:1px solid #3a3a44;background:#1b1b22;color:#cfd2da;cursor:pointer;font:inherit;';
+      'margin-top:16px;padding:6px 14px;border:1px solid #3a3a44;background:#1b1b22;color:#cfd2da;cursor:pointer;font:inherit;';
     stash.onclick = () => this.onPlacePouch?.();
     panel.appendChild(stash);
 
@@ -106,29 +136,44 @@ export class InventoryUI {
     hint.textContent =
       `가방 칸 클릭 = 고르기 → 퀵슬롯 클릭(또는 1~${this.world.quickslots.length}) = 등록   ·   ` +
       '빈손으로 퀵슬롯 클릭 = 등록 해제   ·   가방 칸 우클릭 = 버리기   ·   P 주머니 내려놓기   ·   I 닫기   ·   스킬은 Tab';
-    hint.style.cssText = 'margin-top:16px;color:#6c7280;font-size:11px;';
+    hint.style.cssText = 'margin-top:14px;color:#6c7280;font-size:11px;line-height:1.7;white-space:normal;';
     panel.appendChild(hint);
 
     this.root.replaceChildren(panel);
   }
 
   // ---- 퀵슬롯 ----
+  /** HUD 마름모 넷과 같은 십자 배치(위 1·오른쪽 2·아래 3·왼쪽 4). 칸 수가 넷이 아니면 한 줄로 늘어놓는다 */
   private buildQuickslots(): HTMLElement {
     const world = this.world;
     const box = document.createElement('div');
+    box.style.cssText = `width:${CELL_PX * 3 + GAP_PX * 2}px;flex:none;`;
 
     const title = document.createElement('div');
-    title.textContent = `퀵슬롯 — 전투 중 1~${world.quickslots.length} 로 쓴다`;
-    title.style.cssText = 'color:#e8c76a;margin-bottom:8px;font-size:15px;';
+    title.textContent = `퀵슬롯 — 전투 중 1~${world.quickslots.length}`;
+    title.style.cssText = 'color:#e8c76a;margin-bottom:6px;';
     box.appendChild(title);
 
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:8px;';
+    const cross = world.quickslots.length === CROSS_AREAS.length;
+    const grid = document.createElement('div');
+    grid.style.cssText = cross
+      ? `display:grid;grid-template-columns:repeat(3, ${CELL_PX}px);grid-template-rows:repeat(3, ${CELL_PX}px);gap:${GAP_PX}px;`
+      : `display:flex;flex-wrap:wrap;gap:${GAP_PX}px;`;
+    if (cross) {
+      // 십자의 중심 — 고른 것이 있으면 "어디에 꽂을까"를 여기서 말한다
+      const center = document.createElement('div');
+      center.style.cssText =
+        'grid-area:2 / 2;display:flex;align-items:center;justify-content:center;text-align:center;' +
+        `font-size:10px;line-height:1.5;white-space:pre;color:${this.picked >= 0 ? '#e8c76a' : '#555c66'};`;
+      center.textContent = this.picked >= 0 ? '칸을 눌러\n등록' : '1~4';
+      grid.appendChild(center);
+    }
     world.quickslots.forEach((kind, i) => {
       const cell = document.createElement('div');
       const armed = this.picked >= 0;
       cell.style.cssText =
         CELL +
+        (cross ? `grid-area:${CROSS_AREAS[i]};` : '') +
         `border:1px solid ${armed ? '#e8c76a' : '#3a3a44'};` +
         `background:${kind ? 'rgba(232,199,106,0.07)' : 'rgba(255,255,255,0.02)'};cursor:pointer;`;
 
@@ -155,9 +200,9 @@ export class InventoryUI {
       }
 
       cell.onclick = () => this.assign(i);
-      row.appendChild(cell);
+      grid.appendChild(cell);
     });
-    box.appendChild(row);
+    box.appendChild(grid);
     return box;
   }
 
@@ -166,16 +211,17 @@ export class InventoryUI {
     const world = this.world;
     const cfg = balance.items;
     const box = document.createElement('div');
-    box.style.cssText = 'margin-top:16px;';
+    box.style.cssText = 'flex:none;';
 
     const used = world.inventory.filter((s) => s !== null).length;
+    const full = used >= world.inventory.length;
     const title = document.createElement('div');
-    title.textContent = `가방 ${used}/${world.inventory.length}칸${used >= world.inventory.length ? '  — 가득 찼다. 바닥의 아이템이 안 붙는다' : ''}`;
-    title.style.cssText = `color:${used >= world.inventory.length ? '#e0455a' : '#7fbfff'};margin-bottom:8px;font-size:15px;`;
+    title.textContent = `가방 ${used}/${world.inventory.length}칸${full ? '  — 가득 찼다. 바닥의 아이템을 집을 수 없다' : ''}`;
+    title.style.cssText = `color:${full ? '#e0455a' : '#7fbfff'};margin-bottom:6px;`;
     box.appendChild(title);
 
     const grid = document.createElement('div');
-    grid.style.cssText = `display:grid;grid-template-columns:repeat(${cfg.cols}, 64px);gap:8px;`;
+    grid.style.cssText = `display:grid;grid-template-columns:repeat(${cfg.cols}, ${CELL_PX}px);gap:${GAP_PX}px;`;
     world.inventory.forEach((slot, i) => {
       const cell = document.createElement('div');
       const here = i === this.picked;

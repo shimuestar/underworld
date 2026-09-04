@@ -123,6 +123,7 @@ describe('소모품 E 집기 (2026-09-04: 자석이 아니다)', () => {
 
   it('가방이 가득이면 E 로 날아왔다가 원자리로 튕겨 돌아간다 — pickup_bounced 한 번, 사라지지 않는다', () => {
     fillBag(world);
+    const potionsBefore = countOf(world, 'potion'); // 칸 수는 데이터(5×4) — 채운 뒤의 실제 수와 비교한다
     world.groundItems.push({ id: 1, kind: 'potion', x: 10, z: 8.5 });
     const bounced: unknown[] = [];
     world.events.on('pickup_bounced', (p) => bounced.push(p));
@@ -146,7 +147,7 @@ describe('소모품 E 집기 (2026-09-04: 자석이 아니다)', () => {
     expect(it.z).toBe(8.5);
     expect(it.y).toBeUndefined();
     expect(it.noMagnetTicks).toBe(balance.items.dropNoMagnetTicks); // 바로 다시 집으려 들지 않는다
-    expect(countOf(world, 'potion')).toBe(balance.items.stackMax * 4); // 가방은 그대로
+    expect(countOf(world, 'potion')).toBe(potionsBefore); // 가방은 그대로
   });
 
   it('버린 직후에는 E 도 안 먹는다 — 도로 주워지면 가방을 비울 수가 없다', () => {

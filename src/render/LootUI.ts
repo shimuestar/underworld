@@ -176,7 +176,8 @@ export class LootUI {
   /** 컨테이너 격자 크기 — 가방과 같은 열 수, 줄 수는 가방과 같거나 내용이 넘치면 더 */
   private containerGrid(entries: number): { cols: number; rows: number } {
     const cols = balance.items.cols;
-    return { cols, rows: Math.max(balance.items.rows, Math.ceil(Math.max(entries, this.layout.length) / cols)) };
+    // 최소 줄 수는 가방과 따로 — 가방이 5×4 로 커져도 서너 개 든 주머니는 두 줄이면 된다
+    return { cols, rows: Math.max(balance.loot.ui.containerMinRows, Math.ceil(Math.max(entries, this.layout.length) / cols)) };
   }
 
   /** 커서 이동 — 두 격자를 ←→ 로 오간다: 컨테이너 오른쪽 끝에서 → 는 가방, 가방 왼쪽 끝에서 ← 는 컨테이너.
