@@ -219,6 +219,22 @@ describe('바라보기·열기', () => {
     expect(world.lootInView).toBeNull();
   });
 
+  it('조준 규칙 — 2m 밖이라도 크로스헤어를 주머니에 얹으면(aimArcDeg 안) aimRadius 까지 대상, 시선이 위면 아니다 (주머니 전용)', () => {
+    const p = pouchAt(world, 10, 6, [{ kind: 'gold', count: 5 }]); // 정면 4m — 근접 반경(2.0) 밖
+    tickLoot(world, 1);
+    expect(world.lootInView).toBeNull(); // 수평 시선 — 주머니는 발밑 높이라 각이 벌어진다
+    world.player.pitch = Math.atan2(L.pouch.aimHeight - balance.player.eyeHeight, 4); // 주머니를 내려다본다
+    tickLoot(world, 1);
+    expect(world.lootInView).toEqual({ kind: 'pouch', id: p.id });
+    world.player.pitch += (L.pouch.aimArcDeg + 4) * (Math.PI / 180); // 각 밖으로
+    tickLoot(world, 1);
+    expect(world.lootInView).toBeNull();
+    p.z = 10 - L.pouch.aimRadius - 1; // 너무 멀다
+    world.player.pitch = Math.atan2(L.pouch.aimHeight - balance.player.eyeHeight, L.pouch.aimRadius + 1);
+    tickLoot(world, 1);
+    expect(world.lootInView).toBeNull();
+  });
+
   it('E 를 누르면 열리고(lootOpen·loot_opened), 닫은 직후 같은 E 로는 다시 열리지 않는다', () => {
     const p = pouchAt(world, 10, 8.5, [{ kind: 'gold', count: 5 }]);
     const ev: unknown[] = [];

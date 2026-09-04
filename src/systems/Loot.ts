@@ -203,6 +203,13 @@ export function tick(world: World, _dt: number): void {
   const fx = -Math.sin(p.yaw);
   const fz = -Math.cos(p.yaw);
   const arcCos = Math.cos((cfg.facingArcDeg * Math.PI) / 360);
+  // 조준 규칙(주머니 전용) — 시선 3D 벡터와 주머니 방향의 각이 aimArcDeg 안이면 aimRadius 까지 멀어도 대상.
+  // 발치까지 가지 않아도 크로스헤어를 얹으면 뒤질 수 있다 (사용자 요청 2026-09-04)
+  const lookX = fx * Math.cos(p.pitch);
+  const lookY = Math.sin(p.pitch);
+  const lookZ = fz * Math.cos(p.pitch);
+  const aimCos = Math.cos((cfg.aimArcDeg * Math.PI) / 180);
+  const eyeY = balance.player.eyeHeight;
   let best: GroundItemState | null = null;
   let bestDist = Infinity;
   for (const item of world.groundItems) {
@@ -227,8 +234,15 @@ export function tick(world: World, _dt: number): void {
     const toX = item.x - p.x;
     const toZ = item.z - p.z;
     const dist = Math.hypot(toX, toZ);
-    if (dist > cfg.radius || dist >= bestDist) continue;
-    if (dist > 0.001 && (toX * fx + toZ * fz) / dist < arcCos) continue;
+    if (dist >= bestDist) continue;
+    const near = dist <= cfg.radius && (dist <= 0.001 || (toX * fx + toZ * fz) / dist >= arcCos);
+    let aimed = false;
+    if (!near && dist <= cfg.aimRadius) {
+      const toY = cfg.aimHeight - eyeY;
+      const len = Math.hypot(toX, toY, toZ);
+      aimed = len > 0.001 && (toX * lookX + toY * lookY + toZ * lookZ) / len >= aimCos;
+    }
+    if (!near && !aimed) continue;
     best = item;
     bestDist = dist;
   }
