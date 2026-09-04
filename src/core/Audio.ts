@@ -652,11 +652,12 @@ export class GameAudio {
         this.noise(0.12, 0.35, 1200);
         break;
       case 'item_drop':
-        // 아이템을 바닥에 버렸다 — 작은 것이 툭 떨어져 두어 번 달그락 (가방·컨테이너 공용)
-        this.noise(0.04, 0.6, 900);
-        this.tone(1300, 0.04, 'triangle', 0.22, 0.03, 900);
-        this.tone(1100, 0.05, 'triangle', 0.18, 0.11, 800);
-        this.tone(95, 0.1, 'sine', 0.35, 0, 60);
+        // 아이템을 바닥에 버렸다 — 툭 떨어져 두어 번 달그락 (가방·컨테이너 공용). 2026-09-04 키움(너무 작았다)
+        this.noise(0.06, 1.3, 900);
+        this.tone(1300, 0.06, 'triangle', 0.6, 0.03, 900);
+        this.tone(1100, 0.07, 'triangle', 0.5, 0.12, 800);
+        this.tone(95, 0.14, 'sine', 0.8, 0, 60);
+        this.tone(180, 0.1, 'square', 0.35, 0, 90);
         break;
       case 'loot_reveal':
         // 칸이 밝혀졌다 — 짧은 딸깍 + 위로 살짝 오르는 두 음 (뒤지기 한 바퀴의 마침표)
