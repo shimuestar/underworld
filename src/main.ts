@@ -2122,6 +2122,8 @@ events.on('item_channel_broken', (payload) => {
 });
 events.on('item_dropped', (payload) => {
   const info = payload as { kind: ItemKind; count: number };
+  audio.play('item_drop'); // 가방에서 버렸다 — 발밑에서 달그락 (I 창·루팅 창 가방 칸 공용)
+  padRumble('interact');
   showReaction(`${itemDef(info.kind).name} ${info.count}개를 버렸다`, 1200);
 });
 let bagFullUntil = 0;
@@ -2159,9 +2161,11 @@ events.on('pickup_bounced', (payload) => {
 });
 events.on('loot_dropped', (payload) => {
   const d = payload as { kind: LootKind; count: number; from: 'container' | 'bag' };
-  audio.play('thud');
-  // 가방 쪽은 item_dropped 가 이미 알린다 — 컨테이너 쪽만 여기서
-  if (d.from === 'container') showReaction(`${Loot.entryName({ kind: d.kind, count: d.count })} ${d.count}개를 바닥에 버렸다`, 1200);
+  // 가방 쪽은 item_dropped 가 소리·안내를 이미 낸다 — 컨테이너 쪽만 여기서
+  if (d.from !== 'container') return;
+  audio.play('item_drop');
+  padRumble('interact');
+  showReaction(`${Loot.entryName({ kind: d.kind, count: d.count })} ${d.count}개를 바닥에 버렸다`, 1200);
 });
 events.on('loot_denied', (payload) => {
   const d = payload as { reason: 'full' | 'quiver' };

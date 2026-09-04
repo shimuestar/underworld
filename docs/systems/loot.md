@@ -62,7 +62,7 @@
 `pouch_dropped {id,x,z,owner,tier,entries,merged}` · `pouch_landed {id,x,z,tier}` · `pouch_placed {id,x,z}` · `loot_opened {kind,id,entries,first?}` · `loot_closed {kind,id,emptied}` ·
 `loot_taken {kind,count,from,sigilId?}` · `loot_stashed {kind,count,to}` · `loot_dropped {kind,count,from}` · `loot_denied {reason,kind}` · `loot_revealed {kind,count,sigilId?}` ·
 `pickup_bounced {kind,x,z}`. 재사용: `gold_picked`(컨테이너 자리), `chest_opened`(첫 개봉), `item_dropped`(가방 쪽 버리기), `sigil_acquired`.
-소리: `pouch_open`(가죽 스침, 주머니·상자 재개봉), `chest_opened`(첫 개봉), `loot_stash`, `thud`(주머니 착지·튕김 착지·버리기), 종류별 `pickup_*`, 거부 `shop_deny`.
+소리: `pouch_open`(가죽 스침, 주머니·상자 재개봉), `chest_opened`(첫 개봉), `loot_stash`, `thud`(주머니 착지·튕김 착지), `item_drop`(가방·컨테이너에서 바닥에 버리기 — 달그락), 종류별 `pickup_*`, 거부 `shop_deny`.
 
 ## 계측
 
