@@ -205,9 +205,9 @@ const BURN_EMBER_COLORS = [0xff8a2a, 0xffc04a, 0xff5a1a];
 const FIREBALL_COLOR = 0xff7733;
 const GROUND_ITEM_COLOR = 0xe8c76a; // 바닥 각인 — 어둠 속 금색 발광
 // 빛 선 — 바닥에 놓인 아이템·주머니 위로 솟는 밝은 실선 (멀리서도 "저기 뭐가 있다"). 2026-09-04: 굵은 반투명 기둥 → 얇은 밝은 선, 길이 절반
-const PILLAR_HEIGHT = 1.3;
-const PILLAR_RADIUS = 0.006; // 더 얇고 흐릿하게 (2026-09-04)
+const PILLAR_HEIGHT = 0.91; // 1.3 에서 30% 더 짧게 (2026-09-04)
 const PILLAR_OPACITY = 0.35;
+// 굵기 — 원기둥 대신 1px 선(THREE.Line): 거리와 무관하게 가장 가늘다
 // 선 끝의 상호작용 키캡 — HUD 중앙 키캡과 같은 결(어두운 판 + 밝은 테두리 + 굵은 글자). 라벨별 재질을 캐시한다
 const KEYCAP_SIZE = 0.26;
 const KEYCAP_MATS = new Map<string, THREE.SpriteMaterial>();
@@ -4686,15 +4686,14 @@ export class Stage {
         : kind === 'key' ? KEY_COLOR
         : kind === 'pouch' ? (tier === 'boss' ? GOLD_COLOR : 0xd9a15c)
         : sigilId ? sigilColor(sigilId) : GROUND_ITEM_COLOR;
-      const pillar = new THREE.Mesh(
-        new THREE.CylinderGeometry(PILLAR_RADIUS, PILLAR_RADIUS, PILLAR_HEIGHT, 6, 1, false),
-        new THREE.MeshBasicMaterial({
+      const pillar = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, PILLAR_HEIGHT, 0)]),
+        new THREE.LineBasicMaterial({
           color: pillarColor, transparent: true, opacity: PILLAR_OPACITY,
           blending: THREE.AdditiveBlending, depthWrite: false,
         }),
       );
       pillar.name = 'pillar';
-      pillar.position.y = PILLAR_HEIGHT / 2;
       group.add(pillar);
       // 선 끝의 키캡 — "저건 E 로 집는다". 라벨은 syncGroundItems 가 장치에 맞춰 갈아 끼운다
       const keycap = new THREE.Sprite(keycapMaterial('E'));
@@ -4837,14 +4836,14 @@ export class Stage {
           : 0.55 + Math.sin(now / 400 + item.id) * 0.1);
       group.position.set(item.x, bob, item.z);
       // 빛 기둥 — 바닥에 놓여 있을 때만(날아오거나 튕기거나 떨어지는 중엔 끈다), 발밑 고정. 바라보는 주머니는 더 밝다
-      const pillar = group.getObjectByName('pillar') as THREE.Mesh | undefined;
+      const pillar = group.getObjectByName('pillar') as THREE.Line | undefined;
       const keycap = group.getObjectByName('keycap') as THREE.Sprite | undefined;
       if (pillar) {
         const resting = !item.magnet && item.y === undefined && (item.bounceTicks ?? 0) <= 0;
         const focus = item.id === focusId;
         pillar.visible = resting;
-        pillar.position.y = PILLAR_HEIGHT / 2 - bob;
-        const pm = pillar.material as THREE.MeshBasicMaterial;
+        pillar.position.y = -bob; // 선은 발밑(0)에서 위로 — 물건이 떠서 흔들려도 선은 바닥에 서 있다
+        const pm = pillar.material as THREE.LineBasicMaterial;
         pm.opacity = focus ? Math.min(1, PILLAR_OPACITY * 2.2) : PILLAR_OPACITY * (0.85 + 0.15 * Math.sin(now / 700 + item.id));
         if (keycap) {
           // 선 끝의 키캡 — 바라보는(집을 수 있는) 것은 또렷하고 크게, 나머지는 흐릿하게 작게
@@ -4872,7 +4871,8 @@ export class Stage {
       if (seen.has(id)) continue;
       this.scene.remove(group);
       group.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
+        // 키캡 스프라이트의 재질은 라벨별 공용 캐시라 여기서 버리지 않는다
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
           obj.geometry.dispose();
           (obj.material as THREE.Material).dispose();
         }
