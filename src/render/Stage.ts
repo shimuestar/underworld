@@ -206,7 +206,8 @@ const FIREBALL_COLOR = 0xff7733;
 const GROUND_ITEM_COLOR = 0xe8c76a; // 바닥 각인 — 어둠 속 금색 발광
 // 빛 선 — 바닥에 놓인 아이템·주머니 위로 솟는 밝은 실선 (멀리서도 "저기 뭐가 있다"). 2026-09-04: 굵은 반투명 기둥 → 얇은 밝은 선, 길이 절반
 const PILLAR_HEIGHT = 0.91; // 1.3 에서 30% 더 짧게 (2026-09-04)
-const PILLAR_OPACITY = 0.35;
+const PILLAR_OPACITY = 0.95; // 1px 선이라 흐리면 안 보인다 — 밝게 (2026-09-04)
+const PILLAR_WHITEN = 0.4; // 색을 흰빛 쪽으로 당겨 어두운 바닥에서도 도드라지게
 // 굵기 — 원기둥 대신 1px 선(THREE.Line): 거리와 무관하게 가장 가늘다
 // 선 끝의 상호작용 키캡 — HUD 중앙 키캡과 같은 결(어두운 판 + 밝은 테두리 + 굵은 글자). 라벨별 재질을 캐시한다
 const KEYCAP_SIZE = 0.26;
@@ -4689,7 +4690,8 @@ export class Stage {
       const pillar = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, PILLAR_HEIGHT, 0)]),
         new THREE.LineBasicMaterial({
-          color: pillarColor, transparent: true, opacity: PILLAR_OPACITY,
+          color: new THREE.Color(pillarColor).lerp(new THREE.Color(0xffffff), PILLAR_WHITEN),
+          transparent: true, opacity: PILLAR_OPACITY,
           blending: THREE.AdditiveBlending, depthWrite: false,
         }),
       );
@@ -4844,7 +4846,7 @@ export class Stage {
         pillar.visible = resting;
         pillar.position.y = -bob; // 선은 발밑(0)에서 위로 — 물건이 떠서 흔들려도 선은 바닥에 서 있다
         const pm = pillar.material as THREE.LineBasicMaterial;
-        pm.opacity = focus ? Math.min(1, PILLAR_OPACITY * 2.2) : PILLAR_OPACITY * (0.85 + 0.15 * Math.sin(now / 700 + item.id));
+        pm.opacity = focus ? 1 : PILLAR_OPACITY * (0.9 + 0.1 * Math.sin(now / 700 + item.id));
         if (keycap) {
           // 선 끝의 키캡 — 바라보는(집을 수 있는) 것은 또렷하고 크게, 나머지는 흐릿하게 작게
           keycap.visible = resting;
