@@ -142,6 +142,17 @@
       #interact-key.visible {
         display: block;
       }
+      /* 패드 — 콘솔 버튼처럼 원형. 키보드는 사각 키캡 (2026-09-04) */
+      #interact-key.pad {
+        border-radius: 50%;
+        border-bottom-width: 2px;
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        line-height: 32px;
+        text-align: center;
+        box-sizing: border-box;
+      }
       /* 각인 획득 — 화면 가운데 위쪽에 잠깐 뜬다. 각인 색을 그대로 입혀
          "바닥에서 본 그 색"과 이어지게 한다 */
       #sigil-toast {

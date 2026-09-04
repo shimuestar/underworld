@@ -3398,6 +3398,7 @@ function render(alpha: number): void {
     world.groundItems,
     world.lootInView?.kind === 'pouch' ? world.lootInView.id : world.itemInView?.id,
     keyLabel('interact', 'interact'),
+    input.usingPad, // 패드는 원형 버튼 글리프
   );
   stage.syncLifeMotes(world.lifeMotes);
   stage.syncBarrels(world.barrels);
@@ -3744,6 +3745,7 @@ function render(alpha: number): void {
   }
   if (centerKeycap !== null) {
     interactKeyEl!.textContent = centerKeycap;
+    interactKeyEl!.classList.toggle('pad', input.usingPad); // 패드는 원형 버튼, 키보드는 사각 키캡
     if (!keycapWithPrompt) altarPrompt!.classList.remove('visible'); // 문은 하단 안내 대신 중앙 키캡만
   }
   interactKeyEl!.classList.toggle('visible', centerKeycap !== null);

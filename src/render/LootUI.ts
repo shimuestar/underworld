@@ -369,9 +369,12 @@ export class LootUI {
     const key = (label: string): HTMLSpanElement => {
       const k = document.createElement('span');
       k.textContent = label;
-      k.style.cssText =
-        'display:inline-block;min-width:14px;padding:0 5px;border:1px solid rgba(216,224,234,0.65);border-bottom-width:3px;' +
-        'border-radius:4px;font-weight:bold;color:#e8ecf2;line-height:15px;text-align:center;margin-right:4px;';
+      // 패드는 콘솔 버튼처럼 원형, 키보드는 사각 키캡
+      k.style.cssText = this.padMode
+        ? 'display:inline-block;width:18px;height:18px;border:1px solid rgba(216,224,234,0.7);border-radius:50%;' +
+          'font-weight:bold;color:#e8ecf2;line-height:16px;text-align:center;margin-right:4px;box-sizing:border-box;'
+        : 'display:inline-block;min-width:14px;padding:0 5px;border:1px solid rgba(216,224,234,0.65);border-bottom-width:3px;' +
+          'border-radius:4px;font-weight:bold;color:#e8ecf2;line-height:15px;text-align:center;margin-right:4px;';
       return k;
     };
     const a = document.createElement('span');

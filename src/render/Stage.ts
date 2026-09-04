@@ -212,8 +212,10 @@ const PILLAR_WHITEN = 0.4; // 색을 흰빛 쪽으로 당겨 어두운 바닥에
 // 선 끝의 상호작용 키캡 — HUD 중앙 키캡과 같은 결(어두운 판 + 밝은 테두리 + 굵은 글자). 라벨별 재질을 캐시한다
 const KEYCAP_SIZE = 0.26;
 const KEYCAP_MATS = new Map<string, THREE.SpriteMaterial>();
-function keycapMaterial(label: string): THREE.SpriteMaterial {
-  const cached = KEYCAP_MATS.get(label);
+/** round = 패드(콘솔 버튼처럼 원형), 아니면 키보드 사각 키캡 */
+function keycapMaterial(label: string, round = false): THREE.SpriteMaterial {
+  const cacheKey = `${round ? 'o' : 'k'}:${label}`;
+  const cached = KEYCAP_MATS.get(cacheKey);
   if (cached) return cached;
   const size = 96;
   const canvas = document.createElement('canvas');
@@ -227,29 +229,35 @@ function keycapMaterial(label: string): THREE.SpriteMaterial {
     const w = size - 20;
     const h = size - 22;
     ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
+    if (round) {
+      ctx.arc(size / 2, size / 2, size / 2 - 8, 0, Math.PI * 2);
+    } else {
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+    }
     ctx.closePath();
     ctx.fillStyle = 'rgba(12,14,18,0.88)';
     ctx.fill();
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(216,224,234,0.85)';
     ctx.stroke();
-    // 아래 테두리를 굵게 — 키캡의 두께감 (HUD #interact-key 와 같은 규약)
-    ctx.fillStyle = 'rgba(216,224,234,0.85)';
-    ctx.fillRect(x + r / 2, y + h - 2, w - r, 6);
+    // 아래 테두리를 굵게 — 키캡의 두께감 (HUD #interact-key 와 같은 규약). 원형 버튼엔 없다
+    if (!round) {
+      ctx.fillStyle = 'rgba(216,224,234,0.85)';
+      ctx.fillRect(x + r / 2, y + h - 2, w - r, 6);
+    }
     ctx.fillStyle = '#e8ecf2';
     ctx.font = `bold ${label.length > 2 ? 30 : 44}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, size / 2, y + h / 2 + 1);
+    ctx.fillText(label, size / 2, round ? size / 2 + 1 : y + h / 2 + 1);
   }
   const tex = new THREE.CanvasTexture(canvas);
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
-  KEYCAP_MATS.set(label, mat);
+  KEYCAP_MATS.set(cacheKey, mat);
   return mat;
 }
 // 바닥 모형 색 — HUD 아이콘과 어긋나지 않게 balance.items.kinds 를 그대로 읽는다
@@ -4802,7 +4810,7 @@ export class Stage {
     }
   }
 
-  syncGroundItems(items: GroundItemState[], focusId?: number, keyLabel = 'E'): void {
+  syncGroundItems(items: GroundItemState[], focusId?: number, keyLabel = 'E', padGlyph = false): void {
     const now = performance.now();
     const seen = new Set<number>();
     for (const item of items) {
@@ -4852,9 +4860,10 @@ export class Stage {
           keycap.visible = resting;
           keycap.position.y = PILLAR_HEIGHT + KEYCAP_SIZE * 0.6 - bob;
           const data = keycap.userData as Record<string, unknown>;
-          if (data['label'] !== keyLabel) {
-            keycap.material = keycapMaterial(keyLabel);
-            data['label'] = keyLabel;
+          const wanted = `${padGlyph ? 'o' : 'k'}:${keyLabel}`;
+          if (data['label'] !== wanted) {
+            keycap.material = keycapMaterial(keyLabel, padGlyph);
+            data['label'] = wanted;
           }
           const scale = focus ? KEYCAP_SIZE * 1.25 : KEYCAP_SIZE;
           keycap.scale.set(scale, scale, 1);
