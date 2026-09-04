@@ -420,50 +420,52 @@ describe('버리기', () => {
   });
 });
 
-describe('가방이 가득일 때 안내', () => {
-  it('코앞까지 갔는데 못 줍는 아이템이 있으면 inventory_full 을 알린다', () => {
+describe('가방이 가득일 때 안내 (2026-09-04: 소모품은 E 로 집는다 — 가득이면 튕겨 돌아온다)', () => {
+  function fill(): void {
     const per = CFG.stackMax;
-    const total = world.inventory.length * per;
-    for (let i = 0; i < total; i++) addItem(world, ITEM_KINDS[Math.floor(i / per) % 3]!);
+    for (let i = 0; i < world.inventory.length * per; i++) addItem(world, ITEM_KINDS[Math.floor(i / per) % 3]!);
     expect(hasRoom(world, 'potion')).toBe(false);
+  }
 
+  it('옆에 서 있기만 하면 조용하다 — 자석이 아니라 손으로 집는 것이라 지나갈 때마다 뜨지 않는다', () => {
+    fill();
     const full: unknown[] = [];
     world.events.on('inventory_full', (p) => full.push(p));
     world.groundItems.push({ id: 1, kind: 'potion', x: world.player.x + 0.5, z: world.player.z });
-    Pickups.tick(world, DT);
-    expect(full).toHaveLength(1);
+    for (let i = 0; i < 30; i++) Pickups.tick(world, DT);
+    expect(full).toHaveLength(0);
     expect(world.groundItems).toHaveLength(1); // 바닥에 그대로
+    expect(world.groundItems[0]!.magnet).toBeUndefined();
   });
 
-  it('반경 밖이면 조용하다 — 지나갈 때마다 뜨면 시끄럽다', () => {
-    const per = CFG.stackMax;
-    for (let i = 0; i < world.inventory.length * per; i++) {
-      addItem(world, ITEM_KINDS[Math.floor(i / per) % 3]!);
-    }
-    const full: unknown[] = [];
-    world.events.on('inventory_full', (p) => full.push(p));
+  it('바라보며 E 를 누르면 날아왔다가 원자리로 튕겨 돌아간다 — pickup_bounced 한 번', () => {
+    fill();
+    world.player.yaw = -Math.PI / 2; // +X 를 본다
+    const bounced: unknown[] = [];
+    world.events.on('pickup_bounced', (p) => bounced.push(p));
+    world.groundItems.push({ id: 1, kind: 'potion', x: world.player.x + 1.2, z: world.player.z });
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    Pickups.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(world.groundItems[0]!.magnet).toBe(true);
+    for (let i = 0; i < 120 && bounced.length === 0; i++) Pickups.tick(world, DT);
+    expect(bounced).toHaveLength(1);
+    expect(world.groundItems).toHaveLength(1);
+    expect(world.groundItems[0]!.x).toBeCloseTo(world.player.x + 1.2, 5);
+    expect(hasRoom(world, 'potion')).toBe(false); // 가방은 그대로 가득
+  });
+
+  it('반경 밖이면 대상이 아니다 — E 를 눌러도 조용하다', () => {
+    fill();
+    world.player.yaw = -Math.PI / 2;
     world.groundItems.push({
       id: 1, kind: 'potion',
-      x: world.player.x + balance.pickups.potion.magnetRadius + 1, z: world.player.z,
+      x: world.player.x + balance.loot.pickup.radius + 1, z: world.player.z,
     });
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
     Pickups.tick(world, DT);
-    expect(full).toHaveLength(0);
-  });
-
-  it('여러 개가 깔려 있어도 틱당 한 번만 알린다', () => {
-    const per = CFG.stackMax;
-    for (let i = 0; i < world.inventory.length * per; i++) {
-      addItem(world, ITEM_KINDS[Math.floor(i / per) % 3]!);
-    }
-    const full: unknown[] = [];
-    world.events.on('inventory_full', (p) => full.push(p));
-    for (let i = 0; i < 4; i++) {
-      world.groundItems.push({
-        id: i, kind: 'potion', x: world.player.x + 0.3 * i, z: world.player.z,
-      });
-    }
-    Pickups.tick(world, DT);
-    expect(full).toHaveLength(1);
+    expect(world.itemInView).toBeNull();
+    expect(world.groundItems[0]!.magnet).toBeUndefined();
   });
 });
 

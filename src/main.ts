@@ -2125,6 +2125,18 @@ events.on('loot_taken', (payload) => {
   padRumble('pickup');
 });
 events.on('loot_stashed', () => audio.play('loot_stash'));
+// 주머니가 떨어졌다 — 자루가 돌바닥에 툭 (시체 자리에서 들린다)
+events.on('pouch_dropped', (payload) => {
+  const d = payload as { x: number; z: number };
+  audio.play('thud', panAt(d.x, d.z));
+});
+// 가방이 가득 — 집으려던 소모품이 몸까지 왔다가 튕겨 돌아가 떨어졌다
+events.on('pickup_bounced', (payload) => {
+  const d = payload as { x: number; z: number };
+  audio.play('thud', panAt(d.x, d.z));
+  padRumble('interact');
+  showReaction('가방이 가득 — 집을 수 없다. I 에서 쓰거나 버려야 한다', 1600);
+});
 events.on('loot_dropped', (payload) => {
   const d = payload as { kind: LootKind; count: number; from: 'container' | 'bag' };
   audio.play('thud');
@@ -2956,6 +2968,8 @@ function simulate(dt: number): void {
       world.leverInView !== null ||
       world.chestInView !== null ||
       world.lootInView !== null ||
+      // 바닥 소모품 집기는 전투 중엔 병합하지 않는다 — 발치 물약 때문에 휘두르기가 줍기로 새면 안 된다 (E·패드 B 는 늘 된다)
+      (world.itemInView !== null && !world.mana.inCombat) ||
       (world.altarInView && !world.altarEnteredThisApproach) ||
       world.onEntrancePad ||
       (world.onExitPad && (world.exitOpen || world.exitNeedsKey));
@@ -3655,9 +3669,10 @@ function render(alpha: number): void {
   const onEntrance = world.onEntrancePad && !world.dead && !world.uiOpen && !world.cleared;
   const nearChest = world.chestInView !== null && !world.dead && !world.uiOpen;
   const nearLoot = world.lootInView !== null && !world.dead && !world.uiOpen;
+  const nearItem = world.itemInView !== null && !world.dead && !world.uiOpen;
   altarPrompt!.classList.toggle(
     'visible',
-    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest || nearLoot,
+    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest || nearLoot || nearItem,
   );
   // 상호작용 키 표기 — 한 키 체계라 근접 키를 안내한다 (E 도 여전히 동작한다)
   // 패드는 상호작용 버튼을 보여 준다 — 근접(RT)도 겸하지만("한 키 체계") 안내는
@@ -3676,6 +3691,8 @@ function render(alpha: number): void {
     altarPrompt!.textContent = `${IK} — ${world.chestInView!.opened ? '보물상자를 뒤진다' : '보물상자를 연다'}`;
   } else if (nearLoot) {
     altarPrompt!.textContent = `${IK} — ${Loot.titleOf(world, world.lootInView!)}를 뒤진다`;
+  } else if (nearItem) {
+    altarPrompt!.textContent = `${IK} — ${itemDef(world.itemInView!.kind).name} 줍기`;
   } else if (nearLever) {
     const leverDef = world.level.levers.find(
       (l) => l.cell[0] === world.leverInView!.row && l.cell[1] === world.leverInView!.col,

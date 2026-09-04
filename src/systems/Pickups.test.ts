@@ -15,7 +15,6 @@ import * as Progression from './Progression';
 import * as Sigils from './Sigils';
 
 const DT = 1 / 60;
-const cfg = balance.pickups;
 
 function makeWorld(): World {
   const level = new Level({
@@ -69,72 +68,132 @@ function fillBag(world: World): void {
 }
 
 
-describe('자석 흡수', () => {
+/** 바라보며 E 한 번 (다음 틱들은 손을 뗀다) */
+function press(w: World): void {
+  w.input = { ...Input.emptySnapshot(), interactPressed: true };
+  Pickups.tick(w, DT);
+  w.input = Input.emptySnapshot();
+}
+
+describe('소모품 E 집기 (2026-09-04: 자석이 아니다)', () => {
   /** 흡수될 때까지(또는 maxTicks) 돌린다. 걸린 틱 수 반환 */
   function absorb(maxTicks = 120): number {
     for (let i = 1; i <= maxTicks; i++) {
       Pickups.tick(world, DT);
       if (world.groundItems.length === 0) return i;
     }
-    return -1;
+    return 0;
   }
 
-  it('포션 — 날아와 가방으로 들어간다. 줍는 것만으로는 회복되지 않는다', () => {
+  it('포션 — 바라보고 서 있으면 itemInView, E 를 누르면 날아와 가방으로 들어간다. 줍는 것만으로는 회복되지 않는다', () => {
     world.player.health = balance.player.healthMax - 10;
-    world.groundItems.push({ id: 1, kind: 'potion', x: 12, z: 10 }); // 2m 앞
+    world.groundItems.push({ id: 1, kind: 'potion', x: 10, z: 8.5 }); // 1.5m 앞 (yaw 0 → -Z)
     const events: unknown[] = [];
     world.events.on('item_picked', (payload) => events.push(payload));
 
-    Pickups.tick(world, DT); // 첫 틱 — 자석에 걸려 공중으로
+    for (let i = 0; i < 30; i++) Pickups.tick(world, DT);
+    expect(world.groundItems[0]!.magnet).toBeUndefined(); // 서 있기만 해서는 안 온다
+    expect(world.itemInView).toEqual({ id: 1, kind: 'potion' });
+
+    press(world); // E — 자석 비행으로 출발
     const item = world.groundItems[0]!;
     expect(item.magnet).toBe(true);
-    expect(item.y).toBeGreaterThan(0.5); // 바닥이 아니라 공중
-
+    expect(item.y).toBeGreaterThan(0.5);
     const ticks = absorb();
-    expect(ticks).toBeGreaterThan(1); // 즉시가 아니라 날아온다
-    expect(ticks).toBeLessThan(20); // 아주 빠르게 (0.33초 이내)
+    expect(ticks).toBeGreaterThan(1);
+    expect(ticks).toBeLessThan(20);
     expect(countOf(world, 'potion')).toBe(1);
     expect(world.player.health).toBe(balance.player.healthMax - 10); // 마셔야 찬다
     expect(events[0]).toMatchObject({ kind: 'potion' });
   });
 
-  it('자원이 가득이어도 줍는다 — 기준은 체력이 아니라 가방 자리다', () => {
+  it('자원이 가득이어도 집는다 — 기준은 체력이 아니라 가방 자리다. 한 번에 하나(가장 가까운 것)', () => {
     world.player.health = balance.player.healthMax;
     world.mana.value = balance.mana.max;
-    world.groundItems.push({ id: 1, kind: 'potion', x: 10.5, z: 10 });
-    world.groundItems.push({ id: 2, kind: 'food', x: 10, z: 10.5 });
-    expect(absorb()).toBeGreaterThan(0);
+    world.groundItems.push({ id: 1, kind: 'potion', x: 10, z: 8.5 });
+    world.groundItems.push({ id: 2, kind: 'food', x: 10, z: 8.3 });
+    press(world);
+    expect(world.groundItems.filter((i) => i.magnet)).toHaveLength(1); // 가까운 것 하나만
+    for (let i = 0; i < 60 && world.groundItems.length > 1; i++) Pickups.tick(world, DT);
     expect(countOf(world, 'potion')).toBe(1);
+    press(world);
+    expect(absorb()).toBeGreaterThan(0);
     expect(countOf(world, 'food')).toBe(1);
   });
 
-  it('가방이 가득이면 자석이 안 문다 — 바닥에 그대로 남는다', () => {
+  it('가방이 가득이면 E 로 날아왔다가 원자리로 튕겨 돌아간다 — pickup_bounced 한 번, 사라지지 않는다', () => {
     fillBag(world);
-    world.groundItems.push({ id: 1, kind: 'potion', x: 10.5, z: 10 });
-    for (let i = 0; i < 30; i++) Pickups.tick(world, DT);
+    world.groundItems.push({ id: 1, kind: 'potion', x: 10, z: 8.5 });
+    const bounced: unknown[] = [];
+    world.events.on('pickup_bounced', (p) => bounced.push(p));
+    press(world);
+    expect(world.groundItems[0]!.magnet).toBe(true);
+    let peak = 0;
+    let sawBounce = false;
+    for (let i = 0; i < 120; i++) {
+      Pickups.tick(world, DT);
+      const it = world.groundItems[0]!;
+      if ((it.bounceTicks ?? 0) > 0) { sawBounce = true; peak = Math.max(peak, it.y ?? 0); }
+      if (bounced.length > 0) break;
+    }
+    expect(sawBounce).toBe(true);
+    expect(peak).toBeGreaterThan(0.55); // 포물선으로 튀어오른다
+    expect(bounced).toEqual([{ kind: 'potion', x: 10, z: 8.5 }]);
+    const it = world.groundItems[0]!;
     expect(world.groundItems).toHaveLength(1);
-    expect(world.groundItems[0]!.magnet).toBeUndefined();
+    expect(it.magnet).toBe(false);
+    expect(it.x).toBe(10);
+    expect(it.z).toBe(8.5);
+    expect(it.y).toBeUndefined();
+    expect(it.noMagnetTicks).toBe(balance.items.dropNoMagnetTicks); // 바로 다시 집으려 들지 않는다
+    expect(countOf(world, 'potion')).toBe(balance.items.stackMax * 4); // 가방은 그대로
   });
 
-  it('버린 직후에는 자석이 안 문다 — 도로 주워지면 가방을 비울 수가 없다', () => {
+  it('버린 직후에는 E 도 안 먹는다 — 도로 주워지면 가방을 비울 수가 없다', () => {
     world.groundItems.push({
-      id: 1, kind: 'potion', x: 10.2, z: 10,
+      id: 1, kind: 'potion', x: 10, z: 8.5,
       noMagnetTicks: balance.items.dropNoMagnetTicks,
     });
-    for (let i = 0; i < balance.items.dropNoMagnetTicks - 1; i++) Pickups.tick(world, DT);
+    for (let i = 0; i < balance.items.dropNoMagnetTicks - 1; i++) press(world);
     expect(world.groundItems[0]!.magnet).toBeUndefined();
     expect(countOf(world, 'potion')).toBe(0);
-
-    expect(absorb()).toBeGreaterThan(0); // 유예가 끝나면 다시 주울 수 있다
+    press(world); // 유예가 끝났다
+    press(world);
+    expect(absorb()).toBeGreaterThan(0);
     expect(countOf(world, 'potion')).toBe(1);
   });
 
-  it('반경 밖이면 걸리지 않는다', () => {
-    world.groundItems.push({ id: 1, kind: 'potion', x: 10 + cfg.potion.magnetRadius + 0.5, z: 10 });
-    Pickups.tick(world, DT);
+  it('반경 밖이거나 등지고 있으면 대상이 아니다 — E 를 눌러도 아무 일 없다', () => {
+    world.groundItems.push({ id: 1, kind: 'potion', x: 10, z: 10 - balance.loot.pickup.radius - 0.5 });
+    press(world);
+    expect(world.itemInView).toBeNull();
     expect(world.groundItems[0]!.magnet).toBeUndefined();
-    expect(countOf(world, 'potion')).toBe(0);
+    world.groundItems[0]!.z = 11.5; // 등 뒤 1.5m
+    press(world);
+    expect(world.itemInView).toBeNull();
+    expect(world.groundItems[0]!.magnet).toBeUndefined();
   });
+
+  it('상자·주머니가 대상이면 바닥 아이템은 양보한다 (우선순위)', () => {
+    world.groundItems.push({ id: 1, kind: 'potion', x: 10, z: 8.5 });
+    world.lootInView = { kind: 'pouch', id: 99 };
+    Pickups.tick(world, DT);
+    expect(world.itemInView).toBeNull();
+    world.lootInView = null;
+    Pickups.tick(world, DT);
+    expect(world.itemInView).toEqual({ id: 1, kind: 'potion' });
+  });
+});
+
+describe('자석 흡수 — 골드·화살·각인', () => {
+  /** 흡수될 때까지(또는 maxTicks) 돌린다. 걸린 틱 수 반환 */
+  function absorb(maxTicks = 120): number {
+    for (let i = 1; i <= maxTicks; i++) {
+      Pickups.tick(world, DT);
+      if (world.groundItems.length === 0) return i;
+    }
+    return 0;
+  }
 
   it('골드 — 다가가야 걸리고(반경 1.2m), 한 번 걸리면 멀어져도 따라온다', () => {
     // 2026-08-30: 자석 반경 4.5→1.2 — 멀리서 자동으로 빨려 오지 않고 밟아 먹는 방식
@@ -198,19 +257,19 @@ describe('경험치', () => {
 });
 
 describe('가방이 가득 찬 뒤', () => {
-  it('자석에 걸린 뒤 가방이 차 버리면 발밑에 도로 놓인다 — 사라지지 않는다', () => {
-    world.groundItems.push({ id: 1, kind: 'potion', x: 10.5, z: 10 });
-    Pickups.tick(world, DT); // 자석에 문다
+  it('날아오는 도중에 가방이 차 버리면 원자리로 튕겨 돌아간다 — 사라지지 않는다', () => {
+    world.groundItems.push({ id: 1, kind: 'potion', x: 10, z: 8.5 });
+    press(world); // E — 출발
     expect(world.groundItems[0]!.magnet).toBe(true);
 
     fillBag(world); // 날아오는 도중에 가방이 찼다
-    const full: unknown[] = [];
-    world.events.on('inventory_full', (payload) => full.push(payload));
-    for (let i = 0; i < 60; i++) Pickups.tick(world, DT);
+    const bounced: unknown[] = [];
+    world.events.on('pickup_bounced', (payload) => bounced.push(payload));
+    for (let i = 0; i < 120 && bounced.length === 0; i++) Pickups.tick(world, DT);
 
     expect(world.groundItems).toHaveLength(1); // 증발하지 않았다
-    expect(world.groundItems[0]!.magnet).toBe(false); // 자석은 풀렸다
-    expect(full.length).toBeGreaterThan(0);
-    expect(Math.hypot(world.groundItems[0]!.x - 10, world.groundItems[0]!.z - 10)).toBeLessThan(0.1);
+    expect(world.groundItems[0]!.magnet).toBe(false);
+    expect(bounced).toHaveLength(1);
+    expect(Math.hypot(world.groundItems[0]!.x - 10, world.groundItems[0]!.z - 8.5)).toBeLessThan(0.001); // 원자리
   });
 });

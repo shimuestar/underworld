@@ -68,3 +68,17 @@ zone_cleared    { tick }
 | `damageTakenTotal` (기존) | `player_damaged` + `poison_tick` + `burn_tick` | 도트는 player_damaged 를 안 내므로 따로 합산 |
 
 시스템(`src/systems/Traps.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).
+
+## 전리품 (loot) — 2026-09-04
+
+| 카운터 | 이벤트 | 뜻 |
+|---|---|---|
+| `loot.pouches` | `pouch_dropped` | 떨어진 주머니 수 (병합도 1회로 센다 — 페이로드 `merged`) |
+| `loot.opened` | `loot_opened` | 루팅 창을 연 횟수 (주머니·상자, `kind`) |
+| `loot.taken` | `loot_taken` (`count` 합) | 가져온 아이템 개수 (골드는 금액) |
+| `loot.stashed` | `loot_stashed` (`count` 합) | 내 가방에서 컨테이너로 넣은 개수 — 보관함 사용 지표 |
+| `loot.dropped` | `loot_dropped` (`count` 합) | 창에서 바닥에 버린 개수 |
+| `loot.deniedFull` | `loot_denied` (`reason === 'full'`) | 가방이 가득해 못 가져온 횟수 — 가방 칸·스택 튜닝 지표 |
+
+`loot.taken / loot.pouches` 가 낮으면 주머니를 안 뒤지고 지나간다는 뜻(전리품이 매력 없거나 뒤지기 귀찮다).
+시스템(`src/systems/Loot.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).

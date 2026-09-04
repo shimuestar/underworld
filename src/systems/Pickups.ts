@@ -1,4 +1,4 @@
-// 바닥 아이템 물리와 습득 — 자석(골드·화살·탄약·수류탄·배터리·소모품), 비석 회수.
+// 바닥 아이템 물리와 습득 — 자석(골드·화살·탄약·수류탄·배터리), 소모품 E 집기·튕김, 비석 회수.
 // 각인(Sigils)·주머니(Loot)와 같은 world.groundItems 배열을 쓰되 kind 로 구분한다.
 // 자석 수치는 balance.pickups, 회복량은 balance.items.kinds.
 //
@@ -7,7 +7,7 @@
 // 2026-09-04: 처치 드랍 굴림은 Loot 로 옮겼다 — 이제 적은 아이템이 아니라 주머니를 떨군다.
 
 import { balance } from '../core/Balance';
-import { addItem, hasRoom, recoverGrave } from '../core/Inventory';
+import { addItem, recoverGrave } from '../core/Inventory';
 import type { ItemKind, World } from '../core/World';
 
 /** 바닥에 놓인 높이 (kind별) — 자석에 걸리기 전 기준 높이 */
@@ -18,32 +18,56 @@ function restHeight(kind: string): number {
   return 0.55;
 }
 
-/** 이 아이템을 지금 주울 이유가 있는가.
- *  이제 기준은 "체력이 모자란가"가 아니라 "가방에 자리가 있는가"다 —
- *  당장 필요 없어도 챙겨 뒀다 쓰는 게 가방의 값이고, 대신 가득 차면 바닥에 남는다 */
+/** 자석이 물 수 있는가 — 골드·기믹 전리품은 항상, 화살은 화살통 상한까지.
+ *  소모품은 자석이 아니라 손(E)으로 집으므로 여기 오지 않는다 */
 function wants(world: World, kind: string): boolean {
-  if (kind === 'gold') return true;
-  if (kind === 'key') return true; // 열쇠는 가방을 거치지 않는다 — 바로 손에 쥔다
-  // 기믹 전리품 — 가방을 거치지 않고 바로 주머니로 (골드와 같은 빠른 경로)
-  if (kind === 'ammo' || kind === 'grenade' || kind === 'battery') return true;
-  // 화살은 가방이 아니라 무기 탄약이다 — 상한이 차면 권총탄처럼 바닥에 남는다
-  if (kind === 'arrow') {
-    return (world.weapon.arrows ?? 0) < balance.weapons.bow.ammoMax;
-  }
-  return hasRoom(world, kind as ItemKind);
+  if (kind === 'arrow') return (world.weapon.arrows ?? 0) < balance.weapons.bow.ammoMax;
+  return true;
 }
 
-/** 자석 흡수 — 반경에 들면 공중으로 떠올라 가속하며 몸으로 빨려든다.
- *  한 번 걸린 아이템은 플레이어가 멀어져도 계속 따라온다 */
+const CONSUMABLE_KINDS: ReadonlySet<string> = new Set(['potion', 'mana', 'food']);
+
+/** 지금 집을 수 있는 바닥 소모품 — 반경·시야각(loot.pickup) 안에서 가장 가까운 것.
+ *  날아오는 중·유예 중·튕겨 돌아가는 중은 뺀다 */
+function findItemInView(world: World): { id: number; kind: ItemKind } | null {
+  const cfg = balance.loot.pickup;
+  const p = world.player;
+  const fx = -Math.sin(p.yaw);
+  const fz = -Math.cos(p.yaw);
+  const arcCos = Math.cos((cfg.facingArcDeg * Math.PI) / 360);
+  let best: (typeof world.groundItems)[number] | null = null;
+  let bestDist = Infinity;
+  for (const item of world.groundItems) {
+    if (!CONSUMABLE_KINDS.has(item.kind)) continue;
+    if (item.magnet || (item.noMagnetTicks ?? 0) > 0 || (item.bounceTicks ?? 0) > 0) continue;
+    const toX = item.x - p.x;
+    const toZ = item.z - p.z;
+    const dist = Math.hypot(toX, toZ);
+    if (dist > cfg.radius || dist >= bestDist) continue;
+    if (dist > 0.001 && (toX * fx + toZ * fz) / dist < arcCos) continue;
+    best = item;
+    bestDist = dist;
+  }
+  return best ? { id: best.id, kind: best.kind as ItemKind } : null;
+}
+
+/** 자석 흡수 + E 집기 — 골드·화살·탄약은 반경에 들면 공중으로 떠올라 가속하며 몸으로 빨려든다
+ *  (한 번 걸린 아이템은 플레이어가 멀어져도 계속 따라온다). 소모품은 바라보며 E 를 눌러야
+ *  같은 비행으로 날아온다(2026-09-04) — 가방이 가득이면 몸까지 왔다가 원자리로 튕겨 돌아간다 */
 export function tick(world: World, dt: number): void {
+  world.itemInView = null;
   if (world.groundItems.length === 0) return;
   const p = world.player;
   const cfg = balance.pickups;
   const mag = cfg.magnet;
   const targetY = balance.player.eyeHeight * mag.targetHeightMul; // 가슴 높이
-  // 반경 안에 들어왔는데 가방이 가득이라 못 문 것이 있었는가 (틱당 한 번만 알린다)
+  // 반경 안에 들어왔는데 화살통이 가득이라 못 문 것이 있었는가 (틱당 한 번만 알린다)
   let blocked = false;
   let quiverBlocked = false;
+  // 집기 대상 — 컨테이너(상자·주머니)가 대상이면 양보한다 (우선순위 상자 > 주머니 > 바닥 아이템)
+  const inView = world.chestInView || world.lootInView ? null : findItemInView(world);
+  world.itemInView = inView;
+  const grabId = inView && world.input.interactPressed && !world.lootOpen ? inView.id : null;
 
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
     const item = world.groundItems[i]!;
@@ -63,35 +87,56 @@ export function tick(world: World, dt: number): void {
       continue;
     }
 
-    // 버린 직후에는 자석이 물지 않는다 (버리자마자 도로 주워지는 것을 막는다)
+    // 튕겨 돌아가는 중 — 몸 앞에서 원자리로 포물선 (가방이 가득이었다)
+    if ((item.bounceTicks ?? 0) > 0) {
+      const b = balance.loot.bounce;
+      item.bounceTicks = (item.bounceTicks ?? 0) - 1;
+      const t = 1 - (item.bounceTicks ?? 0) / Math.max(1, b.ticks);
+      const fromX = item.bounceFromX ?? item.x;
+      const fromZ = item.bounceFromZ ?? item.z;
+      const ox = item.originX ?? item.x;
+      const oz = item.originZ ?? item.z;
+      const rest = restHeight(item.kind);
+      const y0 = item.bounceY0 ?? rest;
+      item.x = fromX + (ox - fromX) * t;
+      item.z = fromZ + (oz - fromZ) * t;
+      item.y = y0 + (rest - y0) * t + b.popUp * Math.sin(Math.PI * t);
+      if ((item.bounceTicks ?? 0) <= 0) {
+        item.bounceTicks = undefined;
+        item.bounceFromX = undefined;
+        item.bounceFromZ = undefined;
+        item.bounceY0 = undefined;
+        item.x = ox;
+        item.z = oz;
+        item.y = undefined;
+        item.noMagnetTicks = balance.items.dropNoMagnetTicks; // 바로 다시 집으려 들지 않게
+        world.events.emit('pickup_bounced', { kind: item.kind, x: item.x, z: item.z });
+      }
+      continue;
+    }
+
+    // 버린 직후에는 자석·집기가 물지 않는다 (버리자마자 도로 주워지는 것을 막는다)
     if (item.noMagnetTicks && item.noMagnetTicks > 0) {
       item.noMagnetTicks--;
       continue;
     }
     if (!item.magnet) {
-      const radius =
-        item.kind === 'gold' || item.kind === 'key' ||
-        item.kind === 'ammo' || item.kind === 'grenade' || item.kind === 'battery'
-          ? cfg.gold.magnetRadius
-          : item.kind === 'arrow'
-            ? cfg.arrow.magnetRadius
-            : item.kind === 'mana'
-            ? cfg.manaPotion.magnetRadius
-            : item.kind === 'food'
-              ? cfg.food.magnetRadius
-              : cfg.potion.magnetRadius;
-      if (Math.hypot(p.x - item.x, p.z - item.z) > radius) continue;
-      // 가방이 가득이면 걸리지 않는다 — 자리가 날 때 오라고 남겨둔다.
-      // 다만 코앞까지 왔는데 아무 반응이 없으면 "왜 안 주워지지"가 되므로 한 번 알린다
-      if (!wants(world, item.kind)) {
-        // 화살통과 가방은 다른 물건이다 — 같은 안내를 쓰면
-        // "가방을 비우라"는 엉뚱한 말을 화살 위에서 듣게 된다
-        if (item.kind === 'arrow') quiverBlocked = true;
-        else blocked = true;
-        continue;
+      if (CONSUMABLE_KINDS.has(item.kind)) {
+        // 소모품은 손으로 — 바라보며 E. 가방이 가득이어도 일단 날아온다(튕겨 돌아가는 것이 안내다)
+        if (grabId !== item.id) continue;
+      } else {
+        const radius = item.kind === 'arrow' ? cfg.arrow.magnetRadius : cfg.gold.magnetRadius;
+        if (Math.hypot(p.x - item.x, p.z - item.z) > radius) continue;
+        // 화살통이 가득이면 걸리지 않는다 — 자리가 날 때 오라고 남겨둔다. 코앞에서 아무 반응이
+        // 없으면 "왜 안 주워지지"가 되므로 한 번 알린다
+        if (!wants(world, item.kind)) {
+          if (item.kind === 'arrow') quiverBlocked = true;
+          else blocked = true;
+          continue;
+        }
       }
       item.magnet = true;
-      item.originX = item.x; // 놓여 있던 자리 — 획득 표기가 여기서 뜬다 (비행 후엔 잃는다)
+      item.originX = item.x; // 놓여 있던 자리 — 획득 표기가 여기서 뜨고, 튕기면 여기로 돌아간다
       item.originZ = item.z;
       item.y = restHeight(item.kind) + mag.popUp; // 살짝 튀어오르며 출발
       item.speed = mag.startSpeed;
@@ -159,14 +204,13 @@ export function tick(world: World, dt: number): void {
       world.events.emit('battery_picked', { spares: world.lantern.spares });
       continue;
     }
-    // 소모품 — 가방으로. 자석에 걸린 뒤에 가방이 차 버렸으면 발밑에 도로 놓는다
+    // 소모품 — 가방으로. 가방이 가득이면 몸까지 왔다가 원자리로 튕겨 돌아간다 (연출·소리는 main 이 pickup_bounced 로)
     if (!addItem(world, item.kind as ItemKind)) {
       item.magnet = false;
-      item.x = p.x;
-      item.z = p.z;
-      item.y = restHeight(item.kind);
-      item.noMagnetTicks = balance.items.dropNoMagnetTicks;
-      world.events.emit('inventory_full', { kind: item.kind });
+      item.bounceTicks = balance.loot.bounce.ticks;
+      item.bounceFromX = item.x;
+      item.bounceFromZ = item.z;
+      item.bounceY0 = item.y ?? restHeight(item.kind);
       continue;
     }
     world.groundItems.splice(i, 1);
