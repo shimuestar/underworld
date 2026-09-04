@@ -7,7 +7,7 @@
 // 다시 주우면 그대로 쓸 수 있다. 칸을 기억하면 물약 하나 쓸 때마다 Tab 을 열어야 한다.
 
 import { balance } from './Balance';
-import { ITEM_KINDS, type InventorySlot, type ItemKind, type World } from './World';
+import { findFreeSpot, ITEM_KINDS, type InventorySlot, type ItemKind, type World } from './World';
 
 export interface ItemDef {
   name: string;
@@ -127,10 +127,10 @@ export function takeItem(world: World, kind: ItemKind): boolean {
 
 /** 버린 아이템 id 대역 — 처치 드랍(500000~)·각인(800000~)·상자 골드(900000~)와 겹치지 않게 */
 let nextDropId = 700000;
-const DROP_SCATTER = 0.8;
 
-/** 한 칸을 통째로 발밑에 버린다. 버린 직후에는 자석이 물지 않는다 —
- *  안 그러면 버리자마자 도로 주워져 가방을 비울 수가 없다 */
+/** 한 칸을 통째로 발밑에 버린다. 버린 직후에는 자석·집기가 물지 않는다 —
+ *  안 그러면 버리자마자 도로 주워져 가방을 비울 수가 없다.
+ *  한 개씩 둥글게 놓되 다른 바닥 아이템과 겹치지 않는 자리를 고른다(items.dropSpacing) */
 export function dropSlot(world: World, index: number): void {
   const slot = world.inventory[index];
   if (!slot) return;
@@ -138,11 +138,12 @@ export function dropSlot(world: World, index: number): void {
   const p = world.player;
   for (let i = 0; i < slot.count; i++) {
     const angle = (i / slot.count) * Math.PI * 2;
+    const at = findFreeSpot(world, p.x, p.z, balance.items.dropScatter, balance.items.dropSpacing, angle);
     world.groundItems.push({
       id: nextDropId++,
       kind: slot.kind,
-      x: p.x + Math.cos(angle) * DROP_SCATTER,
-      z: p.z + Math.sin(angle) * DROP_SCATTER,
+      x: at.x,
+      z: at.z,
       noMagnetTicks: balance.items.dropNoMagnetTicks,
     });
   }

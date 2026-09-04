@@ -402,7 +402,21 @@ describe('버리기', () => {
     for (const item of world.groundItems) {
       expect(item.kind).toBe('potion');
       expect(item.noMagnetTicks).toBe(CFG.dropNoMagnetTicks);
-      expect(Math.hypot(item.x - world.player.x, item.z - world.player.z)).toBeLessThan(1.5);
+      expect(Math.hypot(item.x - world.player.x, item.z - world.player.z)).toBeLessThanOrEqual(balance.items.dropScatter * 2.6 + 1e-6);
+    }
+  });
+
+  it('버린 것들은 서로·기존 바닥 아이템과 겹치지 않는다 (items.dropSpacing)', () => {
+    for (let i = 0; i < CFG.stackMax; i++) addItem(world, 'potion');
+    for (let i = 0; i < CFG.stackMax; i++) addItem(world, 'mana');
+    dropSlot(world, 0);
+    dropSlot(world, 1);
+    const items = world.groundItems;
+    expect(items).toHaveLength(CFG.stackMax * 2);
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        expect(Math.hypot(items[i]!.x - items[j]!.x, items[i]!.z - items[j]!.z)).toBeGreaterThanOrEqual(CFG.dropSpacing - 1e-6);
+      }
     }
   });
 

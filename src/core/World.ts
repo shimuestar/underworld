@@ -419,6 +419,37 @@ export interface TrapState {
   rubbleBroken?: boolean;
 }
 
+/** 겹치지 않는 빈 자리 — 중심(cx,cz)에서 startAngle 방향 거리 r 부터, 각도를 좌우로 벌리고 거리를 늘려 가며
+ *  다른 바닥 아이템과 spacing 이상 떨어지고 벽 칸이 아닌 첫 자리를 고른다. 다 실패하면 기본 자리.
+ *  버리기(가방·컨테이너)와 주머니 낙하가 함께 쓴다 — 데이터(spacing·r)는 호출부가 준다 */
+export function findFreeSpot(
+  world: World,
+  cx: number,
+  cz: number,
+  r: number,
+  spacing: number,
+  startAngle: number,
+  skip?: (item: GroundItemState) => boolean,
+): { x: number; z: number } {
+  const cs = world.level.cellSize;
+  const free = (x: number, z: number): boolean =>
+    !world.level.solidAt(Math.floor(x / cs), Math.floor(z / cs)) &&
+    world.groundItems.every(
+      (g) => (skip ? skip(g) : false) || Math.hypot((g.originX ?? g.x) - x, (g.originZ ?? g.z) - z) >= spacing,
+    );
+  const base = { x: cx + Math.sin(startAngle) * r, z: cz + Math.cos(startAngle) * r };
+  if (spacing <= 0 || free(base.x, base.z)) return base;
+  const offsets = [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6, 2.0, -2.0, 2.4, -2.4, Math.PI];
+  for (const mul of [1, 1.5, 2, 2.6]) {
+    for (const off of offsets) {
+      const x = cx + Math.sin(startAngle + off) * r * mul;
+      const z = cz + Math.cos(startAngle + off) * r * mul;
+      if (free(x, z)) return { x, z };
+    }
+  }
+  return base;
+}
+
 /** 전리품 낙하점 — 플레이어 '반대쪽' 호(±arcDeg/2)로만 떨어진다. 죽인·부순·연 자리에서
  *  내 입으로 직행하면 뭘 먹었는지 모른다 — 확인하고 줍는 그림을 만든다 (2026-08-30 공통 규칙) */
 export function scatterAwayFromPlayer(

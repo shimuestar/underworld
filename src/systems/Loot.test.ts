@@ -425,8 +425,16 @@ describe('넣기·버리기·닫기', () => {
     expect(potions).toHaveLength(3);
     for (const g of potions) {
       expect(g.noMagnetTicks).toBe(balance.items.dropNoMagnetTicks);
-      expect(Math.hypot(g.x - 12, g.z - 8)).toBeCloseTo(L.dropScatter, 5);
+      const d = Math.hypot(g.x - 12, g.z - 8);
+      expect(d).toBeGreaterThanOrEqual(L.dropScatter - 1e-6);
+      expect(d).toBeLessThanOrEqual(L.dropScatter * 2.6 + 1e-6);
       expect(g.id).toBeGreaterThanOrEqual(1200000);
+    }
+    // 서로 겹치지 않는다 — 다른 바닥 아이템과 dropSpacing 이상
+    for (let i = 0; i < potions.length; i++) {
+      for (let j = i + 1; j < potions.length; j++) {
+        expect(Math.hypot(potions[i]!.x - potions[j]!.x, potions[i]!.z - potions[j]!.z)).toBeGreaterThanOrEqual(L.dropSpacing - 1e-6);
+      }
     }
     expect(Loot.dropToFloor(world, 'container', 0)).toBe(true); // 이제 0번이 골드
     const gold = world.groundItems.filter((g) => g.kind === 'gold');

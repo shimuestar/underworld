@@ -15,6 +15,7 @@ import { enemyDef } from '../core/Entities';
 import { addItem, dropSlot, hasRoom, itemDef } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
 import {
+  findFreeSpot,
   scatterAwayFromPlayer,
   type GroundItemState,
   type ItemKind,
@@ -423,8 +424,13 @@ export function dropToFloor(world: World, side: 'container' | 'bag', index: numb
   if (!e || !e.searched) return false; // 모르는 것을 버릴 수는 없다
   c.entries.splice(index, 1);
   const grace = balance.items.dropNoMagnetTicks;
+  // 컨테이너에서 플레이어 반대쪽으로, 다른 바닥 아이템과 겹치지 않는 자리에 한 개씩 (loot.dropSpacing)
+  const away = Math.hypot(c.x - world.player.x, c.z - world.player.z) > 0.001
+    ? Math.atan2(c.x - world.player.x, c.z - world.player.z)
+    : Math.random() * Math.PI * 2;
+  const halfArc = ((balance.pickups.awayArcDeg / 2) * Math.PI) / 180;
   const spot = (): { x: number; z: number } =>
-    scatterAwayFromPlayer(world, c.x, c.z, balance.loot.dropScatter, balance.pickups.awayArcDeg);
+    findFreeSpot(world, c.x, c.z, balance.loot.dropScatter, balance.loot.dropSpacing, away + (Math.random() - 0.5) * 2 * halfArc);
   if (e.kind === 'gold') {
     const at = spot();
     world.groundItems.push({ id: nextLootId++, kind: 'gold', amount: e.count, x: at.x, z: at.z, noMagnetTicks: grace });
