@@ -293,8 +293,9 @@ lootUI.onClose = () => {
   setUiOpen(false);
 };
 events.on('loot_opened', (payload) => {
-  const info = payload as { kind: 'pouch' | 'chest' };
-  audio.play(info.kind === 'chest' ? 'chest_opened' : 'pouch_open');
+  const info = payload as { kind: 'pouch' | 'chest'; first?: boolean };
+  // 상자를 처음 여는 소리는 chest_opened 가 낸다 — 다시 뒤질 때와 주머니는 가죽 스침
+  if (info.kind === 'pouch' || info.first === false) audio.play('pouch_open');
   padRumble('interact');
   inventoryUI.hide();
   skillUI.hide();
@@ -1548,13 +1549,11 @@ events.on('explosion', (payload) => {
   audio.play('explosion');
   stage.spawnExplosion(info.x, info.y, info.z, info.radius);
 });
-// 보물상자 — 골드 무더기와 각인 하나가 쏟아진다
-events.on('chest_opened', (payload) => {
+// 보물상자 — 뚜껑이 열리고(1회) 루팅 창이 뜬다. 무엇이 들었는지는 창이 보여 준다
+events.on('chest_opened', () => {
   padRumble('interact');
-  const info = payload as { gold: number; sigilId: string | null };
   audio.play('chest_opened');
-  const sigil = info.sigilId ? ` · ${sigilDef(info.sigilId).name} 스킬` : '';
-  showReaction(`보물상자 — ◆ ${info.gold}${sigil}`, 2600);
+  showReaction('보물상자를 열었다 — 안을 뒤진다', 1600);
 });
 // 날아오던 것을 공중에서 깼다 — 바위가 파편으로 흩어진다
 const PROJECTILE_DEBRIS_COLORS: Record<string, number> = { rock: 0x6b675e, web: 0xe6e9e0 };
@@ -2420,8 +2419,7 @@ function respawnAtAltar(): void {
     level.clearPathBlocked(trap.col, trap.row); // 잔해가 막던 경로도 되돌린다
   }
   world.traps = spawnTraps(levelJson.entities, level);
-  for (const chest of world.chests) if (chest.blocker) level.removeBlocker(chest.blocker);
-  world.chests = spawnChests(levelJson.entities, level);
+  // 상자는 다시 잠기지 않는다 — 안에 남긴 것도 그대로다 (2026-09-04, 컨테이너). 재롤 파밍도 없다
   world.chestInView = null;
   world.projectiles.length = 0;
   world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
@@ -3675,7 +3673,7 @@ function render(alpha: number): void {
       `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
       `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
   } else if (nearChest) {
-    altarPrompt!.textContent = `${IK} — 보물상자를 연다`;
+    altarPrompt!.textContent = `${IK} — ${world.chestInView!.opened ? '보물상자를 뒤진다' : '보물상자를 연다'}`;
   } else if (nearLoot) {
     altarPrompt!.textContent = `${IK} — ${Loot.titleOf(world, world.lootInView!)}를 뒤진다`;
   } else if (nearLever) {

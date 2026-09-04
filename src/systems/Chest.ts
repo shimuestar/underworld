@@ -1,18 +1,16 @@
-// 보물상자 — E로 한 번 열면 골드 한 무더기와 각인 하나가 쏟아진다.
+// 보물상자 — E 로 뚜껑을 열면(1회 롤) 루팅 창이 열린다. 안에는 골드 한 줄과 각인 하나.
 //
 // 제단·문과 같은 상호작용 규약: 반경 안 + 상자를 보고 있어야 E가 먹는다
 // (등지고 서 있는데 열리면 "왜 열렸지"가 된다).
-// 전리품은 손에 바로 쥐여 주지 않고 바닥에 흩뿌린다 — 줍는 맛과 자석 연출을
-// Pickups·Sigils 가 이미 갖고 있어서, 상자만의 획득 경로를 새로 만들 이유가 없다.
+// 2026-09-04: 바닥에 흩뿌리지 않는다 — 상자는 컨테이너다(chestItems). 가져가는 규칙은
+// systems/Loot(takeOne·takeAll·stash·dropToFloor)이 주머니와 똑같이 처리하고, 각인 줄은
+// 가져가는 순간 Sigils 가 loot_taken 을 받아 습득한다. 남긴 것은 상자에 그대로 있고,
+// 다 비운 상자는 뚜껑 열린 채 남되 대상에서 빠진다. 부활해도 다시 잠기지 않는다.
 
 import { balance } from '../core/Balance';
 import { sigilDef } from '../core/SigilData';
 import sigilsJson from '../../data/sigils.json';
-import { scatterAwayFromPlayer, type ChestState, type World } from '../core/World';
-
-// 다른 드랍과 id 대역을 겹치지 않게 나눈다 (각인 1~ / 픽업 500000~)
-let nextGoldId = 900000;
-let nextSigilId = 800000;
+import type { ChestState, LootEntry, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   const cfg = balance.chest;
@@ -24,7 +22,7 @@ export function tick(world: World, _dt: number): void {
   let target: ChestState | null = null;
   let best = Infinity;
   for (const chest of world.chests) {
-    if (chest.opened) continue;
+    if (chest.opened && (chest.chestItems?.length ?? 0) === 0) continue; // 다 비운 상자 — 열린 채 남는다
     const toX = chest.x - p.x;
     const toZ = chest.z - p.z;
     const dist = Math.hypot(toX, toZ);
@@ -35,61 +33,28 @@ export function tick(world: World, _dt: number): void {
   }
   world.chestInView = target;
 
-  if (target && world.input.interactPressed) open(world, target);
+  // 닫은 E 가 다음 틱에 도로 열지 않게 — 주머니와 같은 가드(Loot.closeLoot 가 건다)
+  if (target && world.input.interactPressed && world.lootReopenGuard === 0) open(world, target);
 }
 
+/** 처음이면 뚜껑을 열고 안을 1회 롤한다. 언제든(남은 게 있으면) 루팅 창을 연다 */
 export function open(world: World, chest: ChestState): void {
-  if (chest.opened) return;
-  const cfg = balance.chest;
-  chest.opened = true;
-
-  // 골드 — 한 덩어리로 주면 그냥 숫자가 오르고 끝이다. 여러 무더기로 쏟아
-  // 자석이 하나씩 빨아들이는 그림을 만든다
-  const span = Math.max(0, cfg.gold.max - cfg.gold.min);
-  const total = cfg.gold.min + Math.round(Math.random() * span);
-  const piles = Math.max(1, cfg.goldPiles);
-  let left = total;
-  for (let i = 0; i < piles; i++) {
-    const amount = i === piles - 1 ? left : Math.round(total / piles);
-    left -= amount;
-    if (amount <= 0) continue;
-    // 플레이어 반대쪽으로 흩어지고, 바닥에 놓인 뒤에야 자석이 문다 (공통 드랍 규칙)
-    const r = cfg.scatterRadius * (0.4 + Math.random() * 0.6);
-    const at = scatterAwayFromPlayer(world, chest.x, chest.z, r, balance.pickups.awayArcDeg);
-    world.groundItems.push({
-      id: nextGoldId++,
-      kind: 'gold',
-      amount,
-      x: at.x,
-      z: at.z,
-      noMagnetTicks: balance.pickups.landNoMagnetTicks,
-    });
+  if (world.lootOpen) return;
+  const first = !chest.opened;
+  if (first) {
+    const cfg = balance.chest;
+    chest.opened = true;
+    const span = Math.max(0, cfg.gold.max - cfg.gold.min);
+    const total = cfg.gold.min + Math.round(Math.random() * span);
+    const entries: LootEntry[] = [{ kind: 'gold', count: total }];
+    // 각인 하나 — 아직 없는 것 중에서 뽑는다. 가져가는 순간(loot_taken) Sigils 가 습득시킨다
+    const sigilId = rollSigil(world);
+    if (sigilId) entries.push({ kind: 'sigil', count: 1, sigilId });
+    chest.chestItems = entries;
+    world.events.emit('chest_opened', { id: chest.id, x: chest.x, z: chest.z, gold: total, sigilId });
   }
-
-  // 각인 하나 — 아직 없는 것 중에서 뽑는다
-  const sigilId = rollSigil(world);
-  if (sigilId) {
-    const at = scatterAwayFromPlayer(
-      world, chest.x, chest.z, cfg.scatterRadius * 0.6, balance.pickups.awayArcDeg,
-    );
-    world.groundItems.push({
-      id: nextSigilId++,
-      kind: 'sigil',
-      sigilId,
-      x: at.x,
-      z: at.z,
-      noMagnetTicks: balance.pickups.landNoMagnetTicks,
-    });
-    world.events.emit('sigil_dropped', { id: sigilId });
-  }
-
-  world.events.emit('chest_opened', {
-    id: chest.id,
-    x: chest.x,
-    z: chest.z,
-    gold: total,
-    sigilId,
-  });
+  world.lootOpen = { kind: 'chest', id: chest.id };
+  world.events.emit('loot_opened', { kind: 'chest', id: chest.id, entries: chest.chestItems?.length ?? 0, first });
 }
 
 /** 뽑을 각인 — 이미 가진 것은 뺀다. 이 빌드에서 실제로 효과가 도는

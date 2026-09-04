@@ -51,6 +51,12 @@ export function init(world: World): void {
     if (!enemyDef(enemyType).dropsOnDeath) return;
     dropAll(world, enemyType, x, z);
   });
+
+  // 상자 안 각인 — 루팅 창에서 가져가는 순간 습득한다 (Loot 는 각인 규칙을 모른다, 2026-09-04)
+  world.events.on('loot_taken', (payload) => {
+    const t = payload as { kind: string; sigilId?: string };
+    if (t.kind === 'sigil' && t.sigilId) acquire(world, t.sigilId);
+  });
 }
 
 /** 바닥 각인 줍기 — 접근하면 자동 획득. 스킬 교체 입력도 여기서 받는다 */

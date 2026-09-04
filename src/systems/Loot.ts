@@ -175,7 +175,11 @@ export function tick(world: World, _dt: number): void {
     best = item;
     bestDist = dist;
   }
-  if (world.chestInView) best = null; // 상자가 우선
+  // 상자가 우선 — 상자(Chest.tick, 이 앞)가 대상이면 그것이 lootInView 다 (열기도 Chest 가 한다)
+  if (world.chestInView) {
+    world.lootInView = { kind: 'chest', id: world.chestInView.id };
+    return;
+  }
   world.lootInView = best ? { kind: 'pouch', id: best.id } : null;
   if (world.lootOpen || !best) return;
   if (world.input.interactPressed && world.lootReopenGuard === 0) {

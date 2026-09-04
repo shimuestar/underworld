@@ -10,6 +10,7 @@ import { World, type ChestState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnChests } from '../level/Spawner';
 import * as Chest from './Chest';
+import * as Loot from './Loot';
 import * as Sigils from './Sigils';
 
 const DT = 1 / 60;
@@ -96,54 +97,74 @@ describe('상호작용', () => {
     expect(chest.opened).toBe(false);
   });
 
-  it('한 번 열면 끝 — 두 번째 E 는 아무 일도 없다', () => {
-    putChest(world, 6 + 1.5, 6);
+  it('처음 E — 뚜껑이 열리고(1회 롤) 루팅 창이 열린다. 닫고 다시 E 하면 재롤 없이 다시 열리고, 다 비우면 대상에서 빠진다', () => {
+    const chest = putChest(world, 6 + 1.5, 6);
+    const opened: unknown[] = [];
+    world.events.on('chest_opened', (p) => opened.push(p));
+    const lootOpened: { first?: boolean }[] = [];
+    world.events.on('loot_opened', (p) => lootOpened.push(p as { first?: boolean }));
     interact(world);
-    const loot = world.groundItems.length;
-    expect(loot).toBeGreaterThan(0);
+    expect(chest.opened).toBe(true);
+    expect(world.groundItems).toHaveLength(0); // 바닥에 흩어지지 않는다
+    expect(world.lootOpen).toEqual({ kind: 'chest', id: chest.id });
+    expect(opened).toHaveLength(1);
+    expect(lootOpened).toEqual([expect.objectContaining({ kind: 'chest', first: true })]);
+    const items = JSON.stringify(chest.chestItems);
 
+    Loot.closeLoot(world);
+    interact(world); // 닫은 E 가 새 틱에 들어와도 가드가 막는다
+    expect(world.lootOpen).toBeNull();
+    for (let i = 0; i <= balance.loot.pouch.reopenGuardTicks; i++) Loot.tick(world, DT);
     interact(world);
-    expect(world.groundItems).toHaveLength(loot); // 더 쏟아지지 않는다
+    expect(world.lootOpen).toEqual({ kind: 'chest', id: chest.id });
+    expect(opened).toHaveLength(1); // 재롤 없다
+    expect(JSON.stringify(chest.chestItems)).toBe(items);
+    expect(lootOpened[1]!.first).toBe(false);
+
+    Loot.takeAll(world);
+    Loot.closeLoot(world);
+    for (let i = 0; i <= balance.loot.pouch.reopenGuardTicks; i++) Loot.tick(world, DT);
     Chest.tick(world, DT);
-    expect(world.chestInView).toBeNull(); // 안내도 사라진다
+    expect(world.chestInView).toBeNull(); // 다 비운 상자 — 안내도 사라진다
+    expect(chest.opened).toBe(true); // 뚜껑은 열린 채 남는다
   });
 });
 
-describe('전리품', () => {
-  it('골드를 여러 무더기로 쏟는다 — 합계는 min~max 안', () => {
+describe('전리품 — 상자 속(chestItems)', () => {
+  it('골드 한 줄 — 합계는 min~max 안이고 chest_opened 의 gold 와 같다', () => {
     const chest = putChest(world, 6 + 1.5, 6);
     const opened: { gold: number }[] = [];
     world.events.on('chest_opened', (p) => opened.push(p as { gold: number }));
     interact(world);
-
-    const piles = world.groundItems.filter((i) => i.kind === 'gold');
-    expect(piles.length).toBe(CFG.goldPiles);
-    const total = piles.reduce((sum, i) => sum + (i.amount ?? 0), 0);
-    expect(total).toBe(opened[0]!.gold);
-    expect(total).toBeGreaterThanOrEqual(CFG.gold.min);
-    expect(total).toBeLessThanOrEqual(CFG.gold.max);
+    const gold = chest.chestItems!.find((e) => e.kind === 'gold')!;
+    expect(gold.count).toBe(opened[0]!.gold);
+    expect(gold.count).toBeGreaterThanOrEqual(CFG.gold.min);
+    expect(gold.count).toBeLessThanOrEqual(CFG.gold.max);
     // 일반 적 드랍(3~9)과는 자릿수가 다르다 — "많은 골드"
     expect(CFG.gold.min).toBeGreaterThan(balance.pickups.gold.max * 10);
-
-    // 상자 주변에 흩어진다 (한 점에 겹치지 않는다)
-    for (const pile of piles) {
-      const d = Math.hypot(pile.x - chest.x, pile.z - chest.z);
-      expect(d).toBeGreaterThan(0);
-      expect(d).toBeLessThanOrEqual(CFG.scatterRadius + 0.001);
-    }
+    // 가져가면 곧장 골드로 — 상자 자리에서 ◆ 팝
+    const golds: { x: number; z: number }[] = [];
+    world.events.on('gold_picked', (g) => golds.push(g as { x: number; z: number }));
+    expect(Loot.takeOne(world, 0)).toBe('taken');
+    expect(world.gold).toBe(opened[0]!.gold);
+    expect(golds[0]).toEqual(expect.objectContaining({ x: chest.x, z: chest.z }));
   });
 
-  it('각인을 정확히 1개 준다', () => {
-    putChest(world, 6 + 1.5, 6);
-    const dropped: { id: string }[] = [];
-    world.events.on('sigil_dropped', (p) => dropped.push(p as { id: string }));
+  it('각인을 정확히 1줄 준다 — 가져가면 Sigils 가 습득시킨다 (바닥에 안 떨어진다)', () => {
+    Sigils.init(world);
+    const chest = putChest(world, 6 + 1.5, 6);
+    const acquired: { id: string }[] = [];
+    world.events.on('sigil_acquired', (p) => acquired.push(p as { id: string }));
     interact(world);
-
-    const sigils = world.groundItems.filter((i) => i.kind === 'sigil');
+    const sigils = chest.chestItems!.filter((e) => e.kind === 'sigil');
     expect(sigils).toHaveLength(1);
-    expect(dropped).toHaveLength(1);
-    expect(sigils[0]!.sigilId).toBe(dropped[0]!.id);
     expect(() => sigilDef(sigils[0]!.sigilId!)).not.toThrow();
+    expect(world.groundItems.some((g) => g.kind === 'sigil')).toBe(false);
+    const idx = chest.chestItems!.indexOf(sigils[0]!);
+    expect(Loot.takeOne(world, idx)).toBe('taken');
+    expect(acquired.map((a) => a.id)).toEqual([sigils[0]!.sigilId]);
+    expect(world.sigils.inventory).toContain(sigils[0]!.sigilId);
+    expect(chest.chestItems!.some((e) => e.kind === 'sigil')).toBe(false);
   });
 
   it('이미 가진 각인은 나오지 않는다', () => {
@@ -154,39 +175,39 @@ describe('전리품', () => {
     world.sigils.inventory.push(...sliceIds.slice(1));
     world.sigils.inventory.push(sliceIds[0]!);
 
-    putChest(world, 6 + 1.5, 6);
+    const chest = putChest(world, 6 + 1.5, 6);
     interact(world);
-    const got = world.groundItems.find((i) => i.kind === 'sigil')!.sigilId!;
+    const got = chest.chestItems!.find((e) => e.kind === 'sigil')!.sigilId!;
     expect(sliceIds).not.toContain(got);
   });
 
   it('이 빌드에서 도는 slice 각인을 먼저 준다', () => {
-    putChest(world, 6 + 1.5, 6);
+    const chest = putChest(world, 6 + 1.5, 6);
     interact(world);
-    const got = world.groundItems.find((i) => i.kind === 'sigil')!.sigilId!;
+    const got = chest.chestItems!.find((e) => e.kind === 'sigil')!.sigilId!;
     expect(sigilDef(got).slice).toBe(true);
   });
 
   it('가진 각인이 24종을 다 채웠으면 골드만 나온다', () => {
     world.sigils.inventory.push(...(sigilsJson.sigils as { id: string }[]).map((s) => s.id));
-    putChest(world, 6 + 1.5, 6);
+    const chest = putChest(world, 6 + 1.5, 6);
     const opened: { sigilId: string | null }[] = [];
     world.events.on('chest_opened', (p) => opened.push(p as { sigilId: string | null }));
     interact(world);
-    expect(world.groundItems.some((i) => i.kind === 'sigil')).toBe(false);
-    expect(world.groundItems.some((i) => i.kind === 'gold')).toBe(true);
+    expect(chest.chestItems!.some((e) => e.kind === 'sigil')).toBe(false);
+    expect(chest.chestItems!.some((e) => e.kind === 'gold')).toBe(true);
     expect(opened[0]!.sigilId).toBeNull();
   });
 
-  it('드랍 id 는 각인·픽업 대역과 겹치지 않는다', () => {
-    putChest(world, 6 + 1.5, 6, 1);
-    putChest(world, 6 - 1.5, 6, 2);
+  it('상자 속을 바닥에 버리면 Loot 대역(1200000~)의 서로 다른 id 로 놓인다', () => {
+    const chest = putChest(world, 6 + 1.5, 6);
     interact(world);
-    world.player.yaw = Math.PI / 2; // 두 번째 상자 쪽을 본다
-    interact(world);
+    while (chest.chestItems!.length > 0) Loot.dropToFloor(world, 'container', 0);
     const ids = world.groundItems.map((i) => i.id);
-    expect(new Set(ids).size).toBe(ids.length); // 전부 다른 id
-    for (const id of ids) expect(id).toBeGreaterThan(500000);
+    expect(ids.length).toBeGreaterThanOrEqual(2); // 골드 + 각인
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(id).toBeGreaterThanOrEqual(1200000);
+    expect(world.groundItems.some((g) => g.kind === 'sigil')).toBe(true);
   });
 });
 
