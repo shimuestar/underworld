@@ -206,8 +206,51 @@ const FIREBALL_COLOR = 0xff7733;
 const GROUND_ITEM_COLOR = 0xe8c76a; // 바닥 각인 — 어둠 속 금색 발광
 // 빛 선 — 바닥에 놓인 아이템·주머니 위로 솟는 밝은 실선 (멀리서도 "저기 뭐가 있다"). 2026-09-04: 굵은 반투명 기둥 → 얇은 밝은 선, 길이 절반
 const PILLAR_HEIGHT = 1.3;
-const PILLAR_RADIUS = 0.014;
-const PILLAR_OPACITY = 0.85;
+const PILLAR_RADIUS = 0.006; // 더 얇고 흐릿하게 (2026-09-04)
+const PILLAR_OPACITY = 0.35;
+// 선 끝의 상호작용 키캡 — HUD 중앙 키캡과 같은 결(어두운 판 + 밝은 테두리 + 굵은 글자). 라벨별 재질을 캐시한다
+const KEYCAP_SIZE = 0.26;
+const KEYCAP_MATS = new Map<string, THREE.SpriteMaterial>();
+function keycapMaterial(label: string): THREE.SpriteMaterial {
+  const cached = KEYCAP_MATS.get(label);
+  if (cached) return cached;
+  const size = 96;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const r = 14;
+    const x = 10;
+    const y = 8;
+    const w = size - 20;
+    const h = size - 22;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(12,14,18,0.88)';
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(216,224,234,0.85)';
+    ctx.stroke();
+    // 아래 테두리를 굵게 — 키캡의 두께감 (HUD #interact-key 와 같은 규약)
+    ctx.fillStyle = 'rgba(216,224,234,0.85)';
+    ctx.fillRect(x + r / 2, y + h - 2, w - r, 6);
+    ctx.fillStyle = '#e8ecf2';
+    ctx.font = `bold ${label.length > 2 ? 30 : 44}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, size / 2, y + h / 2 + 1);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  KEYCAP_MATS.set(label, mat);
+  return mat;
+}
 // 바닥 모형 색 — HUD 아이콘과 어긋나지 않게 balance.items.kinds 를 그대로 읽는다
 const POTION_COLOR = itemColor('potion'); // HP 포션 — 붉은 약병
 const MANA_POTION_COLOR = itemColor('mana'); // 마나 물약 — 푸른 약병
@@ -4653,6 +4696,13 @@ export class Stage {
       pillar.name = 'pillar';
       pillar.position.y = PILLAR_HEIGHT / 2;
       group.add(pillar);
+      // 선 끝의 키캡 — "저건 E 로 집는다". 라벨은 syncGroundItems 가 장치에 맞춰 갈아 끼운다
+      const keycap = new THREE.Sprite(keycapMaterial('E'));
+      keycap.name = 'keycap';
+      keycap.scale.set(KEYCAP_SIZE, KEYCAP_SIZE, 1);
+      keycap.position.y = PILLAR_HEIGHT + KEYCAP_SIZE * 0.6;
+      (keycap.userData as Record<string, unknown>)['label'] = 'E';
+      group.add(keycap);
     }
     return group;
   }
@@ -4751,7 +4801,7 @@ export class Stage {
     }
   }
 
-  syncGroundItems(items: GroundItemState[], focusPouchId?: number): void {
+  syncGroundItems(items: GroundItemState[], focusId?: number, keyLabel = 'E'): void {
     const now = performance.now();
     const seen = new Set<number>();
     for (const item of items) {
@@ -4769,7 +4819,7 @@ export class Stage {
         if (leather) {
           const base = (data['glowBase'] as number | undefined) ?? 0.05;
           const settled = (item.noMagnetTicks ?? 0) <= 0;
-          const focus = item.id === focusPouchId;
+          const focus = item.id === focusId;
           const target = !settled ? 0 : focus ? 0.7 : base + 0.14 * (0.5 + 0.5 * Math.sin(now / 650 + item.id));
           leather.emissiveIntensity += (target - leather.emissiveIntensity) * 0.2;
         }
@@ -4788,13 +4838,27 @@ export class Stage {
       group.position.set(item.x, bob, item.z);
       // 빛 기둥 — 바닥에 놓여 있을 때만(날아오거나 튕기거나 떨어지는 중엔 끈다), 발밑 고정. 바라보는 주머니는 더 밝다
       const pillar = group.getObjectByName('pillar') as THREE.Mesh | undefined;
+      const keycap = group.getObjectByName('keycap') as THREE.Sprite | undefined;
       if (pillar) {
         const resting = !item.magnet && item.y === undefined && (item.bounceTicks ?? 0) <= 0;
+        const focus = item.id === focusId;
         pillar.visible = resting;
         pillar.position.y = PILLAR_HEIGHT / 2 - bob;
         const pm = pillar.material as THREE.MeshBasicMaterial;
-        const focus = item.kind === 'pouch' && item.id === focusPouchId;
-        pm.opacity = focus ? 1 : PILLAR_OPACITY * (0.85 + 0.15 * Math.sin(now / 700 + item.id));
+        pm.opacity = focus ? Math.min(1, PILLAR_OPACITY * 2.2) : PILLAR_OPACITY * (0.85 + 0.15 * Math.sin(now / 700 + item.id));
+        if (keycap) {
+          // 선 끝의 키캡 — 바라보는(집을 수 있는) 것은 또렷하고 크게, 나머지는 흐릿하게 작게
+          keycap.visible = resting;
+          keycap.position.y = PILLAR_HEIGHT + KEYCAP_SIZE * 0.6 - bob;
+          const data = keycap.userData as Record<string, unknown>;
+          if (data['label'] !== keyLabel) {
+            keycap.material = keycapMaterial(keyLabel);
+            data['label'] = keyLabel;
+          }
+          const scale = focus ? KEYCAP_SIZE * 1.25 : KEYCAP_SIZE;
+          keycap.scale.set(scale, scale, 1);
+          keycap.material.opacity = focus ? 1 : 0.45;
+        }
       }
       const gem = group.getObjectByName('gem');
       // 빨려드는 동안은 빠르게 회전하고 살짝 작아진다 (몸으로 들어가는 느낌)

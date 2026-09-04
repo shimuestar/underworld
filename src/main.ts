@@ -3393,7 +3393,12 @@ function render(alpha: number): void {
   stage.syncGoo(world.gooPuddles, balance.goo.lifeTicks);
   stage.syncGhoulHeads(world.ghoulHeads);
   stage.syncProjectiles(world.projectiles, alpha);
-  stage.syncGroundItems(world.groundItems, world.lootInView?.kind === 'pouch' ? world.lootInView.id : undefined);
+  // 바라보는 것(주머니 또는 바닥 소모품)이 밝아지고, 선 끝 키캡은 지금 장치의 상호작용 키를 보여 준다
+  stage.syncGroundItems(
+    world.groundItems,
+    world.lootInView?.kind === 'pouch' ? world.lootInView.id : world.itemInView?.id,
+    keyLabel('interact', 'interact'),
+  );
   stage.syncLifeMotes(world.lifeMotes);
   stage.syncBarrels(world.barrels);
   stage.syncProps(world.props);
