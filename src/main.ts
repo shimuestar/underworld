@@ -276,6 +276,11 @@ window.addEventListener('keydown', (e) => {
 events.on('player_died', () => console.log('[metrics] 사망 시점 스냅샷', metrics.snapshot(world)));
 events.on('zone_cleared', () => console.log('[metrics] 클리어 스냅샷', metrics.snapshot(world)));
 const inventoryUI = new InventoryUI(world); // I — 가방·소모품
+// 보관 주머니 — 가방 창에서 빈 주머니를 발밑에 내려놓고 곧장 루팅 창으로 (loot_opened 가 창을 연다)
+inventoryUI.onPlacePouch = () => {
+  inventoryUI.hide();
+  Loot.createPlayerPouch(world);
+};
 const skillUI = new SkillUI(world); // Tab — 스킬 (부위 부착 · 퀵슬롯)
 const shopUI = new ShopUI(world);
 /** UI 오버레이 열기/닫기 — 닫을 때 포인터 락을 바로 되찾는다.
@@ -571,6 +576,8 @@ for (const name of [
   'friendly_fire_kill',
   'sigil_dropped',
   'pouch_dropped',
+  'pouch_landed',
+  'pouch_placed',
   'loot_opened',
   'loot_closed',
   'loot_taken',
@@ -1358,8 +1365,14 @@ events.on('ghoul_ate_mote', () => audio.play('hit_flesh'));
 // 슬라임 식탐 — 삼킬 때 꿀꺽 (게워 내는 건 죽음 파편·자석 픽업이 이미 요란하다).
 // 예고음(slime_windup) 재활용은 공격 신호와 헷갈려서 전용 삼킴음으로 갈랐다
 events.on('slime_ate', (payload) => {
-  const at = payload as { x: number; z: number };
+  const at = payload as { x: number; z: number; kind: string };
   audio.play('slime_gulp', panAt(at.x, at.z));
+  // 주머니를 통째로 삼켰다 — 전리품이 사라진 게 아니다. 노란 핵이 그 표시고, 죽이면 게워 낸다
+  if (at.kind === 'pouch') showReaction('슬라임이 주머니를 먹었다 — 죽이면 게워 낸다', 2200);
+});
+events.on('slime_spilled', (payload) => {
+  const sp = payload as { count: number };
+  showReaction(`슬라임이 먹은 것 ${sp.count}개를 게워 냈다`, 1600);
 });
 // 새끼 사출 — 머리에서 한 마리씩 튀어나올 때마다 철퍽
 events.on('brood_pop', (payload) => {
@@ -2125,11 +2138,13 @@ events.on('loot_taken', (payload) => {
   padRumble('pickup');
 });
 events.on('loot_stashed', () => audio.play('loot_stash'));
-// 주머니가 떨어졌다 — 자루가 돌바닥에 툭 (시체 자리에서 들린다)
-events.on('pouch_dropped', (payload) => {
-  const d = payload as { x: number; z: number };
+// 주머니가 바닥에 닿았다 — 자루가 돌바닥에 툭, 먼지가 낮게 인다 (안착 시간이 끝나는 틱)
+events.on('pouch_landed', (payload) => {
+  const d = payload as { x: number; z: number; tier: 'normal' | 'boss' };
   audio.play('thud', panAt(d.x, d.z));
+  stage.spawnDust(d.x, d.z, d.tier === 'boss' ? 1.6 : 1);
 });
+events.on('pouch_placed', () => showReaction('주머니를 내려놓았다 — 넣어 둔 것은 이 자리에 남는다', 2000));
 // 가방이 가득 — 집으려던 소모품이 몸까지 왔다가 튕겨 돌아가 떨어졌다
 events.on('pickup_bounced', (payload) => {
   const d = payload as { x: number; z: number };
@@ -3014,6 +3029,8 @@ function simulate(dt: number): void {
     else if (input.gamepad.rawPressed(0)) shopUI.padBuy(); // A
     else if (input.gamepad.rawPressed(1)) shopUI.padClose(); // B
   }
+  // 가방 창 — 패드 Y = 보관 주머니 내려놓기 (가방 창엔 다른 패드 조작이 없다)
+  if (inventoryUI.open && input.gamepad.connected && input.gamepad.rawPressed(3)) inventoryUI.onPlacePouch?.();
   // 루팅 창 — D-패드 네 방향(←→ 로 칸 전환), A 가져오기/넣기, X 모두, Y 바닥에 버리기, B 닫기
   if (lootUI.open && input.gamepad.connected) {
     lootUI.padMode = input.usingPad;
@@ -3389,7 +3406,7 @@ function render(alpha: number): void {
   stage.syncGoo(world.gooPuddles, balance.goo.lifeTicks);
   stage.syncGhoulHeads(world.ghoulHeads);
   stage.syncProjectiles(world.projectiles, alpha);
-  stage.syncGroundItems(world.groundItems);
+  stage.syncGroundItems(world.groundItems, world.lootInView?.kind === 'pouch' ? world.lootInView.id : undefined);
   stage.syncLifeMotes(world.lifeMotes);
   stage.syncBarrels(world.barrels);
   stage.syncProps(world.props);

@@ -9,7 +9,9 @@
 // Space·Shift 는 일부러 안 쓴다 — 전투에서 가장 많이 두들기는 키라 오조작이 난다 (ShopUI 와 같다).
 
 import { balance } from '../core/Balance';
-import type { LootEntry, World } from '../core/World';
+import { countOf, isUseful, itemDef } from '../core/Inventory';
+import { sigilDef } from '../core/SigilData';
+import type { ItemKind, LootEntry, World } from '../core/World';
 import * as Loot from '../systems/Loot';
 import { itemIconSvg, lootIconSvg } from './ItemIcons';
 
@@ -193,6 +195,12 @@ export class LootUI {
     columns.appendChild(this.buildBag());
     panel.appendChild(columns);
 
+    // 툴팁 — 커서 아래 것이 무엇이고 지금 쓸 값어치가 있는지 한 줄로
+    const tip = document.createElement('div');
+    tip.textContent = this.describeCursor(c);
+    tip.style.cssText = 'margin-top:12px;min-height:20px;color:#a9b0bc;border-top:1px solid #23232b;padding-top:8px;white-space:pre-line;';
+    panel.appendChild(tip);
+
     const buttons = document.createElement('div');
     buttons.style.cssText = 'display:flex;gap:10px;margin-top:16px;';
     const takeAllBtn = this.button(`모두 가져오기 (${this.padMode ? 'X' : 'T'})`, () => this.takeAll(), c.entries.length > 0);
@@ -210,6 +218,41 @@ export class LootUI {
 
     this.root.replaceChildren(panel);
     this.playFx();
+  }
+
+  /** 커서 아래 아이템 설명 — 소모품은 효과·유용성·가방 수, 골드·화살은 어디에 쓰는지, 각인은 설명 */
+  private describeCursor(c: Loot.Container): string {
+    const world = this.world;
+    const consumable = (kind: ItemKind, where: string): string => {
+      const def = itemDef(kind);
+      const parts: string[] = [];
+      if (def.heal > 0) parts.push(`체력 +${def.heal}`);
+      if (def.restore > 0) parts.push(`마나 +${def.restore}`);
+      if (def.regen) {
+        const total = Math.round(def.regen.healPerTick * def.regen.durationTicks);
+        parts.push(`${Math.round(def.regen.durationTicks / 60)}초 지속 회복(총 +${total}) · 스태미너 회복 ×${def.regen.staminaRegenMul}`);
+      }
+      const useful = isUseful(world, kind) ? '지금 쓸 값어치 있음' : '지금은 가득 — 쓸 값어치 없음';
+      return `▸ ${def.name}${where} — ${parts.join(', ')} · ${useful} · 가방에 ${countOf(world, kind)}개`;
+    };
+    if (this.pane === 'container') {
+      const e = c.entries[this.selC];
+      if (!e) return '';
+      if (e.kind === 'gold') return `▸ 골드 ×${e.count} — 제단 상점에서 체력·마나·탄약·수류탄·배터리를 산다 · 소지 ◆ ${world.gold}`;
+      if (e.kind === 'arrow') {
+        const have = world.weapon.arrows ?? 0;
+        const max = balance.weapons.bow.ammoMax;
+        return `▸ 화살 ×${e.count} — 활 탄약 · 화살통 ${have}/${max}${have >= max ? ' (가득 — 들어갈 자리가 없다)' : ''}`;
+      }
+      if (e.kind === 'sigil') {
+        const def = e.sigilId ? sigilDef(e.sigilId) : null;
+        return def ? `▸ ${def.name} (각인) — ${def.desc ?? ''} · 가져가면 곧바로 몸에 새겨진다` : '▸ 각인';
+      }
+      return consumable(e.kind, ` ×${e.count}`);
+    }
+    const slot = world.inventory[this.selB];
+    if (!slot) return '▸ 빈 칸 — 컨테이너에서 가져온 것이 여기 들어온다';
+    return consumable(slot.kind, ` ×${slot.count} (내 가방)`) + ' · Enter/A 로 컨테이너에 넣는다';
   }
 
   private button(label: string, onClick: () => void, enabled: boolean): HTMLButtonElement {

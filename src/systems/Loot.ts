@@ -110,13 +110,34 @@ export function init(world: World): void {
   });
 }
 
-/** 컨테이너 제목 — 주머니는 '고블린 러너의 주머니', 섞였으면 '전리품 주머니', 상자는 '보물상자' */
+/** 플레이어가 내려놓은 보관 주머니의 주인 표기 */
+export const PLAYER_OWNER = 'player';
+
+/** 컨테이너 제목 — 주머니는 '고블린 러너의 주머니', 섞였으면 '전리품 주머니', 내가 놓았으면 '내 주머니', 상자는 '보물상자' */
 export function titleOf(world: World, ref: LootRef): string {
   if (ref.kind === 'chest') return '보물상자';
   const pouch = world.groundItems.find((g) => g.id === ref.id);
   const owner = pouch?.pouchOwner;
   if (!owner) return '전리품 주머니';
+  if (owner === PLAYER_OWNER) return '내 주머니';
   return `${enemyDef(owner).name ?? owner}의 주머니`;
+}
+
+/** 보관 주머니 — 가방 창에서 빈 주머니를 발밑(정면 placeAhead)에 내려놓고 곧장 열어 준다.
+ *  넣어 둔 것은 층을 오가도·부활해도 그 자리에 남는다(다른 주머니와 같은 규칙). 비운 채 닫으면 사라진다 */
+export function createPlayerPouch(world: World): GroundItemState {
+  const p = world.player;
+  const ahead = balance.loot.pouch.placeAhead;
+  const pouch: GroundItemState = {
+    id: nextLootId++, kind: 'pouch',
+    x: p.x - Math.sin(p.yaw) * ahead, z: p.z - Math.cos(p.yaw) * ahead,
+    pouchItems: [], pouchTier: 'normal', pouchOwner: PLAYER_OWNER, noMagnetTicks: 0,
+  };
+  world.groundItems.push(pouch);
+  world.events.emit('pouch_placed', { id: pouch.id, x: pouch.x, z: pouch.z });
+  world.lootOpen = { kind: 'pouch', id: pouch.id };
+  world.events.emit('loot_opened', { kind: 'pouch', id: pouch.id, entries: 0, first: true });
+  return pouch;
 }
 
 /** 줄 이름 — UI·안내 공용 */
@@ -165,6 +186,10 @@ export function tick(world: World, _dt: number): void {
     if (item.kind !== 'pouch') continue;
     if ((item.noMagnetTicks ?? 0) > 0) {
       item.noMagnetTicks = (item.noMagnetTicks ?? 0) - 1; // 안착 중 — Pickups 는 주머니를 건너뛰므로 여기서 센다
+      if (item.noMagnetTicks === 0) {
+        // 툭 — 자루가 바닥에 닿았다 (소리·먼지는 main). 병합으로 다시 안착해도 다시 난다
+        world.events.emit('pouch_landed', { id: item.id, x: item.x, z: item.z, tier: item.pouchTier ?? 'normal' });
+      }
       continue;
     }
     const toX = item.x - p.x;

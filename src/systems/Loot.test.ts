@@ -148,6 +148,46 @@ describe('주머니 드랍', () => {
   });
 });
 
+describe('안착·보관 주머니', () => {
+  it('안착이 끝나는 틱에 pouch_landed 가 한 번 난다 — 병합으로 다시 안착하면 다시 난다', () => {
+    const p = pouchAt(world, 14, 10, [{ kind: 'gold', count: 1 }], L.pouch.settleTicks);
+    const ev: unknown[] = [];
+    world.events.on('pouch_landed', (x) => ev.push(x));
+    tickLoot(world, L.pouch.settleTicks - 1);
+    expect(ev).toHaveLength(0);
+    tickLoot(world, 1);
+    expect(ev).toEqual([{ id: p.id, x: 14, z: 10, tier: 'normal' }]);
+    tickLoot(world, 10);
+    expect(ev).toHaveLength(1);
+    p.noMagnetTicks = L.pouch.settleTicks; // 병합 — 다시 안착
+    tickLoot(world, L.pouch.settleTicks);
+    expect(ev).toHaveLength(2);
+  });
+
+  it('가방 창의 보관 주머니 — 정면 발밑에 빈 주머니가 놓이고 곧장 열린다. 넣은 건 남고, 비운 채 닫으면 사라진다', () => {
+    const ev: string[] = [];
+    world.events.on('pouch_placed', () => ev.push('placed'));
+    world.events.on('loot_opened', () => ev.push('opened'));
+    addItem(world, 'potion');
+    const pouch = Loot.createPlayerPouch(world);
+    expect(ev).toEqual(['placed', 'opened']);
+    expect(pouch.pouchOwner).toBe(Loot.PLAYER_OWNER);
+    expect(Loot.titleOf(world, { kind: 'pouch', id: pouch.id })).toBe('내 주머니');
+    expect(pouch.x).toBeCloseTo(10, 5);
+    expect(pouch.z).toBeCloseTo(10 - L.pouch.placeAhead, 5); // yaw 0 → -Z 정면
+    expect(world.lootOpen).toEqual({ kind: 'pouch', id: pouch.id });
+    expect(Loot.stash(world, 0)).toBe(true);
+    Loot.closeLoot(world);
+    expect(world.groundItems.find((g) => g.id === pouch.id)?.pouchItems).toEqual([{ kind: 'potion', count: 1 }]);
+    // 다시 열어 도로 가져가고 비운 채 닫으면 사라진다
+    world.lootOpen = { kind: 'pouch', id: pouch.id };
+    expect(Loot.takeOne(world, 0)).toBe('taken');
+    Loot.closeLoot(world);
+    expect(world.groundItems.find((g) => g.id === pouch.id)).toBeUndefined();
+    expect(countOf(world, 'potion')).toBe(1);
+  });
+});
+
 describe('바라보기·열기', () => {
   it('안착 전에는 대상이 아니고, 안착 뒤 정면 반경 안이면 lootInView — 등지면 아니다', () => {
     const p = pouchAt(world, 10, 8.5, [{ kind: 'gold', count: 5 }], L.pouch.settleTicks);

@@ -28,6 +28,8 @@ export class InventoryUI {
   open = false;
   /** 퀵슬롯에 꽂으려고 골라 둔 가방 칸 (-1 = 없음) */
   private picked = -1;
+  /** 보관 주머니 내려놓기 — P 키·패드 Y·버튼. main 이 Loot.createPlayerPouch 로 잇는다 */
+  onPlacePouch: (() => void) | null = null;
 
   constructor(private readonly world: World) {
     this.root = document.createElement('div');
@@ -41,6 +43,12 @@ export class InventoryUI {
     // (전투 키와 헷갈리지 않게, 창이 열려 있을 때는 등록 전용이다)
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
+      if (e.code === 'KeyP') {
+        // 보관 주머니 — 빈 주머니를 발밑에 내려놓고 루팅 창으로 넘어간다 (main 이 잇는다)
+        e.preventDefault();
+        this.onPlacePouch?.();
+        return;
+      }
       const digit = Number.parseInt(e.code.replace('Digit', ''), 10);
       if (!e.code.startsWith('Digit') || Number.isNaN(digit)) return;
       const index = digit - 1;
@@ -86,10 +94,18 @@ export class InventoryUI {
     panel.appendChild(this.buildQuickslots());
     panel.appendChild(this.buildBag());
 
+    // 보관 주머니 — 가방을 비워 두고 싶을 때. 넣어 둔 것은 층을 오가도·죽어도 그 자리에 남는다
+    const stash = document.createElement('button');
+    stash.textContent = '주머니 내려놓기 (P / 패드 Y) — 여기에 아이템을 보관한다';
+    stash.style.cssText =
+      'margin-top:14px;padding:6px 14px;border:1px solid #3a3a44;background:#1b1b22;color:#cfd2da;cursor:pointer;font:inherit;';
+    stash.onclick = () => this.onPlacePouch?.();
+    panel.appendChild(stash);
+
     const hint = document.createElement('div');
     hint.textContent =
       `가방 칸 클릭 = 고르기 → 퀵슬롯 클릭(또는 1~${this.world.quickslots.length}) = 등록   ·   ` +
-      '빈손으로 퀵슬롯 클릭 = 등록 해제   ·   가방 칸 우클릭 = 버리기   ·   I 닫기   ·   스킬은 Tab';
+      '빈손으로 퀵슬롯 클릭 = 등록 해제   ·   가방 칸 우클릭 = 버리기   ·   P 주머니 내려놓기   ·   I 닫기   ·   스킬은 Tab';
     hint.style.cssText = 'margin-top:16px;color:#6c7280;font-size:11px;';
     panel.appendChild(hint);
 

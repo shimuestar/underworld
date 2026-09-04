@@ -3792,6 +3792,33 @@ export class Stage {
     }
   }
 
+  /** 먼지 — 자루가 바닥에 툭 떨어질 때 낮게 피어오른다 (작고 느린 잿빛 알갱이) */
+  spawnDust(x: number, z: number, power = 1): void {
+    const now = performance.now();
+    for (let i = 0; i < Math.round(10 * power); i++) {
+      const size = 0.04 + Math.random() * 0.06;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size, size),
+        new THREE.MeshBasicMaterial({ color: 0x7d7466, transparent: true, opacity: 0.85 }),
+      );
+      const angle = Math.random() * Math.PI * 2;
+      const speed = (0.4 + Math.random() * 1.0) * power;
+      this.particles.push({
+        mesh,
+        ox: x + Math.cos(angle) * 0.1,
+        oy: 0.06,
+        oz: z + Math.sin(angle) * 0.1,
+        vx: Math.cos(angle) * speed,
+        vy: 0.5 + Math.random() * 1.1,
+        vz: Math.sin(angle) * speed,
+        bornMs: now,
+        lifeMs: 520,
+        gravity: 3.5,
+      });
+      this.scene.add(mesh);
+    }
+  }
+
   spawnGuardSparks(x: number, z: number, height: number, color = 0xfff0b0, power = 1): void {
     const now = performance.now();
     for (let i = 0; i < Math.round(16 * power); i++) {
@@ -4571,6 +4598,10 @@ export class Stage {
       sack.scale.set(1, 0.8, 1);
       sack.position.y = 0.16;
       group.add(sack);
+      // 미루팅 주머니는 은은하게 숨 쉬듯 반짝이고, 바라보면 밝아진다 — syncGroundItems 가 굴린다
+      (group.userData as Record<string, unknown>)['leather'] = leather;
+      (group.userData as Record<string, unknown>)['glowBase'] = boss ? 0.25 : 0.05;
+      if (!boss) leather.emissive.setHex(0x8a6a3e);
       const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.08, 8), leather);
       neck.position.y = 0.36;
       group.add(neck);
@@ -4691,7 +4722,7 @@ export class Stage {
     }
   }
 
-  syncGroundItems(items: GroundItemState[]): void {
+  syncGroundItems(items: GroundItemState[], focusPouchId?: number): void {
     const now = performance.now();
     const seen = new Set<number>();
     for (const item of items) {
@@ -4701,6 +4732,18 @@ export class Stage {
         group = this.makeGroundItem(item.kind, item.sigilId, item.pouchTier);
         this.groundItemVisuals.set(item.id, group);
         this.scene.add(group);
+      }
+      if (item.kind === 'pouch') {
+        // 반짝임 — 안착 전엔 꺼져 있고, 놓인 뒤엔 천천히 숨 쉰다. 바라보는 주머니는 또렷하게 밝다
+        const data = group.userData as Record<string, unknown>;
+        const leather = data['leather'] as THREE.MeshLambertMaterial | undefined;
+        if (leather) {
+          const base = (data['glowBase'] as number | undefined) ?? 0.05;
+          const settled = (item.noMagnetTicks ?? 0) <= 0;
+          const focus = item.id === focusPouchId;
+          const target = !settled ? 0 : focus ? 0.7 : base + 0.14 * (0.5 + 0.5 * Math.sin(now / 650 + item.id));
+          leather.emissiveIntensity += (target - leather.emissiveIntensity) * 0.2;
+        }
       }
       // 자석에 걸리면 로직이 계산한 높이(item.y)로 날아간다. 아니면 제자리 부유
       // 골드·화살은 바닥에 놓인 물건이라 떠서 흔들리지 않는다.

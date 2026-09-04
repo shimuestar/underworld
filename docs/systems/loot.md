@@ -41,7 +41,11 @@
 - **바닥 소모품 E 집기** — 바라보며 E → 자석 비행으로 날아온다. 가방이 가득이면 몸까지 왔다가 **원자리로 튕겨 돌아간다**(`pickup_bounced`, 툭 소리 + 안내).
   골드·화살·탄약·수류탄·배터리는 예전처럼 자석.
 - **부활·층** — 주머니는 부활해도 남는다(비석과 같은 규칙; 죽인 적은 되살아나지 않으므로). 상자도 다시 잠기지 않는다(재롤 파밍 없음). 층을 오가도 FloorState 가 그대로 들고 있다.
-- **슬라임**은 주머니도 먹는다(바닥 아이템 규칙) — 죽이면 게워 낸다.
+- **슬라임**은 주머니도 먹는다(바닥 아이템 규칙) — "슬라임이 주머니를 먹었다" 안내, 노란 핵이 표시, 죽이면 게워 낸다("게워 냈다" 안내).
+- **보관 주머니** — 가방 창(I)에서 P(패드 Y·버튼)로 빈 주머니를 정면 `placeAhead` 에 내려놓고 곧장 루팅 창이 열린다(`pouch_placed`, 제목 '내 주머니').
+  넣어 둔 것은 층을 오가도·죽어도 그 자리에 남는다. 비운 채 닫으면 사라진다. 그 근처 처치 전리품은 여기 합쳐질 수 있다(그러면 '전리품 주머니').
+- **착지·반짝임** — 안착이 끝나는 틱에 `pouch_landed`(툭 소리 + 낮은 먼지). 놓인 주머니는 가죽이 천천히 숨 쉬듯 반짝이고, 바라보는(`lootInView`) 주머니는 또렷하게 밝다. 보스 주머니는 금빛 점광원.
+- **툴팁** — 창 아래 한 줄: 소모품은 효과·지금 쓸 값어치·가방 수, 골드·화살은 쓰는 곳·소지량, 각인은 설명.
 - 창이 열려 있는 동안은 시간 정지(상점과 같다).
 
 ## UI 조작
@@ -52,7 +56,7 @@
 
 ## 이벤트
 
-`pouch_dropped {id,x,z,owner,tier,entries,merged}` · `loot_opened {kind,id,entries,first?}` · `loot_closed {kind,id,emptied}` ·
+`pouch_dropped {id,x,z,owner,tier,entries,merged}` · `pouch_landed {id,x,z,tier}` · `pouch_placed {id,x,z}` · `loot_opened {kind,id,entries,first?}` · `loot_closed {kind,id,emptied}` ·
 `loot_taken {kind,count,from,sigilId?}` · `loot_stashed {kind,count,to}` · `loot_dropped {kind,count,from}` · `loot_denied {reason,kind}` ·
 `pickup_bounced {kind,x,z}`. 재사용: `gold_picked`(컨테이너 자리), `chest_opened`(첫 개봉), `item_dropped`(가방 쪽 버리기), `sigil_acquired`.
 소리: `pouch_open`(가죽 스침, 주머니·상자 재개봉), `chest_opened`(첫 개봉), `loot_stash`, `thud`(주머니 착지·튕김 착지·버리기), 종류별 `pickup_*`, 거부 `shop_deny`.
