@@ -354,7 +354,6 @@ window.addEventListener('keydown', (e) => {
 let restartConfirmUntil = 0;
 
 window.addEventListener('keydown', (e) => {
-  if (e.code === keyBindings.code('map')) minimap.toggle();
   // F3 두 번 — 중간 다시 하기 (제단 등록 시 제단에서, 아니면 처음부터)
   if (e.code === 'F3') {
     e.preventDefault();
@@ -3821,10 +3820,12 @@ function render(alpha: number): void {
       ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 조준+${padBtn('melee')} 발사(${padBtn('cycleWeapon')} 무기 교체)  ${padBtn('melee')} 근접·처형  ${padBtn('interact')} 상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
         `${padBtn('skillSelect')}+${padBtn('skill1')}·${padBtn('skill2')}·${padBtn('skill3')}·${padBtn('skill4')} 스킬  ${padBtn('itemSelect')}+D-패드 소모품  ${padBtn('inventory')} 가방→스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴(길게=배터리)  ${padBtn('pause')} 일시정지·키 설정`
       : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형  E 상호작용  Shift 짧게=패링·꾹=방어\n' +
-        'Z·X·C·V 스킬  Q 스킬 교체·휠클릭 사용  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G/U 테스트(U=스킬 전부)');
+        'Z·X·C·V 스킬  Q 스킬 교체·휠클릭 사용  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  F1 지표  F2 덤프  F3 다시하기  P/O/K/G/U 테스트(U=스킬 전부)');
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
   // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)
+  // 미니맵을 끄면 왼쪽 위 안내 글도 함께 숨긴다 — 화면을 비우고 싶을 때 (일시정지 메뉴 7번)
+  hud!.style.display = minimap.visible ? '' : 'none';
   if (bossLine) {
     hud!.innerHTML = hudText.replace(
       bossLine.slice(0, -1),
@@ -3891,6 +3892,9 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
     setPaused(false);
     input.requestLock();
   },
+  // 미니맵 — 키(M)가 아니라 일시정지 메뉴에서만 켜고 끈다. 꺼지면 왼쪽 위 안내 글도 함께 (render 가 본다)
+  toggleMinimap: () => minimap.toggle(),
+  minimapOn: () => minimap.visible,
   trapRoom: () => {
     enterTrapRoom();
     setPaused(false);

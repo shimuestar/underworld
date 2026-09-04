@@ -28,6 +28,9 @@ export interface PauseMenuActions {
   openBindings(mode: 'kb' | 'pad'): void;
   /** 트랩 시험방 — 함정 8종이 깔린 특수 층으로 */
   trapRoom(): void;
+  /** 미니맵 켜기/끄기 — 왼쪽 위 안내 글도 함께 (키가 아니라 여기서만, 2026-09-04) */
+  toggleMinimap(): void;
+  minimapOn(): boolean;
 }
 
 interface MenuItem {
@@ -98,6 +101,15 @@ export class PauseMenu {
         hint: () => '함정 8종이 한 방에 — 스킬·탄 전부 지급. 나오는 길은 처음부터 시작',
         enabled: () => true,
         run: actions.trapRoom,
+      },
+      {
+        label: '7. 미니맵 켜기 / 끄기',
+        hint: () =>
+          actions.minimapOn()
+            ? '지금 켜짐 — 끄면 왼쪽 위 안내 글도 함께 사라진다 (화면을 비운다)'
+            : '지금 꺼짐 — 켜면 미니맵과 왼쪽 위 안내 글이 돌아온다',
+        enabled: () => true,
+        run: actions.toggleMinimap,
       },
     ];
 
@@ -228,6 +240,7 @@ export class PauseMenu {
     if (!item || !item.enabled(this.world)) return;
     this.selected = index;
     item.run();
+    if (this.open) this.refresh(); // 토글 항목(미니맵)은 메뉴가 열린 채 설명이 바뀐다
   }
 
   /** 라벨·설명·선택 표시를 지금 상태에 맞춘다 (DOM 은 생성자에서 한 번만 만든다 —
