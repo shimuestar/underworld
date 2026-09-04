@@ -46,6 +46,10 @@ export class LootUI {
   /** 직전 동작의 연출 — rebuild 뒤 목적지를 찾아 아이콘을 날린다 / 거부된 줄을 흔든다 */
   private pendingFly: { svg: string; from: DOMRect; toKey: string } | null = null;
   private shakeKey: string | null = null;
+  /** 컨테이너 칸 배치 — 줄(entries)은 가져가면 당겨지지만 칸은 제자리를 지킨다(빈 칸으로 남는다).
+   *  같은 항목 객체가 살아 있는 동안 같은 칸, 새 항목은 첫 빈 칸. 창을 열 때 다시 짠다 */
+  private layout: (LootEntry | null)[] = [];
+  private layoutKey: string | null = null;
 
   constructor(private readonly world: World) {
     this.root = document.createElement('div');
@@ -75,8 +79,38 @@ export class LootUI {
     this.selB = 0;
     this.pendingFly = null;
     this.shakeKey = null;
+    this.layout = [];
+    this.layoutKey = null;
     this.root.style.display = 'flex';
     this.rebuild();
+  }
+
+  /** 줄 → 칸 배치를 맞춘다: 사라진 항목의 칸은 비우고(당기지 않는다), 새 항목은 첫 빈 칸에 */
+  private syncLayout(c: Loot.Container): void {
+    const key = `${c.ref.kind}:${c.ref.id}`;
+    if (this.layoutKey !== key) {
+      this.layout = [];
+      this.layoutKey = key;
+    }
+    const live = new Set<LootEntry>(c.entries);
+    for (let i = 0; i < this.layout.length; i++) {
+      const e = this.layout[i];
+      if (e && !live.has(e)) this.layout[i] = null;
+    }
+    for (const e of c.entries) {
+      if (this.layout.includes(e)) continue;
+      const hole = this.layout.indexOf(null);
+      if (hole >= 0) this.layout[hole] = e;
+      else this.layout.push(e);
+    }
+  }
+
+  /** 커서 칸의 항목과 줄 번호 (빈 칸이면 null) */
+  private cursorEntry(c: Loot.Container): { entry: LootEntry; index: number } | null {
+    const e = this.layout[this.selC];
+    if (!e) return null;
+    const index = c.entries.indexOf(e);
+    return index >= 0 ? { entry: e, index } : null;
   }
 
   hide(): void {
@@ -100,7 +134,7 @@ export class LootUI {
   /** 컨테이너 격자 크기 — 가방과 같은 열 수, 줄 수는 가방과 같거나 내용이 넘치면 더 */
   private containerGrid(entries: number): { cols: number; rows: number } {
     const cols = balance.items.cols;
-    return { cols, rows: Math.max(balance.items.rows, Math.ceil(entries / cols)) };
+    return { cols, rows: Math.max(balance.items.rows, Math.ceil(Math.max(entries, this.layout.length) / cols)) };
   }
 
   /** 커서 이동 — 두 격자를 ←→ 로 오간다: 컨테이너 오른쪽 끝에서 → 는 가방, 가방 왼쪽 끝에서 ← 는 컨테이너.
@@ -154,12 +188,13 @@ export class LootUI {
     const c = Loot.container(this.world);
     if (!c) { this.close(); return; }
     if (this.pane === 'container') {
-      const e = c.entries[this.selC];
-      if (!e) { this.shakeKey = `c${this.selC}`; this.rebuild(); return; }
+      const at = this.cursorEntry(c);
+      if (!at) { this.shakeKey = `c${this.selC}`; this.rebuild(); return; }
+      const e = at.entry;
       const from = this.rectOf(`c${this.selC}`);
       const svg = lootIconSvg(e, ROW_ICON_PX);
       const toKey = flyTargetOf(e);
-      const r = Loot.takeOne(this.world, this.selC);
+      const r = Loot.takeOne(this.world, at.index);
       if (r === 'taken') this.pendingFly = { svg, from, toKey };
       else this.shakeKey = `c${this.selC}`;
     } else {
@@ -188,7 +223,9 @@ export class LootUI {
   private drop(): void {
     const c = Loot.container(this.world);
     if (!c) { this.close(); return; }
-    const ok = Loot.dropToFloor(this.world, this.pane, this.pane === 'container' ? this.selC : this.selB);
+    const at = this.pane === 'container' ? this.cursorEntry(c) : null;
+    if (this.pane === 'container' && !at) { this.shakeKey = `c${this.selC}`; this.rebuild(); return; }
+    const ok = Loot.dropToFloor(this.world, this.pane, this.pane === 'container' ? at!.index : this.selB);
     if (!ok) this.shakeKey = this.pane === 'container' ? `c${this.selC}` : `b${this.selB}`;
     this.clampSel();
     this.rebuild();
@@ -198,6 +235,7 @@ export class LootUI {
     const world = this.world;
     const c = Loot.container(world);
     if (!c) { this.close(); return; } // 슬라임이 먹었다 등 — 컨테이너가 사라졌다
+    this.syncLayout(c);
     const panel = document.createElement('div');
     // 폭은 고정 — 툴팁 길이에 따라 창이 늘고 줄면 눈이 어지럽다. 긴 문장은 접어 내린다
     panel.style.cssText = 'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;width:860px;box-sizing:border-box;';
@@ -216,7 +254,7 @@ export class LootUI {
 
     // 툴팁 — 커서 아래 것이 무엇이고 지금 쓸 값어치가 있는지 한 줄로
     const tip = document.createElement('div');
-    tip.textContent = this.describeCursor(c);
+    tip.textContent = this.describeCursor();
     tip.style.cssText = 'margin-top:12px;min-height:44px;color:#a9b0bc;border-top:1px solid #23232b;padding-top:8px;white-space:normal;overflow-wrap:anywhere;';
     panel.appendChild(tip);
 
@@ -240,7 +278,7 @@ export class LootUI {
   }
 
   /** 커서 아래 아이템 설명 — 소모품은 효과·유용성·가방 수, 골드·화살은 어디에 쓰는지, 각인은 설명 */
-  private describeCursor(c: Loot.Container): string {
+  private describeCursor(): string {
     const world = this.world;
     const consumable = (kind: ItemKind, where: string): string => {
       const def = itemDef(kind);
@@ -255,7 +293,7 @@ export class LootUI {
       return `▸ ${def.name}${where} — ${parts.join(', ')} · ${useful} · 가방에 ${countOf(world, kind)}개`;
     };
     if (this.pane === 'container') {
-      const e = c.entries[this.selC];
+      const e = this.layout[this.selC] ?? null;
       if (!e) return '';
       if (e.kind === 'gold') return `▸ 골드 ×${e.count} — 제단 상점에서 체력·마나·탄약·수류탄·배터리를 산다 · 소지 ◆ ${world.gold}`;
       if (e.kind === 'arrow') {
@@ -297,7 +335,7 @@ export class LootUI {
     grid.style.cssText = `display:grid;grid-template-columns:repeat(${g.cols}, ${CELL_PX}px);gap:8px;`;
     const flyMarked = new Set<string>();
     for (let i = 0; i < g.cols * g.rows; i++) {
-      const e = c.entries[i];
+      const e = this.layout[i] ?? null; // 칸 배치 — 가져가도 나머지가 당겨지지 않는다
       const here = this.pane === 'container' && i === this.selC;
       const cell = document.createElement('div');
       cell.dataset['key'] = `c${i}`;
