@@ -111,6 +111,7 @@ describe('패드 에임 어시스트', () => {
     add('ghoul', 16, 10); // 키 1.85 — 정면 8m
     // 조준을 머리 높이(실루엣 안 위쪽)로 — 세로 끌림이 0 이어야 한다
     world.player.pitch = 0.015; // 머리께 — 정수리(0.0197rad) 바로 아래, 실루엣 안
+    world.player.padAimingPrev = true; // LT 는 이미 누른 상태 — 겨누기 시작 스냅 없이 자석만 본다
     const pitch0 = world.player.pitch;
     const yaw0 = world.player.yaw;
     // 이동 스틱만 젓는 상태 — 자석 조건은 살아 있다
@@ -124,6 +125,7 @@ describe('패드 에임 어시스트', () => {
 
   it('몸 밖에서는 실루엣 가장자리까지 끌린다 — 붙는 순간 멈춘다', () => {
     const e = add('ghoul', 16, 10.9); // 옆으로 어긋남(6.4도) — 자석 원뿔 안, 몸 밖
+    world.player.padAimingPrev = true; // LT 는 이미 누른 상태 — 스냅이 몸통 중심으로 데려가면 가장자리 규칙을 볼 수 없다
     for (let i = 0; i < 60; i++) {
       world.input = { ...Input.emptySnapshot(), padMoveActive: true, padAiming: true };
       PlayerMove.tick(world, DT);
@@ -151,5 +153,70 @@ describe('패드 에임 어시스트', () => {
     const yaw0 = world.player.yaw;
     padLookTick(0.5);
     expect(Math.abs(world.player.yaw - yaw0)).toBeCloseTo(0.5 * SENS, 6); // 온전한 감도
+  });
+});
+
+describe('겨누기 시작 스냅 (2026-09-04)', () => {
+  const SNAP = AA.snap;
+  function aimTick(): void {
+    world.input = { ...Input.emptySnapshot(), padAiming: true };
+    PlayerMove.tick(world, DT);
+  }
+
+  it('LT 를 누르는 순간 원뿔 안 적의 몸통으로 ticks 에 나눠 돌아간다 — 누른 채로는 다시 안 하고, 떼고 다시 누르면 또 한 번', () => {
+    const e = add('goblin_runner', 16, 10.9); // 정면 8m, 옆으로 0.9m ≈ 6.4° — 원뿔(9°) 안
+    const snapped: unknown[] = [];
+    world.events.on('aim_snapped', (p) => snapped.push(p));
+    const off0 = yawOffTo(e.x, e.z);
+    expect(off0).toBeGreaterThan(0.05);
+    for (let i = 0; i < SNAP.ticks; i++) aimTick();
+    expect(yawOffTo(e.x, e.z)).toBeLessThan(1e-6);
+    expect(snapped).toHaveLength(1);
+    expect(snapped[0]).toMatchObject({ enemyId: e.id });
+    // 적이 비켜서도 누른 채로는 따라가지 않는다 (스틱을 젓지 않으면 자석도 없다)
+    e.z += 0.5;
+    const off1 = yawOffTo(e.x, e.z);
+    for (let i = 0; i < 10; i++) aimTick();
+    expect(yawOffTo(e.x, e.z)).toBeCloseTo(off1, 9);
+    // 떼고 다시 누르면 다시 한 번
+    world.input = Input.emptySnapshot();
+    PlayerMove.tick(world, DT);
+    for (let i = 0; i < SNAP.ticks; i++) aimTick();
+    expect(yawOffTo(e.x, e.z)).toBeLessThan(1e-6);
+    expect(snapped).toHaveLength(2);
+  });
+
+  it('원뿔 밖 적은 건드리지 않고, 조준(LT) 없이는(마우스) 일어나지 않는다', () => {
+    const e = add('goblin_runner', 16, 13); // ≈ 20.6° 옆 — 원뿔 밖
+    const off0 = yawOffTo(e.x, e.z);
+    for (let i = 0; i < SNAP.ticks; i++) aimTick();
+    expect(yawOffTo(e.x, e.z)).toBeCloseTo(off0, 9);
+
+    world = makeWorld();
+    const e2 = add('goblin_runner', 16, 10.9);
+    const off2 = yawOffTo(e2.x, e2.z);
+    for (let i = 0; i < SNAP.ticks; i++) {
+      world.input = { ...Input.emptySnapshot(), lookDX: 0 };
+      PlayerMove.tick(world, DT);
+    }
+    expect(yawOffTo(e2.x, e2.z)).toBeCloseTo(off2, 9);
+  });
+
+  it('한 번에 maxDeg 까지만 돌린다 — 멀리 빗나간 건 고쳐 주지 않는다', () => {
+    const savedCone = SNAP.coneDeg;
+    const savedMax = SNAP.maxDeg;
+    SNAP.coneDeg = 30; // 원뿔은 넓게, 상한은 좁게 — 상한만 본다
+    SNAP.maxDeg = 3;
+    try {
+      add('goblin_runner', 16, 12); // ≈ 14° 옆
+      const yaw0 = world.player.yaw;
+      const pitch0 = world.player.pitch;
+      for (let i = 0; i < SNAP.ticks; i++) aimTick();
+      const turned = Math.hypot(world.player.yaw - yaw0, world.player.pitch - pitch0);
+      expect(turned).toBeCloseTo((3 * Math.PI) / 180, 4);
+    } finally {
+      SNAP.coneDeg = savedCone;
+      SNAP.maxDeg = savedMax;
+    }
   });
 });

@@ -617,6 +617,7 @@ for (const name of [
   'arrow_impact',
   'arrow_shielded',
   'bow_draw_released',
+  'aim_snapped',
   'arrow_recovered',
   'arrow_broken',
   'quiver_full',

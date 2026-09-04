@@ -64,7 +64,9 @@ function switchLockTarget(
  *  플레이어 몫이어야 한다 (덩치 큰 적 헤드샷이 중심 끌림과 싸우던 문제) */
 export function padAimAssist(
   world: World,
+  coneDeg?: number, // 기본은 aimAssist.coneDeg — 겨누기 시작 스냅은 자기 원뿔(snap.coneDeg)로 찾는다
 ): {
+  enemyId: number;
   offYaw: number;
   offPitch: number;
   off: number;
@@ -73,6 +75,7 @@ export function padAimAssist(
   pullPitch: number;
 } | null {
   const aa = balance.input.gamepad.aimAssist;
+  const cone = ((coneDeg ?? aa.coneDeg) * Math.PI) / 180;
   const p = world.player;
   const eyeY = p.y + balance.player.eyeHeight;
   let best: ReturnType<typeof padAimAssist> = null;
@@ -89,7 +92,7 @@ export function padAimAssist(
     const offPitch = Math.atan2(targetY - eyeY, dist) - p.pitch;
     const off = Math.hypot(offYaw, offPitch);
     const angRadius = Math.atan2(def.radius, dist);
-    if (off > (aa.coneDeg * Math.PI) / 180 + angRadius) continue;
+    if (off > cone + angRadius) continue;
     if (!world.level.hasLineOfSight(p.x, p.z, e.x, e.z)) continue;
     if (best && off >= best.off) continue;
     // 실루엣 가장자리 클램프 — 세로는 발목~정수리, 가로는 몸 반지름의 90%
@@ -99,7 +102,7 @@ export function padAimAssist(
       p.pitch > pitchTop ? pitchTop - p.pitch : p.pitch < pitchBot ? pitchBot - p.pitch : 0;
     const halfW = Math.atan2(def.radius * 0.9, dist);
     const pullYaw = Math.abs(offYaw) <= halfW ? 0 : offYaw - Math.sign(offYaw) * halfW;
-    best = { offYaw, offPitch, off, angRadius, pullYaw, pullPitch };
+    best = { enemyId: e.id, offYaw, offPitch, off, angRadius, pullYaw, pullPitch };
   }
   return best;
 }
@@ -221,6 +224,36 @@ export function tick(world: World, dt: number): void {
     }
   }
 
+  // 겨누기 시작 스냅(패드) — LT 를 누르는 순간 한 번, 원뿔 안 가장 가까운 적의 몸통 중심으로 snap.ticks 에 나눠 돌린다.
+  // 한 번에 maxDeg 까지만 — 멀리 빗나간 건 고쳐 주지 않는다. 누른 채로는 다시 하지 않는다(그 뒤는 마찰·자석만이라
+  // "손을 떼면 저절로 조준하지 않는다"는 규약은 그대로). 락온 중엔 락온이 시선을 잡고 있으니 하지 않는다
+  const snap = balance.input.gamepad.aimAssist.snap;
+  if (input.padAiming && !p.padAimingPrev && world.lockOnId === null) {
+    const target = padAimAssist(world, snap.coneDeg);
+    if (target) {
+      // 가로는 몸통 중심으로, 세로는 실루엣 안에 들 만큼만(pullPitch) — 몸 안에서 머리/몸통을 고르는 건 플레이어 몫
+      // (자석과 같은 규약). 가까운 적의 몸통 중심으로 세로까지 끌면 시선이 배 쪽으로 푹 내려간다 (실측)
+      const off = Math.hypot(target.offYaw, target.pullPitch);
+      const maxRad = (snap.maxDeg * Math.PI) / 180;
+      const scale = off > maxRad ? maxRad / off : 1;
+      p.aimSnapYaw = target.offYaw * scale;
+      p.aimSnapPitch = target.pullPitch * scale;
+      p.aimSnapTicks = Math.max(1, snap.ticks);
+      world.events.emit('aim_snapped', { enemyId: target.enemyId, deg: (off * scale * 180) / Math.PI });
+    }
+  }
+  p.padAimingPrev = input.padAiming;
+  if ((p.aimSnapTicks ?? 0) > 0) {
+    const n = p.aimSnapTicks ?? 1;
+    const stepYaw = (p.aimSnapYaw ?? 0) / n;
+    const stepPitch = (p.aimSnapPitch ?? 0) / n;
+    p.yaw += stepYaw;
+    p.pitch = Math.max(-pitchMax, Math.min(pitchMax, p.pitch + stepPitch));
+    p.aimSnapYaw = (p.aimSnapYaw ?? 0) - stepYaw;
+    p.aimSnapPitch = (p.aimSnapPitch ?? 0) - stepPitch;
+    p.aimSnapTicks = n - 1;
+  }
+
   // 반동 — 남은 오프셋을 먼저 매 틱 recoverRate 비율로 되돌리고, 그 뒤 발사(Weapons.kickAim)가 예약한 밀림을 얹는다
   // (되돌림이 먼저라 새 밀림은 이 틱에 온전히 튄다). 연출이 아니라 실제 조준이 움직인다:
   // 연사하면 위로 기어오르고, 손을 멈추면 대부분 제자리로 내려온다
@@ -259,7 +292,7 @@ export function tick(world: World, dt: number): void {
       p.swayPhase = 0;
       p.swaySeed = Math.random() * Math.PI * 2; // 당길 때마다 다른 위상 — 외워서 보정하지 못하게
     }
-    p.swayPhase += 1;
+    p.swayPhase += p.aimSwaySpeed ?? 1; // 오래 버티면 손에 힘이 빠져 파형이 빨라진다
     const t = p.swayPhase;
     const seed = p.swaySeed ?? 0;
     const targetYaw = swayAmp * (0.65 * Math.sin(sw.freqA * t + seed) + 0.35 * Math.sin(sw.freqB * t * 1.9 + seed * 0.7));

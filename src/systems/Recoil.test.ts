@@ -192,6 +192,7 @@ describe('활 당김 흔들림 (2026-09-04)', () => {
     expect(capped).toBeCloseTo(SW.ampMaxDeg * RAD, 6);
     hold(200);
     expect(world.player.aimSwayAmp).toBeCloseTo(capped, 6); // 그 이상 커지지 않는다
+    expect(world.player.aimSwaySpeed).toBeCloseTo(SW.speedMaxMul, 6); // 속도도 상한
     // 폭·시간은 직전 틱 상태로 세므로 첫 당김 틱은 빠진다 (틱 수 − 1)
     expect(world.weapon.bowDrawTotal).toBe(BOW.maxDrawTicks + SW.rampTicks + 200);
   });
@@ -220,5 +221,27 @@ describe('활 당김 흔들림 (2026-09-04)', () => {
     expect(world.player.swayYaw).toBe(0);
     expect(world.player.yaw).toBeCloseTo(yaw0, 5); // 되돌림은 1e-6 에서 딱 끊는다
     expect(world.weapon.bowDrawTotal).toBe(0); // 확대도 풀린다
+  });
+
+  it('오래 버틸수록 파형이 빨라진다 — 처음엔 1배, speedRampTicks 에서 speedMaxMul 배(상한)', () => {
+    hold(BOW.maxDrawTicks + 1);
+    expect(world.player.aimSwaySpeed).toBeGreaterThanOrEqual(1);
+    expect(world.player.aimSwaySpeed).toBeLessThan(1 + (SW.speedMaxMul - 1) * 0.15);
+    hold(SW.speedRampTicks);
+    expect(world.player.aimSwaySpeed).toBeCloseTo(SW.speedMaxMul, 6);
+    hold(100);
+    expect(world.player.aimSwaySpeed).toBeCloseTo(SW.speedMaxMul, 6);
+    // PlayerMove 는 그 배율만큼 위상을 빨리 감는다
+    world.player.swayPhase = 0;
+    for (let i = 0; i < 10; i++) {
+      world.input = Input.emptySnapshot();
+      PlayerMove.tick(world, DT);
+    }
+    expect(world.player.swayPhase).toBeCloseTo(10 * SW.speedMaxMul, 6);
+    // 놓으면 1 배로
+    world.input = Input.emptySnapshot();
+    Weapons.tick(world, DT);
+    Weapons.tick(world, DT);
+    expect(world.player.aimSwaySpeed).toBe(1);
   });
 });

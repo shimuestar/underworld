@@ -70,10 +70,17 @@ export interface PlayerState {
   recoilRecoverFrac?: number;
   /** 활 당김 흔들림 — Weapons 가 매 틱 폭(rad)을 주고 PlayerMove 가 느린 파형으로 얹는다. 0 이면 오프셋이 제자리로 돌아온다 */
   aimSwayAmp?: number;
+  /** 파형 진행 속도 배율 — 오래 버틸수록 빨라진다(손에 힘이 빠진다). Weapons 가 준다 */
+  aimSwaySpeed?: number;
   swayYaw?: number;
   swayPitch?: number;
   swayPhase?: number;
   swaySeed?: number;
+  /** 패드 겨누기 시작 스냅 — LT 엣지 판정용 직전 상태와, 남은 틱·남은 회전(rad). PlayerMove 가 나눠 얹는다 */
+  padAimingPrev?: boolean;
+  aimSnapTicks?: number;
+  aimSnapYaw?: number;
+  aimSnapPitch?: number;
   /** 지속 피해 상태(독·화염) — 종류별 하나. 걸려 있는 동안만 키가 있다 (Traps.tickDots 가 진행) */
   dots?: Partial<Record<DotKind, DotState>>;
   /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */

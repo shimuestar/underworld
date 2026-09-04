@@ -643,6 +643,14 @@ melee_kill      { enemyType }
 - **흔들림** — `Weapons.updateBowSway` 가 매 틱 폭을 센다: 세기(`bowDraw/maxDrawTicks`)가 `sway.startFrac` 아래면 0(짧게·적당히
   당기면 안 흔들린다), 그 위에서는 (세기를 0→1 로 편 값)^`strengthPow` × 유지 시간(`bowHoldTicks`/`rampTicks`, 상한 1 로
   `ampStartDeg`→`ampMaxDeg`). `PlayerMove` 가 그 폭 안에서 두 사인의 합으로 조준을 느리게 떠돌게 한다(`player.swayYaw/Pitch`).
-  놓으면 폭 0 → `recoverRate` 비율로 제자리. 데이터 `weapons.bow.sway`.
+  놓으면 폭 0 → `recoverRate` 비율로 제자리. **속도** — 버틴 틱이 `speedRampTicks` 에 이르기까지 파형 진행이 1→`speedMaxMul`
+  배로 빨라진다(손에 힘이 빠진다; 폭의 `rampTicks` 와 따로). 데이터 `weapons.bow.sway`.
 - **확대** — `bowDrawTotal`(당기기 시작한 뒤 틱, 상한 없음)/`zoom.rampTicks` 를 목표로 `Stage.setAimZoom` 의 두 번째 소스가 FOV 를
   `zoom.fovScale` 까지 좁힌다. 조준(ADS) 줌과 곱해진다. 데이터 `weapons.bow.zoom`.
+
+### 패드 겨누기 시작 스냅 (2026-09-04)
+
+LT 를 누르는 순간 한 번, `aimAssist.snap.coneDeg` 원뿔 안 가장 가까운 적(시야선·사거리는 어시스트와 같은 규칙)으로
+`snap.ticks` 에 나눠 돌린다(`player.aimSnap*`) — 가로는 몸통 중심, 세로는 실루엣 안에 들 만큼만(자석의 `pullPitch` 와 같은 규약). 한 번에 `snap.maxDeg` 까지만 — 멀리 빗나간 건 고치지 않는다. 누른 채로는 다시
+하지 않는다(그 뒤는 마찰·자석만, "손을 떼면 저절로 조준하지 않는다"는 규약 유지). 락온 중·마우스에는 없다. 이벤트 `aim_snapped{enemyId,deg}`.
+활·권총 모두 LT 조준을 거치므로 둘 다 걸린다. 테스트 `AimAssist.test.ts`.

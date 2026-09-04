@@ -573,6 +573,7 @@ function updateBowSway(world: World): void {
     w.bowDrawTotal = 0;
     w.bowHoldTicks = 0;
     p.aimSwayAmp = 0;
+    p.aimSwaySpeed = 1;
     return;
   }
   w.bowDrawTotal = (w.bowDrawTotal ?? 0) + 1;
@@ -581,12 +582,15 @@ function updateBowSway(world: World): void {
   if (s <= 0) {
     w.bowHoldTicks = 0;
     p.aimSwayAmp = 0;
+    p.aimSwaySpeed = 1;
     return;
   }
   w.bowHoldTicks = (w.bowHoldTicks ?? 0) + 1;
   const hold = Math.min(1, w.bowHoldTicks / sw.rampTicks);
   const ampDeg = (sw.ampStartDeg + (sw.ampMaxDeg - sw.ampStartDeg) * hold) * Math.pow(s, sw.strengthPow);
   p.aimSwayAmp = (ampDeg * Math.PI) / 180;
+  // 손에 힘이 빠진다 — 버틸수록 파형이 빨라진다 (폭과 따로 잰다, 상한 speedMaxMul)
+  p.aimSwaySpeed = 1 + (sw.speedMaxMul - 1) * Math.min(1, w.bowHoldTicks / sw.speedRampTicks);
 }
 
 /** 반동을 예약한다 — 위로 pitchDeg, 좌우로 ±yawDeg 안에서 무작위(rad 로 바꿔 쌓는다). PlayerMove 가 다음 틱
