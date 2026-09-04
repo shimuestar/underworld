@@ -316,6 +316,8 @@
       "_damageNote": "34 → 22 (2026-08, −35%) → 11 (2026-08-25, 절반). 부위 배율 적용 시 머리 16.5 / 몸통 8.8 — 러너 30HP 기준 몸통 4발, 헤드샷 2발. 화살(44)은 그대로 — 총알의 2배 연결은 이때 풀었다",
       "damage": 11,
       "fireIntervalTicks": 14,
+      "_recoilNote": "반동 — 쏘면 조준이 pitchDeg 만큼 위로, ±yawDeg 안에서 좌우로 튄다(연출이 아니라 실제 조준). 연사하면 heat 가 쌓여(발당 heatPerShot, 틱당 heatDecayPerTick 식음, 상한 heatMax) 튀는 폭이 (1 + heat×heatMul)배. 튄 것은 틱마다 recoverRate 비율로 되돌아오되 recoverFrac 만큼만 — 나머지는 남아 연사할수록 조준이 기어오른다 (2026-09-04)",
+      "recoil": { "pitchDeg": 1.6, "yawDeg": 0.6, "heatPerShot": 1, "heatMax": 6, "heatDecayPerTick": 0.05, "heatMul": 0.35, "recoverRate": 0.14, "recoverFrac": 0.8 },
       "reloadTicks": 66,
       "magSize": 12,
       "pierceBarrier": true,
@@ -359,7 +361,9 @@
       "_recoverNote": "회수할 때 이 확률로 살아남는다. 1.0 이면 화살이 무한 순환해 제단에서 살 이유가 사라진다",
       "recoverChance": 0.75,
       "_barrelNote": "화살은 통을 한 방에 터뜨린다. 총알·해머는 3대를 때려야 하는데 활만 즉발이라 통 기믹에서는 활이 앞선다 — 의도한 것이다. false 로 두면 총알과 같은 누적 규칙으로 돌아간다",
-      "ignitesBarrel": true
+      "ignitesBarrel": true,
+      "_recoilNote": "놓는 반동 — 당김 비율(0~1)로 pitchDegMin~Max·yawDegMin~Max 사이. 강하게 당겨 쏠수록 크게 튄다. 되돌림 규약은 권총과 같다(recoverRate·recoverFrac). 활은 쿨다운이 길어 열(heat)은 없다 (2026-09-04)",
+      "recoil": { "pitchDegMin": 0.6, "pitchDegMax": 3.2, "yawDegMin": 0.2, "yawDegMax": 1.3, "recoverRate": 0.1, "recoverFrac": 0.85 }
     },
     "grenade": {
       "ammoMax": 4,

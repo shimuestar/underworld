@@ -29,6 +29,8 @@ export function tick(world: World, _dt: number): void {
 
   if (w.muzzleFlash > 0) w.muzzleFlash--;
   if (w.cooldown > 0) w.cooldown--;
+  // 반동 열 — 연사가 끊기면 식는다 (권총 반동 폭의 배율)
+  if ((w.recoilHeat ?? 0) > 0) w.recoilHeat = Math.max(0, (w.recoilHeat ?? 0) - pistol.recoil.heatDecayPerTick);
   if (w.meleeCooldown > 0) w.meleeCooldown--;
   if ((w.meleeBufferTicks ?? 0) > 0) w.meleeBufferTicks = (w.meleeBufferTicks ?? 0) - 1;
   // 연속타 유지 시간 — 끊기면 1타부터 다시
@@ -557,6 +559,18 @@ function drawBow(world: World): void {
   loose(world, (draw - bow.minDrawTicks) / (bow.maxDrawTicks - bow.minDrawTicks));
 }
 
+/** 반동을 예약한다 — 위로 pitchDeg, 좌우로 ±yawDeg 안에서 무작위(rad 로 바꿔 쌓는다). PlayerMove 가 다음 틱
+ *  시선에 얹고 recoverRate 비율로 되돌린다. recoverFrac 만큼만 돌아오고 나머지는 남는다 — 연사하면 조준이 기어오른다.
+ *  연출(손 모형 반동은 Stage)이 아니라 실제 조준이 움직인다 — 박쥐 비명의 aimShake 와 같은 층위 */
+function kickAim(world: World, pitchDeg: number, yawDeg: number, recoverRate: number, recoverFrac: number): void {
+  const p = world.player;
+  const toRad = Math.PI / 180;
+  p.recoilKickPitch = (p.recoilKickPitch ?? 0) + pitchDeg * toRad;
+  p.recoilKickYaw = (p.recoilKickYaw ?? 0) + (Math.random() * 2 - 1) * yawDeg * toRad;
+  p.recoilRecoverRate = recoverRate;
+  p.recoilRecoverFrac = recoverFrac;
+}
+
 /** 화살을 놓는다 — 중력을 받지 않는 직선 투사체. 명중·관통 판정은 Projectiles가 한다 */
 function loose(world: World, chargeFrac: number): void {
   const w = world.weapon;
@@ -566,6 +580,15 @@ function loose(world: World, chargeFrac: number): void {
 
   w.arrows = (w.arrows ?? 0) - 1;
   w.cooldown = bow.cooldownTicks;
+  // 놓는 반동 — 강하게 당겨 쏠수록 크게 튄다 (이 화살은 지금 시선으로 나가고, 조준은 다음 틱에 밀린다)
+  const rc = bow.recoil;
+  kickAim(
+    world,
+    rc.pitchDegMin + (rc.pitchDegMax - rc.pitchDegMin) * frac,
+    rc.yawDegMin + (rc.yawDegMax - rc.yawDegMin) * frac,
+    rc.recoverRate,
+    rc.recoverFrac,
+  );
 
   const speed = bow.speedMin + (bow.speedMax - bow.speedMin) * frac;
   const damage = bow.damageMin + (bow.damageMax - bow.damageMin) * frac;
@@ -664,6 +687,12 @@ function fire(world: World): void {
   w.cooldown = pistol.fireIntervalTicks;
   w.muzzleFlash = pistol.muzzleFlash.ticks;
   world.events.emit('ammo_spent', { type: '9mm', amount: 1 });
+  // 반동 — 연사할수록(heat) 더 크게 튄다. 이 발은 지금 시선으로 나가고 조준은 다음 틱에 밀린다(PlayerMove)
+  const rc = pistol.recoil;
+  const heat = w.recoilHeat ?? 0;
+  const heatMul = 1 + heat * rc.heatMul;
+  kickAim(world, rc.pitchDeg * heatMul, rc.yawDeg * heatMul, rc.recoverRate, rc.recoverFrac);
+  w.recoilHeat = Math.min(rc.heatMax, heat + rc.heatPerShot);
 
   // 시선 방향 레이
   const cosPitch = Math.cos(p.pitch);

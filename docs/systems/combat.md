@@ -620,3 +620,20 @@ melee_kill      { enemyType }
 ```
 
 `mana_decayed`의 누적이 곧 **마나 휘발률** 지표다. 이 값이 30%를 넘으면 코어 루프가 작동하지 않는다는 신호다.
+
+
+## 반동 (2026-09-04)
+
+총·활을 쏘면 조준이 실제로 튄다 — 연출(손 모형 반동은 Stage)이 아니라 `player.yaw/pitch` 가 움직여 다음 탄착이 어긋난다
+(박쥐 비명의 aimShake 와 같은 층위). 두 단계:
+
+1. **예약** — `Weapons.kickAim` 이 발사 순간 `player.recoilKickPitch/Yaw` 에 rad 를 쌓는다. 그 발은 원래 시선으로 나간다.
+2. **적용·되돌림** — `PlayerMove.tick` 이 다음 틱 시선 입력 뒤에 밀림을 얹고, 남은 오프셋(`recoilPitch/Yaw`)을 매 틱
+   `recoverRate` 비율로 되돌린다. 밀린 양의 `recoverFrac` 만 돌아오고 나머지는 남는다 → 연사하면 조준이 기어오른다.
+
+| 무기 | 폭 | 규칙 | 데이터 |
+|---|---|---|---|
+| 권총 | `pitchDeg` 위 / `±yawDeg` 좌우 | 연사 열(`recoilHeat`): 발당 +`heatPerShot`, 틱당 −`heatDecayPerTick`, 상한 `heatMax`. 폭 × (1 + heat×`heatMul`) | `weapons.pistol.recoil` |
+| 활 | `pitchDegMin~Max` / `yawDegMin~Max` | 당김 비율(0~1)로 보간 — 강하게 당겨 쏠수록 크게 | `weapons.bow.recoil` |
+
+테스트: `src/systems/Recoil.test.ts`.

@@ -221,6 +221,34 @@ export function tick(world: World, dt: number): void {
     }
   }
 
+  // 반동 — 남은 오프셋을 먼저 매 틱 recoverRate 비율로 되돌리고, 그 뒤 발사(Weapons.kickAim)가 예약한 밀림을 얹는다
+  // (되돌림이 먼저라 새 밀림은 이 틱에 온전히 튄다). 연출이 아니라 실제 조준이 움직인다:
+  // 연사하면 위로 기어오르고, 손을 멈추면 대부분 제자리로 내려온다
+  if ((p.recoilPitch ?? 0) !== 0 || (p.recoilYaw ?? 0) !== 0) {
+    const rate = p.recoilRecoverRate ?? 0;
+    const backPitch = (p.recoilPitch ?? 0) * rate;
+    const backYaw = (p.recoilYaw ?? 0) * rate;
+    p.recoilPitch = (p.recoilPitch ?? 0) - backPitch;
+    p.recoilYaw = (p.recoilYaw ?? 0) - backYaw;
+    p.pitch = Math.max(-pitchMax, Math.min(pitchMax, p.pitch - backPitch));
+    p.yaw -= backYaw;
+    if (Math.abs(p.recoilPitch) < 1e-6) p.recoilPitch = 0;
+    if (Math.abs(p.recoilYaw) < 1e-6) p.recoilYaw = 0;
+  }
+  if ((p.recoilKickPitch ?? 0) !== 0 || (p.recoilKickYaw ?? 0) !== 0) {
+    const kickPitch = p.recoilKickPitch ?? 0;
+    const kickYaw = p.recoilKickYaw ?? 0;
+    p.recoilKickPitch = 0;
+    p.recoilKickYaw = 0;
+    const before = p.pitch;
+    p.pitch = Math.max(-pitchMax, Math.min(pitchMax, p.pitch + kickPitch));
+    p.yaw += kickYaw;
+    // 실제로 밀린 만큼만(천장 클램프) × 돌아오는 비율만 되돌림 대상에 쌓는다
+    const frac = p.recoilRecoverFrac ?? 1;
+    p.recoilPitch = (p.recoilPitch ?? 0) + (p.pitch - before) * frac;
+    p.recoilYaw = (p.recoilYaw ?? 0) + kickYaw * frac;
+  }
+
   // 초음파 비명(박쥐) — 조준이 잔떨림에 실려 흔들린다. 시선 입력 뒤에 얹어
   // 조준 자체를 어긋나게 한다 (연출이 아니라 실제 탄착이 흔들린다)
   if ((p.aimShakeTicks ?? 0) > 0) {

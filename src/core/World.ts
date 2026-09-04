@@ -59,6 +59,15 @@ export interface PlayerState {
   blinkShroudAfter?: number;
   aimShakeTicks?: number;
   aimShakeAmp?: number;
+  /** 반동 — 발사(Weapons)가 예약한 밀림(rad). PlayerMove 가 다음 틱 시선에 얹고 비운다 */
+  recoilKickPitch?: number;
+  recoilKickYaw?: number;
+  /** 아직 되돌아오지 않은 반동 오프셋(rad) — 매 틱 recoilRecoverRate 비율로 줄며 시선을 제자리로 당긴다 */
+  recoilPitch?: number;
+  recoilYaw?: number;
+  recoilRecoverRate?: number;
+  /** 밀린 양 중 되돌아오는 비율 — 나머지는 남아 연사하면 조준이 기어오른다 */
+  recoilRecoverFrac?: number;
   /** 지속 피해 상태(독·화염) — 종류별 하나. 걸려 있는 동안만 키가 있다 (Traps.tickDots 가 진행) */
   dots?: Partial<Record<DotKind, DotState>>;
   /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */
@@ -734,6 +743,8 @@ export interface WeaponState {
   arrows?: number;
   /** 시위를 당긴 틱 (0 = 안 당김). maxDrawTicks 에서 최대 */
   bowDraw?: number;
+  /** 권총 연사 열 — 발마다 쌓이고 틱마다 식는다. 반동 폭이 (1 + heat×heatMul)배 (balance.weapons.pistol.recoil) */
+  recoilHeat?: number;
   /** 시위를 내린 뒤 잠금 — 좌클릭을 뗄 때까지 다시 안 당겨진다.
    *  없으면 취소한 다음 틱에 곧바로 다시 당겨져 취소가 취소가 아니게 된다 */
   bowDrawLocked?: boolean;
