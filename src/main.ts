@@ -130,6 +130,31 @@ function padRumbleScaled(kind: 'draw' | 'loose', frac: number): void {
   input.gamepad.rumble(r.ms, r.strong * m, r.weak * m);
 }
 
+/** 메뉴 스틱 — 왼 스틱의 기울기를 D-패드 한 칸 이동으로 바꾼다. 임계를 넘긴 순간 한 칸, 계속 밀면
+ *  firstRepeatTicks 뒤부터 repeatTicks 마다 반복. 축마다 따로 세지 않고 지배적인 축 하나만 본다 */
+const menuStick = { dx: 0, dy: 0, held: 0 };
+function menuStickStep(): { dx: number; dy: number } {
+  const cfg = balance.input.gamepad.menuStick;
+  const none = { dx: 0, dy: 0 };
+  if (!input.gamepad.connected) { menuStick.dx = 0; menuStick.dy = 0; menuStick.held = 0; return none; }
+  const ax = input.gamepad.axes();
+  let dx = 0;
+  let dy = 0;
+  if (Math.abs(ax.moveX) >= Math.abs(ax.moveY)) {
+    if (Math.abs(ax.moveX) >= cfg.threshold) dx = Math.sign(ax.moveX);
+  } else if (Math.abs(ax.moveY) >= cfg.threshold) {
+    dy = Math.sign(ax.moveY); // 위가 음수 → 위로 이동은 dy -1
+  }
+  if (dx === 0 && dy === 0) { menuStick.dx = 0; menuStick.dy = 0; menuStick.held = 0; return none; }
+  if (dx !== menuStick.dx || dy !== menuStick.dy) {
+    menuStick.dx = dx; menuStick.dy = dy; menuStick.held = 0;
+    return { dx, dy };
+  }
+  menuStick.held++;
+  if (menuStick.held >= cfg.firstRepeatTicks && (menuStick.held - cfg.firstRepeatTicks) % cfg.repeatTicks === 0) return { dx, dy };
+  return none;
+}
+
 let nextHeartbeatAt = 0; // 저체력 맥박 스케줄
 const statusHpEl = document.getElementById('status-hp')!;
 const statusHpFillEl = document.getElementById('status-hp-fill')!;
@@ -3016,6 +3041,9 @@ function simulate(dt: number): void {
     else if (input.gamepad.rawPressed(0)) shopUI.padBuy(); // A
     else if (input.gamepad.rawPressed(1)) shopUI.padClose(); // B
   }
+  // 메뉴 스틱 — 왼 스틱을 D-패드처럼 (한 번 밀면 한 칸, 계속 밀면 반복). 루팅 창·상점 공용
+  const stick = menuStickStep();
+  if (shopUI.open && input.gamepad.connected && stick.dy !== 0) shopUI.padMove(stick.dy);
   // 가방 창 — 패드 Y = 보관 주머니 내려놓기 (가방 창엔 다른 패드 조작이 없다)
   if (inventoryUI.open && input.gamepad.connected && input.gamepad.rawPressed(3)) inventoryUI.onPlacePouch?.();
   // 루팅 창 — D-패드 네 방향(←→ 로 칸 전환), A 가져오기/넣기, X 모두, Y 바닥에 버리기, B 닫기
@@ -3025,6 +3053,7 @@ function simulate(dt: number): void {
     else if (input.gamepad.rawPressed(12)) lootUI.padMove(0, -1);
     else if (input.gamepad.rawPressed(15)) lootUI.padMove(1, 0);
     else if (input.gamepad.rawPressed(14)) lootUI.padMove(-1, 0);
+    else if (stick.dx !== 0 || stick.dy !== 0) lootUI.padMove(stick.dx, stick.dy);
     else if (input.gamepad.rawPressed(0)) lootUI.padActivate();
     else if (input.gamepad.rawPressed(2)) lootUI.padTakeAll();
     else if (input.gamepad.rawPressed(3)) lootUI.padDrop();

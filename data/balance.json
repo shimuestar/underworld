@@ -11,6 +11,8 @@
     "pitchMaxDeg": 89,
     "_gamepadNote": "패드 튜닝. 마우스는 델타를 주고 스틱은 위치를 주므로, 시선은 축 값 × lookSpeed 를 틱으로 나눠 델타로 바꾼다. lookCurve 는 중앙부를 눌러 정밀 조준을 살리는 지수 (1이면 선형)",
     "gamepad": {
+      "_menuStickNote": "메뉴(루팅 창·상점)에서 왼 스틱으로도 커서를 옮긴다 — threshold 를 넘긴 순간 한 칸, 계속 밀면 firstRepeatTicks 뒤부터 repeatTicks 마다 반복 (D-패드와 같은 이동)",
+      "menuStick": { "threshold": 0.6, "firstRepeatTicks": 18, "repeatTicks": 9 },
       "moveDeadzone": 0.22,
       "lookDeadzone": 0.16,
       "lookSpeed": 3.4,
