@@ -328,6 +328,52 @@ describe('수류탄 (슬롯 2)', () => {
     expect(empty).toHaveLength(1);
   });
 
+  it('차징 중 조준(LT)을 놓거나 R 을 누르면 던지지 않고 거둔다 — 활의 시위 내리기와 같다 (2026-09-04)', () => {
+    world.weapon.ranged = 'grenade';
+    world.weapon.meleeCooldown = 0;
+    const cancelled: unknown[] = [];
+    world.events.on('grenade_cancelled', () => cancelled.push(1));
+    for (let i = 0; i < 10; i++) {
+      world.input = { ...Input.emptySnapshot(), rangedHeld: true, rangedPressed: i === 0, padAiming: true };
+      Weapons.tick(world, DT);
+    }
+    expect(world.weapon.grenadeCharge).toBe(10);
+    // 조준(LT)을 놓았다 — 같은 틱에 rangedHeld 도 꺼진다. 예전엔 여기서 던져 버렸다
+    world.input = { ...Input.emptySnapshot(), aimReleased: true };
+    Weapons.tick(world, DT);
+    expect(world.weapon.grenadeCharge).toBe(0);
+    expect(world.weapon.grenades).toBe(3);
+    expect(world.projectiles.some((p) => p.kind === 'grenade')).toBe(false);
+    expect(cancelled).toHaveLength(1);
+    // RT 를 쥔 채 취소했으니 잠겼다 — 한 번 떼야 풀린다
+    world.input = { ...Input.emptySnapshot(), rangedHeld: true };
+    Weapons.tick(world, DT);
+    expect(world.weapon.grenadeCharge).toBe(0);
+    world.input = Input.emptySnapshot();
+    Weapons.tick(world, DT);
+
+    // R 로도 거둔다 — 마우스를 쥔 채라 잠기고, 뗐다 다시 눌러야 차징된다
+    for (let i = 0; i < 5; i++) {
+      world.input = { ...Input.emptySnapshot(), rangedHeld: true, rangedPressed: i === 0 };
+      Weapons.tick(world, DT);
+    }
+    expect(world.weapon.grenadeCharge).toBe(5);
+    world.input = { ...Input.emptySnapshot(), rangedHeld: true, reload: true };
+    Weapons.tick(world, DT);
+    expect(world.weapon.grenadeCharge).toBe(0);
+    expect(cancelled).toHaveLength(2);
+    world.input = { ...Input.emptySnapshot(), rangedHeld: true };
+    Weapons.tick(world, DT);
+    expect(world.weapon.grenadeCharge).toBe(0); // 잠김 — 쥔 채로는 다시 차징되지 않는다
+    world.input = Input.emptySnapshot(); // 뗐다
+    Weapons.tick(world, DT);
+    expect(world.projectiles.some((p) => p.kind === 'grenade')).toBe(false); // 거둔 것은 던지지 않는다
+    world.input = { ...Input.emptySnapshot(), rangedHeld: true, rangedPressed: true };
+    Weapons.tick(world, DT);
+    expect(world.weapon.grenadeCharge).toBe(1); // 다시 차징
+    expect(world.weapon.grenades).toBe(3);
+  });
+
   /** 수류탄을 원하는 위치·속도로 직접 놓는다 (투척 각도에 휘둘리지 않게) */
   function placeGrenade(
     x: number, y: number, z: number, vx: number, vy: number, vz: number,

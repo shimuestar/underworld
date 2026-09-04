@@ -617,6 +617,7 @@ for (const name of [
   'arrow_impact',
   'arrow_shielded',
   'bow_draw_released',
+  'grenade_cancelled',
   'aim_snapped',
   'arrow_recovered',
   'arrow_broken',
@@ -2238,6 +2239,11 @@ events.on('bow_draw_released', (payload) => {
   if (!(payload as { cancelled?: boolean }).cancelled) return;
   audio.play('reload_end');
   showReaction('시위를 내렸다', 900);
+});
+// 수류탄 차징 취소(LT 놓음·R) — 활의 시위 내리기와 같은 소리·안내
+events.on('grenade_cancelled', () => {
+  audio.play('reload_end');
+  showReaction('수류탄을 거뒀다', 900);
 });
 // 방패에 막힌 화살 — 판에 꽂힌 채 남는다. 소리·번쩍임은 총알이 막힐 때와 같게
 // (같은 일이 벌어진 것이므로 다른 신호를 쓸 이유가 없다)

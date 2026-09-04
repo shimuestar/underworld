@@ -122,11 +122,24 @@ export function tick(world: World, _dt: number): void {
       return;
     }
     const grenade = balance.weapons.grenade;
-    if (world.input.rangedHeld) {
-      w.grenadeCharge = Math.min(w.grenadeCharge + 1, grenade.maxChargeTicks);
-    } else if (w.grenadeCharge > 0) {
-      throwGrenade(world, w.grenadeCharge / grenade.maxChargeTicks);
+    // 조준(LT)을 놓거나 R 을 누르면 던지지 않고 거둔다 — 활의 시위 내리기와 같은 규약 (2026-09-04 사용자 지시).
+    // 조준을 놓으면 rangedHeld 도 같은 틱에 꺼져 아래 '놓음' 분기가 던져 버리므로 그 전에 잡는다.
+    // RT(또는 마우스)를 쥔 채 취소했을 테니 잠가 둔다 — 안 그러면 다음 틱에 곧바로 다시 차징이 시작된다
+    if (w.grenadeCharge > 0 && (world.input.reload || world.input.aimReleased)) {
       w.grenadeCharge = 0;
+      w.grenadeLocked = true;
+      world.events.emit('grenade_cancelled', {});
+      return;
+    }
+    if (world.input.rangedHeld) {
+      if (w.grenadeLocked) return; // 뗐다 다시 눌러야 차징된다
+      w.grenadeCharge = Math.min(w.grenadeCharge + 1, grenade.maxChargeTicks);
+    } else {
+      w.grenadeLocked = false; // 손을 뗐다 — 다음부터 다시 차징할 수 있다
+      if (w.grenadeCharge > 0) {
+        throwGrenade(world, w.grenadeCharge / grenade.maxChargeTicks);
+        w.grenadeCharge = 0;
+      }
     }
     return;
   }

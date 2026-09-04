@@ -764,6 +764,8 @@ export interface WeaponState {
   /** 시위를 내린 뒤 잠금 — 좌클릭을 뗄 때까지 다시 안 당겨진다.
    *  없으면 취소한 다음 틱에 곧바로 다시 당겨져 취소가 취소가 아니게 된다 */
   bowDrawLocked?: boolean;
+  /** 수류탄 차징을 취소(LT 놓음·R)한 뒤 RT/마우스를 뗄 때까지 잠김 — 곧바로 다시 차징되지 않게 (활의 bowDrawLocked 와 같다) */
+  grenadeLocked?: boolean;
   /** 해머/수류탄 공용 스윙 쿨다운 */
   meleeCooldown: number;
   /** 후딜 중에 눌린 근접 입력을 기억하는 남은 틱 — 풀리는 즉시 이어 친다 */

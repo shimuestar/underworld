@@ -658,3 +658,9 @@ LT 를 누르는 순간 한 번, `aimAssist.snap.coneDeg` 원뿔 안 가장 가�
 모두 이 배율을 타서, 오래 당겨 손이 떨리면 자동 조준도 함께 사라지고 빨리 당겨 쏘면 온전하다. 표적 물림 표시(`#crosshair.lock`)도 같이 꺼진다. 한 번에 `snap.maxDeg` 까지만 — 멀리 빗나간 건 고치지 않는다. 누른 채로는 다시
 하지 않는다(그 뒤는 마찰·자석만, "손을 떼면 저절로 조준하지 않는다"는 규약 유지). 락온 중·마우스에는 없다. 이벤트 `aim_snapped{enemyId,deg}`.
 활·권총 모두 LT 조준을 거치므로 둘 다 걸린다. 테스트 `AimAssist.test.ts`.
+
+### 수류탄 차징 취소 (2026-09-04)
+
+차징 중 조준(LT)을 놓거나 R 을 누르면 던지지 않고 거둔다 — 활의 시위 내리기와 같은 규약(전에는 LT 를 놓으면 `rangedHeld` 가 꺼져
+그대로 던져 버렸다). RT/마우스를 쥔 채 취소하면 `weapon.grenadeLocked` 로 잠겨 뗐다 다시 눌러야 차징된다. 이벤트 `grenade_cancelled`
+(소리 `reload_end` + "수류탄을 거뒀다"). 테스트 `Weapons.test.ts`.
