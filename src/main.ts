@@ -3427,6 +3427,7 @@ function render(alpha: number): void {
     world.lootInView?.kind === 'pouch' ? world.lootInView.id : world.itemInView?.id,
     keyLabel('interact', 'interact'),
     input.usingPad, // 패드는 원형 버튼 글리프
+    Loot.groundItemName, // 키캡 옆 한글 이름 판 — "저건 B 로 집는 체력 물약"
   );
   stage.syncLifeMotes(world.lifeMotes);
   stage.syncBarrels(world.barrels);

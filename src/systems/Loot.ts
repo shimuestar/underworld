@@ -164,11 +164,29 @@ export const PLAYER_OWNER = 'player';
 /** 컨테이너 제목 — 주머니는 '고블린 러너의 주머니', 섞였으면 '전리품 주머니', 내가 놓았으면 '내 주머니', 상자는 '보물상자' */
 export function titleOf(world: World, ref: LootRef): string {
   if (ref.kind === 'chest') return '보물상자';
-  const pouch = world.groundItems.find((g) => g.id === ref.id);
+  return pouchTitle(world.groundItems.find((g) => g.id === ref.id));
+}
+
+/** 주머니 이름 — 주인(적 종류)이 하나면 '고블린 러너의 주머니', 섞였으면 '전리품 주머니', 내가 놓은 것은 '내 주머니' */
+export function pouchTitle(pouch: GroundItemState | undefined): string {
   const owner = pouch?.pouchOwner;
   if (!owner) return '전리품 주머니';
   if (owner === PLAYER_OWNER) return '내 주머니';
   return `${enemyDef(owner).name ?? owner}의 주머니`;
+}
+
+/** 바닥 물건의 한글 이름 — 선 끝 키캡 옆 이름 판(Stage)과 하단 안내가 같은 말을 쓴다 (2026-09-04).
+ *  비석·모르는 종류는 빈 문자열(이름 판 없음) */
+export function groundItemName(item: GroundItemState): string {
+  if (item.kind === 'pouch') return pouchTitle(item);
+  if (isConsumable(item.kind as LootKind)) return itemDef(item.kind as ItemKind).name;
+  if (item.kind === 'gold') return item.amount ? `골드 ${item.amount}` : '골드';
+  if (item.kind === 'arrow') return '화살';
+  if (item.kind === 'ammo') return '탄약';
+  if (item.kind === 'grenade') return '수류탄';
+  if (item.kind === 'battery') return '배터리';
+  if (item.kind === 'sigil') return item.sigilId ? `${sigilDef(item.sigilId).name} (각인)` : '각인';
+  return '';
 }
 
 /** 보관 주머니 — 가방 창에서 빈 주머니를 발밑(정면 placeAhead)에 내려놓고 곧장 열어 준다.

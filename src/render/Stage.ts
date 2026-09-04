@@ -211,15 +211,31 @@ const PILLAR_WHITEN = 0.4; // 색을 흰빛 쪽으로 당겨 어두운 바닥에
 // 굵기 — 원기둥 대신 1px 선(THREE.Line): 거리와 무관하게 가장 가늘다
 // 선 끝의 상호작용 키캡 — HUD 중앙 키캡과 같은 결(어두운 판 + 밝은 테두리 + 굵은 글자). 라벨별 재질을 캐시한다
 const KEYCAP_SIZE = 0.26;
+const KEYCAP_NAME_FONT = 'bold 36px monospace'; // 키 글자(44px)보다 조금 작게 — 키가 주역, 이름은 설명
+const KEYCAP_NAME_GAP = 10; // 키캡과 이름 판 사이(px, 96px 키캡 기준)
+const KEYCAP_NAME_PAD = 14; // 이름 판 안쪽 여백(px)
 const KEYCAP_MATS = new Map<string, THREE.SpriteMaterial>();
-/** round = 패드(콘솔 버튼처럼 원형), 아니면 키보드 사각 키캡 */
-function keycapMaterial(label: string, round = false): THREE.SpriteMaterial {
-  const cacheKey = `${round ? 'o' : 'k'}:${label}`;
+/** 스프라이트 배치 — 재질 userData 에 실린다. aspect = 가로/세로, anchorX = 키캡 중심의 가로 위치(0~1) */
+interface KeycapLayout { aspect: number; anchorX: number }
+function keycapLayout(mat: THREE.Material): KeycapLayout {
+  const d = mat.userData as Partial<KeycapLayout>;
+  return { aspect: d.aspect ?? 1, anchorX: d.anchorX ?? 0.5 };
+}
+/** round = 패드(콘솔 버튼처럼 원형), 아니면 키보드 사각 키캡. name 이 있으면 키 오른쪽에 물건 이름(한글) 판을 붙인다 —
+ *  "저건 B 로 집는 체력 물약"이 멀리서도 읽히게 (2026-09-04). 라벨·이름별로 캐시한다 */
+function keycapMaterial(label: string, round = false, name = ''): THREE.SpriteMaterial {
+  const cacheKey = `${round ? 'o' : 'k'}:${label}|${name}`;
   const cached = KEYCAP_MATS.get(cacheKey);
   if (cached) return cached;
   const size = 96;
   const canvas = document.createElement('canvas');
-  canvas.width = size;
+  let nameW = 0;
+  const measure = canvas.getContext('2d');
+  if (name && measure) {
+    measure.font = KEYCAP_NAME_FONT;
+    nameW = Math.ceil(measure.measureText(name).width) + KEYCAP_NAME_PAD * 2;
+  }
+  canvas.width = size + (nameW > 0 ? KEYCAP_NAME_GAP + nameW : 0); // 크기를 정하면 컨텍스트 상태가 초기화된다
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (ctx) {
@@ -254,9 +270,35 @@ function keycapMaterial(label: string, round = false): THREE.SpriteMaterial {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, size / 2, round ? size / 2 + 1 : y + h / 2 + 1);
+    // 이름 판 — 키 오른쪽, 어두운 둥근 판 위 밝은 글자 (키캡보다 테두리를 옅게 해 키가 먼저 읽히게)
+    if (nameW > 0) {
+      const nx = size + KEYCAP_NAME_GAP;
+      const ny = y + 8;
+      const nh = h - 16;
+      const nr = 10;
+      ctx.beginPath();
+      ctx.moveTo(nx + nr, ny);
+      ctx.arcTo(nx + nameW, ny, nx + nameW, ny + nh, nr);
+      ctx.arcTo(nx + nameW, ny + nh, nx, ny + nh, nr);
+      ctx.arcTo(nx, ny + nh, nx, ny, nr);
+      ctx.arcTo(nx, ny, nx + nameW, ny, nr);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(12,14,18,0.82)';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(216,224,234,0.35)';
+      ctx.stroke();
+      ctx.fillStyle = '#e8ecf2';
+      ctx.font = KEYCAP_NAME_FONT;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(name, nx + KEYCAP_NAME_PAD, ny + nh / 2 + 1);
+    }
   }
   const tex = new THREE.CanvasTexture(canvas);
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  const layout: KeycapLayout = { aspect: canvas.width / size, anchorX: size / 2 / canvas.width };
+  Object.assign(mat.userData, layout);
   KEYCAP_MATS.set(cacheKey, mat);
   return mat;
 }
@@ -4706,7 +4748,7 @@ export class Stage {
       pillar.name = 'pillar';
       group.add(pillar);
       // 선 끝의 키캡 — "저건 E 로 집는다". 라벨은 syncGroundItems 가 장치에 맞춰 갈아 끼운다
-      const keycap = new THREE.Sprite(keycapMaterial('E'));
+      const keycap = new THREE.Sprite(keycapMaterial('E').clone()); // 스프라이트별 복제 — syncGroundItems 참조
       keycap.name = 'keycap';
       keycap.scale.set(KEYCAP_SIZE, KEYCAP_SIZE, 1);
       keycap.position.y = PILLAR_HEIGHT + KEYCAP_SIZE * 0.6;
@@ -4810,7 +4852,13 @@ export class Stage {
     }
   }
 
-  syncGroundItems(items: GroundItemState[], focusId?: number, keyLabel = 'E', padGlyph = false): void {
+  syncGroundItems(
+    items: GroundItemState[],
+    focusId?: number,
+    keyLabel = 'E',
+    padGlyph = false,
+    nameOf?: (item: GroundItemState) => string,
+  ): void {
     const now = performance.now();
     const seen = new Set<number>();
     for (const item of items) {
@@ -4860,13 +4908,20 @@ export class Stage {
           keycap.visible = resting;
           keycap.position.y = PILLAR_HEIGHT + KEYCAP_SIZE * 0.6 - bob;
           const data = keycap.userData as Record<string, unknown>;
-          const wanted = `${padGlyph ? 'o' : 'k'}:${keyLabel}`;
+          const name = nameOf ? nameOf(item) : '';
+          const wanted = `${padGlyph ? 'o' : 'k'}:${keyLabel}|${name}`;
           if (data['label'] !== wanted) {
-            keycap.material = keycapMaterial(keyLabel, padGlyph);
+            // 재질은 스프라이트마다 복제한다 — 캐시를 그대로 나눠 쓰면 뒤에 도는 아이템이 앞 아이템의
+            // 밝기(focus)를 덮어써 바라보는 키캡이 흐려졌다. 텍스처는 캐시 공용이라 비용은 재질 객체 하나뿐
+            keycap.material.dispose();
+            keycap.material = keycapMaterial(keyLabel, padGlyph, name).clone();
             data['label'] = wanted;
           }
+          // 이름 판이 붙으면 스프라이트가 오른쪽으로 길어진다 — 키캡 중심은 그대로 선 끝에 둔다
+          const layout = keycapLayout(keycap.material);
+          keycap.center.set(layout.anchorX, 0.5);
           const scale = focus ? KEYCAP_SIZE * 1.25 : KEYCAP_SIZE;
-          keycap.scale.set(scale, scale, 1);
+          keycap.scale.set(scale * layout.aspect, scale, 1);
           keycap.material.opacity = focus ? 1 : 0.45;
         }
       }
@@ -4882,10 +4937,11 @@ export class Stage {
       if (seen.has(id)) continue;
       this.scene.remove(group);
       group.traverse((obj) => {
-        // 키캡 스프라이트의 재질은 라벨별 공용 캐시라 여기서 버리지 않는다
         if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
           obj.geometry.dispose();
           (obj.material as THREE.Material).dispose();
+        } else if (obj instanceof THREE.Sprite) {
+          obj.material.dispose(); // 스프라이트별 복제 재질만 — 텍스처는 라벨별 공용 캐시라 남긴다
         }
       });
       this.groundItemVisuals.delete(id);
