@@ -3485,6 +3485,13 @@ export class Stage {
         if (enemy.lurking) {
           visual.torso.rotation.x = Math.PI;
           visual.torso.position.y = def2.height;
+        } else if ((enemy.dropTicks ?? 0) <= 0) {
+          // 지상의 거머리 — 몸이 작아(반지름 0.35) 공용 자세 오프셋(뻗음·후퇴 0.5m)이 피격 상자 밖으로
+          // 몸을 통째로 밀어냈다: 착지 직후 보이는 몸을 쏴도 안 맞던 원인(2026-09-04).
+          // 보이는 것 = 맞는 것 — 전후 이동과 기울기를 몸 반지름 안으로 죈다
+          const maxOff = def2.radius * 0.45;
+          visual.torso.position.z = Math.max(-maxOff, Math.min(maxOff, visual.torso.position.z));
+          visual.torso.rotation.x = Math.max(-0.3, Math.min(0.3, visual.torso.rotation.x));
         }
         // 배불리 먹은 놈은 통통하다 — 피를 얼마나 뺏겼는지 몸집으로 보인다
         const fat = enemy.gorged ? 1.35 : 1;
