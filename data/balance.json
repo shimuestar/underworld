@@ -418,7 +418,7 @@
     "pouch": { "scatterRadius": 0.5, "mergeRadius": 1.6, "radius": 2.0, "facingArcDeg": 110, "settleTicks": 30, "reopenGuardTicks": 3, "placeAhead": 0.9, "launchY": 0.3, "mergeHop": 0.45,
                "aimRadius": 5.0, "aimArcDeg": 12, "aimHeight": 0.2 },
     "_pickupNote": "바닥 소모품(물약·마나·고기)은 자석이 아니라 E 로 집는다 — 이 거리·시야각 안에서. 골드·화살·탄약은 여전히 자석",
-    "pickup": { "radius": 1.8, "facingArcDeg": 100 },
+    "pickup": { "radius": 1.8, "facingArcDeg": 150 },
     "_bounceNote": "가방이 가득인데 집으려 하면 몸까지 날아왔다 원자리로 튕겨 돌아간다 — popUp 높이의 포물선을 ticks 동안",
     "bounce": { "popUp": 0.5, "ticks": 26 },
     "_dropScatterNote": "루팅 창에서 컨테이너 쪽 아이템을 바닥에 버릴 때 컨테이너에서 이 거리만큼 플레이어 반대쪽으로",

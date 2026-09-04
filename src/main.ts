@@ -3673,6 +3673,7 @@ function render(alpha: number): void {
   const IK = keyLabel('interact', 'interact');
   // 중앙 키캡 — 이번 프레임에 보여 줄 키 (null = 숨김). 문 같은 단순 대상 전용
   let centerKeycap: string | null = null;
+  let keycapWithPrompt = false; // 키캡과 하단 설명을 함께 (주머니·바닥 아이템)
   // 사망 화면 힌트 — 죽은 뒤에 패드를 집거나 내려놔도 표기가 따라온다
   if (world.dead) deathHint!.textContent = deathHintText();
   if (showAltarPrompt) {
@@ -3683,9 +3684,14 @@ function render(alpha: number): void {
   } else if (nearChest) {
     altarPrompt!.textContent = `${IK} — ${world.chestInView!.opened ? '보물상자를 뒤진다' : '보물상자를 연다'}`;
   } else if (nearLoot) {
+    // 주머니·바닥 아이템은 중앙 키캡 + 하단 설명 둘 다 — 바닥의 작은 물건은 키캡이 "지금 눌러라"를 바로 보여 준다
     altarPrompt!.textContent = `${IK} — ${Loot.titleOf(world, world.lootInView!)}를 뒤진다`;
+    centerKeycap = IK;
+    keycapWithPrompt = true;
   } else if (nearItem) {
     altarPrompt!.textContent = `${IK} — ${itemDef(world.itemInView!.kind).name} 줍기`;
+    centerKeycap = IK;
+    keycapWithPrompt = true;
   } else if (nearLever) {
     const leverDef = world.level.levers.find(
       (l) => l.cell[0] === world.leverInView!.row && l.cell[1] === world.leverInView!.col,
@@ -3724,7 +3730,7 @@ function render(alpha: number): void {
   }
   if (centerKeycap !== null) {
     interactKeyEl!.textContent = centerKeycap;
-    altarPrompt!.classList.remove('visible'); // 하단 안내 대신 중앙 키캡만
+    if (!keycapWithPrompt) altarPrompt!.classList.remove('visible'); // 문은 하단 안내 대신 중앙 키캡만
   }
   interactKeyEl!.classList.toggle('visible', centerKeycap !== null);
 

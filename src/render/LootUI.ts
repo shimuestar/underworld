@@ -97,33 +97,51 @@ export class LootUI {
   padDrop(): void { if (this.open) this.drop(); }
   padClose(): void { this.close(); }
 
-  /** 커서 이동 — 컨테이너는 위아래로 감기고, → 로 가방으로 넘어간다. 가방은 격자(cols)로 돌고 왼쪽 끝에서 ← 면 컨테이너로 */
+  /** 컨테이너 격자 크기 — 가방과 같은 열 수, 줄 수는 가방과 같거나 내용이 넘치면 더 */
+  private containerGrid(entries: number): { cols: number; rows: number } {
+    const cols = balance.items.cols;
+    return { cols, rows: Math.max(balance.items.rows, Math.ceil(entries / cols)) };
+  }
+
+  /** 커서 이동 — 두 격자를 ←→ 로 오간다: 컨테이너 오른쪽 끝에서 → 는 가방, 가방 왼쪽 끝에서 ← 는 컨테이너.
+   *  위아래는 각 격자 안에서 감긴다 */
   private move(dx: number, dy: number): void {
     const c = Loot.container(this.world);
-    const n = c?.entries.length ?? 0;
     const cols = balance.items.cols;
-    const slots = this.world.inventory.length;
     if (this.pane === 'container') {
-      if (dx > 0) this.pane = 'bag';
-      else if (dy !== 0 && n > 0) this.selC = (this.selC + dy + n) % n;
-    } else if (dx < 0 && this.selB % cols === 0) {
-      this.pane = 'container';
-    } else if (dx !== 0) {
-      const row = Math.floor(this.selB / cols);
-      const col = ((this.selB % cols) + dx + cols) % cols;
-      this.selB = Math.min(slots - 1, row * cols + col);
-    } else if (dy !== 0) {
-      const rows = Math.max(1, Math.ceil(slots / cols));
-      const row = (Math.floor(this.selB / cols) + dy + rows) % rows;
-      this.selB = Math.min(slots - 1, row * cols + (this.selB % cols));
+      const g = this.containerGrid(c?.entries.length ?? 0);
+      const total = g.cols * g.rows;
+      if (dx > 0 && this.selC % cols === cols - 1) {
+        this.pane = 'bag';
+      } else if (dx !== 0) {
+        const row = Math.floor(this.selC / cols);
+        const col = ((this.selC % cols) + dx + cols) % cols;
+        this.selC = Math.min(total - 1, row * cols + col);
+      } else if (dy !== 0) {
+        const row = (Math.floor(this.selC / cols) + dy + g.rows) % g.rows;
+        this.selC = Math.min(total - 1, row * cols + (this.selC % cols));
+      }
+    } else {
+      const slots = this.world.inventory.length;
+      if (dx < 0 && this.selB % cols === 0) {
+        this.pane = 'container';
+      } else if (dx !== 0) {
+        const row = Math.floor(this.selB / cols);
+        const col = ((this.selB % cols) + dx + cols) % cols;
+        this.selB = Math.min(slots - 1, row * cols + col);
+      } else if (dy !== 0) {
+        const rows = Math.max(1, Math.ceil(slots / cols));
+        const row = (Math.floor(this.selB / cols) + dy + rows) % rows;
+        this.selB = Math.min(slots - 1, row * cols + (this.selB % cols));
+      }
     }
     this.rebuild();
   }
 
   private clampSel(): void {
     const c = Loot.container(this.world);
-    const n = c?.entries.length ?? 0;
-    if (this.selC >= n) this.selC = Math.max(0, n - 1);
+    const g = this.containerGrid(c?.entries.length ?? 0);
+    if (this.selC >= g.cols * g.rows) this.selC = g.cols * g.rows - 1;
   }
 
   private rectOf(key: string): DOMRect {
@@ -137,7 +155,7 @@ export class LootUI {
     if (!c) { this.close(); return; }
     if (this.pane === 'container') {
       const e = c.entries[this.selC];
-      if (!e) return;
+      if (!e) { this.shakeKey = `c${this.selC}`; this.rebuild(); return; }
       const from = this.rectOf(`c${this.selC}`);
       const svg = lootIconSvg(e, ROW_ICON_PX);
       const toKey = flyTargetOf(e);
@@ -181,7 +199,8 @@ export class LootUI {
     const c = Loot.container(world);
     if (!c) { this.close(); return; } // 슬라임이 먹었다 등 — 컨테이너가 사라졌다
     const panel = document.createElement('div');
-    panel.style.cssText = 'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;min-width:760px;';
+    // 폭은 고정 — 툴팁 길이에 따라 창이 늘고 줄면 눈이 어지럽다. 긴 문장은 접어 내린다
+    panel.style.cssText = 'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;width:860px;box-sizing:border-box;';
 
     const title = document.createElement('div');
     title.textContent = `${c.title}   ◆ ${world.gold}`;
@@ -198,7 +217,7 @@ export class LootUI {
     // 툴팁 — 커서 아래 것이 무엇이고 지금 쓸 값어치가 있는지 한 줄로
     const tip = document.createElement('div');
     tip.textContent = this.describeCursor(c);
-    tip.style.cssText = 'margin-top:12px;min-height:20px;color:#a9b0bc;border-top:1px solid #23232b;padding-top:8px;white-space:pre-line;';
+    tip.style.cssText = 'margin-top:12px;min-height:44px;color:#a9b0bc;border-top:1px solid #23232b;padding-top:8px;white-space:normal;overflow-wrap:anywhere;';
     panel.appendChild(tip);
 
     const buttons = document.createElement('div');
@@ -266,54 +285,56 @@ export class LootUI {
     return b;
   }
 
+  /** 컨테이너 — 가방과 같은 사각 칸 격자. 한 칸 = 한 종류(×개수). 빈 칸은 어둡게 */
   private buildContainer(c: Loot.Container): HTMLDivElement {
     const col = document.createElement('div');
-    col.style.cssText = 'width:320px;';
+    const g = this.containerGrid(c.entries.length);
     const head = document.createElement('div');
-    head.textContent = c.ref.kind === 'chest' ? `상자 안 (${c.entries.length}줄)` : `주머니 안 (${c.entries.length}줄)`;
+    head.textContent = c.ref.kind === 'chest' ? `상자 안 (${c.entries.length}종)` : `주머니 안 (${c.entries.length}종)`;
     head.style.cssText = `color:${this.pane === 'container' ? '#e8c76a' : '#8a8f9a'};margin-bottom:6px;`;
     col.appendChild(head);
-    if (c.entries.length === 0) {
-      const empty = document.createElement('div');
-      empty.textContent = '비었다';
-      empty.style.cssText = 'color:#555c66;padding:12px 8px;';
-      col.appendChild(empty);
-    }
-    c.entries.forEach((e, i) => {
+    const grid = document.createElement('div');
+    grid.style.cssText = `display:grid;grid-template-columns:repeat(${g.cols}, ${CELL_PX}px);gap:8px;`;
+    const flyMarked = new Set<string>();
+    for (let i = 0; i < g.cols * g.rows; i++) {
+      const e = c.entries[i];
       const here = this.pane === 'container' && i === this.selC;
-      const line = document.createElement('div');
-      line.dataset['key'] = `c${i}`;
-      line.dataset['fly'] = `k:${e.kind}`;
-      line.style.cssText =
-        'display:flex;gap:10px;padding:5px 8px;align-items:center;border-top:1px solid #23232b;cursor:pointer;' +
-        (here ? 'background:#242a36;box-shadow:inset 2px 0 0 #7fbfff;' : '');
+      const cell = document.createElement('div');
+      cell.dataset['key'] = `c${i}`;
+      cell.style.cssText =
+        `width:${CELL_PX}px;height:${CELL_PX}px;box-sizing:border-box;position:relative;border-radius:4px;cursor:pointer;` +
+        'display:flex;align-items:center;justify-content:center;' +
+        `border:1px solid ${here ? '#7fbfff' : '#3a3a44'};background:${here ? 'rgba(127,191,255,0.12)' : '#1b1b22'};`;
       // mousemove 로 커서가 따라온다 (mouseenter 는 rebuild 마다 다시 떠서 키보드 선택을 덮는다 — ShopUI 규약)
-      line.onmousemove = () => {
+      cell.onmousemove = () => {
         if (this.pane === 'container' && this.selC === i) return;
         this.pane = 'container';
         this.selC = i;
         this.rebuild();
       };
-      line.onclick = () => { this.pane = 'container'; this.selC = i; this.act(); };
-      line.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'container'; this.selC = i; this.drop(); };
-      const cursor = document.createElement('span');
-      cursor.textContent = here ? '▸' : ' ';
-      cursor.style.cssText = 'color:#7fbfff;width:10px;';
-      line.appendChild(cursor);
-      const icon = document.createElement('span');
-      icon.style.cssText = 'display:block;line-height:0;';
-      icon.innerHTML = lootIconSvg(e, ROW_ICON_PX);
-      line.appendChild(icon);
-      const name = document.createElement('span');
-      name.textContent = Loot.entryName(e);
-      name.style.cssText = 'flex:1;';
-      line.appendChild(name);
-      const count = document.createElement('span');
-      count.textContent = `×${e.count}`;
-      count.style.cssText = 'color:#e8c76a;width:52px;text-align:right;';
-      line.appendChild(count);
-      col.appendChild(line);
-    });
+      cell.onclick = () => { this.pane = 'container'; this.selC = i; this.act(); };
+      cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'container'; this.selC = i; this.drop(); };
+      if (e) {
+        const flyKey = `k:${e.kind}`;
+        if (!flyMarked.has(flyKey)) { cell.dataset['fly'] = flyKey; flyMarked.add(flyKey); }
+        const icon = document.createElement('span');
+        icon.style.cssText = 'display:block;line-height:0;';
+        icon.innerHTML = lootIconSvg(e, ICON_PX);
+        cell.appendChild(icon);
+        const count = document.createElement('span');
+        count.textContent = `×${e.count}`;
+        count.style.cssText = 'position:absolute;right:4px;bottom:1px;font-size:11px;color:#e8c76a;';
+        cell.appendChild(count);
+      }
+      grid.appendChild(cell);
+    }
+    col.appendChild(grid);
+    if (c.entries.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = '비었다';
+      empty.style.cssText = 'color:#555c66;margin-top:8px;';
+      col.appendChild(empty);
+    }
     return col;
   }
 
