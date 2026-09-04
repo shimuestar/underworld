@@ -2969,32 +2969,10 @@ const systems = [
 function simulate(dt: number): void {
   world.input = input.sample();
 
-  // 한 키 체계 — 근접·처형과 상호작용은 논리적으로 한 키다.
-  // 상호작용 대상 앞에서는 근접 키가 상호작용이 되고(1순위),
-  // 대상이 없으면 상호작용 키가 근접·처형이 된다. *_InView 는 지난 틱에
-  // 시스템들이 계산한 값이라 한 틱(16ms) 늦지만 체감할 수 없다.
-  // 레버 관문(byLever)은 손으로 못 여니 대상으로 안 친다 — 관문 앞 전투에서
-  // 근접이 헛손질로 바뀌면 안 된다. 봉인된 출구도 같은 이유로 제외.
-  // 구울에게 물린 동안은 병합을 끈다 — 근접 연타(몸부림)가 문·상자 상호작용으로
-  // 바뀌면 빠져나올 방법이 없다 (문 앞에서 물리면 연타가 전부 먹히던 버그)
-  if (!world.dead && !world.uiOpen && world.grappleEnemyId === null) {
-    const interactable =
-      (world.doorInView !== null && (!world.doorInView.byLever || world.doorInView.unlockedOnce === true)) ||
-      world.leverInView !== null ||
-      world.chestInView !== null ||
-      world.lootInView !== null ||
-      // 바닥 소모품 집기는 전투 중엔 병합하지 않는다 — 발치 물약 때문에 휘두르기가 줍기로 새면 안 된다 (E·패드 B 는 늘 된다)
-      (world.itemInView !== null && !world.mana.inCombat) ||
-      (world.altarInView && !world.altarEnteredThisApproach) ||
-      world.onEntrancePad ||
-      (world.onExitPad && (world.exitOpen || world.exitNeedsKey));
-    if (interactable && world.input.meleePressed) {
-      world.input = { ...world.input, meleePressed: false, interactPressed: true };
-    }
-    // E → 해머 변환은 없앴다 (2026-08-28, 사용자 결정): E 는 상호작용 전용이고
-    // 대상이 없으면 아무 일도 하지 않는다. 근접 키 → 상호작용 방향만 남긴다
-  }
-
+  // 상호작용은 전용 키(E·패드 B)만 — 근접 키(우클릭·RT)는 더 이상 상호작용으로 바뀌지 않는다
+  // (2026-09-04 사용자 결정: 문·주머니 앞에서 휘두르려다 창이 열리는 사고를 없앤다).
+  // 예전 "한 키 체계"(근접 → 상호작용 병합)는 여기 있었다 — 되살리려면 *_InView 로 대상을 보고
+  // meleePressed 를 interactPressed 로 바꾸는 한 줄이면 된다
   // Menu 버튼 = Tab. 가방·각인 창은 스냅샷을 안 거치는 raw 입력이라 여기서 본다.
   // 렌더 루프에서 읽으면 안 된다 — 폴링은 틱에서 도는데 렌더는 다른 속도로 돌아
   // 같은 엣지를 두 프레임이 먹고 창이 열렸다 곧바로 닫힌다 (실측으로 확인)
@@ -3691,10 +3669,8 @@ function render(alpha: number): void {
     'visible',
     showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest || nearLoot || nearItem,
   );
-  // 상호작용 키 표기 — 한 키 체계라 근접 키를 안내한다 (E 도 여전히 동작한다)
-  // 패드는 상호작용 버튼을 보여 준다 — 근접(RT)도 겸하지만("한 키 체계") 안내는
-  // 전용 키가 정직하다. 키보드는 우클릭(근접 겸용)이 관례라 그대로
-  const IK = keyLabel('우클릭', 'interact');
+  // 상호작용 키 표기 — 전용 키만 상호작용이다 (키보드는 현재 바인딩, 패드는 상호작용 버튼)
+  const IK = keyLabel('interact', 'interact');
   // 중앙 키캡 — 이번 프레임에 보여 줄 키 (null = 숨김). 문 같은 단순 대상 전용
   let centerKeycap: string | null = null;
   // 사망 화면 힌트 — 죽은 뒤에 패드를 집거나 내려놔도 표기가 따라온다
@@ -3791,9 +3767,9 @@ function render(alpha: number): void {
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}${world.skillTestMode ? '   [스킬 테스트]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
     (input.usingPad
-      ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 조준+${padBtn('melee')} 발사(${padBtn('cycleWeapon')} 무기 교체)  ${padBtn('melee')} 근접·처형·상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
+      ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 조준+${padBtn('melee')} 발사(${padBtn('cycleWeapon')} 무기 교체)  ${padBtn('melee')} 근접·처형  ${padBtn('interact')} 상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
         `${padBtn('skillSelect')}+${padBtn('skill1')}·${padBtn('skill2')}·${padBtn('skill3')}·${padBtn('skill4')} 스킬  ${padBtn('itemSelect')}+D-패드 소모품  ${padBtn('inventory')} 가방→스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴(길게=배터리)  ${padBtn('pause')} 일시정지·키 설정`
-      : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형·상호작용  Shift 짧게=패링·꾹=방어\n' +
+      : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형  E 상호작용  Shift 짧게=패링·꾹=방어\n' +
         'Z·X·C·V 스킬  Q 스킬 교체·휠클릭 사용  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  M 미니맵  F1 지표  F2 덤프  F3 다시하기  P/O/K/G/U 테스트(U=스킬 전부)');
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
