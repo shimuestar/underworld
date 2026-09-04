@@ -76,16 +76,43 @@ export function rollLoot(enemyType: string, rng: () => number = Math.random): Lo
   return out;
 }
 
-/** 시체 자리에 주머니 — 가까이(mergeRadius) 다른 주머니가 있으면 거기에 합친다.
+/** 떨어질 자리 — 플레이어 반대쪽 호(awayArcDeg) 안에서, 다른 주머니와 minSpacing 이상 떨어지고 벽이 아닌 첫 자리.
+ *  각도를 좌우로 벌리고 거리를 늘려 가며 찾는다. 다 실패하면 기본 자리(공통 드랍 규칙) */
+function landingSpot(world: World, x: number, z: number, r: number): { x: number; z: number } {
+  const cfg = balance.loot.pouch;
+  const base = scatterAwayFromPlayer(world, x, z, r, balance.pickups.awayArcDeg);
+  const spacing = cfg.minSpacing;
+  if (spacing <= 0) return base;
+  const p = world.player;
+  const adx = x - p.x;
+  const adz = z - p.z;
+  const away = Math.hypot(adx, adz) > 0.001 ? Math.atan2(adx, adz) : Math.atan2(base.x - x, base.z - z);
+  const cs = world.level.cellSize;
+  const free = (cx: number, cz: number): boolean =>
+    !world.level.solidAt(Math.floor(cx / cs), Math.floor(cz / cs)) &&
+    world.groundItems.every((g) => g.kind !== 'pouch' || Math.hypot((g.originX ?? g.x) - cx, (g.originZ ?? g.z) - cz) >= spacing);
+  if (free(base.x, base.z)) return base;
+  const offsets = [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4, Math.PI * 0.6, -Math.PI * 0.6, Math.PI];
+  for (const mul of [1, 1.6, 2.2, 3]) {
+    for (const off of offsets) {
+      const cx = x + Math.sin(away + off) * r * mul;
+      const cz = z + Math.cos(away + off) * r * mul;
+      if (free(cx, cz)) return { x: cx, z: cz };
+    }
+  }
+  return base;
+}
+
+/** 시체 자리에 주머니 — 기본은 각자 떨어진다(다른 주머니와 minSpacing 이상 띄워). mergeRadius > 0 이면 그 안의 주머니에 합친다.
  *  떨어진 뒤 settleTicks 동안은 손댈 수 없다(noMagnetTicks 를 안착 시간으로 쓴다) */
 export function dropPouch(world: World, enemyType: string, x: number, z: number): GroundItemState | null {
   const entries = rollLoot(enemyType);
   if (entries.length === 0) return null;
   const cfg = balance.loot.pouch;
   const boss = enemyDef(enemyType).boss === true;
-  const near = world.groundItems.find(
-    (g) => g.kind === 'pouch' && Math.hypot(g.x - x, g.z - z) <= cfg.mergeRadius,
-  );
+  const near = cfg.mergeRadius > 0
+    ? world.groundItems.find((g) => g.kind === 'pouch' && Math.hypot(g.x - x, g.z - z) <= cfg.mergeRadius)
+    : undefined;
   if (near) {
     const items = (near.pouchItems ??= []);
     for (const e of entries) mergeEntry(items, e);
@@ -107,7 +134,7 @@ export function dropPouch(world: World, enemyType: string, x: number, z: number)
   }
   // 플레이어 반대쪽으로 떨어진다 — 시체에서 내 발밑으로 직행하지 않는다 (공통 드랍 규칙).
   // 바닥에 '짠' 나타나지 않고 시체에서 적 머리 높이까지 튀어올랐다가 settleTicks 동안 그 자리로 떨어진다 (tick 이 굴린다)
-  const at = scatterAwayFromPlayer(world, x, z, cfg.scatterRadius, balance.pickups.awayArcDeg);
+  const at = landingSpot(world, x, z, cfg.scatterRadius);
   const pouch: GroundItemState = {
     id: nextLootId++, kind: 'pouch', x, z, y: cfg.launchY,
     pouchItems: entries, pouchTier: boss ? 'boss' : 'normal', pouchOwner: enemyType,
@@ -148,9 +175,20 @@ export function titleOf(world: World, ref: LootRef): string {
 export function createPlayerPouch(world: World): GroundItemState {
   const p = world.player;
   const ahead = balance.loot.pouch.placeAhead;
+  // 정면 발밑 — 거기에 다른 주머니가 있으면 옆으로 비켜 놓는다 (landingSpot 은 시체→반대쪽 규칙이라 발밑 기준으로 따로)
+  let px = p.x - Math.sin(p.yaw) * ahead;
+  let pz = p.z - Math.cos(p.yaw) * ahead;
+  const spacing = balance.loot.pouch.minSpacing;
+  const crowded = (cx: number, cz: number): boolean =>
+    world.groundItems.some((g) => g.kind === 'pouch' && Math.hypot(g.x - cx, g.z - cz) < spacing);
+  for (let k = 1; k <= 8 && crowded(px, pz); k++) {
+    const side = (k % 2 === 0 ? 1 : -1) * Math.ceil(k / 2) * spacing;
+    px = p.x - Math.sin(p.yaw) * ahead + Math.cos(p.yaw) * side;
+    pz = p.z - Math.cos(p.yaw) * ahead - Math.sin(p.yaw) * side;
+  }
   const pouch: GroundItemState = {
     id: nextLootId++, kind: 'pouch',
-    x: p.x - Math.sin(p.yaw) * ahead, z: p.z - Math.cos(p.yaw) * ahead,
+    x: px, z: pz,
     pouchItems: [], pouchTier: 'normal', pouchOwner: PLAYER_OWNER, noMagnetTicks: 0,
   };
   world.groundItems.push(pouch);

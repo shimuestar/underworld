@@ -17,7 +17,7 @@
 
 ## 데이터 (`balance.loot`)
 
-- `pouch.scatterRadius` 0.5 / `mergeRadius` 1.6 (이 안 주머니에 합친다) / `radius` 2.0·`facingArcDeg` 110 (뒤질 수 있는 거리·시야각) /
+- `pouch.scatterRadius` 0.5 / `mergeRadius` 0 (병합 없음; 켜면 이 안 주머니에 합친다) / `minSpacing` 0.8 (다른 주머니와 띄우는 거리) / `radius` 2.0·`facingArcDeg` 110 (뒤질 수 있는 거리·시야각) /
   `settleTicks` 30 (떨어진 뒤 손댈 수 없는 시간 — `noMagnetTicks` 를 안착으로 쓴다) / `reopenGuardTicks` 3 (닫은 E 가 도로 열지 않게)
 - `pickup.radius` 1.8·`facingArcDeg` 100 — 바닥 소모품을 E 로 집는 거리
 - `bounce.popUp` 0.5·`ticks` 26 — 가득일 때 몸 앞에서 원자리로 튕겨 돌아가는 포물선
@@ -27,8 +27,8 @@
 ## 규칙
 
 - **주머니 내용물** = 소모품(물약·마나·고기) + 골드 + 화살. `LootEntry {kind, count, sigilId?}` 줄로 쌓인다(상한 없음). 상자에는 각인 줄이 있다.
-- **병합** — `mergeRadius` 안에 주머니가 있으면 새 전리품이 거기 합쳐진다. 같은 종류 적이면 이름 유지(`고블린 러너의 주머니`), 다르면 `전리품 주머니`,
-  보스가 섞이면 금빛(`pouchTier: 'boss'`, 점광원).
+- **각자 떨어진다** — 기본 `mergeRadius` 0(병합 없음). 떨어질 자리는 플레이어 반대쪽 호 안에서 **다른 주머니와 `minSpacing`(0.8m) 이상 떨어지고 벽이 아닌 곳**을 각도·거리를 넓혀 가며 고른다(`landingSpot`). 보관 주머니도 옆으로 비켜 놓인다.
+  `mergeRadius` 를 켜면 그 안의 주머니에 합쳐진다(같은 종류면 이름 유지, 다르면 `전리품 주머니`, 보스가 섞이면 금빛).
 - **뒤지기(타르코프식)** — 컨테이너 칸은 처음엔 `?` 로 가려 있다. 창을 열면 배치 순서대로 한 칸씩 `loot.search.perItemMs`(1초) 동안 쿨다운처럼 한 바퀴 도는 덮개가 얹히고, 다 돌면 소리(`loot_reveal`)와 함께 정체가 드러난다(`LootEntry.searched`, `loot_revealed`). 밝혀진 칸만 가져가기·버리기가 된다. 창을 닫으면 멈추고 다시 열면 이어진다(데이터에 남는다). 내가 넣은 것은 바로 보인다.
 - **가져오기** — 골드는 항상 전부(카운터, `gold_picked` 는 컨테이너 자리에서 ◆ 팝). 화살은 화살통 상한까지 부분(남은 건 줄에 남는다).
   소모품은 가방에 자리가 있을 때만 1개씩. 각인은 가져가는 순간 `Sigils` 가 `loot_taken` 을 받아 습득(토스트).

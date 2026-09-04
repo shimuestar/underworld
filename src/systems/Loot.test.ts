@@ -143,25 +143,58 @@ describe('주머니 드랍', () => {
     expect(world.groundItems).toHaveLength(0);
   });
 
-  it('가까운 주머니에 합쳐진다 — 같은 종류면 이름 유지, 다른 종류면 전리품 주머니, 보스면 금빛. 멀면 새 주머니', () => {
+  it('기본은 병합 없음 — 같은 자리에서 여럿을 죽여도 주머니가 각자 떨어지고 서로 minSpacing 이상 떨어진다', () => {
     Loot.init(world);
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 14, z: 10 });
-    world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 14.5, z: 10 });
-    let pouches = world.groundItems.filter((g) => g.kind === 'pouch');
-    expect(pouches).toHaveLength(1);
-    expect(pouches[0]!.pouchItems!.find((e) => e.kind === 'potion')!.count).toBe(2);
-    expect(pouches[0]!.pouchOwner).toBe('goblin_runner');
-    expect(pouches[0]!.noMagnetTicks).toBe(L.pouch.settleTicks); // 다시 안착 — 제자리에서 살짝 뛴다
-    expect(pouches[0]!.bounceY0).toBe(L.pouch.mergeHop);
-    world.events.emit('enemy_died', { enemyType: 'goblin_chieftain', x: 14.2, z: 10.3 });
-    pouches = world.groundItems.filter((g) => g.kind === 'pouch');
-    expect(pouches).toHaveLength(1);
-    expect(pouches[0]!.pouchOwner).toBeUndefined(); // 섞였다
-    expect(pouches[0]!.pouchTier).toBe('boss');
-    expect(Loot.titleOf(world, { kind: 'pouch', id: pouches[0]!.id })).toBe('전리품 주머니');
-    world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 24, z: 10 }); // mergeRadius 밖
-    expect(world.groundItems.filter((g) => g.kind === 'pouch')).toHaveLength(2);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5); // 호 한가운데 — 같은 각도로 떨어지려 한다
+    for (let i = 0; i < 4; i++) world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 14, z: 10 });
+    const pouches = world.groundItems.filter((g) => g.kind === 'pouch');
+    expect(pouches).toHaveLength(4);
+    for (let i = 0; i < pouches.length; i++) {
+      for (let j = i + 1; j < pouches.length; j++) {
+        const a = pouches[i]!;
+        const b = pouches[j]!;
+        expect(Math.hypot(a.originX! - b.originX!, a.originZ! - b.originZ!)).toBeGreaterThanOrEqual(L.pouch.minSpacing - 1e-6);
+      }
+      expect(pouches[i]!.pouchOwner).toBe('goblin_runner'); // 섞이지 않는다
+      // 벽 칸에 놓이지 않는다
+      const cs = world.level.cellSize;
+      expect(world.level.solidAt(Math.floor(pouches[i]!.originX! / cs), Math.floor(pouches[i]!.originZ! / cs))).toBe(false);
+    }
+  });
+
+  it('mergeRadius 를 켜면 가까운 주머니에 합쳐진다 — 같은 종류면 이름 유지, 다른 종류면 전리품 주머니, 보스면 금빛', () => {
+    const saved = L.pouch.mergeRadius;
+    (L.pouch as { mergeRadius: number }).mergeRadius = 1.6;
+    try {
+      Loot.init(world);
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 14, z: 10 });
+      world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 14.5, z: 10 });
+      let pouches = world.groundItems.filter((g) => g.kind === 'pouch');
+      expect(pouches).toHaveLength(1);
+      expect(pouches[0]!.pouchItems!.find((e) => e.kind === 'potion')!.count).toBe(2);
+      expect(pouches[0]!.pouchOwner).toBe('goblin_runner');
+      expect(pouches[0]!.noMagnetTicks).toBe(L.pouch.settleTicks); // 다시 안착 — 제자리에서 살짝 뛴다
+      expect(pouches[0]!.bounceY0).toBe(L.pouch.mergeHop);
+      world.events.emit('enemy_died', { enemyType: 'goblin_chieftain', x: 14.2, z: 10.3 });
+      pouches = world.groundItems.filter((g) => g.kind === 'pouch');
+      expect(pouches).toHaveLength(1);
+      expect(pouches[0]!.pouchOwner).toBeUndefined(); // 섞였다
+      expect(pouches[0]!.pouchTier).toBe('boss');
+      expect(Loot.titleOf(world, { kind: 'pouch', id: pouches[0]!.id })).toBe('전리품 주머니');
+      world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 24, z: 10 }); // mergeRadius 밖
+      expect(world.groundItems.filter((g) => g.kind === 'pouch')).toHaveLength(2);
+    } finally {
+      (L.pouch as { mergeRadius: number }).mergeRadius = saved;
+    }
+  });
+
+  it('보관 주머니도 이미 있는 주머니 위에 겹쳐 놓이지 않는다', () => {
+    const a = Loot.createPlayerPouch(world);
+    a.pouchItems = [{ kind: 'gold', count: 1, searched: true }]; // 비어 있지 않게 (비면 닫을 때 사라진다)
+    Loot.closeLoot(world);
+    const b = Loot.createPlayerPouch(world);
+    expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThanOrEqual(L.pouch.minSpacing - 1e-6);
   });
 });
 
