@@ -3826,6 +3826,9 @@ function render(alpha: number): void {
   // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)
   // 미니맵을 끄면 왼쪽 위 안내 글도 함께 숨긴다 — 화면을 비우고 싶을 때 (일시정지 메뉴 7번)
   hud!.style.display = minimap.visible ? '' : 'none';
+  // 패드로 노는 중엔 OS 커서를 숨긴다 — 루팅·가방·일시정지가 포인터락을 풀어도 화살표가 안 뜨게.
+  // 마우스를 움직이거나 클릭하면 Input 이 장치를 kb 로 돌려 곧바로 다시 보인다 (일시정지 중에도 render 는 돈다)
+  document.documentElement.classList.toggle('padcursor', input.usingPad);
   if (bossLine) {
     hud!.innerHTML = hudText.replace(
       bossLine.slice(0, -1),

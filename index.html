@@ -27,6 +27,12 @@
         pointer-events: none;
         user-select: none;
       }
+      /* 패드로 노는 중(마지막 입력 장치가 패드)에는 OS 커서를 숨긴다 — 루팅·가방·메뉴가 포인터락을
+         풀어도 화살표가 떠 있지 않게. 마우스를 움직이거나 클릭하면 Input 이 장치를 kb 로 돌려 다시 보인다 */
+      html.padcursor,
+      html.padcursor * {
+        cursor: none !important;
+      }
       #crosshair {
         position: fixed;
         top: 50%;

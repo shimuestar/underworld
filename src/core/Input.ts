@@ -177,15 +177,20 @@ export class Input {
     window.addEventListener('blur', () => this.keys.clear());
 
     window.addEventListener('mousemove', (e) => {
-      if (!this.pointerLocked) return;
+      if (!this.pointerLocked) {
+        // 창(루팅·가방·메뉴) 위에서 마우스를 실제로 움직이면 마우스 사용자로 돌아온다 —
+        // 패드 때문에 숨긴 커서(html.padcursor)가 다시 나타나고 안내도 키보드 표기로 바뀐다
+        if (e.movementX !== 0 || e.movementY !== 0) this.device = 'kb';
+        return;
+      }
       this.dx += e.movementX;
       this.dy += e.movementY;
     });
 
     // 포인터 락을 얻는 그 클릭은 발사로 치지 않는다 (mousedown 시점엔 아직 미잠금)
     window.addEventListener('mousedown', (e) => {
+      this.device = 'kb'; // 창 안을 클릭한 것도 마우스 사용이다 (커서를 되살린다)
       if (!this.pointerLocked) return;
-      this.device = 'kb';
       // 좌클릭 = 원거리 / 우클릭 = 근접
       if (e.button === 0) {
         this.rangedClicks++;
