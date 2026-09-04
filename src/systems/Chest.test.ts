@@ -58,6 +58,11 @@ function putChest(world: World, x: number, z: number, id = 1): ChestState {
   return chest;
 }
 
+/** 상자 속을 전부 밝힌다 — 루팅 창의 뒤지기(1초/칸)를 건너뛴다 */
+function revealAll(world: World, chest: ChestState): void {
+  for (const e of chest.chestItems ?? []) Loot.revealEntry(world, e);
+}
+
 /** E 한 번 */
 function interact(world: World): void {
   world.input = { ...Input.emptySnapshot(), interactPressed: true };
@@ -121,6 +126,7 @@ describe('상호작용', () => {
     expect(JSON.stringify(chest.chestItems)).toBe(items);
     expect(lootOpened[1]!.first).toBe(false);
 
+    revealAll(world, chest);
     Loot.takeAll(world);
     Loot.closeLoot(world);
     for (let i = 0; i <= balance.loot.pouch.reopenGuardTicks; i++) Loot.tick(world, DT);
@@ -145,6 +151,8 @@ describe('전리품 — 상자 속(chestItems)', () => {
     // 가져가면 곧장 골드로 — 상자 자리에서 ◆ 팝
     const golds: { x: number; z: number }[] = [];
     world.events.on('gold_picked', (g) => golds.push(g as { x: number; z: number }));
+    expect(Loot.takeOne(world, 0)).toBe('none'); // 아직 뒤지지 않았다
+    revealAll(world, chest);
     expect(Loot.takeOne(world, 0)).toBe('taken');
     expect(world.gold).toBe(opened[0]!.gold);
     expect(golds[0]).toEqual(expect.objectContaining({ x: chest.x, z: chest.z }));
@@ -161,6 +169,7 @@ describe('전리품 — 상자 속(chestItems)', () => {
     expect(() => sigilDef(sigils[0]!.sigilId!)).not.toThrow();
     expect(world.groundItems.some((g) => g.kind === 'sigil')).toBe(false);
     const idx = chest.chestItems!.indexOf(sigils[0]!);
+    revealAll(world, chest);
     expect(Loot.takeOne(world, idx)).toBe('taken');
     expect(acquired.map((a) => a.id)).toEqual([sigils[0]!.sigilId]);
     expect(world.sigils.inventory).toContain(sigils[0]!.sigilId);
@@ -202,6 +211,7 @@ describe('전리품 — 상자 속(chestItems)', () => {
   it('상자 속을 바닥에 버리면 Loot 대역(1200000~)의 서로 다른 id 로 놓인다', () => {
     const chest = putChest(world, 6 + 1.5, 6);
     interact(world);
+    revealAll(world, chest);
     while (chest.chestItems!.length > 0) Loot.dropToFloor(world, 'container', 0);
     const ids = world.groundItems.map((i) => i.id);
     expect(ids.length).toBeGreaterThanOrEqual(2); // 골드 + 각인

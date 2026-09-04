@@ -534,6 +534,7 @@ describe('화살통 드랍 — 주머니 안 화살 줄 (2026-09-04: 바닥에 �
     const pouch = world.groundItems.find((g) => g.kind === 'pouch')!;
     expect(pouch).toBeTruthy();
     world.lootOpen = { kind: 'pouch', id: pouch.id };
+    for (const e of pouch.pouchItems!) Loot.revealEntry(world, e); // 뒤지기(1초/칸)는 건너뛴다
     Loot.takeAll(world);
     expect(world.weapon.arrows).toBe(ARCHER.max);
   });

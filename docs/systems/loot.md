@@ -29,6 +29,7 @@
 - **주머니 내용물** = 소모품(물약·마나·고기) + 골드 + 화살. `LootEntry {kind, count, sigilId?}` 줄로 쌓인다(상한 없음). 상자에는 각인 줄이 있다.
 - **병합** — `mergeRadius` 안에 주머니가 있으면 새 전리품이 거기 합쳐진다. 같은 종류 적이면 이름 유지(`고블린 러너의 주머니`), 다르면 `전리품 주머니`,
   보스가 섞이면 금빛(`pouchTier: 'boss'`, 점광원).
+- **뒤지기(타르코프식)** — 컨테이너 칸은 처음엔 `?` 로 가려 있다. 창을 열면 배치 순서대로 한 칸씩 `loot.search.perItemMs`(1초) 동안 쿨다운처럼 한 바퀴 도는 덮개가 얹히고, 다 돌면 소리(`loot_reveal`)와 함께 정체가 드러난다(`LootEntry.searched`, `loot_revealed`). 밝혀진 칸만 가져가기·버리기가 된다. 창을 닫으면 멈추고 다시 열면 이어진다(데이터에 남는다). 내가 넣은 것은 바로 보인다.
 - **가져오기** — 골드는 항상 전부(카운터, `gold_picked` 는 컨테이너 자리에서 ◆ 팝). 화살은 화살통 상한까지 부분(남은 건 줄에 남는다).
   소모품은 가방에 자리가 있을 때만 1개씩. 각인은 가져가는 순간 `Sigils` 가 `loot_taken` 을 받아 습득(토스트).
   **모두 가져오기**는 골드 → 각인 → 화살 → 소모품 순, 거부 알림은 한 번(소모품이 남았으면 '가방 가득', 화살만 남았으면 '화살통 가득').
@@ -59,7 +60,7 @@
 ## 이벤트
 
 `pouch_dropped {id,x,z,owner,tier,entries,merged}` · `pouch_landed {id,x,z,tier}` · `pouch_placed {id,x,z}` · `loot_opened {kind,id,entries,first?}` · `loot_closed {kind,id,emptied}` ·
-`loot_taken {kind,count,from,sigilId?}` · `loot_stashed {kind,count,to}` · `loot_dropped {kind,count,from}` · `loot_denied {reason,kind}` ·
+`loot_taken {kind,count,from,sigilId?}` · `loot_stashed {kind,count,to}` · `loot_dropped {kind,count,from}` · `loot_denied {reason,kind}` · `loot_revealed {kind,count,sigilId?}` ·
 `pickup_bounced {kind,x,z}`. 재사용: `gold_picked`(컨테이너 자리), `chest_opened`(첫 개봉), `item_dropped`(가방 쪽 버리기), `sigil_acquired`.
 소리: `pouch_open`(가죽 스침, 주머니·상자 재개봉), `chest_opened`(첫 개봉), `loot_stash`, `thud`(주머니 착지·튕김 착지·버리기), 종류별 `pickup_*`, 거부 `shop_deny`.
 

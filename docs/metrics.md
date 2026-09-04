@@ -75,6 +75,7 @@ zone_cleared    { tick }
 |---|---|---|
 | `loot.pouches` | `pouch_dropped` | 떨어진 주머니 수 (병합도 1회로 센다 — 페이로드 `merged`) |
 | `loot.opened` | `loot_opened` | 루팅 창을 연 횟수 (주머니·상자, `kind`) |
+| `loot.revealed` | `loot_revealed` | 뒤져서 밝힌 칸 수 — `taken` 과 비교하면 밝힌 것 중 얼마나 가져가는지 |
 | `loot.taken` | `loot_taken` (`count` 합) | 가져온 아이템 개수 (골드는 금액) |
 | `loot.stashed` | `loot_stashed` (`count` 합) | 내 가방에서 컨테이너로 넣은 개수 — 보관함 사용 지표 |
 | `loot.dropped` | `loot_dropped` (`count` 합) | 창에서 바닥에 버린 개수 |

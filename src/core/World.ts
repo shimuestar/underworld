@@ -605,6 +605,8 @@ export interface LootEntry {
   kind: LootKind;
   count: number;
   sigilId?: string;
+  /** 뒤져서 정체가 드러났다 — 창에서 한 칸씩 차례로(1초) 밝혀진다. 드러나기 전엔 가져갈 수 없다. 내가 넣은 것은 처음부터 참 */
+  searched?: boolean;
 }
 /** 바라보는/열어 둔 컨테이너 참조 — 주머니는 groundItems 의 id, 상자는 chests 의 id */
 export type LootRef = { kind: 'pouch'; id: number } | { kind: 'chest'; id: number };

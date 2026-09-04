@@ -50,6 +50,9 @@ export class LootUI {
    *  같은 항목 객체가 살아 있는 동안 같은 칸, 새 항목은 첫 빈 칸. 창을 열 때 다시 짠다 */
   private layout: (LootEntry | null)[] = [];
   private layoutKey: string | null = null;
+  /** 뒤지기 — 지금 밝히는 중인 칸과 시작 시각(벽시계, 창은 시간 정지 중에도 돈다) */
+  private searching: { entry: LootEntry; startMs: number } | null = null;
+  private searchRaf: number | null = null;
 
   constructor(private readonly world: World) {
     this.root = document.createElement('div');
@@ -83,6 +86,42 @@ export class LootUI {
     this.layoutKey = null;
     this.root.style.display = 'flex';
     this.rebuild();
+    this.startSearch();
+  }
+
+  /** 뒤지기 루프 — 아직 모르는 칸을 배치 순서대로 하나씩 perItemMs 동안 한 바퀴 돌려 밝힌다 */
+  private startSearch(): void {
+    if (this.searchRaf !== null) return;
+    const step = (): void => {
+      this.searchRaf = null;
+      if (!this.open) { this.searching = null; return; }
+      const c = Loot.container(this.world);
+      if (!c) { this.searching = null; return; }
+      this.syncLayout(c);
+      const now = performance.now();
+      if (!this.searching) {
+        const next = this.layout.find((e) => e !== null && !e.searched) ?? null;
+        if (!next) return; // 다 밝혀졌다 — 루프 종료 (새 항목이 들어오면 rebuild 가 다시 켠다)
+        this.searching = { entry: next, startMs: now };
+        this.rebuild();
+      }
+      const per = Math.max(1, balance.loot.search.perItemMs);
+      const frac = (now - this.searching.startMs) / per;
+      if (frac >= 1 || !c.entries.includes(this.searching.entry)) {
+        if (c.entries.includes(this.searching.entry)) Loot.revealEntry(this.world, this.searching.entry);
+        this.searching = null;
+        this.rebuild(); // 밝혀진 칸을 그린다 (다음 칸은 다음 프레임에)
+      } else {
+        const idx = this.layout.indexOf(this.searching.entry);
+        const sweep = this.root.querySelector<HTMLElement>(`[data-key="c${idx}"] [data-sweep]`);
+        if (sweep) {
+          const deg = Math.round(frac * 360);
+          sweep.style.background = `conic-gradient(rgba(127,191,255,0.42) 0deg ${deg}deg, transparent ${deg}deg 360deg)`;
+        }
+      }
+      this.searchRaf = requestAnimationFrame(step);
+    };
+    this.searchRaf = requestAnimationFrame(step);
   }
 
   /** 줄 → 칸 배치를 맞춘다: 사라진 항목의 칸은 비우고(당기지 않는다), 새 항목은 첫 빈 칸에 */
@@ -116,6 +155,9 @@ export class LootUI {
   hide(): void {
     this.open = false;
     this.root.style.display = 'none';
+    if (this.searchRaf !== null) cancelAnimationFrame(this.searchRaf);
+    this.searchRaf = null;
+    this.searching = null; // 닫으면 멈춘다 — 밝혀진 것(searched)은 데이터에 남아 다시 열면 이어진다
   }
 
   private close(): void {
@@ -275,6 +317,7 @@ export class LootUI {
 
     this.root.replaceChildren(panel);
     this.playFx();
+    if (this.open && this.layout.some((e) => e !== null && !e.searched)) this.startSearch();
   }
 
   /** 커서 아래 아이템 설명 — 소모품은 효과·유용성·가방 수, 골드·화살은 어디에 쓰는지, 각인은 설명 */
@@ -295,6 +338,7 @@ export class LootUI {
     if (this.pane === 'container') {
       const e = this.layout[this.selC] ?? null;
       if (!e) return '';
+      if (!e.searched) return '▸ 아직 모른다 — 뒤지는 중… (밝혀진 칸만 가져갈 수 있다)';
       if (e.kind === 'gold') return `▸ 골드 ×${e.count} — 제단 상점에서 체력·마나·탄약·수류탄·배터리를 산다 · 소지 ◆ ${world.gold}`;
       if (e.kind === 'arrow') {
         const have = world.weapon.arrows ?? 0;
@@ -328,7 +372,9 @@ export class LootUI {
     const col = document.createElement('div');
     const g = this.containerGrid(c.entries.length);
     const head = document.createElement('div');
-    head.textContent = c.ref.kind === 'chest' ? `상자 안 (${c.entries.length}종)` : `주머니 안 (${c.entries.length}종)`;
+    const known = c.entries.filter((e) => e.searched).length;
+    const label = c.ref.kind === 'chest' ? '상자 안' : '주머니 안';
+    head.textContent = known < c.entries.length ? `${label} (${known}/${c.entries.length}종 확인 — 뒤지는 중…)` : `${label} (${c.entries.length}종)`;
     head.style.cssText = `color:${this.pane === 'container' ? '#e8c76a' : '#8a8f9a'};margin-bottom:6px;`;
     col.appendChild(head);
     const grid = document.createElement('div');
@@ -352,7 +398,20 @@ export class LootUI {
       };
       cell.onclick = () => { this.pane = 'container'; this.selC = i; this.act(); };
       cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'container'; this.selC = i; this.drop(); };
-      if (e) {
+      if (e && !e.searched) {
+        // 아직 모르는 칸 — ? 로 가려 있다. 뒤지는 중이면 쿨다운처럼 한 바퀴 도는 덮개가 얹힌다
+        const mark = document.createElement('span');
+        mark.textContent = '?';
+        mark.style.cssText = 'font-size:22px;color:#555c66;';
+        cell.appendChild(mark);
+        if (this.searching && this.searching.entry === e) {
+          const sweep = document.createElement('div');
+          sweep.dataset['sweep'] = '1';
+          sweep.style.cssText = 'position:absolute;inset:0;border-radius:4px;pointer-events:none;';
+          cell.appendChild(sweep);
+          cell.style.borderColor = '#7fbfff';
+        }
+      } else if (e) {
         const flyKey = `k:${e.kind}`;
         if (!flyMarked.has(flyKey)) { cell.dataset['fly'] = flyKey; flyMarked.add(flyKey); }
         const icon = document.createElement('span');

@@ -65,7 +65,9 @@ function fillBag(w: World): void {
 }
 
 let nextTestId = 4242000;
-function pouchAt(w: World, x: number, z: number, entries: LootEntry[], settle = 0): GroundItemState {
+function pouchAt(w: World, x: number, z: number, entries: LootEntry[], settle = 0, searched = true): GroundItemState {
+  // 이전 규칙 테스트는 이미 뒤진(밝혀진) 칸을 전제한다 — 뒤지기 자체는 아래 '뒤지기' 블록이 본다
+  if (searched) for (const e of entries) e.searched = true;
   const p: GroundItemState = {
     id: nextTestId++, kind: 'pouch', x, z, pouchItems: entries, pouchTier: 'normal', pouchOwner: 'goblin_runner',
     noMagnetTicks: settle,
@@ -193,7 +195,7 @@ describe('안착·보관 주머니', () => {
     expect(world.lootOpen).toEqual({ kind: 'pouch', id: pouch.id });
     expect(Loot.stash(world, 0)).toBe(true);
     Loot.closeLoot(world);
-    expect(world.groundItems.find((g) => g.id === pouch.id)?.pouchItems).toEqual([{ kind: 'potion', count: 1 }]);
+    expect(world.groundItems.find((g) => g.id === pouch.id)?.pouchItems).toEqual([{ kind: 'potion', count: 1, searched: true }]);
     // 다시 열어 도로 가져가고 비운 채 닫으면 사라진다
     world.lootOpen = { kind: 'pouch', id: pouch.id };
     expect(Loot.takeOne(world, 0)).toBe('taken');
@@ -319,6 +321,52 @@ describe('가져오기', () => {
   });
 });
 
+describe('뒤지기 (타르코프식 한 칸씩 밝히기)', () => {
+  it('처치 전리품은 처음엔 모르는 칸 — 밝혀지기 전엔 가져가기·모두·버리기가 안 된다', () => {
+    const p = pouchAt(world, 12, 8, [{ kind: 'potion', count: 1 }, { kind: 'gold', count: 5 }], 0, false);
+    openPouch(world, p);
+    expect(p.pouchItems!.every((e) => !e.searched)).toBe(true);
+    expect(Loot.takeOne(world, 0)).toBe('none');
+    expect(Loot.takeAll(world)).toEqual({ taken: 0, leftover: 6, denied: null });
+    expect(Loot.dropToFloor(world, 'container', 1)).toBe(false);
+    expect(world.gold).toBe(0);
+  });
+
+  it('revealEntry 가 칸을 밝히고 loot_revealed 를 낸다 — 그 뒤엔 가져갈 수 있다. 두 번 밝혀도 한 번만', () => {
+    const p = pouchAt(world, 12, 8, [{ kind: 'gold', count: 5 }, { kind: 'mana', count: 1 }], 0, false);
+    openPouch(world, p);
+    const ev: unknown[] = [];
+    world.events.on('loot_revealed', (x) => ev.push(x));
+    Loot.revealEntry(world, p.pouchItems![0]!);
+    Loot.revealEntry(world, p.pouchItems![0]!);
+    expect(ev).toEqual([{ kind: 'gold', count: 5, sigilId: undefined }]);
+    expect(Loot.takeOne(world, 0)).toBe('taken');
+    expect(world.gold).toBe(5);
+    expect(Loot.takeAll(world).taken).toBe(0); // 마나는 아직 모른다
+    Loot.revealEntry(world, p.pouchItems![0]!);
+    expect(Loot.takeAll(world).taken).toBe(1);
+  });
+
+  it('내가 넣은 것은 바로 보이고, 모르는 같은 종류 칸에 넣으면 그 칸이 밝혀진다', () => {
+    addItem(world, 'potion');
+    addItem(world, 'potion');
+    const p = pouchAt(world, 12, 8, [{ kind: 'potion', count: 1 }], 0, false);
+    openPouch(world, p);
+    expect(Loot.stash(world, 0)).toBe(true);
+    expect(p.pouchItems).toEqual([{ kind: 'potion', count: 2, searched: true }]);
+    Loot.createPlayerPouch(world);
+    expect(Loot.stash(world, 0)).toBe(true);
+    const mine = world.groundItems.find((g) => g.kind === 'pouch' && g.pouchOwner === Loot.PLAYER_OWNER)!;
+    expect(mine.pouchItems![0]!.searched).toBe(true);
+  });
+
+  it('처치 드랍의 칸은 모두 모르는 상태로 시작한다', () => {
+    const entries = Loot.rollLoot('goblin_runner', () => 0.01);
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.every((e) => !e.searched)).toBe(true);
+  });
+});
+
 describe('넣기·버리기·닫기', () => {
   it('내 가방 칸에서 컨테이너로 1개 — 5개 무더기는 4개가 되고 컨테이너 줄에 합쳐진다, 빈 칸은 false', () => {
     for (let i = 0; i < 5; i++) addItem(world, 'potion');
@@ -328,7 +376,7 @@ describe('넣기·버리기·닫기', () => {
     world.events.on('loot_stashed', (x) => ev.push(x));
     expect(Loot.stash(world, 0)).toBe(true);
     expect(world.inventory[0]!.count).toBe(4);
-    expect(p.pouchItems).toEqual([{ kind: 'potion', count: 2 }]);
+    expect(p.pouchItems).toEqual([{ kind: 'potion', count: 2, searched: true }]);
     expect(world.quickslots[0]).toBe('potion'); // 등록은 그대로
     expect(Loot.stash(world, 1)).toBe(false); // 빈 칸
     expect(ev).toEqual([{ kind: 'potion', count: 1, to: 'pouch' }]);

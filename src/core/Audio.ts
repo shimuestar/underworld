@@ -12,6 +12,7 @@ export type SoundName =
   | 'door_close'
   | 'door_bump'
   | 'pouch_open'
+  | 'loot_reveal'
   | 'loot_stash'
   | 'thud'
   | 'telegraph_blue'
@@ -648,6 +649,12 @@ export class GameAudio {
         break;
       case 'grenade_throw':
         this.noise(0.12, 0.35, 1200);
+        break;
+      case 'loot_reveal':
+        // 칸이 밝혀졌다 — 짧은 딸깍 + 위로 살짝 오르는 두 음 (뒤지기 한 바퀴의 마침표)
+        this.noise(0.03, 0.35, 2600);
+        this.tone(660, 0.09, 'triangle', 0.32, 0.02, 720);
+        this.tone(990, 0.12, 'triangle', 0.26, 0.09, 1050);
         break;
       case 'pouch_open':
         // 주머니를 뒤진다 — 가죽 스침 + 안의 것들이 잘그락

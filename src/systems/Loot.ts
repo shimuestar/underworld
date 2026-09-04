@@ -38,8 +38,19 @@ export function mergeEntry(entries: LootEntry[], e: LootEntry): void {
   const same = entries.find((x) =>
     x.kind === e.kind && (e.kind !== 'sigil' || x.sigilId === e.sigilId),
   );
-  if (same) same.count += e.count;
-  else entries.push({ kind: e.kind, count: e.count, ...(e.sigilId ? { sigilId: e.sigilId } : {}) });
+  if (same) {
+    same.count += e.count;
+    if (e.searched) same.searched = true; // 내가 넣은 것이 섞이면 그 칸은 이미 안다
+  } else {
+    entries.push({ kind: e.kind, count: e.count, ...(e.sigilId ? { sigilId: e.sigilId } : {}), ...(e.searched ? { searched: true } : {}) });
+  }
+}
+
+/** 칸 하나를 밝힌다 — 루팅 창이 한 칸씩 차례로 부른다(1초에 하나). 소리·계측은 이벤트로 */
+export function revealEntry(world: World, entry: LootEntry): void {
+  if (entry.searched) return;
+  entry.searched = true;
+  world.events.emit('loot_revealed', { kind: entry.kind, count: entry.count, sigilId: entry.sigilId });
 }
 
 /** 처치 전리품 굴림 — 예전 Pickups.rollDrops 와 같은 확률(pickups.*). 바닥에 뿌리지 않고 줄로 돌려준다.
@@ -264,6 +275,7 @@ export type TakeResult = 'taken' | 'full' | 'quiver' | 'none';
 function takeOneImpl(world: World, c: Container, index: number, announceDeny: boolean): TakeResult {
   const e = c.entries[index];
   if (!e) return 'none';
+  if (!e.searched) return 'none'; // 아직 뒤지지 않은 칸 — 정체를 모르면 손댈 수 없다
   const from = c.ref.kind;
   const deny = (reason: 'full' | 'quiver'): TakeResult => {
     if (announceDeny) world.events.emit('loot_denied', { reason, kind: e.kind });
@@ -350,7 +362,7 @@ export function stash(world: World, slotIndex: number): boolean {
   if (!slot) return false;
   slot.count--;
   if (slot.count <= 0) world.inventory[slotIndex] = null;
-  mergeEntry(c.entries, { kind: slot.kind, count: 1 });
+  mergeEntry(c.entries, { kind: slot.kind, count: 1, searched: true }); // 내가 넣은 것은 바로 보인다
   world.events.emit('loot_stashed', { kind: slot.kind, count: 1, to: c.ref.kind });
   return true;
 }
@@ -370,7 +382,7 @@ export function dropToFloor(world: World, side: 'container' | 'bag', index: numb
     return true;
   }
   const e = c.entries[index];
-  if (!e) return false;
+  if (!e || !e.searched) return false; // 모르는 것을 버릴 수는 없다
   c.entries.splice(index, 1);
   const grace = balance.items.dropNoMagnetTicks;
   const spot = (): { x: number; z: number } =>

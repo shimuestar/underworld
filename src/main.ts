@@ -584,6 +584,7 @@ for (const name of [
   'loot_stashed',
   'loot_dropped',
   'loot_denied',
+  'loot_revealed',
   'pickup_bounced',
   'item_picked',
   'item_gained',
@@ -2138,6 +2139,10 @@ events.on('loot_taken', (payload) => {
   padRumble('pickup');
 });
 events.on('loot_stashed', () => audio.play('loot_stash'));
+events.on('loot_revealed', () => {
+  audio.play('loot_reveal'); // 칸 하나가 밝혀졌다 — 뒤지기 한 바퀴의 마침표
+  padRumble('pickup');
+});
 // 주머니가 바닥에 닿았다 — 자루가 돌바닥에 툭, 먼지가 낮게 인다 (안착 시간이 끝나는 틱)
 events.on('pouch_landed', (payload) => {
   const d = payload as { x: number; z: number; tier: 'normal' | 'boss' };
