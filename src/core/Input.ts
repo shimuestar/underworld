@@ -125,7 +125,7 @@ export class Input {
       (e) => {
         if (this.pointerLocked) return;
         // UI 오버레이 안을 클릭할 때는 제외 — 거기선 커서를 써야 한다
-        if ((e.target as HTMLElement | null)?.closest?.('#sigilui, #shopui, #pause .menu, #gamepadui')) return;
+        if ((e.target as HTMLElement | null)?.closest?.('#sigilui, #shopui, #lootui, #pause .menu, #gamepadui')) return;
         this.tryLock(0);
       },
       { capture: true },

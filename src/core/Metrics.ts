@@ -39,6 +39,8 @@ export interface MetricsSnapshot {
     triggered: number; hitsPlayer: number; hitsEnemy: number; kills: number;
     disarms: number; parried: number; deaths: number;
   };
+  /** 전리품 — 주머니 수 / 창 연 횟수 / 가져온·넣은·버린 개수 / 가방 가득 거부 */
+  loot: { pouches: number; opened: number; taken: number; stashed: number; dropped: number; deniedFull: number };
   derived: {
     ammoLeftRatioAtAltar: number | null;
     altarBypassRatio: number | null;
@@ -72,6 +74,12 @@ export class Metrics {
   private potionsPicked = 0;
   private healedTotal = 0;
   private goldCollected = 0;
+  private lootPouches = 0;
+  private lootOpened = 0;
+  private lootTaken = 0;
+  private lootStashed = 0;
+  private lootDropped = 0;
+  private lootDeniedFull = 0;
   private xpGained = 0;
   private shieldsBroken = 0;
   private shotsFired = 0;
@@ -125,6 +133,15 @@ export class Metrics {
     });
     events.on('gold_picked', (payload) => {
       this.goldCollected += (payload as { amount: number }).amount;
+    });
+    // 전리품 — 주머니·루팅 창 (Loot 는 카운터를 갖지 않는다)
+    events.on('pouch_dropped', () => this.lootPouches++);
+    events.on('loot_opened', () => this.lootOpened++);
+    events.on('loot_taken', (payload) => { this.lootTaken += (payload as { count: number }).count; });
+    events.on('loot_stashed', (payload) => { this.lootStashed += (payload as { count: number }).count; });
+    events.on('loot_dropped', (payload) => { this.lootDropped += (payload as { count: number }).count; });
+    events.on('loot_denied', (payload) => {
+      if ((payload as { reason: string }).reason === 'full') this.lootDeniedFull++;
     });
     // 함정 — 시스템 안에 카운터를 두지 않는다 (CLAUDE.md 4). 전부 이벤트 구독
     events.on('trap_triggered', () => this.trapsTriggered++);
@@ -258,6 +275,14 @@ export class Metrics {
         disarms: this.trapDisarms,
         parried: this.trapParried,
         deaths: this.trapDeaths,
+      },
+      loot: {
+        pouches: this.lootPouches,
+        opened: this.lootOpened,
+        taken: this.lootTaken,
+        stashed: this.lootStashed,
+        dropped: this.lootDropped,
+        deniedFull: this.lootDeniedFull,
       },
       derived: {
         ammoLeftRatioAtAltar: round2(avg(this.ammoLeftRatios)),

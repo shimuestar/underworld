@@ -1,0 +1,384 @@
+// 루팅 UI — 주머니·보물상자를 뒤지는 두 칸 창. 왼쪽 컨테이너, 오른쪽 내 가방(+골드·화살 카운터).
+// ShopUI 와 같은 규약: DOM 오버레이, 열려 있는 동안 main 이 시뮬레이션을 멈춘다(uiOpen),
+// 커서 하나를 키보드·마우스·패드가 함께 움직인다. 규칙은 systems/Loot 가 갖고 여기는
+// 그리기·입력·연출만 — 아이콘이 반대 칸으로 날아가고 골드·화살 카운터가 오르는 것으로
+// '옮겨지는 것'이 눈에 보이게 한다.
+//
+// 조작: WASD/화살표 이동(←→ 로 칸 전환), Enter·좌클릭 = 가져오기/넣기, T = 모두 가져오기,
+// X·Delete·우클릭 = 바닥에 버리기, E/Esc 닫기. 패드는 main 이 padMove/padActivate/... 로 부른다.
+// Space·Shift 는 일부러 안 쓴다 — 전투에서 가장 많이 두들기는 키라 오조작이 난다 (ShopUI 와 같다).
+
+import { balance } from '../core/Balance';
+import type { LootEntry, World } from '../core/World';
+import * as Loot from '../systems/Loot';
+import { itemIconSvg, lootIconSvg } from './ItemIcons';
+
+const UP_KEYS = new Set(['KeyW', 'ArrowUp']);
+const DOWN_KEYS = new Set(['KeyS', 'ArrowDown']);
+const LEFT_KEYS = new Set(['KeyA', 'ArrowLeft']);
+const RIGHT_KEYS = new Set(['KeyD', 'ArrowRight']);
+const CELL_PX = 64;
+const ICON_PX = 28;
+const ROW_ICON_PX = 22;
+
+type Pane = 'container' | 'bag';
+
+/** 가져온 것이 어디로 갔는지 — 날아가는 아이콘의 목적지 표식 (data-fly) */
+function flyTargetOf(e: LootEntry): string {
+  if (e.kind === 'gold') return 'gold';
+  if (e.kind === 'arrow') return 'arrow';
+  if (e.kind === 'sigil') return 'title';
+  return `b:${e.kind}`;
+}
+
+export class LootUI {
+  private readonly root: HTMLDivElement;
+  open = false;
+  pane: Pane = 'container';
+  private selC = 0;
+  private selB = 0;
+  /** 닫힐 때 main 이 Loot.closeLoot 와 uiOpen 을 되돌린다 */
+  onClose: (() => void) | null = null;
+  /** 패드로 조작 중 — 버튼·힌트를 패드 표기로 (main 이 틱마다 갱신) */
+  padMode = false;
+  /** 직전 동작의 연출 — rebuild 뒤 목적지를 찾아 아이콘을 날린다 / 거부된 줄을 흔든다 */
+  private pendingFly: { svg: string; from: DOMRect; toKey: string } | null = null;
+  private shakeKey: string | null = null;
+
+  constructor(private readonly world: World) {
+    this.root = document.createElement('div');
+    this.root.id = 'lootui';
+    this.root.style.cssText =
+      'position:fixed;inset:0;display:none;align-items:center;justify-content:center;' +
+      'background:rgba(0,0,0,0.72);color:#cfd2da;font:13px/1.6 monospace;user-select:none;z-index:10;';
+    document.body.appendChild(this.root);
+
+    window.addEventListener('keydown', (e) => {
+      if (!this.open) return;
+      if (UP_KEYS.has(e.code)) { e.preventDefault(); this.move(0, -1); return; }
+      if (DOWN_KEYS.has(e.code)) { e.preventDefault(); this.move(0, 1); return; }
+      if (LEFT_KEYS.has(e.code)) { e.preventDefault(); this.move(-1, 0); return; }
+      if (RIGHT_KEYS.has(e.code)) { e.preventDefault(); this.move(1, 0); return; }
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); this.act(); return; }
+      if (e.code === 'KeyT') { e.preventDefault(); this.takeAll(); return; }
+      if (e.code === 'KeyX' || e.code === 'Delete') { e.preventDefault(); this.drop(); return; }
+      if (e.code === 'KeyE' || e.code === 'Escape') { e.preventDefault(); this.close(); }
+    });
+  }
+
+  show(): void {
+    this.open = true;
+    this.pane = 'container';
+    this.selC = 0;
+    this.selB = 0;
+    this.pendingFly = null;
+    this.shakeKey = null;
+    this.root.style.display = 'flex';
+    this.rebuild();
+  }
+
+  hide(): void {
+    this.open = false;
+    this.root.style.display = 'none';
+  }
+
+  private close(): void {
+    if (!this.open) return;
+    this.hide();
+    this.onClose?.();
+  }
+
+  // ---- 패드 — 일시정지 메뉴·상점과 같은 고정 버튼 규약 (main 이 raw 버튼으로 부른다) ----
+  padMove(dx: number, dy: number): void { if (this.open) this.move(dx, dy); }
+  padActivate(): void { if (this.open) this.act(); }
+  padTakeAll(): void { if (this.open) this.takeAll(); }
+  padDrop(): void { if (this.open) this.drop(); }
+  padClose(): void { this.close(); }
+
+  /** 커서 이동 — 컨테이너는 위아래로 감기고, → 로 가방으로 넘어간다. 가방은 격자(cols)로 돌고 왼쪽 끝에서 ← 면 컨테이너로 */
+  private move(dx: number, dy: number): void {
+    const c = Loot.container(this.world);
+    const n = c?.entries.length ?? 0;
+    const cols = balance.items.cols;
+    const slots = this.world.inventory.length;
+    if (this.pane === 'container') {
+      if (dx > 0) this.pane = 'bag';
+      else if (dy !== 0 && n > 0) this.selC = (this.selC + dy + n) % n;
+    } else if (dx < 0 && this.selB % cols === 0) {
+      this.pane = 'container';
+    } else if (dx !== 0) {
+      const row = Math.floor(this.selB / cols);
+      const col = ((this.selB % cols) + dx + cols) % cols;
+      this.selB = Math.min(slots - 1, row * cols + col);
+    } else if (dy !== 0) {
+      const rows = Math.max(1, Math.ceil(slots / cols));
+      const row = (Math.floor(this.selB / cols) + dy + rows) % rows;
+      this.selB = Math.min(slots - 1, row * cols + (this.selB % cols));
+    }
+    this.rebuild();
+  }
+
+  private clampSel(): void {
+    const c = Loot.container(this.world);
+    const n = c?.entries.length ?? 0;
+    if (this.selC >= n) this.selC = Math.max(0, n - 1);
+  }
+
+  private rectOf(key: string): DOMRect {
+    const el = this.root.querySelector<HTMLElement>(`[data-key="${key}"]`);
+    return el?.getBoundingClientRect() ?? this.root.getBoundingClientRect();
+  }
+
+  /** Enter/A/좌클릭 — 컨테이너 줄이면 가져오기, 가방 칸이면 넣기 */
+  private act(): void {
+    const c = Loot.container(this.world);
+    if (!c) { this.close(); return; }
+    if (this.pane === 'container') {
+      const e = c.entries[this.selC];
+      if (!e) return;
+      const from = this.rectOf(`c${this.selC}`);
+      const svg = lootIconSvg(e, ROW_ICON_PX);
+      const toKey = flyTargetOf(e);
+      const r = Loot.takeOne(this.world, this.selC);
+      if (r === 'taken') this.pendingFly = { svg, from, toKey };
+      else this.shakeKey = `c${this.selC}`;
+    } else {
+      const slot = this.world.inventory[this.selB];
+      if (!slot) {
+        this.shakeKey = `b${this.selB}`;
+      } else {
+        const from = this.rectOf(`b${this.selB}`);
+        const svg = itemIconSvg(slot.kind, ROW_ICON_PX);
+        if (Loot.stash(this.world, this.selB)) this.pendingFly = { svg, from, toKey: `k:${slot.kind}` };
+      }
+    }
+    this.clampSel();
+    this.rebuild();
+  }
+
+  private takeAll(): void {
+    const c = Loot.container(this.world);
+    if (!c) { this.close(); return; }
+    const res = Loot.takeAll(this.world);
+    if (res.denied && c.entries.length > 0) this.shakeKey = `c${Math.min(this.selC, c.entries.length - 1)}`;
+    this.clampSel();
+    this.rebuild();
+  }
+
+  private drop(): void {
+    const c = Loot.container(this.world);
+    if (!c) { this.close(); return; }
+    const ok = Loot.dropToFloor(this.world, this.pane, this.pane === 'container' ? this.selC : this.selB);
+    if (!ok) this.shakeKey = this.pane === 'container' ? `c${this.selC}` : `b${this.selB}`;
+    this.clampSel();
+    this.rebuild();
+  }
+
+  private rebuild(): void {
+    const world = this.world;
+    const c = Loot.container(world);
+    if (!c) { this.close(); return; } // 슬라임이 먹었다 등 — 컨테이너가 사라졌다
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;min-width:760px;';
+
+    const title = document.createElement('div');
+    title.textContent = `${c.title}   ◆ ${world.gold}`;
+    title.dataset['fly'] = 'title';
+    title.style.cssText = `color:${c.tier === 'boss' ? '#ffd75e' : '#e8c76a'};margin-bottom:12px;font-size:15px;`;
+    panel.appendChild(title);
+
+    const columns = document.createElement('div');
+    columns.style.cssText = 'display:flex;gap:28px;align-items:flex-start;';
+    columns.appendChild(this.buildContainer(c));
+    columns.appendChild(this.buildBag());
+    panel.appendChild(columns);
+
+    const buttons = document.createElement('div');
+    buttons.style.cssText = 'display:flex;gap:10px;margin-top:16px;';
+    const takeAllBtn = this.button(`모두 가져오기 (${this.padMode ? 'X' : 'T'})`, () => this.takeAll(), c.entries.length > 0);
+    const closeBtn = this.button(`닫기 (${this.padMode ? 'B' : 'E'})`, () => this.close(), true);
+    buttons.appendChild(takeAllBtn);
+    buttons.appendChild(closeBtn);
+    panel.appendChild(buttons);
+
+    const hint = document.createElement('div');
+    hint.textContent = this.padMode
+      ? 'D-패드 이동 · ←→ 칸 전환   A 가져오기/넣기   X 모두 가져오기   Y 바닥에 버리기   B 닫기'
+      : 'WASD·화살표 이동 · ←→ 칸 전환   Enter·좌클릭 가져오기/넣기   T 모두 가져오기   X·우클릭 바닥에 버리기   E / Esc 닫기';
+    hint.style.cssText = 'margin-top:14px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;white-space:pre-line;';
+    panel.appendChild(hint);
+
+    this.root.replaceChildren(panel);
+    this.playFx();
+  }
+
+  private button(label: string, onClick: () => void, enabled: boolean): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.disabled = !enabled;
+    b.style.cssText =
+      'padding:6px 14px;border:1px solid #3a3a44;background:#1b1b22;color:#cfd2da;cursor:pointer;font:inherit;' +
+      (enabled ? '' : 'opacity:0.45;cursor:default;');
+    b.onclick = onClick;
+    return b;
+  }
+
+  private buildContainer(c: Loot.Container): HTMLDivElement {
+    const col = document.createElement('div');
+    col.style.cssText = 'width:320px;';
+    const head = document.createElement('div');
+    head.textContent = c.ref.kind === 'chest' ? `상자 안 (${c.entries.length}줄)` : `주머니 안 (${c.entries.length}줄)`;
+    head.style.cssText = `color:${this.pane === 'container' ? '#e8c76a' : '#8a8f9a'};margin-bottom:6px;`;
+    col.appendChild(head);
+    if (c.entries.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = '비었다';
+      empty.style.cssText = 'color:#555c66;padding:12px 8px;';
+      col.appendChild(empty);
+    }
+    c.entries.forEach((e, i) => {
+      const here = this.pane === 'container' && i === this.selC;
+      const line = document.createElement('div');
+      line.dataset['key'] = `c${i}`;
+      line.dataset['fly'] = `k:${e.kind}`;
+      line.style.cssText =
+        'display:flex;gap:10px;padding:5px 8px;align-items:center;border-top:1px solid #23232b;cursor:pointer;' +
+        (here ? 'background:#242a36;box-shadow:inset 2px 0 0 #7fbfff;' : '');
+      // mousemove 로 커서가 따라온다 (mouseenter 는 rebuild 마다 다시 떠서 키보드 선택을 덮는다 — ShopUI 규약)
+      line.onmousemove = () => {
+        if (this.pane === 'container' && this.selC === i) return;
+        this.pane = 'container';
+        this.selC = i;
+        this.rebuild();
+      };
+      line.onclick = () => { this.pane = 'container'; this.selC = i; this.act(); };
+      line.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'container'; this.selC = i; this.drop(); };
+      const cursor = document.createElement('span');
+      cursor.textContent = here ? '▸' : ' ';
+      cursor.style.cssText = 'color:#7fbfff;width:10px;';
+      line.appendChild(cursor);
+      const icon = document.createElement('span');
+      icon.style.cssText = 'display:block;line-height:0;';
+      icon.innerHTML = lootIconSvg(e, ROW_ICON_PX);
+      line.appendChild(icon);
+      const name = document.createElement('span');
+      name.textContent = Loot.entryName(e);
+      name.style.cssText = 'flex:1;';
+      line.appendChild(name);
+      const count = document.createElement('span');
+      count.textContent = `×${e.count}`;
+      count.style.cssText = 'color:#e8c76a;width:52px;text-align:right;';
+      line.appendChild(count);
+      col.appendChild(line);
+    });
+    return col;
+  }
+
+  private buildBag(): HTMLDivElement {
+    const world = this.world;
+    const cfg = balance.items;
+    const col = document.createElement('div');
+    const used = world.inventory.filter((s) => s !== null).length;
+    const head = document.createElement('div');
+    head.textContent = `가방 ${used}/${world.inventory.length}칸${used >= world.inventory.length ? '  — 가득' : ''}`;
+    head.style.cssText = `color:${this.pane === 'bag' ? '#e8c76a' : '#8a8f9a'};margin-bottom:6px;`;
+    col.appendChild(head);
+    const grid = document.createElement('div');
+    grid.style.cssText = `display:grid;grid-template-columns:repeat(${cfg.cols}, ${CELL_PX}px);gap:8px;`;
+    const flyMarked = new Set<string>();
+    world.inventory.forEach((slot, i) => {
+      const here = this.pane === 'bag' && i === this.selB;
+      const cell = document.createElement('div');
+      cell.dataset['key'] = `b${i}`;
+      cell.style.cssText =
+        `width:${CELL_PX}px;height:${CELL_PX}px;box-sizing:border-box;position:relative;border-radius:4px;cursor:pointer;` +
+        'display:flex;align-items:center;justify-content:center;' +
+        `border:1px solid ${here ? '#e8c76a' : '#3a3a44'};background:${here ? 'rgba(232,199,106,0.12)' : '#1b1b22'};`;
+      cell.onmousemove = () => {
+        if (this.pane === 'bag' && this.selB === i) return;
+        this.pane = 'bag';
+        this.selB = i;
+        this.rebuild();
+      };
+      cell.onclick = () => { this.pane = 'bag'; this.selB = i; this.act(); };
+      cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'bag'; this.selB = i; this.drop(); };
+      if (slot) {
+        // 같은 종류의 첫 칸이 날아온 아이콘의 목적지 — 실제로 addItem 이 쌓는 자리와 같다
+        if (!flyMarked.has(slot.kind)) { cell.dataset['fly'] = `b:${slot.kind}`; flyMarked.add(slot.kind); }
+        const icon = document.createElement('span');
+        icon.style.cssText = 'display:block;line-height:0;';
+        icon.innerHTML = itemIconSvg(slot.kind, ICON_PX);
+        cell.appendChild(icon);
+        const count = document.createElement('span');
+        count.textContent = `×${slot.count}`;
+        count.style.cssText = 'position:absolute;right:4px;bottom:1px;font-size:11px;color:#e8c76a;';
+        cell.appendChild(count);
+        const q = world.quickslots.indexOf(slot.kind);
+        if (q >= 0) {
+          const tag = document.createElement('span');
+          tag.textContent = `${q + 1}`;
+          tag.style.cssText = 'position:absolute;left:4px;top:1px;font-size:10px;color:#8a8f9a;';
+          cell.appendChild(tag);
+        }
+      }
+      grid.appendChild(cell);
+    });
+    col.appendChild(grid);
+    // 빈 종류의 목적지 — 첫 빈 칸이 받는다 (addItem 이 새 칸을 잡는 자리)
+    const firstEmpty = world.inventory.indexOf(null);
+    if (firstEmpty >= 0) {
+      const cell = grid.children[firstEmpty] as HTMLElement | undefined;
+      if (cell) cell.dataset['flyEmpty'] = '1';
+    }
+    const counters = document.createElement('div');
+    counters.style.cssText = 'margin-top:8px;color:#cfd2da;display:flex;gap:18px;';
+    const gold = document.createElement('span');
+    gold.dataset['fly'] = 'gold';
+    gold.textContent = `◆ ${world.gold}`;
+    gold.style.color = '#e8c76a';
+    const arrows = document.createElement('span');
+    arrows.dataset['fly'] = 'arrow';
+    arrows.textContent = `화살 ${world.weapon.arrows ?? 0}/${balance.weapons.bow.ammoMax}`;
+    counters.appendChild(gold);
+    counters.appendChild(arrows);
+    col.appendChild(counters);
+    return col;
+  }
+
+  /** rebuild 뒤 연출 — 날아가는 아이콘(Web Animations, 스타일시트 없이) / 거부된 줄 흔들림 */
+  private playFx(): void {
+    const ui = balance.loot.ui;
+    if (this.shakeKey) {
+      const el = this.root.querySelector<HTMLElement>(`[data-key="${this.shakeKey}"]`);
+      el?.animate(
+        [{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }],
+        { duration: ui.shakeMs },
+      );
+      this.shakeKey = null;
+    }
+    const fly = this.pendingFly;
+    this.pendingFly = null;
+    if (!fly) return;
+    let target = this.root.querySelector<HTMLElement>(`[data-fly="${fly.toKey}"]`);
+    if (!target && fly.toKey.startsWith('b:')) target = this.root.querySelector<HTMLElement>('[data-fly-empty="1"]');
+    if (!target) return;
+    const to = target.getBoundingClientRect();
+    const span = document.createElement('span');
+    span.innerHTML = fly.svg;
+    span.style.cssText =
+      `position:fixed;left:${fly.from.left + fly.from.width / 2 - ROW_ICON_PX / 2}px;top:${fly.from.top + fly.from.height / 2 - ROW_ICON_PX / 2}px;` +
+      'pointer-events:none;z-index:11;line-height:0;';
+    document.body.appendChild(span);
+    const anim = span.animate(
+      [
+        { transform: 'translate(0,0) scale(1)' },
+        { transform: `translate(${to.left + to.width / 2 - (fly.from.left + fly.from.width / 2)}px, ${to.top + to.height / 2 - (fly.from.top + fly.from.height / 2)}px) scale(0.85)` },
+      ],
+      { duration: ui.flyMs, easing: 'ease-out' },
+    );
+    anim.onfinish = () => {
+      span.remove();
+      target?.animate([{ filter: 'brightness(1)' }, { filter: 'brightness(2.2)' }, { filter: 'brightness(1)' }], { duration: ui.shakeMs });
+    };
+  }
+}

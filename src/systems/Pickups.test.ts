@@ -1,4 +1,4 @@
-// 처치 드랍(HP 포션 / 골드)과 자동 획득 검증. 드랍 굴림은 Math.random을 고정해 결정적으로 본다.
+// 바닥 아이템 자동 획득(자석) 검증. 처치 드랍 굴림·주머니는 Loot.test 가 본다 (2026-09-04).
 // 2026-08: 소모품은 주워도 즉시 먹지 않는다 — 효과는 Items.test 가 본다.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +9,7 @@ import { Input } from '../core/Input';
 import { addItem, countOf, initInventory } from '../core/Inventory';
 import { World } from '../core/World';
 import { Level } from '../level/GridLoader';
+import * as Loot from './Loot';
 import * as Pickups from './Pickups';
 import * as Progression from './Progression';
 import * as Sigils from './Sigils';
@@ -67,48 +68,6 @@ function fillBag(world: World): void {
   if (!full) throw new Error('가방을 못 채웠다 — stackMax/칸 수 확인');
 }
 
-/** Math.random을 고정값으로 */
-function fixRandom(value: number): void {
-  vi.spyOn(Math, 'random').mockReturnValue(value);
-}
-
-describe('처치 드랍', () => {
-  it('굴림이 확률 안이면 포션과 골드가 함께 떨어진다', () => {
-    fixRandom(0.01); // potion(0.18)·gold(0.65) 둘 다 통과
-    Pickups.rollDrops(world, 'goblin_runner', 12, 10);
-    const kinds = world.groundItems.map((i) => i.kind);
-    expect(kinds).toContain('potion');
-    expect(kinds).toContain('gold');
-    const gold = world.groundItems.find((i) => i.kind === 'gold')!;
-    expect(gold.amount).toBe(cfg.gold.min); // random 0 → 최소치
-  });
-
-  it('굴림이 빗나가면 아무것도 떨어지지 않는다', () => {
-    fixRandom(0.99);
-    Pickups.rollDrops(world, 'goblin_runner', 12, 10);
-    expect(world.groundItems).toHaveLength(0);
-  });
-
-  it('마나 물약도 함께 떨어진다', () => {
-    fixRandom(0.01);
-    Pickups.rollDrops(world, 'goblin_runner', 12, 10);
-    expect(world.groundItems.map((i) => i.kind)).toContain('mana');
-  });
-
-  it('음식도 함께 떨어진다', () => {
-    fixRandom(0.01); // food(0.15) 통과
-    Pickups.rollDrops(world, 'goblin_runner', 12, 10);
-    expect(world.groundItems.map((i) => i.kind)).toContain('food');
-  });
-
-  it('보스는 확률과 무관하게 포션 확정 + 골드 ×배율', () => {
-    fixRandom(0.99);
-    Pickups.rollDrops(world, 'goblin_chieftain', 12, 10);
-    const gold = world.groundItems.find((i) => i.kind === 'gold')!;
-    expect(world.groundItems.some((i) => i.kind === 'potion')).toBe(true);
-    expect(gold.amount).toBe(cfg.gold.max * cfg.gold.bossMul); // random 0.99 → 최대치
-  });
-});
 
 describe('자석 흡수', () => {
   /** 흡수될 때까지(또는 maxTicks) 돌린다. 걸린 틱 수 반환 */
@@ -204,14 +163,14 @@ describe('자석 흡수', () => {
 describe('보스 소환수(noLoot)', () => {
   it('죽어도 드랍·골드·경험치가 없다 — 생명 입자만 나온다', async () => {
     const LifeMotes = await import('./LifeMotes');
-    Pickups.init(world);
+    Loot.init(world);
     Progression.init(world);
     LifeMotes.init(world);
     const orig = Math.random;
     Math.random = () => 0; // 드랍 롤 확정 구간 — 보상이 있었다면 반드시 떨어졌을 값
     world.events.emit('enemy_died', { enemyType: 'slime_small', x: 30, z: 30, noLoot: true });
     Math.random = orig;
-    expect(world.groundItems).toHaveLength(0); // 아이템도 골드도 없다
+    expect(world.groundItems).toHaveLength(0); // 주머니도 없다
     expect(world.xp).toBe(0); // 경험치도 없다
     expect(world.lifeMotes.length).toBeGreaterThan(0); // 회복 입자는 나온다
   });

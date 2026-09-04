@@ -566,6 +566,8 @@ export interface ChestState {
   z: number;
   opened: boolean;
   blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** 상자 속 — 처음 열 때 1회 롤(골드 + 각인). 루팅 UI 로 가져간다. 비어도 상자는 남는다 */
+  chestItems?: LootEntry[];
 }
 
 /** 폭발통 — 총·해머로 여러 대 때리면 도화선이 짧아지고, 화염구·수류탄은 즉발 */
@@ -596,6 +598,17 @@ export interface InventorySlot {
   count: number;
 }
 
+/** 전리품 종류 — 주머니·상자 안에 들어가는 것: 가방 소모품 + 골드 + 화살 (+ 상자의 각인) */
+export type LootKind = ItemKind | 'gold' | 'arrow' | 'sigil';
+/** 컨테이너(주머니·상자) 한 줄 — 같은 종류는 한 줄에 쌓인다(상한 없음). 각인은 sigilId 별 한 줄 */
+export interface LootEntry {
+  kind: LootKind;
+  count: number;
+  sigilId?: string;
+}
+/** 바라보는/열어 둔 컨테이너 참조 — 주머니는 groundItems 의 id, 상자는 chests 의 id */
+export type LootRef = { kind: 'pouch'; id: number } | { kind: 'chest'; id: number };
+
 /** 생명 입자 — 처치 시 흩뿌려져 가까이 가면 빨려 들어온다 (systems/LifeMotes) */
 export interface LifeMoteState {
   id: number;
@@ -612,7 +625,7 @@ export interface LifeMoteState {
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
-  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow' | 'key' | 'grave' | 'ammo' | 'grenade' | 'battery';
+  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow' | 'key' | 'grave' | 'ammo' | 'grenade' | 'battery' | 'pouch';
   x: number;
   z: number;
   /** kind==='sigil' 일 때만 */
@@ -629,9 +642,20 @@ export interface GroundItemState {
   /** 비행 중 높이와 현재 속도 (자석 상태에서만 의미 있음) */
   y?: number;
   speed?: number;
-  /** 이 틱 수만큼은 자석에 안 걸린다 — 가방에서 버린 직후 도로 주워지는 것을 막는다 */
+  /** 이 틱 수만큼은 자석에 안 걸린다 — 가방에서 버린 직후 도로 주워지는 것을 막는다.
+   *  주머니에서는 '떨어져 안착하는 시간'(그동안 뒤질 수 없다) */
   noMagnetTicks?: number;
-
+  /** kind==='pouch' — 처치 전리품 묶음. 뒤져서(루팅 UI) 가져간다. 비면 사라진다 (systems/Loot) */
+  pouchItems?: LootEntry[];
+  /** 보스 주머니는 금빛 — 뒤져 볼 가치가 보이게 */
+  pouchTier?: 'normal' | 'boss';
+  /** 떨군 적 종류 — 창 제목용. 다른 종류의 전리품과 병합되면 undefined(전리품 주머니) */
+  pouchOwner?: string;
+  /** 가득 찬 가방에 튕겨 원자리로 돌아가는 중 — 남은 틱 / 출발점 / 출발 높이 (Pickups 가 굴린다) */
+  bounceTicks?: number;
+  bounceFromX?: number;
+  bounceFromZ?: number;
+  bounceY0?: number;
 }
 
 export interface ManaState {
@@ -1092,6 +1116,14 @@ export class World {
 
   /** 지금 바라보고 있는 열 수 있는 상자 (없으면 null) — HUD 안내가 읽는다 */
   chestInView: ChestState | null = null;
+  /** 지금 바라보는 컨테이너(주머니·상자) — Loot 가 계산, HUD 안내·상호작용 병합이 읽는다 */
+  lootInView: LootRef | null = null;
+  /** 열어 둔 컨테이너 — 루팅 UI 가 이걸 보고 그린다. null 이면 닫힘 */
+  lootOpen: LootRef | null = null;
+  /** 지금 바라보는 바닥 소모품(E 로 집는 것) — Pickups 가 계산 */
+  itemInView: { id: number; kind: ItemKind } | null = null;
+  /** 창을 닫은 E 가 다음 틱에 같은 것을 다시 열지 않게 — 닫은 뒤 이 틱 동안 열기 무시 */
+  lootReopenGuard = 0;
 
   /** 보유 골드 — 적 처치 드랍으로 모인다 (사용처는 이후 구역) */
   /** 스태미너 — 질주로 닳고 회피로 크게 깎인다. 0이 되면 지쳐서 질주 불가 */

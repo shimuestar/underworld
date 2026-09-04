@@ -6,7 +6,8 @@
 // 칸 안에 그대로 있어야 "이게 뭐였지"가 안 생긴다.
 
 import { itemDef } from '../core/Inventory';
-import type { ItemKind } from '../core/World';
+import { sigilColor } from '../core/SigilData';
+import type { ItemKind, LootEntry } from '../core/World';
 
 /** 유리·뼈 같은 보조 색 — 3D 모형(Stage)의 POTION_GLASS / FOOD_BONE 과 같은 값 */
 const GLASS = '#bfe6ff';
@@ -70,4 +71,37 @@ export function itemIcon(kind: ItemKind, size: number): HTMLSpanElement {
   span.style.cssText = 'display:block;line-height:0;';
   span.innerHTML = itemIconSvg(kind, size);
   return span;
+}
+
+/** 골드 — 바닥 골드 더미(Stage GOLD_COLOR)와 같은 색 */
+const GOLD = '#ffcc3a';
+const ARROW_WOOD = '#d8d0b8';
+
+/** 전리품 줄 아이콘 — 소모품은 가방 아이콘 그대로, 골드는 ◆, 화살은 대·촉·깃, 각인은 그 각인 색 팔면체 */
+export function lootIconSvg(entry: LootEntry, size: number): string {
+  if (entry.kind === 'potion' || entry.kind === 'mana' || entry.kind === 'food') return itemIconSvg(entry.kind, size);
+  let body: string;
+  let glow: string;
+  if (entry.kind === 'gold') {
+    glow = GOLD;
+    body =
+      `<path d="M12 2.5L21 12L12 21.5L3 12Z" fill="${GOLD}" stroke="${OUTLINE}" stroke-width="1.4" stroke-linejoin="round"/>` +
+      `<path d="M8.5 12L12 6.5L15.5 12" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.3" stroke-linecap="round"/>`;
+  } else if (entry.kind === 'arrow') {
+    glow = ARROW_WOOD;
+    body =
+      `<path d="M5 19L18 6" stroke="${ARROW_WOOD}" stroke-width="2.2" stroke-linecap="round"/>` +
+      `<path d="M15.2 4.2L20 4L19.8 8.8Z" fill="#9a9aa4" stroke="${OUTLINE}" stroke-width="1"/>` +
+      `<path d="M5.5 15.5L3.5 17.5M8.5 18.5L6.5 20.5" stroke="#e8ddc0" stroke-width="1.6" stroke-linecap="round"/>`;
+  } else {
+    const c = `#${sigilColor(entry.sigilId ?? '').toString(16).padStart(6, '0')}`;
+    glow = c;
+    body =
+      `<path d="M12 2L19 12L12 22L5 12Z" fill="${c}" stroke="${OUTLINE}" stroke-width="1.4" stroke-linejoin="round"/>` +
+      `<path d="M5 12H19M12 2V22" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>`;
+  }
+  return (
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" ` +
+    `style="display:block;filter:drop-shadow(0 0 4px ${glow});">${body}</svg>`
+  );
 }

@@ -1,95 +1,14 @@
-// 소모품 드랍 — 적 처치 시 포션·음식·골드를 바닥에 떨구고, 근처에 가면 자동 획득한다.
-// 각인(Sigils)과 같은 world.groundItems 배열을 쓰되 kind로 구분한다.
-// 드랍 확률·자석은 balance.pickups, 회복량은 balance.items.kinds.
+// 바닥 아이템 물리와 습득 — 자석(골드·화살·탄약·수류탄·배터리·소모품), 비석 회수.
+// 각인(Sigils)·주머니(Loot)와 같은 world.groundItems 배열을 쓰되 kind 로 구분한다.
+// 자석 수치는 balance.pickups, 회복량은 balance.items.kinds.
 //
 // 2026-08: 포션·음식은 몸에 닿아도 즉시 먹지 않는다 — 가방(Items)으로 들어가고,
 // 실제로 마시는 것은 퀵슬롯 1~5 다. 골드만 예전처럼 바로 주머니로 들어간다.
+// 2026-09-04: 처치 드랍 굴림은 Loot 로 옮겼다 — 이제 적은 아이템이 아니라 주머니를 떨군다.
 
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
 import { addItem, hasRoom, recoverGrave } from '../core/Inventory';
 import type { ItemKind, World } from '../core/World';
-
-let nextPickupId = 500000; // 각인 아이템 id 대역과 구분
-
-/** 드랍 구독. 시작 시 1회 호출 */
-export function init(world: World): void {
-  world.events.on('enemy_died', (payload) => {
-    const { enemyType, x, z, noLoot } = payload as {
-      enemyType: string; x: number; z: number; noLoot?: boolean;
-    };
-    if (noLoot) return; // 보스 소환수 — 아이템도 골드도 없다 (생명 입자는 LifeMotes 가 준다)
-    rollDrops(world, enemyType, x, z);
-  });
-}
-
-/** 처치 드랍 굴림 — 포션은 낮은 확률(보스는 확정), 골드는 자주 */
-/** 낙하점 — 플레이어 반대쪽 호(awayArcDeg)로만. 죽은 자리에서 내 입으로 직행하지 않는다 */
-function dropSpot(world: World, x: number, z: number, r: number): { x: number; z: number } {
-  const p = world.player;
-  const adx = x - p.x;
-  const adz = z - p.z;
-  const away = Math.hypot(adx, adz) > 0.001 ? Math.atan2(adx, adz) : Math.random() * Math.PI * 2;
-  const halfArc = ((balance.pickups.awayArcDeg / 2) * Math.PI) / 180;
-  const ang = away + (Math.random() - 0.5) * 2 * halfArc;
-  return { x: x + Math.sin(ang) * r, z: z + Math.cos(ang) * r };
-}
-
-export function rollDrops(world: World, enemyType: string, x: number, z: number): void {
-  const def = enemyDef(enemyType);
-  const cfg = balance.pickups;
-  const land = cfg.landNoMagnetTicks; // 바닥에 놓일 때까지 자석·픽업 유예
-
-  if (Math.random() < cfg.potion.dropChance || (def.boss && cfg.potion.bossAlways)) {
-    const at = dropSpot(world, x, z, 0.4);
-    world.groundItems.push({ id: nextPickupId++, kind: 'potion', x: at.x, z: at.z, noMagnetTicks: land });
-    world.events.emit('potion_dropped', { x, z });
-  }
-
-  if (Math.random() < cfg.manaPotion.dropChance || (def.boss && cfg.potion.bossAlways)) {
-    const at = dropSpot(world, x, z, 0.45);
-    world.groundItems.push({
-      id: nextPickupId++, kind: 'mana', x: at.x, z: at.z, noMagnetTicks: land,
-    });
-    world.events.emit('mana_potion_dropped', { x, z });
-  }
-
-  // 음식 — HP·마나를 동시에, 대신 각 포션의 절반씩
-  if (Math.random() < cfg.food.dropChance) {
-    const at = dropSpot(world, x, z, 0.45);
-    world.groundItems.push({
-      id: nextPickupId++, kind: 'food', x: at.x, z: at.z, noMagnetTicks: land,
-    });
-    world.events.emit('food_dropped', { x, z });
-  }
-
-  // 화살통 — 활을 든 적만 떨군다. 이게 없으면 활은 빗나갈 때마다 순손실이라
-  // 제단에서 사 쓰는 무기가 된다 (맞힌 화살 회수만으로는 본전이 안 나온다)
-  if (def.arrowDrop) {
-    const drop = def.arrowDrop;
-    let count = drop.min;
-    while (count < drop.max && Math.random() < drop.extraChance) count++;
-    for (let i = 0; i < count; i++) {
-      const at = dropSpot(world, x, z, cfg.arrow.scatterRadius);
-      world.groundItems.push({
-        id: nextPickupId++, kind: 'arrow', amount: 1, x: at.x, z: at.z, noMagnetTicks: land,
-      });
-    }
-    world.events.emit('arrows_dropped', { count, x, z });
-  }
-
-  if (Math.random() < cfg.gold.dropChance || def.boss) {
-    const span = cfg.gold.max - cfg.gold.min;
-    let amount = cfg.gold.min + Math.round(Math.random() * span);
-    if (def.boss) amount *= cfg.gold.bossMul;
-    // 두 드랍이 겹쳐 보이지 않게 살짝 흩뿌린다 — 역시 플레이어 반대쪽으로
-    const at = dropSpot(world, x, z, 0.5);
-    world.groundItems.push({
-      id: nextPickupId++, kind: 'gold', amount, x: at.x, z: at.z, noMagnetTicks: land,
-    });
-    world.events.emit('gold_dropped', { amount, x, z });
-  }
-}
 
 /** 바닥에 놓인 높이 (kind별) — 자석에 걸리기 전 기준 높이 */
 function restHeight(kind: string): number {
@@ -128,7 +47,7 @@ export function tick(world: World, dt: number): void {
 
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
     const item = world.groundItems[i]!;
-    if (item.kind === 'sigil') continue; // 각인은 Sigils 담당
+    if (item.kind === 'sigil' || item.kind === 'pouch') continue; // 각인은 Sigils, 주머니는 Loot 담당
     // 비석 — 돌이라 자석에 걸리지 않는다. 밟을 만큼 다가가야 유품을 다시 담아 간다
     if (item.kind === 'grave') {
       if (Math.hypot(p.x - item.x, p.z - item.z) > balance.pickups.grave.radius) continue;

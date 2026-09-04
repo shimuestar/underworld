@@ -5,7 +5,7 @@ import { Metrics } from './core/Metrics';
 import { DebugOverlay } from './render/DebugOverlay';
 import { Input } from './core/Input';
 import { Loop } from './core/Loop';
-import { World, type ItemKind, type DotState } from './core/World';
+import { World, type ItemKind, type DotState, type LootKind } from './core/World';
 import { countOf, initInventory, spillInventoryToGrave, itemColor, itemDef } from './core/Inventory';
 import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
@@ -40,8 +40,10 @@ import * as Exit from './systems/Exit';
 import * as Door from './systems/Door';
 import * as Lever from './systems/Lever';
 import * as Lantern from './systems/Lantern';
+import * as Loot from './systems/Loot';
 import { enemyDef, healthBarState } from './core/Entities';
 import { ShopUI } from './render/ShopUI';
+import { LootUI } from './render/LootUI';
 import { InventoryUI, quickslotView } from './render/InventoryUI';
 import { SKILL_KEYS, SkillUI } from './render/SkillUI';
 import { itemIconSvg } from './render/ItemIcons';
@@ -284,7 +286,23 @@ function setUiOpen(open: boolean): void {
   else input.requestLock();
 }
 shopUI.onClose = () => setUiOpen(false);
+// 루팅 창 — 주머니·상자를 뒤진다. 열리는 건 loot_opened(Loot/Chest 가 낸다), 닫히면 규칙(빈 주머니 정리·재오픈 가드)을 Loot 에 맡긴다
+const lootUI = new LootUI(world);
+lootUI.onClose = () => {
+  Loot.closeLoot(world);
+  setUiOpen(false);
+};
+events.on('loot_opened', (payload) => {
+  const info = payload as { kind: 'pouch' | 'chest' };
+  audio.play(info.kind === 'chest' ? 'chest_opened' : 'pouch_open');
+  padRumble('interact');
+  inventoryUI.hide();
+  skillUI.hide();
+  lootUI.show();
+  setUiOpen(true);
+});
 window.addEventListener('keydown', (e) => {
+  if (lootUI.open) return; // 루팅 창은 자기 키(E/Esc)로만 닫는다 — Tab·I 가 다른 창을 겹쳐 열지 않게
   if (e.code === 'Tab') {
     e.preventDefault();
     // 상점에서 Tab — 스킬 창으로 넘어간다 (둘이 겹쳐 뜨지 않게). 제단에서는 패시브를 뗄 수 있다
@@ -551,16 +569,20 @@ for (const name of [
   'spell_kill',
   'friendly_fire_kill',
   'sigil_dropped',
-  'potion_dropped',
-  'mana_potion_dropped',
-  'food_dropped',
+  'pouch_dropped',
+  'loot_opened',
+  'loot_closed',
+  'loot_taken',
+  'loot_stashed',
+  'loot_dropped',
+  'loot_denied',
+  'pickup_bounced',
   'item_picked',
   'item_gained',
   'item_used',
   'arrow_loosed',
   'arrow_impact',
   'arrow_shielded',
-  'arrows_dropped',
   'bow_draw_released',
   'arrow_recovered',
   'arrow_broken',
@@ -571,7 +593,6 @@ for (const name of [
   'item_dropped',
   'inventory_full',
   'quickslot_bound',
-  'gold_dropped',
   'gold_picked',
   'xp_gained',
   'sigil_acquired',
@@ -2096,6 +2117,26 @@ events.on('inventory_full', () => {
   bagFullUntil = performance.now() + 2500;
   showReaction(`가방이 가득 찼다 — ${keyLabel('inventory', 'inventory')} 에서 쓰거나 버려야 한다`, 2000);
 });
+// 루팅 — 가져오면 종류별 습득음, 넣으면 천 소리, 버리면 툭, 거부는 상점과 같은 거절음 + 이유
+events.on('loot_taken', (payload) => {
+  const t = payload as { kind: LootKind; count: number };
+  if (t.kind === 'gold' || t.kind === 'arrow') audio.play('pickup_gold');
+  else if (t.kind === 'sigil') audio.play('pickup');
+  else audio.play(ITEM_SOUND[t.kind] ?? 'pickup');
+  padRumble('pickup');
+});
+events.on('loot_stashed', () => audio.play('loot_stash'));
+events.on('loot_dropped', (payload) => {
+  const d = payload as { kind: LootKind; count: number; from: 'container' | 'bag' };
+  audio.play('thud');
+  // 가방 쪽은 item_dropped 가 이미 알린다 — 컨테이너 쪽만 여기서
+  if (d.from === 'container') showReaction(`${Loot.entryName({ kind: d.kind, count: d.count })} ${d.count}개를 바닥에 버렸다`, 1200);
+});
+events.on('loot_denied', (payload) => {
+  const d = payload as { reason: 'full' | 'quiver' };
+  audio.play('shop_deny');
+  showReaction(d.reason === 'quiver' ? '화살통이 가득 — 더 못 넣는다' : '가방이 가득 — 자리를 비워야 가져온다', 1600);
+});
 events.on('gold_picked', (payload) => {
   audio.play('pickup_gold');
   padRumble('pickup');
@@ -2385,8 +2426,13 @@ function respawnAtAltar(): void {
   world.projectiles.length = 0;
   world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
   world.ghoulHeads = []; // 튀는 머리도 층에 속한다
-  // 바닥 보상은 리셋하되 비석만은 남긴다 — 유품은 다시 죽어도 그 자리에 있다
-  world.groundItems = world.groundItems.filter((g) => g.kind === 'grave');
+  // 바닥 보상은 리셋하되 비석과 주머니는 남긴다 — 유품은 다시 죽어도 그 자리에 있고,
+  // 주머니의 주인(죽인 적)은 되살아나지 않으니 전리품까지 지우면 이중 처벌이다
+  world.groundItems = world.groundItems.filter((g) => g.kind === 'grave' || g.kind === 'pouch');
+  world.lootOpen = null;
+  world.lootInView = null;
+  world.itemInView = null;
+  lootUI.hide();
   world.freezeTicks = 0;
   world.grappleEnemyId = null;
   world.grappleMash = 0;
@@ -2723,6 +2769,9 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   const atYaw = arrival === 'exit' && level.exitPos ? level.exitYaw : level.spawnYaw;
 
   world.chestInView = null;
+  world.lootInView = null;
+  world.lootOpen = null;
+  world.itemInView = null;
   world.doorInView = null;
   world.leverInView = null;
   world.altarInView = false;
@@ -2855,7 +2904,7 @@ events.on('corruption_threshold', (payload) => {
 // 상태가 확정된 뒤 판정해야 한다.
 Mana.init(world);
 Sigils.init(world);
-Pickups.init(world);
+Loot.init(world); // 처치 드랍 → 주머니 (Pickups 는 바닥 아이템 물리만)
 LifeMotes.init(world);
 Projectiles.init(world);
 initInventory(world);
@@ -2886,6 +2935,7 @@ const systems = [
   Door.tick,
   Lever.tick,
   Chest.tick,
+  Loot.tick, // 주머니 대상·E 열기 — 상자 뒤에서 돈다 (상자가 우선)
   Exit.tick,
   Lantern.tick,
   Stamina.tick, // 소모하는 쪽(PlayerMove·Reaction) 뒤에서 회복한다
@@ -2907,6 +2957,7 @@ function simulate(dt: number): void {
       (world.doorInView !== null && (!world.doorInView.byLever || world.doorInView.unlockedOnce === true)) ||
       world.leverInView !== null ||
       world.chestInView !== null ||
+      world.lootInView !== null ||
       (world.altarInView && !world.altarEnteredThisApproach) ||
       world.onEntrancePad ||
       (world.onExitPad && (world.exitOpen || world.exitNeedsKey));
@@ -2927,7 +2978,9 @@ function simulate(dt: number): void {
   }
   // Menu 는 창이 하나뿐인 패드를 위해 순환한다: 닫힘 → 가방 → 스킬 → 닫힘
   if (input.gamepad.pressed('inventory')) {
-    if (shopUI.open) {
+    if (lootUI.open) {
+      lootUI.padClose(); // 루팅 창은 Menu 로도 닫힌다 (다른 창으로 넘어가지 않는다)
+    } else if (shopUI.open) {
       shopUI.hide();
       setUiOpen(skillUI.toggle(true));
     } else if (inventoryUI.open) {
@@ -2948,6 +3001,18 @@ function simulate(dt: number): void {
     else if (input.gamepad.rawPressed(12)) shopUI.padMove(-1); // D-패드 ↑
     else if (input.gamepad.rawPressed(0)) shopUI.padBuy(); // A
     else if (input.gamepad.rawPressed(1)) shopUI.padClose(); // B
+  }
+  // 루팅 창 — D-패드 네 방향(←→ 로 칸 전환), A 가져오기/넣기, X 모두, Y 바닥에 버리기, B 닫기
+  if (lootUI.open && input.gamepad.connected) {
+    lootUI.padMode = input.usingPad;
+    if (input.gamepad.rawPressed(13)) lootUI.padMove(0, 1);
+    else if (input.gamepad.rawPressed(12)) lootUI.padMove(0, -1);
+    else if (input.gamepad.rawPressed(15)) lootUI.padMove(1, 0);
+    else if (input.gamepad.rawPressed(14)) lootUI.padMove(-1, 0);
+    else if (input.gamepad.rawPressed(0)) lootUI.padActivate();
+    else if (input.gamepad.rawPressed(2)) lootUI.padTakeAll();
+    else if (input.gamepad.rawPressed(3)) lootUI.padDrop();
+    else if (input.gamepad.rawPressed(1)) lootUI.padClose();
   }
   if (world.dead) {
     if (input.gamepad.pressed('interact')) restartAfterDeath();
@@ -3591,9 +3656,10 @@ function render(alpha: number): void {
   const onExit = world.onExitPad && !world.dead && !world.uiOpen && !world.cleared;
   const onEntrance = world.onEntrancePad && !world.dead && !world.uiOpen && !world.cleared;
   const nearChest = world.chestInView !== null && !world.dead && !world.uiOpen;
+  const nearLoot = world.lootInView !== null && !world.dead && !world.uiOpen;
   altarPrompt!.classList.toggle(
     'visible',
-    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest,
+    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest || nearLoot,
   );
   // 상호작용 키 표기 — 한 키 체계라 근접 키를 안내한다 (E 도 여전히 동작한다)
   // 패드는 상호작용 버튼을 보여 준다 — 근접(RT)도 겸하지만("한 키 체계") 안내는
@@ -3610,6 +3676,8 @@ function render(alpha: number): void {
       `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
   } else if (nearChest) {
     altarPrompt!.textContent = `${IK} — 보물상자를 연다`;
+  } else if (nearLoot) {
+    altarPrompt!.textContent = `${IK} — ${Loot.titleOf(world, world.lootInView!)}를 뒤진다`;
   } else if (nearLever) {
     const leverDef = world.level.levers.find(
       (l) => l.cell[0] === world.leverInView!.row && l.cell[1] === world.leverInView!.col,
@@ -3817,6 +3885,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__input = input;
   (window as unknown as Record<string, unknown>).__stage = stage; // 씬 그래프 검증용
   (window as unknown as Record<string, unknown>).__audio = audio; // 소리 재생 호출 추적용(헤드리스)
+  (window as unknown as Record<string, unknown>).__lootUI = lootUI; // 루팅 창 패드 경로 검증용
 }
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)

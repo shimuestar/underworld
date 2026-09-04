@@ -7,6 +7,7 @@ import { Input } from '../core/Input';
 import { breakProp, damageProp, World, type PropState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Barrels from './Barrels';
+import * as Loot from './Loot';
 import * as Pickups from './Pickups';
 import * as Props from './Props';
 import * as Sigils from './Sigils';
@@ -160,15 +161,15 @@ describe('기믹 — 파괴 롤과 판정', () => {
     expect(barrel.alive).toBe(false);
   });
 
-  it('몬스터 드랍도 같은 규칙 — 플레이어 반대쪽 + 착지 유예', () => {
+  it('몬스터 드랍(주머니)도 같은 규칙 — 플레이어 반대쪽 + 안착 유예', () => {
     const orig = Math.random;
-    Math.random = () => 0; // 물약 드랍 확정 + 호의 한쪽 끝
-    Pickups.rollDrops(world, 'goblin_runner', 10, 6); // 플레이어(6,6)에서 +X 쪽 4m
+    Math.random = () => 0; // 드랍 확정 + 호의 한쪽 끝
+    Loot.dropPouch(world, 'goblin_runner', 10, 6); // 플레이어(6,6)에서 +X 쪽 4m
     Math.random = orig;
-    const drop = world.groundItems.find((g) => g.kind === 'potion');
-    expect(drop).toBeTruthy();
-    expect(drop!.x).toBeGreaterThan(10); // 반대쪽(+X)으로 밀려 떨어졌다
-    expect(drop!.noMagnetTicks).toBe(balance.pickups.landNoMagnetTicks);
+    const pouch = world.groundItems.find((g) => g.kind === 'pouch');
+    expect(pouch).toBeTruthy();
+    expect(pouch!.x).toBeGreaterThan(10); // 반대쪽(+X)으로 밀려 떨어졌다
+    expect(pouch!.noMagnetTicks).toBe(balance.loot.pouch.settleTicks);
   });
 
   it('noExplode(작은방 배치) — 폭발 롤이 나와도 심지가 붙지 않는다', () => {

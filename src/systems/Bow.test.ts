@@ -9,6 +9,7 @@ import { World, type EnemyState, type ProjectileState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { enemyDef } from '../core/Entities';
 import { spawnEnemyAt } from '../level/Spawner';
+import * as Loot from './Loot';
 import * as Pickups from './Pickups';
 import * as Projectiles from './Projectiles';
 import * as Sigils from './Sigils';
@@ -503,48 +504,37 @@ describe('통·소음·인지', () => {
   });
 });
 
-describe('화살통 드랍', () => {
+describe('화살통 드랍 — 주머니 안 화살 줄 (2026-09-04: 바닥에 흩어지지 않는다)', () => {
   const ARCHER = enemyDef('goblin_archer').arrowDrop!;
 
   it('궁수는 최소 한 대를 확정으로 떨군다', () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0.999); // extraChance 실패
-    Pickups.rollDrops(world, 'goblin_archer', 20, 6);
-    expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(ARCHER.min);
+    const entries = Loot.rollLoot('goblin_archer', () => 0.999); // extraChance 실패
+    expect(entries.find((e) => e.kind === 'arrow')?.count).toBe(ARCHER.min);
     expect(ARCHER.min).toBe(1);
   });
 
   it('드물게 한 대 더 — 최대치를 넘지 않는다', () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0); // extraChance 항상 성공
-    Pickups.rollDrops(world, 'goblin_archer', 20, 6);
-    const arrows = world.groundItems.filter((g) => g.kind === 'arrow');
-    expect(arrows).toHaveLength(ARCHER.max);
+    const entries = Loot.rollLoot('goblin_archer', () => 0); // extraChance 항상 성공
+    expect(entries.find((e) => e.kind === 'arrow')?.count).toBe(ARCHER.max);
     expect(ARCHER.max).toBe(2);
   });
 
-  it('한 점에 겹쳐 쌓이지 않는다 — 흩뿌린다', () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    Pickups.rollDrops(world, 'goblin_archer', 20, 6);
-    for (const a of world.groundItems.filter((g) => g.kind === 'arrow')) {
-      expect(Math.hypot(a.x - 20, a.z - 6)).toBeCloseTo(balance.pickups.arrow.scatterRadius, 5);
-    }
-  });
-
   it('활을 안 든 적은 화살을 안 떨군다', () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0);
     for (const type of ['goblin_runner', 'goblin_spear', 'spider_small', 'warden']) {
       expect(enemyDef(type).arrowDrop).toBeUndefined();
-      Pickups.rollDrops(world, type, 20, 6);
+      expect(Loot.rollLoot(type, () => 0).some((e) => e.kind === 'arrow')).toBe(false);
     }
-    expect(world.groundItems.filter((g) => g.kind === 'arrow')).toHaveLength(0);
   });
 
-  it('떨군 화살은 그대로 주울 수 있다 — 회수 규칙을 그대로 탄다', () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0); // 두 대 + 회수도 성공
+  it('주머니에서 가져온 화살은 화살통으로 — 회수 굴림 없이(쏜 게 아니라 들고 있던 것)', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0); // 두 대
     world.weapon.arrows = 0;
-    world.player.x = 20;
-    world.player.z = 6;
-    Pickups.rollDrops(world, 'goblin_archer', 20 + 1, 6);
-    for (let i = 0; i < 200 && world.groundItems.length > 0; i++) Pickups.tick(world, DT);
+    Loot.init(world);
+    world.events.emit('enemy_died', { enemyType: 'goblin_archer', x: 20, z: 6 });
+    const pouch = world.groundItems.find((g) => g.kind === 'pouch')!;
+    expect(pouch).toBeTruthy();
+    world.lootOpen = { kind: 'pouch', id: pouch.id };
+    Loot.takeAll(world);
     expect(world.weapon.arrows).toBe(ARCHER.max);
   });
 });

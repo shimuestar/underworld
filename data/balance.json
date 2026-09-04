@@ -414,6 +414,20 @@
     }
   },
 
+  "loot": {
+    "_comment": "전리품 주머니(2026-09-04) — 처치 드랍은 바닥에 흩어지지 않고 주머니 하나로 묶인다(소모품·골드·화살; 각인은 따로 떨어져 밟으면 습득). 확률·양은 pickups.*.dropChance / pickups.gold 를 그대로 읽는다. 주머니는 자석에 안 걸리고, 바라보며 E 로 뒤진다(루팅 UI, 시간 정지). 부활해도 남는다(죽인 적은 안 돌아오므로 전리품까지 지우면 이중 처벌). 슬라임은 주머니도 먹는다",
+    "_pouchNote": "scatterRadius: 시체에서 플레이어 반대쪽으로 떨어지는 거리 / mergeRadius: 이 안에 주머니가 있으면 새 전리품이 거기 합쳐진다(바닥 어지러움 방지) / radius·facingArcDeg: 뒤질 수 있는 거리·시야각(상자 2.4/120 보다 좁다 — 작은 물건) / settleTicks: 떨어진 뒤 이 틱 동안은 손댈 수 없다 / reopenGuardTicks: 닫은 E 가 다음 틱에 도로 열지 않게",
+    "pouch": { "scatterRadius": 0.5, "mergeRadius": 1.6, "radius": 2.0, "facingArcDeg": 110, "settleTicks": 30, "reopenGuardTicks": 3 },
+    "_pickupNote": "바닥 소모품(물약·마나·고기)은 자석이 아니라 E 로 집는다 — 이 거리·시야각 안에서. 골드·화살·탄약은 여전히 자석",
+    "pickup": { "radius": 1.8, "facingArcDeg": 100 },
+    "_bounceNote": "가방이 가득인데 집으려 하면 몸까지 날아왔다 원자리로 튕겨 돌아간다 — popUp 높이의 포물선을 ticks 동안",
+    "bounce": { "popUp": 0.5, "ticks": 26 },
+    "_dropScatterNote": "루팅 창에서 컨테이너 쪽 아이템을 바닥에 버릴 때 컨테이너에서 이 거리만큼 플레이어 반대쪽으로",
+    "dropScatter": 0.6,
+    "_uiNote": "루팅 창 연출 — 아이콘이 반대 칸으로 날아가는 시간 / 거부 시 줄이 흔들리는 시간 (ms, 연출 전용)",
+    "ui": { "flyMs": 180, "shakeMs": 220 }
+  },
+
   "pickups": {
     "_dropRuleNote": "모든 처치 드랍 공통 (2026-08-30): 플레이어 반대쪽 호(awayArcDeg)로만 떨어지고 landNoMagnetTicks 동안 자석·픽업이 안 문다 — 뭘 먹었는지 보이게",
     "awayArcDeg": 150,
@@ -422,7 +436,7 @@
     "grave": { "radius": 1.4 },
     "_slimeEatNote": "슬라임 식탐 — 몸 반경 + 이 손길 안의 바닥 아이템을 삼킨다. 죽으면 전부 게워 낸다",
     "slimeEat": { "reach": 0.35 },
-    "_comment": "적 처치 드랍. 근처에 가면 자동 획득 (각인과 같은 바닥 아이템 경로). 2026-08: 소모품은 즉시 먹지 않고 가방으로 들어간다 — 회복량은 items.kinds 로 옮겼다",
+    "_comment": "적 처치 드랍 확률·양. 2026-09-04: 드랍은 주머니(loot)로 묶여 떨어진다 — 여기 확률을 Loot.rollLoot 가 읽는다. 바닥 소모품은 자석이 아니라 E 로 집는다(loot.pickup, magnetRadius 는 플레이어가 버린 것의 자석 폐지 전까지 유지). 회복량은 items.kinds",
     "potion": {
       "dropChance": 0.18,
       "bossAlways": true,

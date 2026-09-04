@@ -4391,7 +4391,7 @@ export class Stage {
   }
 
   /** 바닥 아이템 비주얼 — 각인(팔면체 보석) / 포션(붉은 약병) / 골드(낮은 더미) */
-  private makeGroundItem(kind: GroundItemState['kind'], sigilId?: string): THREE.Group {
+  private makeGroundItem(kind: GroundItemState['kind'], sigilId?: string, tier?: 'normal' | 'boss'): THREE.Group {
     const group = new THREE.Group();
     if (kind === 'grave') {
       // 비석 — 봉분 위 잿빛 돌판 + 둥근 머리. 돌이라 부유·회전하지 않는다 (grounded)
@@ -4558,6 +4558,27 @@ export class Stage {
       pile.name = 'gem';
       group.add(pile);
       group.add(new THREE.PointLight(GOLD_COLOR, 0.5, 3.5, 0));
+    } else if (kind === 'pouch') {
+      // 전리품 주머니 — 눌린 가죽 자루 + 목 매듭. 돌지 않고 바닥에 얌전히 놓인다(grounded).
+      // 보스 것은 금빛에 점광원 — 뒤져 볼 가치가 멀리서 보인다
+      const boss = tier === 'boss';
+      const leather = new THREE.MeshLambertMaterial({
+        color: boss ? 0xc9a24a : 0x6b4a2e,
+        emissive: boss ? 0xc9a24a : 0x000000,
+        emissiveIntensity: boss ? 0.25 : 0,
+      });
+      const sack = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), leather);
+      sack.scale.set(1, 0.8, 1);
+      sack.position.y = 0.16;
+      group.add(sack);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.08, 8), leather);
+      neck.position.y = 0.36;
+      group.add(neck);
+      const tie = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.018, 6, 10), new THREE.MeshLambertMaterial({ color: 0x3a2a1a }));
+      tie.rotation.x = Math.PI / 2;
+      tie.position.y = 0.33;
+      group.add(tie);
+      if (boss) group.add(new THREE.PointLight(GOLD_COLOR, 0.6, 3.5, 0));
     } else {
       // 각인 — 종류마다 색이 다르다. 어둠 속에서 점광원 색만 보고도 무엇인지 안다
       const color = sigilId ? sigilColor(sigilId) : GROUND_ITEM_COLOR;
@@ -4677,7 +4698,7 @@ export class Stage {
       seen.add(item.id);
       let group = this.groundItemVisuals.get(item.id);
       if (!group) {
-        group = this.makeGroundItem(item.kind, item.sigilId);
+        group = this.makeGroundItem(item.kind, item.sigilId, item.pouchTier);
         this.groundItemVisuals.set(item.id, group);
         this.scene.add(group);
       }
@@ -4686,11 +4707,12 @@ export class Stage {
       // 화살은 눕혀 둔 것이라 물약처럼 가슴 높이에서 까딱거리면 안 된다
       const grounded =
         item.kind === 'gold' || item.kind === 'arrow' || item.kind === 'grave' ||
-        item.kind === 'ammo' || item.kind === 'grenade' || item.kind === 'battery';
+        item.kind === 'ammo' || item.kind === 'grenade' || item.kind === 'battery' || item.kind === 'pouch';
       const bob =
         item.y ??
-        (grounded ? (item.kind === 'gold' ? 0.12 : item.kind === 'grave' ? 0 : GROUND_ARROW_Y)
-                  : 0.55 + Math.sin(now / 400 + item.id) * 0.1);
+        (grounded
+          ? (item.kind === 'gold' ? 0.12 : item.kind === 'grave' || item.kind === 'pouch' ? 0 : GROUND_ARROW_Y)
+          : 0.55 + Math.sin(now / 400 + item.id) * 0.1);
       group.position.set(item.x, bob, item.z);
       const gem = group.getObjectByName('gem');
       // 빨려드는 동안은 빠르게 회전하고 살짝 작아진다 (몸으로 들어가는 느낌)

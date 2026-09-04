@@ -11,6 +11,9 @@ export type SoundName =
   | 'net_snag'
   | 'door_close'
   | 'door_bump'
+  | 'pouch_open'
+  | 'loot_stash'
+  | 'thud'
   | 'telegraph_blue'
   | 'telegraph_red'
   | 'telegraph_purple'
@@ -645,6 +648,23 @@ export class GameAudio {
         break;
       case 'grenade_throw':
         this.noise(0.12, 0.35, 1200);
+        break;
+      case 'pouch_open':
+        // 주머니를 뒤진다 — 가죽 스침 + 안의 것들이 잘그락
+        this.noise(0.14, 0.3, 1800);
+        this.tone(300, 0.08, 'triangle', 0.25, 0.02, 220);
+        this.tone(1400, 0.05, 'triangle', 0.18, 0.09);
+        this.tone(1750, 0.05, 'triangle', 0.16, 0.14);
+        break;
+      case 'loot_stash':
+        // 천 주머니에 넣는다 — 부드러운 툭
+        this.tone(420, 0.09, 'triangle', 0.35, 0, 300);
+        this.noise(0.06, 0.2, 1200);
+        break;
+      case 'thud':
+        // 자루가 돌바닥에 떨어진다 — 둔탁한 툭
+        this.tone(90, 0.12, 'sine', 0.6, 0, 50);
+        this.noise(0.06, 0.5, 600);
         break;
       case 'chest_opened':
         // 낡은 경첩이 삐걱 열리고 금붙이가 쏟아진다
