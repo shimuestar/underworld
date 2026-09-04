@@ -8,8 +8,7 @@ import { balance } from '../core/Balance';
 import type { EnemyState, PlayerState } from '../core/World';
 import type { Level } from '../level/GridLoader';
 
-// 시각 상수 (튜닝값 아님)
-const PX_PER_UNIT = 3;
+// 시각 상수 (튜닝값 아님) — 지도 배율(px/unit)은 balance.minimap.pxPerUnit
 // 월드 시각물과 같은 색을 쓴다 — 지도와 실물이 일치해야 한다
 const COLORS: Record<string, string> = {
   '#': '#565663',
@@ -46,7 +45,7 @@ export class Minimap {
   private pings: { x: number; z: number; bornMs: number }[] = [];
 
   constructor(private level: Level) {
-    this.cellPx = level.cellSize * PX_PER_UNIT;
+    this.cellPx = level.cellSize * balance.minimap.pxPerUnit;
     const w = level.cols * this.cellPx;
     const h = level.rows * this.cellPx;
 
@@ -73,7 +72,7 @@ export class Minimap {
     // 범례 — 미니맵 바로 아래
     this.legend = document.createElement('div');
     this.legend.style.cssText =
-      `position:fixed;top:${h + 14}px;right:8px;width:${w}px;` +
+      `position:fixed;top:${h + 14}px;right:8px;white-space:nowrap;` +
       'font:10px/1.6 monospace;color:#8a8f9a;text-align:right;pointer-events:none;user-select:none;';
     this.legend.innerHTML =
       '<span style="color:#d8c9a0">■</span>제단 ' +
@@ -92,6 +91,14 @@ export class Minimap {
       'position:fixed;top:10px;right:16px;font:bold 11px/1 monospace;color:#d8e0ea;' +
       'text-shadow:1px 1px 0 #000;pointer-events:none;user-select:none;z-index:2;';
     document.body.appendChild(this.floorTitle);
+    this.reserveHudColumn(w);
+  }
+
+  /** 왼쪽 위 안내 글(#hud)이 미니맵 열을 침범하지 않게 — 지도·범례 중 넓은 쪽 폭을 CSS 변수로 알린다.
+   *  지도를 절반으로 줄이자(2026-09-04) 범례가 안내 글 마지막 줄과 겹쳤다 */
+  private reserveHudColumn(mapW: number): void {
+    const col = Math.max(mapW, this.legend.offsetWidth) + 16; // 오른쪽 여백 8 + 사이 간격 8
+    document.documentElement.style.setProperty('--minimap-col', `${col}px`);
   }
 
   private readonly legend: HTMLDivElement;
@@ -114,7 +121,7 @@ export class Minimap {
   /** 층이 바뀌었다 — 새 그리드로 갈아 끼우고 밑그림·안개를 다시 그린다 */
   setLevel(level: Level): void {
     this.level = level;
-    this.cellPx = level.cellSize * PX_PER_UNIT;
+    this.cellPx = level.cellSize * balance.minimap.pxPerUnit;
     const w = level.cols * this.cellPx;
     const h = level.rows * this.cellPx;
     this.base.width = w;
@@ -123,6 +130,8 @@ export class Minimap {
     this.fog.height = h;
     this.canvas.width = w;
     this.canvas.height = h;
+    this.legend.style.top = `${h + 14}px`; // 층마다 행 수가 다르면 범례가 지도에서 떨어졌다
+    this.reserveHudColumn(w);
     this.revealed = this.revealedSetFor(level);
     this.combat.clear();
     this.pings = [];
@@ -226,7 +235,7 @@ export class Minimap {
     const now = performance.now();
     this.reveal(player.x, player.z, player.yaw);
     const ctx = this.ctx;
-    const s = PX_PER_UNIT;
+    const s = balance.minimap.pxPerUnit;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.drawImage(this.base, 0, 0);
 

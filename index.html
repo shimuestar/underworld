@@ -20,9 +20,10 @@
         position: fixed;
         top: 8px;
         left: 8px;
+        right: var(--minimap-col, 8px); /* 미니맵 열(지도·범례)을 침범하지 않는다 — Minimap 이 갱신 */
         color: #9fe870;
         font: 13px/1.5 monospace;
-        white-space: pre;
+        white-space: pre-wrap;
         pointer-events: none;
         user-select: none;
       }
