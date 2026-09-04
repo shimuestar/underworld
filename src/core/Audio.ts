@@ -10,6 +10,7 @@ export type SoundName =
   | 'trap_squash'
   | 'net_snag'
   | 'door_close'
+  | 'door_bump'
   | 'telegraph_blue'
   | 'telegraph_red'
   | 'telegraph_purple'
@@ -1103,6 +1104,13 @@ export class GameAudio {
         this.tone(210, 0.06, 'square', 0.55);
         this.tone(140, 0.09, 'square', 0.45, 0.06);
         this.noise(0.18, 0.35, 1200, 0.02);
+        break;
+      case 'door_bump':
+        // 문이 몸에 걸렸다 — 나무판이 몸을 툭 치고 삐걱 되튕기는 소리. "안 닫힌다"의 신호
+        this.noise(0.05, 0.8, 700);
+        this.tone(160, 0.12, 'square', 0.4, 0, 110);
+        this.tone(420, 0.22, 'sawtooth', 0.25, 0.06, 300);
+        this.noise(0.18, 0.2, 1800, 0.08);
         break;
       case 'door_close':
         // 문이 되밀려 닫힌다 — 돌 갈림 뒤 묵직한 쿵 + 걸쇠 철컥

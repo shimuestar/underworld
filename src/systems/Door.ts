@@ -21,8 +21,8 @@ import { enemyDef } from '../core/Entities';
 import { addDoorFrameBlockers, removeDoorFrameBlockers } from '../level/GridLoader';
 import type { DoorState, World } from '../core/World';
 
-/** 문 칸에 몸이 있는가 — 플레이어·살아 있는 적의 원이 셀 사각형과 겹치면 참 */
-function bodyInDoorway(world: World, door: DoorState): boolean {
+/** 문 칸에 몸이 있는가 — 플레이어·살아 있는 적의 원이 셀 사각형과 겹치면 누구인지 돌려준다 */
+function bodyInDoorway(world: World, door: DoorState): 'player' | 'enemy' | null {
   const cs = world.level.cellSize;
   const minX = door.col * cs;
   const maxX = minX + cs;
@@ -31,19 +31,29 @@ function bodyInDoorway(world: World, door: DoorState): boolean {
   const overlaps = (x: number, z: number, r: number): boolean =>
     x + r > minX && x - r < maxX && z + r > minZ && z - r < maxZ;
   const p = world.player;
-  if (!world.dead && overlaps(p.x, p.z, balance.player.radius)) return true;
+  if (!world.dead && overlaps(p.x, p.z, balance.player.radius)) return 'player';
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
-    if (overlaps(enemy.x, enemy.z, enemyDef(enemy.type).radius)) return true;
+    if (overlaps(enemy.x, enemy.z, enemyDef(enemy.type).radius)) return 'enemy';
   }
-  return false;
+  return null;
 }
 
-/** 닫히는 중 — 몸에 걸리면 멈춰 기다리고, 다 닫힌 틱에 셀·문틀을 되돌린다 */
-function tickClosing(world: World, door: DoorState, closeTicks: number): void {
+/** 닫히는 중 — 몸에 걸리면 멈춰 기다리며 주기적으로 알리고(문이 몸을 두드린다), 다 닫힌 틱에 셀·문틀을 되돌린다 */
+function tickClosing(world: World, door: DoorState, cfg: { closeTicks: number; blockedNagTicks: number }): void {
   door.prevSlide = door.slide;
-  if (bodyInDoorway(world, door)) return;
-  door.slide = Math.max(0, door.slide - 1 / Math.max(1, closeTicks));
+  const by = bodyInDoorway(world, door);
+  if (by) {
+    // 아무 반응이 없으면 왜 안 닫히는지 모른다 — 걸린 첫 틱과 그 뒤 blockedNagTicks 마다 알린다
+    const nag = Math.max(1, cfg.blockedNagTicks);
+    door.blockedTicks = (door.blockedTicks ?? 0) + 1;
+    if ((door.blockedTicks - 1) % nag === 0) {
+      world.events.emit('door_blocked', { row: door.row, col: door.col, x: door.x, z: door.z, by, during: 'closing' });
+    }
+    return;
+  }
+  door.blockedTicks = 0;
+  door.slide = Math.max(0, door.slide - 1 / Math.max(1, cfg.closeTicks));
   if (door.slide > 0) return;
   door.closing = false;
   door.opened = false;
@@ -75,7 +85,9 @@ export function tick(world: World, _dt: number): void {
     const toZ = door.z - p.z;
     const dist = Math.hypot(toX, toZ);
     if (dist > cfg.radius || dist >= best) continue;
-    if (dist > 0.001 && (toX * fx + toZ * fz) / dist < arcCos) continue;
+    // 열린 문의 문틈에 서 있으면 어디를 보든 대상이다 — 그래야 E 가 "네가 문틈에 있다"고 알려 줄 수 있다
+    const inDoorway = door.opened && bodyInDoorway(world, door) === 'player';
+    if (!inDoorway && dist > 0.001 && (toX * fx + toZ * fz) / dist < arcCos) continue;
     target = door;
     best = dist;
   }
@@ -83,16 +95,18 @@ export function tick(world: World, _dt: number): void {
 
   for (const door of world.doors) {
     if (door.closing) {
-      tickClosing(world, door, cfg.closeTicks);
+      tickClosing(world, door, cfg);
       continue;
     }
     if (door.opened) {
-      // 닫기 — 열린 문 앞에서 E. 문 칸에 몸이 있으면 거부한다 (닫히면 벽이 되므로)
+      // 닫기 — 열린 문 앞에서 E. 문 칸에 몸이 있으면 거부한다 (닫히면 벽이 되므로) — 누가 막는지 알린다
       if (door === target && world.input.interactPressed) {
-        if (bodyInDoorway(world, door)) {
-          world.events.emit('door_blocked', { row: door.row, col: door.col });
+        const by = bodyInDoorway(world, door);
+        if (by) {
+          world.events.emit('door_blocked', { row: door.row, col: door.col, x: door.x, z: door.z, by, during: 'start' });
         } else {
           door.closing = true;
+          door.blockedTicks = 0;
           door.prevSlide = door.slide;
           world.events.emit('door_closing', { row: door.row, col: door.col, x: door.x, z: door.z });
         }

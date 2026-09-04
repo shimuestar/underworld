@@ -485,22 +485,37 @@ describe('닫기', () => {
     const g = spawnEnemyAt('goblin_runner', 22, 10, 9001); // 문 칸 한가운데
     world.enemies.push(g);
     const ev: string[] = [];
-    world.events.on('door_blocked', () => ev.push('blocked'));
+    world.events.on('door_blocked', (p) => ev.push(`${(p as { by: string }).by}:${(p as { during: string }).during}`));
     press(world);
     expect(world.doors[0]!.closing ?? false).toBe(false);
-    expect(ev).toEqual(['blocked']);
+    expect(ev).toEqual(['enemy:start']);
     g.x = 30; // 비켜났다
     press(world);
     expect(world.doors[0]!.closing).toBe(true);
     idle(world, 10);
     const mid = world.doors[0]!.slide;
     g.x = 22; // 다시 문틈으로
-    idle(world, 20);
+    idle(world, CFG.blockedNagTicks * 2);
     expect(world.doors[0]!.slide).toBe(mid); // 멈춰 기다린다
     expect(world.doors[0]!.opened).toBe(true);
+    // 걸린 첫 틱과 blockedNagTicks 마다 알린다 — 소리 없이 멈추면 왜 안 닫히는지 모른다
+    expect(ev).toEqual(['enemy:start', 'enemy:closing', 'enemy:closing']);
     g.x = 30;
     idle(world, CFG.closeTicks);
     expect(world.doors[0]!.opened).toBe(false);
+  });
+
+  it('내가 문틈에 서 있으면 어디를 보든 E 가 "네가 막고 있다"고 알린다 (by player)', () => {
+    openFully(world);
+    world.player.x = 22; // 문 칸 한가운데
+    world.player.yaw = 0; // 문 중심이 아니라 복도 방향을 본다
+    const ev: string[] = [];
+    world.events.on('door_blocked', (p) => ev.push((p as { by: string }).by));
+    Door.tick(world, DT);
+    expect(world.doorInView).toBe(world.doors[0]);
+    press(world);
+    expect(ev).toEqual(['player']);
+    expect(world.doors[0]!.closing ?? false).toBe(false);
   });
 
   it('닫은 문은 채널 없이 E 한 번에 다시 밀려 열린다 — 자물쇠는 이미 부서졌다', () => {

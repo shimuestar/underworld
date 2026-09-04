@@ -364,6 +364,8 @@ export interface DoorState {
   unlockedOnce?: boolean;
   /** 열려 있는 동안 세워 둔 석조 문틀 차단 — 닫힐 때 걷는다 */
   frameBlockers?: { minX: number; maxX: number; minZ: number; maxZ: number }[];
+  /** 닫히는 중 몸에 걸려 멈춰 있는 연속 틱 — 주기적 알림(door_blocked) 박자 */
+  blockedTicks?: number;
 }
 
 /** 기믹(파괴물) 하나 — 항아리·궤짝·뼈 무더기·석관·광차. 부수면 결과(전리품/매복/폭발

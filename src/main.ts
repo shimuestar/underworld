@@ -2638,12 +2638,22 @@ events.on('door_closed', (payload) => {
   stage.setDoorSwing(at.row, at.col, 0);
   minimap.rebuildBase(); // 다시 벽으로 그린다
 });
+// 문이 안 닫힌다 — 소리로 먼저 알린다(문이 몸을 툭 치고 되튕김). 누가 막는지 문장으로: 내 몸이면 비켜서라고
 let doorBlockedUntil = 0;
-events.on('door_blocked', () => {
-  if (performance.now() < doorBlockedUntil) return;
-  doorBlockedUntil = performance.now() + 1500;
-  audio.play('shop_deny');
-  showReaction('문틈에 뭔가 걸려 있다 — 비워야 닫힌다', 1600);
+events.on('door_blocked', (payload) => {
+  const b = payload as { x: number; z: number; by: 'player' | 'enemy'; during: 'start' | 'closing' };
+  audio.play('door_bump', panAt(b.x, b.z));
+  padRumble('interact');
+  if (performance.now() < doorBlockedUntil) return; // 문장은 도배하지 않는다 (소리는 매번)
+  doorBlockedUntil = performance.now() + 1200;
+  showReaction(
+    b.by === 'player'
+      ? '문틈에 서 있다 — 문 칸에서 비켜서야 닫힌다'
+      : b.during === 'closing'
+        ? '문이 적의 몸에 걸렸다 — 문틈이 비면 다시 닫힌다'
+        : '문틈에 적이 있다 — 비워야 닫힌다',
+    1600,
+  );
 });
 events.on('door_reopened', () => {
   audio.play('door_slide');
