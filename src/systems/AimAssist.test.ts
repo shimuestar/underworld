@@ -164,17 +164,18 @@ describe('겨누기 시작 스냅 (2026-09-04)', () => {
   }
 
   it('LT 를 누르는 순간 원뿔 안 적의 몸통으로 ticks 에 나눠 돌아간다 — 누른 채로는 다시 안 하고, 떼고 다시 누르면 또 한 번', () => {
-    const e = add('goblin_runner', 16, 10.9); // 정면 8m, 옆으로 0.9m ≈ 6.4° — 원뿔(9°) 안
+    const e = add('goblin_runner', 16, 10.6); // 정면 8m, 옆으로 0.6m ≈ 4.3° — 실루엣 가장자리가 십자 원뿔(2°) 안
+    world.player.pitch = -0.06; // 가슴께를 본다 — 세로는 실루엣 안 (가로 스냅만 본다)
     const snapped: unknown[] = [];
     world.events.on('aim_snapped', (p) => snapped.push(p));
     const off0 = yawOffTo(e.x, e.z);
-    expect(off0).toBeGreaterThan(0.05);
+    expect(off0).toBeGreaterThan(0.03); // ≈2.1° 빗나가 있다
     for (let i = 0; i < SNAP.ticks; i++) aimTick();
     expect(yawOffTo(e.x, e.z)).toBeLessThan(1e-6);
     expect(snapped).toHaveLength(1);
     expect(snapped[0]).toMatchObject({ enemyId: e.id });
     // 적이 비켜서도 누른 채로는 따라가지 않는다 (스틱을 젓지 않으면 자석도 없다)
-    e.z += 0.5;
+    e.z += 0.1;
     const off1 = yawOffTo(e.x, e.z);
     for (let i = 0; i < 10; i++) aimTick();
     expect(yawOffTo(e.x, e.z)).toBeCloseTo(off1, 9);
@@ -187,7 +188,8 @@ describe('겨누기 시작 스냅 (2026-09-04)', () => {
   });
 
   it('원뿔 밖 적은 건드리지 않고, 조준(LT) 없이는(마우스) 일어나지 않는다', () => {
-    const e = add('goblin_runner', 16, 13); // ≈ 20.6° 옆 — 원뿔 밖
+    const e = add('goblin_runner', 16, 11.2); // ≈ 8.5° 옆 — 실루엣 가장자리가 십자 원뿔(2°) 밖
+    world.player.pitch = -0.06;
     const off0 = yawOffTo(e.x, e.z);
     for (let i = 0; i < SNAP.ticks; i++) aimTick();
     expect(yawOffTo(e.x, e.z)).toBeCloseTo(off0, 9);
@@ -209,6 +211,7 @@ describe('겨누기 시작 스냅 (2026-09-04)', () => {
     SNAP.maxDeg = 3;
     try {
       add('goblin_runner', 16, 12); // ≈ 14° 옆
+      world.player.pitch = -0.06;
       const yaw0 = world.player.yaw;
       const pitch0 = world.player.pitch;
       for (let i = 0; i < SNAP.ticks; i++) aimTick();
@@ -218,5 +221,58 @@ describe('겨누기 시작 스냅 (2026-09-04)', () => {
       SNAP.coneDeg = savedCone;
       SNAP.maxDeg = savedMax;
     }
+  });
+});
+
+describe('당김 흔들림과 어시스트 (2026-09-04)', () => {
+  const AMP_MAX = (balance.weapons.bow.sway.ampMaxDeg * Math.PI) / 180;
+
+  it('흔들림이 최대면 마찰·자석이 사라진다 — 오래 당기면 자동 조준도 함께 없다', () => {
+    const e = add('goblin_runner', 16, 10.8); // 자석 원뿔 안, 몸 밖
+    world.player.padAimingPrev = true; // 스냅은 보지 않는다
+    world.player.aimSwayAmp = AMP_MAX; // 손이 다 떨린다
+    expect(PlayerMove.assistStrength(world)).toBe(0);
+    const yaw0 = world.player.yaw;
+    const off0 = yawOffTo(e.x, e.z);
+    padLookTick(0.5);
+    // 마찰 없음 — 온전한 감도로 돌았고, 자석도 없다 (돈 만큼이 정확히 입력값). 흔들림 파형 오프셋은 빼고 본다
+    const sway = world.player.swayYaw ?? 0;
+    expect(Math.abs(world.player.yaw - sway - yaw0)).toBeCloseTo(0.5 * SENS, 6);
+    world.player.yaw -= sway;
+    expect(Math.abs(yawOffTo(e.x, e.z) - off0)).toBeCloseTo(0.5 * SENS, 6);
+  });
+
+  it('빨리 당겨 쏘면(흔들림 0) 어시스트는 온전하고, 중간이면 그만큼 옅다', () => {
+    add('goblin_runner', 16, 10);
+    world.player.padAimingPrev = true;
+    world.player.aimSwayAmp = 0;
+    expect(PlayerMove.assistStrength(world)).toBe(1);
+    const yaw0 = world.player.yaw;
+    padLookTick(0.5);
+    const fullAssistTurn = Math.abs(world.player.yaw - yaw0);
+    expect(fullAssistTurn).toBeLessThan(0.5 * SENS * (AA.frictionMul + 0.25));
+
+    world = makeWorld();
+    add('goblin_runner', 16, 10);
+    world.player.padAimingPrev = true;
+    world.player.aimSwayAmp = AMP_MAX * AA.swayFadeAtFrac * 0.5; // 절반쯤 떨린다
+    expect(PlayerMove.assistStrength(world)).toBeCloseTo(0.5, 6);
+    const yaw1 = world.player.yaw;
+    padLookTick(0.5);
+    const halfTurn = Math.abs(world.player.yaw - (world.player.swayYaw ?? 0) - yaw1); // 흔들림 파형은 빼고
+    expect(halfTurn).toBeGreaterThan(fullAssistTurn); // 마찰이 절반만 걸린다
+    expect(halfTurn).toBeLessThan(0.5 * SENS); // 그래도 조금은 무겁다
+  });
+
+  it('스냅 원뿔은 조준 십자보다 조금 큰 정도 — 실루엣이 십자에서 8° 떨어진 적은 잡지 않는다', () => {
+    expect(AA.snap.coneDeg).toBeLessThanOrEqual(2);
+    const e = add('goblin_runner', 16, 11.2); // ≈ 8.5° 옆
+    world.player.pitch = -0.06;
+    const off0 = yawOffTo(e.x, e.z);
+    for (let i = 0; i < AA.snap.ticks; i++) {
+      world.input = { ...Input.emptySnapshot(), padAiming: true };
+      PlayerMove.tick(world, DT);
+    }
+    expect(yawOffTo(e.x, e.z)).toBeCloseTo(off0, 9);
   });
 });

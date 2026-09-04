@@ -18,7 +18,7 @@ import { KEY_ACTIONS, keyBindings, type KeyAction } from './core/KeyBindings';
 import { Stage } from './render/Stage';
 import { grenadeThrowSpeed } from './systems/Weapons';
 import * as PlayerMove from './systems/PlayerMove';
-import { padAimAssist } from './systems/PlayerMove';
+import { assistStrength, padAimAssist } from './systems/PlayerMove';
 import * as Enemies from './systems/Enemies';
 import * as GhoulHeads from './systems/GhoulHeads';
 import * as Weapons from './systems/Weapons';
@@ -3589,6 +3589,7 @@ function render(alpha: number): void {
       world.input.padAiming &&
       !world.dead &&
       !world.uiOpen &&
+      assistStrength(world) > 0.05 && // 오래 당겨 어시스트가 사라졌으면 물었다는 표시도 끈다
       padAimAssist(world) !== null,
   );
 

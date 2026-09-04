@@ -65,11 +65,14 @@ function switchLockTarget(
 export function padAimAssist(
   world: World,
   coneDeg?: number, // 기본은 aimAssist.coneDeg — 겨누기 시작 스냅은 자기 원뿔(snap.coneDeg)로 찾는다
+  byEdge = false, // true: 몸통 중심이 아니라 실루엣 '가장자리'까지의 각거리(edgeOff)로 거르고 고른다 — 십자에 걸린 적만
 ): {
   enemyId: number;
   offYaw: number;
   offPitch: number;
   off: number;
+  /** 조준점에서 실루엣 가장자리까지 — 이미 몸 위면 0 */
+  edgeOff: number;
   angRadius: number;
   pullYaw: number;
   pullPitch: number;
@@ -92,9 +95,6 @@ export function padAimAssist(
     const offPitch = Math.atan2(targetY - eyeY, dist) - p.pitch;
     const off = Math.hypot(offYaw, offPitch);
     const angRadius = Math.atan2(def.radius, dist);
-    if (off > cone + angRadius) continue;
-    if (!world.level.hasLineOfSight(p.x, p.z, e.x, e.z)) continue;
-    if (best && off >= best.off) continue;
     // 실루엣 가장자리 클램프 — 세로는 발목~정수리, 가로는 몸 반지름의 90%
     const pitchTop = Math.atan2((e.jumpY ?? 0) + def.height * 0.95 - eyeY, dist);
     const pitchBot = Math.atan2((e.jumpY ?? 0) + def.height * 0.1 - eyeY, dist);
@@ -102,9 +102,24 @@ export function padAimAssist(
       p.pitch > pitchTop ? pitchTop - p.pitch : p.pitch < pitchBot ? pitchBot - p.pitch : 0;
     const halfW = Math.atan2(def.radius * 0.9, dist);
     const pullYaw = Math.abs(offYaw) <= halfW ? 0 : offYaw - Math.sign(offYaw) * halfW;
-    best = { enemyId: e.id, offYaw, offPitch, off, angRadius, pullYaw, pullPitch };
+    const edgeOff = Math.hypot(pullYaw, pullPitch);
+    // 중심 기준(마찰·자석)은 원뿔에 각반지름을 더해 가까운 적일수록 후하게, 가장자리 기준(스냅)은 원뿔 그대로
+    const measure = byEdge ? edgeOff : off;
+    if (measure > (byEdge ? cone : cone + angRadius)) continue;
+    if (!world.level.hasLineOfSight(p.x, p.z, e.x, e.z)) continue;
+    if (best && measure >= (byEdge ? best.edgeOff : best.off)) continue;
+    best = { enemyId: e.id, offYaw, offPitch, off, edgeOff, angRadius, pullYaw, pullPitch };
   }
   return best;
+}
+
+/** 어시스트 세기 0~1 — 활 당김 흔들림이 클수록 옅어진다(최대 폭의 swayFadeAtFrac 에서 0).
+ *  마찰·자석·스냅이 모두 이 배율을 탄다. 오래 당겨 손이 떨리면 자동 조준도 함께 사라진다 (2026-09-04) */
+export function assistStrength(world: World): number {
+  const aa = balance.input.gamepad.aimAssist;
+  const ampMax = (balance.weapons.bow.sway.ampMaxDeg * Math.PI) / 180;
+  const swayFrac = ampMax > 0 ? (world.player.aimSwayAmp ?? 0) / ampMax : 0;
+  return Math.max(0, Math.min(1, 1 - swayFrac / aa.swayFadeAtFrac));
 }
 
 export function tick(world: World, dt: number): void {
@@ -207,9 +222,12 @@ export function tick(world: World, dt: number): void {
     const stickActive = padDX !== 0 || padDY !== 0 || input.padMoveActive;
     // 에임 보정은 조준(LT) 중에만 — 평시 시선은 온전히 자유다 (2026-09-01 ADS 개편)
     const assist = stickActive && input.padAiming ? padAimAssist(world) : null;
+    // 당김 흔들림이 클수록 어시스트가 옅어진다 — 마찰은 1(없음) 쪽으로, 자석은 0 쪽으로
+    const strength = assistStrength(world);
     if (assist) {
-      padDX *= aa.frictionMul;
-      padDY *= aa.frictionMul;
+      const friction = 1 - (1 - aa.frictionMul) * strength;
+      padDX *= friction;
+      padDY *= friction;
     }
     p.yaw -= (input.lookDX + padDX) * sens;
     p.pitch = Math.max(
@@ -218,7 +236,7 @@ export function tick(world: World, dt: number): void {
     );
     if (assist && assist.off <= (aa.magnetConeDeg * Math.PI) / 180 + assist.angRadius) {
       // 몸 실루엣 가장자리까지만 끈다 — 이미 몸 위면 0 (머리를 노리는 손을 방해하지 않는다)
-      const step = (aa.magnetDegPerTick * Math.PI) / 180;
+      const step = ((aa.magnetDegPerTick * Math.PI) / 180) * strength;
       p.yaw += Math.max(-step, Math.min(step, assist.pullYaw));
       p.pitch += Math.max(-step * 0.7, Math.min(step * 0.7, assist.pullPitch));
     }
@@ -229,13 +247,13 @@ export function tick(world: World, dt: number): void {
   // "손을 떼면 저절로 조준하지 않는다"는 규약은 그대로). 락온 중엔 락온이 시선을 잡고 있으니 하지 않는다
   const snap = balance.input.gamepad.aimAssist.snap;
   if (input.padAiming && !p.padAimingPrev && world.lockOnId === null) {
-    const target = padAimAssist(world, snap.coneDeg);
+    const target = padAimAssist(world, snap.coneDeg, true); // 십자에서 실루엣 가장자리까지 coneDeg 안인 적만
     if (target) {
       // 가로는 몸통 중심으로, 세로는 실루엣 안에 들 만큼만(pullPitch) — 몸 안에서 머리/몸통을 고르는 건 플레이어 몫
       // (자석과 같은 규약). 가까운 적의 몸통 중심으로 세로까지 끌면 시선이 배 쪽으로 푹 내려간다 (실측)
       const off = Math.hypot(target.offYaw, target.pullPitch);
       const maxRad = (snap.maxDeg * Math.PI) / 180;
-      const scale = off > maxRad ? maxRad / off : 1;
+      const scale = (off > maxRad ? maxRad / off : 1) * assistStrength(world); // 당긴 채 떨리는 중이면 그만큼 덜 고친다
       p.aimSnapYaw = target.offYaw * scale;
       p.aimSnapPitch = target.pullPitch * scale;
       p.aimSnapTicks = Math.max(1, snap.ticks);
