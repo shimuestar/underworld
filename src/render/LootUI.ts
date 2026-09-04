@@ -89,6 +89,13 @@ export class LootUI {
     this.startSearch();
   }
 
+  /** 마우스 hover 로 커서를 옮겨도 되는가 — 패드로 조작 중이거나 실제로 움직인 게 아니면(이동량 0) 무시한다.
+   *  포인터락이 풀리며 화면 중앙에 나타나는 커서가 가방 격자 위에 놓여, 패드로 열자마자 커서가 가방으로 튀었다 (2026-09-04) */
+  private hoverAllowed(ev: MouseEvent): boolean {
+    if (this.padMode) return false;
+    return ev.movementX !== 0 || ev.movementY !== 0;
+  }
+
   /** 뒤지기 루프 — 아직 모르는 칸을 배치 순서대로 하나씩 perItemMs 동안 한 바퀴 돌려 밝힌다 */
   private startSearch(): void {
     if (this.searchRaf !== null) return;
@@ -423,7 +430,8 @@ export class LootUI {
         'display:flex;align-items:center;justify-content:center;' +
         `border:1px solid ${here ? '#7fbfff' : '#3a3a44'};background:${here ? 'rgba(127,191,255,0.12)' : '#1b1b22'};`;
       // mousemove 로 커서가 따라온다 (mouseenter 는 rebuild 마다 다시 떠서 키보드 선택을 덮는다 — ShopUI 규약)
-      cell.onmousemove = () => {
+      cell.onmousemove = (ev) => {
+        if (!this.hoverAllowed(ev)) return;
         if (this.pane === 'container' && this.selC === i) return;
         this.pane = 'container';
         this.selC = i;
@@ -492,7 +500,8 @@ export class LootUI {
         `width:${CELL_PX}px;height:${CELL_PX}px;box-sizing:border-box;position:relative;border-radius:4px;cursor:pointer;` +
         'display:flex;align-items:center;justify-content:center;' +
         `border:1px solid ${here ? '#e8c76a' : '#3a3a44'};background:${here ? 'rgba(232,199,106,0.12)' : '#1b1b22'};`;
-      cell.onmousemove = () => {
+      cell.onmousemove = (ev) => {
+        if (!this.hoverAllowed(ev)) return;
         if (this.pane === 'bag' && this.selB === i) return;
         this.pane = 'bag';
         this.selB = i;

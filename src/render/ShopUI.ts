@@ -142,7 +142,9 @@ export class ShopUI {
       // 마우스를 움직이면 커서가 따라온다. mouseenter 가 아니라 mousemove 인 이유:
       // 커서가 패널 위에 멈춰 있어도 rebuild 로 노드가 갈리면 mouseenter 가 다시 떠서
       // 키보드로 옮긴 선택을 마우스 위치로 되돌려 버린다 (실측으로 확인)
-      line.onmousemove = () => {
+      line.onmousemove = (ev) => {
+        // 패드로 조작 중이거나 실제로 움직인 게 아니면(이동량 0) 무시 — 포인터락이 풀리며 나타난 커서가 줄을 덮어쓰지 않게 (LootUI 와 같은 규약)
+        if (this.padMode || (ev.movementX === 0 && ev.movementY === 0)) return;
         if (this.selected === i) return;
         this.selected = i;
         this.rebuild();
