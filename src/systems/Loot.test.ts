@@ -97,10 +97,18 @@ describe('처치 전리품 굴림 (rollLoot)', () => {
     expect(Loot.rollLoot('goblin_runner', () => 0.99)).toEqual([]);
   });
 
-  it('보스는 확률과 무관하게 물약·마나 확정 + 골드 ×배율', () => {
+  it('보스는 확률과 무관하게 물약·마나 확정 + 골드 ×배율 + 장비 1개 (2026-09-04)', () => {
     const entries = Loot.rollLoot('goblin_chieftain', () => 0.99);
-    expect(kindsOf(entries)).toEqual(expect.arrayContaining(['potion', 'mana', 'gold']));
+    expect(kindsOf(entries)).toEqual(expect.arrayContaining(['potion', 'mana', 'gold', 'equip']));
     expect(entries.find((e) => e.kind === 'gold')!.count).toBe(cfg.gold.max * cfg.gold.bossMul);
+    const eq = entries.find((e) => e.kind === 'equip')!;
+    expect(eq.count).toBe(1);
+    expect(typeof eq.equipId).toBe('string');
+  });
+
+  it('일반 적은 pickups.equip.dropChance 밖이면 장비를 떨구지 않는다', () => {
+    const entries = Loot.rollLoot('goblin_runner', () => 0.01);
+    expect(kindsOf(entries)).not.toContain('equip'); // dropChance 0
   });
 });
 

@@ -11,7 +11,7 @@
 //  - 주머니는 부활해도 남고(비석과 같은 규칙), 층을 오갈 때도 그대로다(FloorState).
 
 import { balance } from '../core/Balance';
-import { equipDef } from '../core/EquipData';
+import { equipDef, allEquipIds } from '../core/EquipData';
 import { enemyDef } from '../core/Entities';
 import { addItem, autoBind, dropSlot, hasRoom, itemDef, addSigil, addEquip } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
@@ -44,7 +44,10 @@ export function mergeEntry(entries: LootEntry[], e: LootEntry): void {
     same.count += e.count;
     if (e.searched) same.searched = true; // 내가 넣은 것이 섞이면 그 칸은 이미 안다
   } else {
-    entries.push({ kind: e.kind, count: e.count, ...(e.sigilId ? { sigilId: e.sigilId } : {}), ...(e.searched ? { searched: true } : {}) });
+    entries.push({
+      kind: e.kind, count: e.count,
+      ...(e.sigilId ? { sigilId: e.sigilId } : {}), ...(e.equipId ? { equipId: e.equipId } : {}), ...(e.searched ? { searched: true } : {}),
+    });
   }
 }
 
@@ -74,6 +77,12 @@ export function rollLoot(enemyType: string, rng: () => number = Math.random): Lo
     let amount = cfg.gold.min + Math.round(rng() * (cfg.gold.max - cfg.gold.min));
     if (def.boss) amount *= cfg.gold.bossMul;
     mergeEntry(out, { kind: 'gold', count: amount });
+  }
+  // 장비 — 보스는 확정 1개, 일반 적은 pickups.equip.dropChance (2026-09-04). 어느 장비인지도 rng 로
+  if ((def.boss && cfg.equip.bossAlways) || rng() < cfg.equip.dropChance) {
+    const ids = allEquipIds();
+    const pick = ids[Math.min(ids.length - 1, Math.floor(rng() * ids.length))]!;
+    mergeEntry(out, { kind: 'equip', count: 1, equipId: pick });
   }
   return out;
 }

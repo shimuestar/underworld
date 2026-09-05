@@ -1,11 +1,12 @@
 // 보물상자 — 상호작용 조건(반경·시선), 골드 무더기, 각인 1개, 1회성.
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { allEquipIds } from '../core/EquipData';
 import sigilsJson from '../../data/sigils.json';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { bagSigilIds, initInventory } from '../core/Inventory';
+import { addEquip, bagSigilIds, initInventory } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
 import { World, type ChestState } from '../core/World';
 import { Level } from '../level/GridLoader';
@@ -184,6 +185,36 @@ describe('전리품 — 상자 속(chestItems)', () => {
     expect(acquired.map((a) => a.id)).toEqual([id]);
     expect(world.sigils.inventory).toContain(id);
     expect(bagSigilIds(world)).toEqual([]);
+  });
+
+  it('장비 한 줄 — chest.equipChance 안이면 들어가고, 몸에 걸친 것·가방에 든 것은 뽑지 않는다 (2026-09-04)', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0); // equipChance 안 · 풀의 첫 번째
+    const chest = putChest(world, 6 + 1.5, 6);
+    interact(world);
+    const equips = chest.chestItems!.filter((e) => e.kind === 'equip');
+    expect(equips).toHaveLength(1);
+    const first = allEquipIds()[0]!;
+    expect(equips[0]!.equipId).toBe(first);
+    vi.restoreAllMocks();
+    // 같은 것을 가방에 들고 있으면 다음 상자는 그것을 건너뛴다
+    const w2 = makeWorld();
+    initInventory(w2);
+    addEquip(w2, first);
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const chest2 = putChest(w2, 6 + 1.5, 6);
+    interact(w2);
+    const e2 = chest2.chestItems!.filter((e) => e.kind === 'equip');
+    expect(e2).toHaveLength(1);
+    expect(e2[0]!.equipId).toBe(allEquipIds()[1]);
+    vi.restoreAllMocks();
+    // 확률 밖이면 장비 줄이 없다
+    vi.spyOn(Math, 'random').mockReturnValue(0.99);
+    const w3 = makeWorld();
+    initInventory(w3);
+    const chest3 = putChest(w3, 6 + 1.5, 6);
+    interact(w3);
+    expect(chest3.chestItems!.some((e) => e.kind === 'equip')).toBe(false);
+    vi.restoreAllMocks();
   });
 
   it('가방이 가득이면 상자의 각인을 가져올 수 없다 (full)', () => {

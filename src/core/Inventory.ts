@@ -55,6 +55,13 @@ export function addEquip(world: World, equipId: string): boolean {
   return true;
 }
 
+/** 가방에 든 장비 id 목록 */
+export function bagEquipIds(world: World): string[] {
+  const out: string[] = [];
+  for (const slot of world.inventory) if (slot?.kind === 'equip' && slot.equipId) out.push(slot.equipId);
+  return out;
+}
+
 /** 기본 가방 칸 — items.cols × rows. 짐칸 장비(bagSlots)가 더한다 */
 export function bagBaseSlots(): number {
   return balance.items.cols * balance.items.rows;

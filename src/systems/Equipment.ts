@@ -2,6 +2,7 @@
 // 효과는 core/Modifiers 가 각인과 함께 합산한다. 오염은 없다. 짐칸(벨트/가방)은 가방 칸 수를 바꾸므로
 // 걸치기/벗기 때 가방을 다시 재고(resizeInventory) — 줄어드는데 든 것이 안 들어가면 벗지 못한다(안내, 결정 6-A).
 
+import { balance } from '../core/Balance';
 import { equipDef, type EquipSlot, slotsFor } from '../core/EquipData';
 import { addEquip, bagSizeFor, hasRoom, resizeInventory } from '../core/Inventory';
 import { recomputeModifiers } from '../core/Modifiers';
@@ -20,8 +21,15 @@ export function targetSlot(world: World, equipId: string): EquipSlot {
 export function equipFromBag(world: World, slotIndex: number): EquipResult {
   const slot = world.inventory[slotIndex];
   if (!slot || slot.kind !== 'equip' || !slot.equipId) return 'none';
+  return equipTo(world, slotIndex, targetSlot(world, slot.equipId));
+}
+
+/** 가방 칸의 장비를 정한 칸에 걸친다 (드래그로 반지 2 에 놓기 등). 부위가 다르면 none */
+export function equipTo(world: World, slotIndex: number, target: EquipSlot): EquipResult {
+  const slot = world.inventory[slotIndex];
+  if (!slot || slot.kind !== 'equip' || !slot.equipId) return 'none';
   const id = slot.equipId;
-  const target = targetSlot(world, id);
+  if (!slotsFor(equipDef(id).slot).includes(target)) return 'none';
   const prev = world.equipment[target];
   world.inventory[slotIndex] = prev ? { kind: 'equip', count: 1, equipId: prev } : null;
   world.equipment[target] = id;
@@ -56,6 +64,17 @@ export function unequip(world: World, slot: EquipSlot): 'ok' | 'bag_full' | 'non
   addEquip(world, id);
   world.events.emit('equip_changed', { slot, id: null, prev: id });
   return 'ok';
+}
+
+/** 제단에서 가방의 장비를 판다 — 정가 × equipment.sellRatio */
+export function sellFromBag(world: World, slotIndex: number): number {
+  const slot = world.inventory[slotIndex];
+  if (!slot || slot.kind !== 'equip' || !slot.equipId) return 0;
+  const gold = Math.round(equipDef(slot.equipId).price * balance.equipment.sellRatio);
+  world.inventory[slotIndex] = null;
+  world.gold += gold;
+  world.events.emit('equip_sold', { id: slot.equipId, gold, total: world.gold });
+  return gold;
 }
 
 /** 시작 시 1회 — 장비 상태에 맞춰 파생 수치·가방 칸을 맞춘다 */

@@ -2582,6 +2582,11 @@ events.on('equip_changed', (payload) => {
   if (d.id) showReaction(`${equipDef(d.id).name} 을(를) ${slotLabel(d.slot)}에 걸쳤다${d.prev ? ` — ${equipDef(d.prev).name} 은(는) 가방으로` : ''}`, 2200);
   else if (d.prev) showReaction(`${equipDef(d.prev).name} 을(를) 벗었다 — 가방으로`, 2000);
 });
+events.on('equip_sold', (payload) => {
+  const d = payload as { id: string; gold: number; total: number };
+  audio.play('pickup_gold');
+  showReaction(`${equipDef(d.id).name} 을(를) 팔았다 — ◆ +${d.gold} (소지 ◆ ${d.total})`, 2000);
+});
 events.on('equip_denied', (payload) => {
   const d = payload as { id: string; reason: string };
   showReaction(`${equipDef(d.id).name} — 가방을 비워야 한다 (칸이 줄어들어 든 것이 안 들어간다)`, 2600);

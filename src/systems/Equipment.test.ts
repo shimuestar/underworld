@@ -137,6 +137,26 @@ describe('짐칸 — 가방 칸 수', () => {
   });
 });
 
+describe('정한 칸에 걸치기 · 팔기', () => {
+  it('equipTo — 반지를 2번 칸에 바로 걸친다. 부위가 다르면 none', () => {
+    addEquip(world, 'ring_mana');
+    addEquip(world, 'helm_iron');
+    expect(Equipment.equipTo(world, 0, 'ring2')).toBe('equipped');
+    expect(world.equipment.ring2).toBe('ring_mana');
+    expect(world.equipment.ring1).toBeNull();
+    expect(Equipment.equipTo(world, 1, 'feet')).toBe('none'); // 투구를 발에
+    expect(world.inventory[1]!.equipId).toBe('helm_iron');
+  });
+
+  it('sellFromBag — 정가 × sellRatio 골드, 아이템은 사라진다', () => {
+    addEquip(world, 'armor_chain');
+    const price = Math.round(equipDef('armor_chain').price * balance.equipment.sellRatio);
+    expect(Equipment.sellFromBag(world, 0)).toBe(price);
+    expect(world.gold).toBe(price);
+    expect(world.inventory[0]).toBeNull();
+  });
+});
+
 describe('훅', () => {
   it('damagePlayer — 갑옷 배율, 함정은 부츠 배율까지', () => {
     addEquip(world, 'armor_chain');

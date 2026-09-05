@@ -186,6 +186,8 @@
     "radius": 2.4,
     "facingArcDeg": 120,
     "gold": { "min": 120, "max": 220 },
+    "_equipNote": "장비 한 줄 — equipChance 확률로 (2026-09-04). 몸에 걸친 것·가방에 든 것은 빼고 뽑는다",
+    "equipChance": 0.6,
     "collisionRadius": 0.55
   },
   "explosionKnockback": {
@@ -478,6 +480,8 @@
       "dropChance": 0.18,
       "bossAlways": true
     },
+    "_equipDropNote": "장비 드랍 — 보스 주머니는 확정 1개(bossAlways), 일반 적은 dropChance (0 = 안 떨어진다, 2026-09-04). 어느 장비인지는 전체에서 무작위",
+    "equip": { "dropChance": 0, "bossAlways": true },
     "manaPotion": {
       "dropChance": 0.16
     },
@@ -981,5 +985,7 @@
     "autoRespawnDelayTicks": 180,
     "regen": { "healthPerSec": 25, "manaPerSec": 15 },
     "summon": { "minDist": 2, "maxDist": 10, "arcDeg": 90, "minPlayerDist": 2, "tries": 48, "counts": [1, 3, 6] }
-  }
+  },
+  "_equipmentNote": "장비 공통 — sellRatio: 제단 앞 가방 탭 X 로 팔 때 정가 대비 비율 (2026-09-04)",
+  "equipment": { "sellRatio": 0.5 }
 }

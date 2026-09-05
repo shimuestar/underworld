@@ -8,7 +8,8 @@
 // 다 비운 상자는 뚜껑 열린 채 남되 대상에서 빠진다. 부활해도 다시 잠기지 않는다.
 
 import { balance } from '../core/Balance';
-import { bagSigilIds } from '../core/Inventory';
+import { allEquipIds } from '../core/EquipData';
+import { bagSigilIds, bagEquipIds } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
 import sigilsJson from '../../data/sigils.json';
 import type { ChestState, LootEntry, World } from '../core/World';
@@ -51,11 +52,22 @@ export function open(world: World, chest: ChestState): void {
     // 각인 하나 — 아직 없는 것 중에서 뽑는다. 가져가는 순간(loot_taken) Sigils 가 습득시킨다
     const sigilId = rollSigil(world);
     if (sigilId) entries.push({ kind: 'sigil', count: 1, sigilId });
+    // 장비 하나 — chest.equipChance 로. 몸에 걸친 것·가방에 든 것은 뺀다 (2026-09-04)
+    const equipId = rollEquip(world);
+    if (equipId) entries.push({ kind: 'equip', count: 1, equipId });
     chest.chestItems = entries;
-    world.events.emit('chest_opened', { id: chest.id, x: chest.x, z: chest.z, gold: total, sigilId });
+    world.events.emit('chest_opened', { id: chest.id, x: chest.x, z: chest.z, gold: total, sigilId, equipId });
   }
   world.lootOpen = { kind: 'chest', id: chest.id };
   world.events.emit('loot_opened', { kind: 'chest', id: chest.id, entries: chest.chestItems?.length ?? 0, first });
+}
+
+/** 뽑을 장비 — equipChance 안이면 하나. 몸에 걸친 것·가방에 든 것은 뺀다 */
+function rollEquip(world: World): string | null {
+  if (Math.random() >= balance.chest.equipChance) return null;
+  const owned = new Set<string>([...Object.values(world.equipment).filter((v): v is string => !!v), ...bagEquipIds(world)]);
+  const pool = allEquipIds().filter((id) => !owned.has(id));
+  return pool[Math.floor(Math.random() * pool.length)] ?? null;
 }
 
 /** 뽑을 각인 — 이미 가진 것은 뺀다. 이 빌드에서 실제로 효과가 도는

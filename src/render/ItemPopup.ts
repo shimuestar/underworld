@@ -3,7 +3,7 @@
 // DOM 만 만든다 — 무엇을 설명할지(효과·유용성·가방 수)는 Inventory 의 규칙을 그대로 읽는다.
 
 import { balance } from '../core/Balance';
-import { equipDef, describeEffect, slotLabel, slotsFor } from '../core/EquipData';
+import { equipDef, describeEffect, slotLabel, slotsFor, type EquipSlot } from '../core/EquipData';
 import { countOf, isUseful, itemDef } from '../core/Inventory';
 import { sigilDef, isActiveSkill } from '../core/SigilData';
 import type { ItemKind, LootEntry, World } from '../core/World';
@@ -78,12 +78,13 @@ export function lootEntryPopup(world: World, e: LootEntry): PopupContent {
 }
 
 /** 장비 설명 — 부위·효과·지금 걸친 것과 비교 (2026-09-04) */
-export function equipPopup(world: World, equipId: string, where = ''): PopupContent {
+export function equipPopup(world: World, equipId: string, where = '', at?: EquipSlot): PopupContent {
   const def = equipDef(equipId);
   const lines: string[] = [def.desc];
   for (const [k, v] of Object.entries(def.effects)) lines.push(describeEffect(k, v));
-  const target = slotsFor(def.slot).find((s) => world.equipment[s] === null) ?? slotsFor(def.slot)[0]!;
-  const worn = world.equipment[target];
+  // at = 이미 걸친 칸(인형 팝업). 없으면 걸칠 칸 — 빈 칸 먼저, 다 차 있으면 첫 칸과 맞바꾼다
+  const target = at ?? slotsFor(def.slot).find((s) => world.equipment[s] === null) ?? slotsFor(def.slot)[0]!;
+  const worn = at ? null : world.equipment[target];
   if (worn) lines.push(`지금 ${slotLabel(target)}: ${equipDef(worn).name} — 걸치면 맞바꾼다`);
   return {
     title: `${def.name} (${slotLabel(target)})${where}`,
