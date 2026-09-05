@@ -839,7 +839,9 @@
     "xpPop": { "delayMs": 750, "ms": 1000, "sizeM": 0.62 },
     "_gainNote": "골드·XP 획득 피드백 — 조준점 위에 +획득량이 떠서 숫자가 굴러 올라가고(roll*), 아이콘이 통통 튀며, 대량(bigGold/bigXp 이상)이면 커지고 밝아진다. holdMs 뒤 HUD 지갑 표기로 빨려 들어가며(absorbMs) 도착 순간 HUD 숫자가 팝(statPop) — 들어갔다는 인과. 연달아 먹으면 같은 표시에 누적 (2026-08-30)",
     "statPop": { "scaleMul": 1.6, "durationMs": 350 },
-    "centerGain": { "holdMs": 900, "absorbMs": 380, "risePx": 10, "fontPx": 21, "rollIntervalMs": 30, "rollStepRatio": 0.3, "bigGold": 20, "bigXp": 45, "bigScaleMul": 1.35 }
+    "centerGain": { "holdMs": 900, "absorbMs": 380, "risePx": 10, "fontPx": 21, "rollIntervalMs": 30, "rollStepRatio": 0.3, "bigGold": 20, "bigXp": 45, "bigScaleMul": 1.35 },
+    "_damageTakenNote": "플레이어가 받은 피해 — HP 바 위로 붉은 -N 이 튀어올라 risePx 떠오르며 ms 뒤 사라진다(적 머리 위 피해 숫자의 플레이어 판). mergeMs 안에 같은 결로 연달아 맞으면 하나로 합산. bigAt 이상은 bigScaleMul 배로 크게·밝게. 막힌 타격(칩 피해)은 회색, 독·화염 도트는 종류 색(도트는 이미 박자마다 묶여 온다). 좌우 jitterPx 로 흔들고, 살아 있는 숫자가 있으면 그 수만큼 stackPx 위에 쌓아 겹침을 피한다 (2026-09-04)",
+    "damageTaken": { "ms": 900, "risePx": 34, "fontPx": 20, "bigAt": 20, "bigScaleMul": 1.35, "mergeMs": 250, "jitterPx": 14, "stackPx": 20 }
   },
   "_hitShakeNote": "피격 셰이크 — 해머·총·화살·스킬이 맞으면 durationMs 동안 매 프레임 무작위로 몸이 튄다 (남은 시간에 비례해 잦아든다). 해머 강타만 heavyMul 배. 연출 전용 — 판정 좌표는 안 움직인다 (2026-09-01)",
   "hitShake": { "durationMs": 100, "amp": 0.07, "heavyMul": 1.6 },

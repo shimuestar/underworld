@@ -993,12 +993,18 @@ const dotSeconds = (payload: unknown): number => Math.round(((payload as { ticks
 events.on('poison_applied', (payload) => {
   showReaction(`독에 중독됐다 — ${dotSeconds(payload)}초 동안 체력이 조금씩 깎인다`, 2600);
 });
-events.on('poison_tick', () => audio.play('grunt'));
+events.on('poison_tick', (payload) => {
+  audio.play('grunt');
+  showDamageTaken((payload as { amount: number }).amount, 'poison'); // 도트는 이미 박자마다 묶여 온다
+});
 events.on('poison_ended', () => showReaction('독이 풀렸다', 1400));
 events.on('burn_applied', (payload) => {
   showReaction(`불이 붙었다 — ${dotSeconds(payload)}초 동안 타며 체력이 깎인다`, 2200);
 });
-events.on('burn_tick', () => audio.play('grunt_fire'));
+events.on('burn_tick', (payload) => {
+  audio.play('grunt_fire');
+  showDamageTaken((payload as { amount: number }).amount, 'burn');
+});
 events.on('burn_ended', () => showReaction('불이 꺼졌다', 1200));
 // 이미 걸린 채 다시 닿았다 — 시간이 처음부터. 재시작 소리 + 아이콘 깜빡임 (구름·불길 안에 서 있는 동안은 나지 않는다)
 events.on('poison_refreshed', (payload) => {
@@ -1768,8 +1774,10 @@ const grappleRing = document.getElementById('grapple-ring');
 const grappleCount = document.getElementById('grapple-count');
 events.on('player_damaged', (payload) => {
   const hit = payload as {
-    blocked?: boolean; srcX?: number; srcZ?: number; srcId?: number; source?: string;
+    amount?: number; blocked?: boolean; srcX?: number; srcZ?: number; srcId?: number; source?: string;
   };
+  // 받은 피해 숫자 — 막힌 타격도 칩 피해가 있으면 회색으로 보여 준다
+  if (hit.amount !== undefined) showDamageTaken(hit.amount, hit.blocked ? 'blocked' : 'hit');
   if (hit.blocked) return;
   // 맞았다 — 굵은 충격. 파먹기·흡혈은 약모터의 다른 결, 폭발 피해는 가장 굵고 길게
   padRumble(
@@ -1947,6 +1955,50 @@ events.on('item_picked', (payload) => {
   rootStyle.setProperty('--gain-rise', `${balance.hud.centerGain.risePx}px`);
   rootStyle.setProperty('--gain-font', `${balance.hud.centerGain.fontPx}px`);
   rootStyle.setProperty('--gain-big-mul', String(balance.hud.centerGain.bigScaleMul));
+  rootStyle.setProperty('--dmg-ms', `${balance.hud.damageTaken.ms}ms`);
+  rootStyle.setProperty('--dmg-rise', `${balance.hud.damageTaken.risePx}px`);
+  rootStyle.setProperty('--dmg-font', `${balance.hud.damageTaken.fontPx}px`);
+  rootStyle.setProperty('--dmg-big-mul', String(balance.hud.damageTaken.bigScaleMul));
+}
+
+// ---- 받은 피해 숫자 — HP 바 위로 붉게 튄다 (적 머리 위 피해 숫자의 플레이어 판, 2026-09-04) ----
+type DamageTone = 'hit' | 'blocked' | 'poison' | 'burn';
+const dmgTakenBox = document.getElementById('dmg-taken')!;
+let lastDmgNum: { el: HTMLElement; amount: number; at: number; tone: DamageTone } | null = null;
+function renderDamageTaken(rec: { el: HTMLElement; amount: number }): void {
+  const cfg = balance.hud.damageTaken;
+  rec.el.textContent = `-${Math.max(1, Math.round(rec.amount))}`;
+  rec.el.classList.toggle('big', rec.amount >= cfg.bigAt);
+  // 애니메이션을 처음부터 — 합산돼 커질 때 다시 튄다
+  rec.el.style.animation = 'none';
+  void rec.el.offsetWidth;
+  rec.el.style.animation = '';
+}
+/** 받은 피해를 HP 바 위에 띄운다. mergeMs 안의 같은 결(맞음/막힘/독/화염)은 하나로 합산 */
+function showDamageTaken(amount: number, tone: DamageTone): void {
+  if (!(amount > 0)) return;
+  const cfg = balance.hud.damageTaken;
+  const now = performance.now();
+  if (lastDmgNum && lastDmgNum.tone === tone && now - lastDmgNum.at < cfg.mergeMs && lastDmgNum.el.isConnected) {
+    lastDmgNum.amount += amount;
+    lastDmgNum.at = now;
+    renderDamageTaken(lastDmgNum);
+    return;
+  }
+  const el = document.createElement('div');
+  el.className = `dmg-num ${tone}`;
+  // HP 바(왼쪽 막대) 위 — 좌우로 조금 흔들어 연타가 겹치지 않게
+  const bar = document.getElementById('status-hp')?.getBoundingClientRect();
+  const cx = bar ? bar.left + bar.width / 2 : window.innerWidth / 2;
+  const top = bar ? bar.top - 6 : window.innerHeight - 120;
+  el.style.left = `${cx + (Math.random() * 2 - 1) * cfg.jitterPx}px`;
+  // 아직 사라지지 않은 숫자가 있으면 그 위에 층을 쌓는다 — 다른 결(막힘·독)이 동시에 떠도 겹치지 않게
+  el.style.top = `${top - dmgTakenBox.childElementCount * cfg.stackPx}px`;
+  el.addEventListener('animationend', () => el.remove());
+  dmgTakenBox.appendChild(el);
+  const rec = { el, amount, at: now, tone };
+  lastDmgNum = rec;
+  renderDamageTaken(rec);
 }
 const statPopTimers = new Map<string, number>();
 /** 획득 팝 — HUD 숫자가 잠깐 커졌다 제자리로 (연달아 먹으면 다시 처음부터) */

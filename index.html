@@ -592,6 +592,49 @@
       }
       /* 중앙 획득 표시 — 조준선 바로 아래, 먹은 골드·XP 가 잠깐 떠오른다.
          연달아 먹으면 사라지기 전까지 같은 표시에 누적된다 */
+      /* 받은 피해 숫자 — HP 바 위로 붉게 튀어올라 떠오르며 사라진다 (main.showDamageTaken 이 위치·문구를 넣는다).
+         body 직속(transform 조상 금지). 시간·높이·크기는 CSS 변수(balance.hud.damageTaken)로 주입 */
+      #dmg-taken {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        user-select: none;
+        z-index: 5;
+      }
+      #dmg-taken .dmg-num {
+        position: absolute;
+        transform: translate(-50%, -100%);
+        font: bold var(--dmg-font, 20px) / 1.2 monospace;
+        letter-spacing: 0.5px;
+        color: #ff5a5a;
+        text-shadow:
+          1px 1px 0 #000,
+          -1px 1px 0 #000,
+          1px -1px 0 #000,
+          -1px -1px 0 #000,
+          0 0 8px rgba(255, 60, 60, 0.7);
+        animation: dmg-float var(--dmg-ms, 900ms) ease-out forwards;
+        white-space: nowrap;
+      }
+      #dmg-taken .dmg-num.big {
+        font-size: calc(var(--dmg-font, 20px) * var(--dmg-big-mul, 1.35));
+        color: #ff3b3b;
+        text-shadow:
+          1px 1px 0 #000,
+          -1px 1px 0 #000,
+          1px -1px 0 #000,
+          -1px -1px 0 #000,
+          0 0 14px rgba(255, 40, 40, 0.95);
+      }
+      #dmg-taken .dmg-num.blocked { color: #b9bec7; text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000; }
+      #dmg-taken .dmg-num.poison { color: #7fd27f; text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000, 0 0 8px rgba(90, 220, 90, 0.6); }
+      #dmg-taken .dmg-num.burn { color: #ff9a3c; text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000, 0 0 8px rgba(255, 140, 40, 0.7); }
+      @keyframes dmg-float {
+        0% { opacity: 1; transform: translate(-50%, -100%) scale(1.45); }
+        14% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+        60% { opacity: 1; transform: translate(-50%, calc(-100% - var(--dmg-rise, 34px) * 0.6)) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, calc(-100% - var(--dmg-rise, 34px))) scale(0.95); }
+      }
       /* 주의: transform 이 있는 조상(#status 등) 안에 두면 fixed 기준이 그 조상이 된다
          — 반드시 body 직속. 조준점 바로 위에 떠서, 머물다 위로 흘러가며 사라진다 */
       #gain-center {
@@ -1043,6 +1086,7 @@
     </div>
     <div id="hud"></div>
     <div id="crosshair"><span class="chl t"></span><span class="chl b"></span><span class="chl l"></span><span class="chl r"></span></div>
+    <div id="dmg-taken"></div>
     <div id="gain-center"><div id="gain-center-gold"><span class="gc-icon">◆</span><span class="gc-num"></span></div><div id="gain-center-xp"><span class="gc-icon">✦</span><span class="gc-num"></span></div></div>
     <div id="death">
       <div>사망</div>
