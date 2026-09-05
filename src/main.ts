@@ -3121,8 +3121,17 @@ function simulate(dt: number): void {
   if (inventoryUI.open && input.gamepad.connected && input.gamepad.rawPressed(3)) inventoryUI.onPlacePouch?.();
   // 루팅 창 — D-패드 네 방향(←→ 로 칸 전환), A 짧게 가져오기/넣기 · 길게 집어 들기(→ 이동 → A 놓기),
   // X 모두, Y 바닥에 버리기(들고 있으면 그것을), B 닫기(들고 있으면 취소). A 는 홀드 판정이라 매 틱 상태를 넘긴다
+  if (lootUI.open) {
+    // 표기는 '마지막으로 쓴 장치'를 따른다 — 창을 벗어난 사이 브라우저가 패드를 감춰도(connected=false) 패드 표기를 유지하고,
+    // 그 상태면 창 안에 "패드가 잠들었다 — 클릭·아무 키" 안내를 띄운다 (브라우저 규칙: 새 제스처 전까지 패드 노출이 막힌다)
+    lootUI.padMode = input.lastDevice === 'pad';
+    lootUI.setNotice(
+      input.lastDevice === 'pad' && !input.gamepad.connected
+        ? '패드 입력이 들어오지 않는다 — 창을 벗어났다 돌아왔다면 화면을 한 번 클릭하거나 아무 키를 누르면 다시 잡힌다 (브라우저 규칙)'
+        : null,
+    );
+  }
   if (lootUI.open && input.gamepad.connected) {
-    lootUI.padMode = input.usingPad;
     lootUI.padA(input.gamepad.rawHeld(0));
     if (input.gamepad.rawPressed(13)) lootUI.padMove(0, 1);
     else if (input.gamepad.rawPressed(12)) lootUI.padMove(0, -1);
@@ -4027,6 +4036,7 @@ document.addEventListener('pointerlockchange', () => {
 // ② 한 번의 제스처(아무 키·클릭)로 재개·패드·소리가 다 살아나게 하며 ③ 메뉴에 이유를 적어 둔다 (2026-09-04)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    if (world.uiOpen) return; // 창(루팅·상점·가방)이 열려 있으면 이미 시간이 멈춰 있다 — 멈추면 패드 폴링까지 끊겨 창이 굳는다
     if (!loop.isPaused) pausedByFocusLoss = true;
     setPaused(true);
   } else {
@@ -4034,6 +4044,9 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 window.addEventListener('blur', () => {
+  // 창이 열려 있으면 멈추지 않는다 — uiOpen 이 곧 시간 정지다. 멈추면 루팅 창의 패드 폴링(simulate)이 끊겨
+  // 돌아온 뒤 패드로 아무것도 못 하는 채 굳는다 (2026-09-04 사용자 보고)
+  if (world.uiOpen) return;
   if (!loop.isPaused) pausedByFocusLoss = true;
   setPaused(true);
 });

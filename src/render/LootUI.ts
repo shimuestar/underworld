@@ -66,6 +66,8 @@ export class LootUI {
   private aConsumed = false;
   /** 수량 나누기 대화상자 (가방 스택) — X 길게 / Shift+Enter / Shift+클릭 */
   private split: SplitState | null = null;
+  /** 상황 안내 — 창을 벗어난 사이 패드가 잠든 이유 같은 것 (main 이 setNotice 로, 글이 바뀔 때만 다시 그린다) */
+  private notice: string | null = null;
   private xHoldTicks = 0;
   private xConsumed = false;
   /** 뒤지기 — 지금 밝히는 중인 칸과 시작 시각(벽시계, 창은 시간 정지 중에도 돈다) */
@@ -232,6 +234,11 @@ export class LootUI {
   }
   get carrying(): boolean { return this.carry !== null; }
   get splitting(): boolean { return this.split !== null; }
+  setNotice(text: string | null): void {
+    if (this.notice === text) return;
+    this.notice = text;
+    if (this.open) this.rebuild();
+  }
 
   /** X 버튼 상태를 매 틱 받는다 — 짧게 떼면 모두 가져오기, padSplitHoldTicks 넘게 누르면 커서 가방 스택 수량 나누기 */
   padX(held: boolean): void {
@@ -631,6 +638,14 @@ export class LootUI {
       buttons.appendChild(b);
     });
     left.appendChild(buttons);
+
+    if (this.notice) {
+      const n = document.createElement('div');
+      n.textContent = this.notice;
+      n.style.cssText =
+        'margin-top:12px;padding:8px 10px;border:1px solid #6b4a2f;background:rgba(107,74,47,0.18);color:#e8c76a;font-size:12px;line-height:1.5;white-space:normal;';
+      left.appendChild(n);
+    }
 
     const right = this.panel();
     const bagTitle = document.createElement('div');
