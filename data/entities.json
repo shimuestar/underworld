@@ -104,10 +104,10 @@
       "moanIntervalTicks": 130,
       "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 14, "recoverTicks": 26, "whiffRecoverTicks": 40, "impactRangeMul": 1.25, "parryable": true, "telegraph": "blue" },
       "_stalkNote": "추격 시 달려들기 사정거리(untilRange=chargeAttack.maxRange) 밖에서는 아주 천천히 걸어온다(6.5×0.3≈2m/s) — 빠른 건 돌진 순간뿐. 광란이 쌓이면 이 걸음도 조금 빨라진다 (2026-08-30)",
- "stalk": { "speedMul": 0.3, "untilRange": 4 },
+ "stalk": { "speedMul": 0.3, "untilRange": 3 },
  "_latchNote": "달려들기 — 맞으면 피해 대신 들러붙어 파먹는다. 근접 키 연타로 밀쳐내야 풀린다 (balance.ghoulGrapple). 방어로 막으면 평소처럼 흘려보낸다",
       "_cancelNote": "달려드는 중 활·수류탄·해머·스킬 피해를 입으면 물어뜯기가 끊긴다 — 고꾸라져 cancelStaggerTicks 동안 무방비. 총알(권총)은 못 끊는다 — 총이 만능이 되지 않게 (2026-09-01)",
-      "chargeAttack": { "type": "contact", "arcDeg": 130, "chargeSpeed": 13, "chargeRunTicks": 22, "minRange": 2.6, "maxRange": 4, "windupTicks": 36, "recoverTicks": 45, "whiffRecoverTicks": 65, "impactRangeMul": 1.2, "parryable": false, "telegraph": "red", "cooldownTicks": 220, "latches": true, "cancelOnHit": true, "cancelStaggerTicks": 45 },
+      "chargeAttack": { "type": "contact", "arcDeg": 130, "chargeSpeed": 13, "chargeRunTicks": 22, "minRange": 2.6, "maxRange": 3, "windupTicks": 36, "recoverTicks": 45, "whiffRecoverTicks": 65, "impactRangeMul": 1.2, "parryable": false, "telegraph": "red", "cooldownTicks": 220, "latches": true, "cancelOnHit": true, "cancelStaggerTicks": 45 },
       "counters": { "pistol": "good", "rifle": "good", "grenade": "good", "flash": "best", "melee": "good", "magic": "good", "deflect": "none" },
       "drops": []
     },

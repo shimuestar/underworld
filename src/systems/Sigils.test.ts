@@ -1283,7 +1283,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
 
   it('구울 물어뜯기 캔슬 — 달려드는 중 피해를 입으면 끊기고 고꾸라진다', () => {
     world.player.health = 100000;
-    const g = add('ghoul', 9.5, 6); // 3.5m — 달려들기 사거리 [2.6, 4] 안 (2026-09-04 절반으로 줄임)
+    const g = add('ghoul', 8.8, 6); // 2.8m — 달려들기 사거리 [2.6, 3] 안 (2026-09-04: 8 → 4 → 3m)
     g.ai = 'chase';
     let broken = false;
     world.events.on('charge_broken', () => (broken = true));
@@ -1300,7 +1300,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(g.whiffed).toBe(true); // 반격 창
     // 총알은 못 끊는다 — Weapons 총격 경로는 피해와 함께 기준선을 내린다 (계약 고정)
     g.alive = false; // 고꾸라진 첫 구울이 둘째와 겹쳐 밀려나지 않게
-    const g2 = add('ghoul', 9.6, 6); // 3.6m — 사거리 [2.6, 4] 안
+    const g2 = add('ghoul', 8.85, 6); // 2.85m — 사거리 [2.6, 3] 안
     g2.ai = 'chase';
     let broken2 = false;
     world.events.on('charge_broken', () => (broken2 = true));
@@ -1335,14 +1335,14 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(farMoved).toBeGreaterThan(slowStep * 0.6);
     expect(farMoved).toBeLessThan(slowStep * 1.5); // 제 속도(6.5)라면 3.25m — 그 근처도 못 간다
     far.alive = false;
-    // 안(3.9m < untilRange 4): 제 속도로 달린다 (돌진은 쿨다운으로 막아 걸음만 잰다)
-    const near = add('ghoul', 9.9, 6);
+    // 안(2.9m < untilRange 3): 제 속도로 달린다 (돌진은 쿨다운으로 막아 걸음만 잰다)
+    const near = add('ghoul', 8.9, 6);
     near.ai = 'chase';
     near.chargeCooldown = 9999;
-    // 사정거리(4m)가 짧아 반 초면 근접 사거리에 닿아 멈춘다 — 10틱(1/6초)만 잰다
-    for (let i = 0; i < 10; i++) Enemies.tick(world, DT);
-    const nearMoved = Math.hypot(near.x - 9.9, near.z - 6);
-    expect(nearMoved).toBeGreaterThan(def.speed * (10 / 60) * 0.6); // 살금살금(≈0.35m)과는 확연히 다르다
+    // 사정거리(3m)가 짧아 금방 근접 사거리에 닿아 멈춘다 — 6틱(0.1초)만 잰다
+    for (let i = 0; i < 6; i++) Enemies.tick(world, DT);
+    const nearMoved = Math.hypot(near.x - 8.9, near.z - 6);
+    expect(nearMoved).toBeGreaterThan(def.speed * (6 / 60) * 0.6); // 살금살금(≈0.2m)과는 확연히 다르다
   });
 
   it('거머리 낙하 명중이면 얼굴에 들러붙는다 — 흡혈 진입 경로', () => {
