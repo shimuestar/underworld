@@ -614,13 +614,7 @@ export class LootUI {
       }
       grid.appendChild(cell);
     }
-    col.appendChild(grid);
-    if (c.entries.length === 0) {
-      const empty = document.createElement('div');
-      empty.textContent = '비었다';
-      empty.style.cssText = 'color:#555c66;margin-top:8px;';
-      col.appendChild(empty);
-    }
+    col.appendChild(grid); // 빈 주머니는 빈 격자 그대로 — '비었다' 글자는 두지 않는다 (2026-09-04 사용자)
     return col;
   }
 
