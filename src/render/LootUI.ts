@@ -533,8 +533,10 @@ export class LootUI {
       const svg = lootIconSvg(e, ROW_ICON_PX);
       const toKey = flyTargetOf(e);
       const r = Loot.takeOne(this.world, at.index);
-      if (r === 'taken') this.pendingFly = { svg, from, toKey };
-      else this.shakeKey = `c${this.selC}`;
+      if (r === 'taken') {
+        this.pendingFly = { svg, from, toKey };
+        this.advanceContainerCursor(); // 칸이 비었으면 다음 든 칸으로 — A/Enter 를 연달아 눌러 담는다
+      } else this.shakeKey = `c${this.selC}`;
     } else {
       const slot = this.world.inventory[this.selB];
       if (!slot) {
@@ -589,6 +591,20 @@ export class LootUI {
     }
     this.clampSel();
     this.rebuild();
+  }
+
+  /** 가져간 칸이 비었으면 커서를 다음 든 칸(앞으로, 끝에서 감김)으로 옮긴다 — 패드로 연달아 담을 수 있게 (2026-09-04 사용자).
+   *  부분 가져오기(화살 상한 등)로 아직 남았으면 그대로. 남은 칸이 없으면 제자리 */
+  private advanceContainerCursor(): void {
+    const c = Loot.container(this.world);
+    if (!c) return;
+    this.syncLayout(c); // 가져간 항목이 배치에서 지워지게
+    if (this.layout[this.selC]) return;
+    const n = this.layout.length;
+    for (let k = 1; k <= n; k++) {
+      const i = (this.selC + k) % n;
+      if (this.layout[i]) { this.selC = i; return; }
+    }
   }
 
   private takeAll(): void {
