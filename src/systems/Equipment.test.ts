@@ -94,17 +94,23 @@ describe('걸치기 · 벗기', () => {
 });
 
 describe('짐칸 — 가방 칸 수', () => {
-  it('기본 15칸, 작은 벨트 +5, 큰 가방 +15. 바꾸면 그만큼 늘고 줄어든다', () => {
+  it('기본 10칸(5×2), 작은 벨트 +3, 큰 가방 +10 (2026-09-04 사용자). 바꾸면 그만큼 늘고 줄어든다', () => {
     expect(bagBaseSlots()).toBe(balance.items.cols * balance.items.rows);
+    expect(bagBaseSlots()).toBe(10);
     expect(world.inventory).toHaveLength(bagBaseSlots());
     addEquip(world, 'belt_small');
     Equipment.equipFromBag(world, 0);
-    expect(world.inventory).toHaveLength(bagBaseSlots() + 5);
+    expect(world.inventory).toHaveLength(bagBaseSlots() + equipDef('belt_small').effects['bagSlots']!);
+    expect(equipDef('belt_small').effects['bagSlots']).toBe(3);
     expect(world.modifiers.itemChannelMul).toBeCloseTo(0.8);
     addEquip(world, 'bag_large');
     Equipment.equipFromBag(world, world.inventory.findIndex((s) => s?.equipId === 'bag_large'));
     expect(world.equipment.pack).toBe('bag_large');
-    expect(world.inventory).toHaveLength(bagBaseSlots() + 15);
+    expect(world.inventory).toHaveLength(bagBaseSlots() + 10);
+    // 사용자 지정 칸 수 — 큰 벨트 5 · 작은 가방 5 · 중간 가방 8
+    expect(equipDef('belt_large').effects['bagSlots']).toBe(5);
+    expect(equipDef('bag_small').effects['bagSlots']).toBe(5);
+    expect(equipDef('bag_medium').effects['bagSlots']).toBe(8);
     expect(world.inventory.some((s) => s?.equipId === 'belt_small')).toBe(true); // 벨트는 가방으로
     expect(world.modifiers.itemChannelMul).toBe(1);
   });
@@ -112,12 +118,12 @@ describe('짐칸 — 가방 칸 수', () => {
   it('짐칸을 벗어 칸이 줄어드는데 든 것이 안 들어가면 벗지 못한다 (결정 6-A). 비우면 벗겨지고 앞으로 모인다', () => {
     addEquip(world, 'bag_small');
     Equipment.equipFromBag(world, 0);
-    expect(world.inventory).toHaveLength(bagBaseSlots() + 10);
-    // 뒤쪽 칸까지 채운다 — 기본 15칸 + 가방 1칸이 안 들어가게
+    expect(world.inventory).toHaveLength(bagBaseSlots() + 5);
+    // 뒤쪽 칸까지 채운다 — 기본 10칸 + 가방 1칸이 안 들어가게
     for (let i = 0; i < world.inventory.length - 1; i++) world.inventory[i] = { kind: 'potion', count: 1 };
     expect(Equipment.unequip(world, 'pack')).toBe('bag_full');
     expect(world.equipment.pack).toBe('bag_small');
-    expect(world.inventory).toHaveLength(bagBaseSlots() + 10); // 되돌렸다
+    expect(world.inventory).toHaveLength(bagBaseSlots() + 5); // 되돌렸다
     // 비운다 — 뒤쪽에 하나만 남기고
     world.inventory = world.inventory.map((_, i) => (i === world.inventory.length - 2 ? { kind: 'food' as const, count: 2 } : null));
     expect(Equipment.unequip(world, 'pack')).toBe('ok');
@@ -133,7 +139,7 @@ describe('짐칸 — 가방 칸 수', () => {
     expect(Equipment.equipFromBag(world, 0)).toBe('bag_full');
     expect(world.equipment.pack).toBe('bag_large');
     expect(world.inventory[0]!.equipId).toBe('belt_small');
-    expect(world.inventory).toHaveLength(bagBaseSlots() + 15);
+    expect(world.inventory).toHaveLength(bagBaseSlots() + 10);
   });
 });
 

@@ -4,7 +4,7 @@
 
 ## 데이터 · 모델
 
-- `data/equipment.json` — `items.<id> { name, slot(head|body|feet|ring|neck|pack), packKind?(belt|bag), tier, color, price, desc, effects }`. 첫 슬라이스 17종.
+- `data/equipment.json` — `items.<id> { name, slot(head|body|feet|ring|neck|pack), packKind?(belt|bag), tier, color, price, desc, effects }`. 첫 슬라이스 18종.
 - 몸의 칸 `world.equipment: Record<EquipSlot, id|null>` — `head body feet ring1 ring2 neck pack` (`core/EquipData`). 반지 정의 하나가 두 칸 중 빈 곳에 간다.
 - 장비는 **가방 아이템**(`ItemKind 'equip'`, `InventorySlot.equipId`, 스택 불가, 퀵슬롯 없음). 바닥·주머니·상자·비석 모두 각인과 같은 경로(`Pickups` E 집기, `Loot` 줄, `graveItems`).
 - 효과는 `core/Modifiers.recomputeModifiers` 가 **각인 + 장비**를 합산해 `world.modifiers` 에 쓴다. `*Mul` 은 곱, `perfectBandBonus`·`bagSlots` 는 합, `shopDiscount` 는 (1-a)(1-b).
@@ -22,11 +22,11 @@
 | `stunMul` | `Reaction` 패링 실패 경직 · `Enemies` 방패 격돌 경직 |
 | `shopDiscount` | `Altar.shopState` 가격 |
 | `itemChannelMul`, `potionHealMul` | `Items` 마시는 시간 · 회복량 |
-| `bagSlots` | `Inventory.bagSizeFor` — 기본 `items.cols×rows`(5×3=15) + 짐칸 |
+| `bagSlots` | `Inventory.bagSizeFor` — 기본 `items.cols×rows`(5×2=10) + 짐칸 |
 
 ## 짐칸 규칙 (벨트 ↔ 가방, 하나만)
 
-- 벨트: 칸 +5/+10 + 마시는 시간 −20/−35%. 가방: 칸 +10/+15, 큰 가방은 이속 −3%.
+- 벨트: 작은 +3 / 큰 +5 칸 + 마시는 시간 −20/−35%. 가방: 작은 +5 / 중간 +8 / 큰 +10 칸, 큰 가방은 이속 −3% (2026-09-04 사용자 지정).
 - 걸치기/벗기 때 `Inventory.resizeInventory` — 늘면 빈 칸을 붙이고, **줄면 든 것(+벗는 장비 한 칸)이 들어갈 때만** 앞으로 모아 줄인다. 안 들어가면 되돌리고 `equip_denied {reason:'bag_full'}` → "가방을 비워야 한다" (사용자 결정 6-A).
 
 ## 조작 (배치 3, 가방 탭)
