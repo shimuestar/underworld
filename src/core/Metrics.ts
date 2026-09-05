@@ -40,7 +40,7 @@ export interface MetricsSnapshot {
     disarms: number; parried: number; deaths: number;
   };
   /** 전리품 — 주머니 수 / 창 연 횟수 / 가져온·넣은·버린 개수 / 가방 가득 거부 */
-  loot: { pouches: number; opened: number; revealed: number; taken: number; stashed: number; dropped: number; deniedFull: number };
+  loot: { pouches: number; opened: number; revealed: number; taken: number; stashed: number; dropped: number; deniedFull: number; interrupted: number };
   derived: {
     ammoLeftRatioAtAltar: number | null;
     altarBypassRatio: number | null;
@@ -81,6 +81,7 @@ export class Metrics {
   private lootStashed = 0;
   private lootDropped = 0;
   private lootDeniedFull = 0;
+  private lootInterrupted = 0;
   private xpGained = 0;
   private shieldsBroken = 0;
   private shotsFired = 0;
@@ -145,6 +146,7 @@ export class Metrics {
     events.on('loot_denied', (payload) => {
       if ((payload as { reason: string }).reason === 'full') this.lootDeniedFull++;
     });
+    events.on('loot_interrupted', () => this.lootInterrupted++); // 실시간 루팅 — 맞거나 밀려나 끊긴 횟수
     // 함정 — 시스템 안에 카운터를 두지 않는다 (CLAUDE.md 4). 전부 이벤트 구독
     events.on('trap_triggered', () => this.trapsTriggered++);
     events.on('trap_hit_player', () => this.trapHitsPlayer++);
@@ -286,6 +288,7 @@ export class Metrics {
         stashed: this.lootStashed,
         dropped: this.lootDropped,
         deniedFull: this.lootDeniedFull,
+        interrupted: this.lootInterrupted,
       },
       derived: {
         ammoLeftRatioAtAltar: round2(avg(this.ammoLeftRatios)),

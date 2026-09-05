@@ -50,6 +50,8 @@ export class LootUI {
   private selBtn = 0;
   /** 닫힐 때 main 이 Loot.closeLoot 와 uiOpen 을 되돌린다 */
   onClose: (() => void) | null = null;
+  /** 이 키면 창을 닫고 게임에 그대로 넘긴다(반응·질주) — 실시간 루팅에서 위협에 즉시 대응. main 이 키 설정으로 준다 */
+  escapeKey: ((code: string) => boolean) | null = null;
   /** 패드로 조작 중 — 버튼·힌트를 패드 표기로 (main 이 틱마다 갱신) */
   padMode = false;
   /** 직전 동작의 연출 — rebuild 뒤 목적지를 찾아 아이콘을 날린다 / 거부된 줄을 흔든다 */
@@ -84,6 +86,7 @@ export class LootUI {
 
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
+      if (!this.split && this.escapeKey?.(e.code)) { this.close(); return; } // preventDefault 없이 — 게임이 그 키를 받는다
       if (this.split) {
         // 대화상자 — 화살표/WASD 로 몫을 정하고 Enter 확인, Esc 취소. 다른 키는 삼킨다
         e.preventDefault();
@@ -206,7 +209,8 @@ export class LootUI {
     this.searching = null; // 닫으면 멈춘다 — 밝혀진 것(searched)은 데이터에 남아 다시 열면 이어진다
   }
 
-  private close(): void {
+  /** 닫기 — 창을 숨기고 onClose 로 규칙(Loot.closeLoot·uiOpen)을 되돌린다. main 도 부른다(끊김·무기 버튼) */
+  close(): void {
     if (!this.open) return;
     this.hide();
     this.onClose?.();
@@ -615,8 +619,13 @@ export class LootUI {
     const title = document.createElement('div');
     title.textContent = c.title;
     title.dataset['fly'] = 'title';
-    title.style.cssText = `color:${c.tier === 'boss' ? '#ffd75e' : '#e8c76a'};margin-bottom:10px;font-size:15px;`;
+    title.style.cssText = `color:${c.tier === 'boss' ? '#ffd75e' : '#e8c76a'};margin-bottom:2px;font-size:15px;`;
     left.appendChild(title);
+    // 실시간 — 뒤지는 동안 게임은 멈추지 않는다. 한 줄로 못박아 둔다 (맞으면 끊긴다)
+    const live = document.createElement('div');
+    live.textContent = `게임은 멈추지 않는다 — 공격받으면 끊긴다 · ${this.padMode ? 'RT/LT' : 'Shift/Space'} 로 바로 대응`;
+    live.style.cssText = 'color:#8a8f9a;font-size:11px;margin-bottom:10px;';
+    left.appendChild(live);
     left.appendChild(this.buildContainer(c));
     // 버튼 줄 — 커서(패드·키보드)로도 고른다: 격자 아래로 내려오면 여기, ←→ 로 둘 사이, A/Enter 로 실행
     const buttons = document.createElement('div');

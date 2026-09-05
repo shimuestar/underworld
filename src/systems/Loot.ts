@@ -314,6 +314,14 @@ export function tick(world: World, _dt: number): void {
     best = item;
     bestDist = dist;
   }
+  // 실시간 루팅 — 열어 둔 컨테이너에서 밀려나 멀어지면 끊긴다 (main 이 loot_interrupt 를 받아 창을 닫는다)
+  if (world.lootOpen) {
+    const ref = world.lootOpen;
+    const src = ref.kind === 'pouch' ? world.groundItems.find((g) => g.id === ref.id) : world.chests.find((ch) => ch.id === ref.id);
+    if (src && Math.hypot(src.x - p.x, src.z - p.z) > balance.loot.live.closeDistance) {
+      world.events.emit('loot_interrupt', { reason: 'distance' });
+    }
+  }
   // 상자가 우선 — 상자(Chest.tick, 이 앞)가 대상이면 그것이 lootInView 다 (열기도 Chest 가 한다)
   if (world.chestInView) {
     world.lootInView = { kind: 'chest', id: world.chestInView.id };

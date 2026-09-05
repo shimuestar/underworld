@@ -322,6 +322,8 @@ lootUI.onClose = () => {
   Loot.closeLoot(world);
   setUiOpen(false);
 };
+// 실시간 루팅 — 반응(패링·방어)·질주/회피 키는 창을 닫고 그 입력이 그대로 통한다 (Input 이 이미 눌림을 기록한다)
+lootUI.escapeKey = (code) => code === keyBindings.code('reaction') || code === keyBindings.code('sprint');
 events.on('loot_opened', (payload) => {
   const info = payload as { kind: 'pouch' | 'chest'; first?: boolean };
   // 상자를 처음 여는 소리는 chest_opened 가 낸다 — 다시 뒤질 때와 주머니는 가죽 스침
@@ -623,6 +625,8 @@ for (const name of [
   'loot_carry_started',
   'loot_carry_cancelled',
   'item_split',
+  'loot_interrupt',
+  'loot_interrupted',
   'aim_snapped',
   'arrow_recovered',
   'arrow_broken',
@@ -1777,10 +1781,20 @@ function spawnBloodSplatter(): void {
 }
 const grappleRing = document.getElementById('grapple-ring');
 const grappleCount = document.getElementById('grapple-count');
+/** 루팅이 끊겼다 — 창을 닫고(규칙은 onClose → Loot.closeLoot) 이유를 알린다 */
+function interruptLoot(reason: 'damage' | 'distance'): void {
+  if (!lootUI.open) return;
+  lootUI.close();
+  audio.play('shop_deny');
+  showReaction(reason === 'damage' ? '공격받아 루팅이 끊겼다' : '멀어져 루팅이 끊겼다', 1200);
+  events.emit('loot_interrupted', { reason });
+}
+events.on('loot_interrupt', (payload) => interruptLoot((payload as { reason: 'distance' }).reason));
 events.on('player_damaged', (payload) => {
   const hit = payload as {
     amount?: number; blocked?: boolean; srcX?: number; srcZ?: number; srcId?: number; source?: string;
   };
+  if (balance.loot.live.interruptOnDamage) interruptLoot('damage'); // 실시간 루팅 — 맞으면 창이 닫힌다 (도트 틱은 player_damaged 가 아니다)
   // 받은 피해 숫자 — 막힌 타격도 칩 피해가 있으면 회색으로 보여 준다
   if (hit.amount !== undefined) showDamageTaken(hit.amount, hit.blocked ? 'blocked' : 'hit');
   if (hit.blocked) return;
@@ -3121,6 +3135,9 @@ function simulate(dt: number): void {
   if (inventoryUI.open && input.gamepad.connected && input.gamepad.rawPressed(3)) inventoryUI.onPlacePouch?.();
   // 루팅 창 — D-패드 네 방향(←→ 로 칸 전환), A 짧게 가져오기/넣기 · 길게 집어 들기(→ 이동 → A 놓기),
   // X 모두, Y 바닥에 버리기(들고 있으면 그것을), B 닫기(들고 있으면 취소). A 는 홀드 판정이라 매 틱 상태를 넘긴다
+  if (lootUI.open && input.gamepad.connected && (input.gamepad.pressed('melee') || input.gamepad.pressed('ranged'))) {
+    lootUI.close(); // 무기를 쥐면 창이 닫히고 그 입력은 이 틱에 그대로 통한다 (실시간 루팅 — 위협에 즉시 대응)
+  }
   if (lootUI.open) {
     // 표기는 '마지막으로 쓴 장치'를 따른다 — 창을 벗어난 사이 브라우저가 패드를 감춰도(connected=false) 패드 표기를 유지하고,
     // 그 상태면 창 안에 "패드가 잠들었다 — 클릭·아무 키" 안내를 띄운다 (브라우저 규칙: 새 제스처 전까지 패드 노출이 막힌다)
@@ -3158,7 +3175,11 @@ function simulate(dt: number): void {
     return;
   }
 
-  if (!world.dead && !world.uiOpen && !world.cleared) {
+  // 실시간 루팅 — 루팅 창은 시간을 멈추지 않는다(상점·가방·스킬 창은 여전히 멈춘다). 대신 플레이어는 뿌리내린다:
+  // 이동·시선·공격 입력을 비운다(WASD·왼 스틱은 커서를 옮기는 중이다). 적은 그대로 다가와 때리고, 맞으면 창이 닫힌다
+  const lootLive = world.uiOpen && world.lootOpen !== null;
+  if (lootLive) world.input = Input.emptySnapshot();
+  if (!world.dead && (!world.uiOpen || lootLive) && !world.cleared) {
     // 무적(테스트) — 시스템을 손대지 않고 한 곳에서 자원만 되돌린다.
     // HP를 깎는 지점이 여섯 군데라 각각 분기를 심으면 금방 어긋난다
     const keep = world.godMode ? snapshotResources() : null;
