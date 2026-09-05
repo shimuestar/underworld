@@ -514,14 +514,17 @@ describe('드래그 놓기 (2026-09-04)', () => {
 });
 
 describe('실시간 루팅 — 끊김 (2026-09-04)', () => {
-  it('열어 둔 주머니에서 closeDistance 넘게 멀어지면 loot_interrupt(distance) 가 난다, 가까우면 안 난다', () => {
+  it('열어 둔 주머니에서 (열 수 있는 최대 거리 + closeSlack) 넘게 멀어지면 loot_interrupt(distance), 그 안이면 안 난다', () => {
     const p = pouchAt(world, 10, 8, [{ kind: 'potion', count: 1 }]);
     openPouch(world, p);
     const got: unknown[] = [];
     world.events.on('loot_interrupt', (x) => got.push(x));
     Loot.tick(world, DT);
     expect(got).toHaveLength(0); // 2m — 아직 붙어 있다
-    world.player.x = 10 + balance.loot.live.closeDistance + 0.5; // 밀려났다
+    world.player.z = 8 + L.pouch.aimRadius - 0.2; // 조준 규칙으로 열 수 있는 거리 안 — 안 끊긴다
+    Loot.tick(world, DT);
+    expect(got).toHaveLength(0);
+    world.player.z = 8 + Math.max(L.pouch.radius, L.pouch.aimRadius) + balance.loot.live.closeSlack + 0.5; // 밀려났다
     Loot.tick(world, DT);
     expect(got).toEqual([{ reason: 'distance' }]);
     expect(world.lootOpen).not.toBeNull(); // 닫는 것은 main(창) 의 몫 — 시스템은 알리기만

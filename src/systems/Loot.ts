@@ -318,7 +318,9 @@ export function tick(world: World, _dt: number): void {
   if (world.lootOpen) {
     const ref = world.lootOpen;
     const src = ref.kind === 'pouch' ? world.groundItems.find((g) => g.id === ref.id) : world.chests.find((ch) => ch.id === ref.id);
-    if (src && Math.hypot(src.x - p.x, src.z - p.z) > balance.loot.live.closeDistance) {
+    // 열 수 있는 최대 거리(가까이 또는 조준 5m) + 여유 — 고정 3.2m 였을 땐 멀리서 조준해 열면 그 틱에 끊겼다
+    const limit = Math.max(cfg.radius, cfg.aimRadius) + balance.loot.live.closeSlack;
+    if (src && Math.hypot(src.x - p.x, src.z - p.z) > limit) {
       world.events.emit('loot_interrupt', { reason: 'distance' });
     }
   }

@@ -126,7 +126,7 @@
 이동·시선·공격 입력을 비운다(WASD·왼 스틱은 커서를 옮기는 중). 적은 그대로 다가와 때린다.
 
 - **끊김** — `player_damaged`(도트 틱 제외)를 받으면 창이 닫힌다(`loot.live.interruptOnDamage`). 밀려나 컨테이너에서
-  `loot.live.closeDistance` 넘게 멀어지면 `Loot.tick` 이 `loot_interrupt{distance}` 를 내고 main 이 닫는다. 둘 다 소리 + "…끊겼다" 안내,
+  열 수 있는 최대 거리(`max(pouch.radius, pouch.aimRadius)`) + `loot.live.closeSlack` 넘게 멀어지면 `Loot.tick` 이 `loot_interrupt{distance}` 를 내고 main 이 닫는다. 둘 다 소리 + "…끊겼다" 안내,
   계측 `loot.interrupted`.
 - **즉시 대응** — 반응(Shift)·질주/회피(Space) 키(`LootUI.escapeKey`, 키 설정을 따른다)와 패드 RT/LT 는 창을 닫으며 그 입력이 같은 틱에
   그대로 통한다(Input 은 창과 무관하게 눌림을 기록한다). 창 제목 아래 한 줄이 이 규칙을 말한다.

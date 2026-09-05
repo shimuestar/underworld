@@ -76,11 +76,14 @@ export function lootEntryPopup(world: World, e: LootEntry): PopupContent {
 export function keycap(label: string, round: boolean): HTMLSpanElement {
   const k = document.createElement('span');
   k.textContent = label;
+  // 패드: 한 글자(A/B/X/Y)는 원, 두 글자 이상('X 길게'·'◂▸')은 같은 높이의 알약 — 지름 고정 원에 넣으면 넘쳐 옆 글자와 겹쳤다
+  const pill = round && label.length > 1;
   k.style.cssText = round
-    ? 'display:inline-block;width:18px;height:18px;border:1px solid rgba(216,224,234,0.7);border-radius:50%;' +
-      'font-weight:bold;color:#e8ecf2;line-height:16px;text-align:center;margin-right:6px;box-sizing:border-box;flex:none;'
+    ? `display:inline-block;${pill ? 'min-width:18px;padding:0 7px;' : 'width:18px;'}height:18px;border:1px solid rgba(216,224,234,0.7);` +
+      `border-radius:${pill ? '9px' : '50%'};font-weight:bold;color:#e8ecf2;line-height:16px;text-align:center;margin-right:6px;` +
+      'box-sizing:border-box;flex:none;white-space:nowrap;'
     : 'display:inline-block;min-width:14px;padding:0 5px;border:1px solid rgba(216,224,234,0.65);border-bottom-width:3px;' +
-      'border-radius:4px;font-weight:bold;color:#e8ecf2;line-height:15px;text-align:center;margin-right:6px;flex:none;';
+      'border-radius:4px;font-weight:bold;color:#e8ecf2;line-height:15px;text-align:center;margin-right:6px;flex:none;white-space:nowrap;';
   return k;
 }
 
