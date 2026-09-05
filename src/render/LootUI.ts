@@ -15,7 +15,7 @@ import { itemIconSvg, lootIconSvg } from './ItemIcons';
 import { attachPopup, consumablePopup, lootEntryPopup, type PopupContent } from './ItemPopup';
 import { beginDrag } from './DragDrop';
 import { moveSlot, splitSlot } from '../core/Inventory';
-import { adjustSplit, makeSplit, renderSplitDialog, type SplitState } from './SplitDialog';
+import { adjustSplit, makeSplit, renderSplitDialog, splitActivate, splitNavigate, type SplitState } from './SplitDialog';
 
 const UP_KEYS = new Set(['KeyW', 'ArrowUp']);
 const DOWN_KEYS = new Set(['KeyS', 'ArrowDown']);
@@ -88,14 +88,13 @@ export class LootUI {
       if (!this.open) return;
       if (!this.split && this.escapeKey?.(e.code)) { this.close(); return; } // preventDefault 없이 — 게임이 그 키를 받는다
       if (this.split) {
-        // 대화상자 — 화살표/WASD 로 몫을 정하고 Enter 확인, Esc 취소. 다른 키는 삼킨다
+        // 대화상자 — 화살표/WASD 로 수량 줄(±1·+big)과 버튼 줄(−big·−1·+1·+big·확인·취소) 사이를 오가고 Enter 실행, Esc 취소
         e.preventDefault();
-        const big = balance.loot.ui.splitBigStep;
-        if (LEFT_KEYS.has(e.code)) this.adjustSplit(-1);
-        else if (RIGHT_KEYS.has(e.code)) this.adjustSplit(1);
-        else if (UP_KEYS.has(e.code)) this.adjustSplit(big);
-        else if (DOWN_KEYS.has(e.code)) this.adjustSplit(-big);
-        else if (e.code === 'Enter' || e.code === 'NumpadEnter') this.confirmSplit();
+        if (LEFT_KEYS.has(e.code)) this.navSplit(-1, 0);
+        else if (RIGHT_KEYS.has(e.code)) this.navSplit(1, 0);
+        else if (UP_KEYS.has(e.code)) this.navSplit(0, -1);
+        else if (DOWN_KEYS.has(e.code)) this.navSplit(0, 1);
+        else if (e.code === 'Enter' || e.code === 'NumpadEnter') this.activateSplit();
         else if (e.code === 'Escape' || e.code === 'KeyE') this.cancelSplit();
         return;
       }
@@ -220,10 +219,8 @@ export class LootUI {
   padMove(dx: number, dy: number): void {
     if (!this.open) return;
     if (this.split) {
-      // 대화상자 — ←→ ±1, ↑(dy<0) +big, ↓ −big
-      const big = balance.loot.ui.splitBigStep;
-      if (dx !== 0) this.adjustSplit(dx > 0 ? 1 : -1);
-      else if (dy !== 0) this.adjustSplit(dy < 0 ? big : -big);
+      // 대화상자 — 수량 줄/버튼 줄 커서 (SplitDialog.splitNavigate)
+      this.navSplit(dx, dy);
       return;
     }
     this.move(dx, dy);
@@ -282,6 +279,18 @@ export class LootUI {
     adjustSplit(this.split, delta);
     this.rebuild();
   }
+  private navSplit(dx: number, dy: number): void {
+    if (!this.split) return;
+    splitNavigate(this.split, dx, dy);
+    this.rebuild();
+  }
+  private activateSplit(): void {
+    if (!this.split) return;
+    const r = splitActivate(this.split);
+    if (r === 'confirm') this.confirmSplit();
+    else if (r === 'cancel') this.cancelSplit();
+    else this.rebuild();
+  }
   private confirmSplit(): void {
     const s = this.split;
     if (!s) return;
@@ -301,9 +310,9 @@ export class LootUI {
   padA(held: boolean): void {
     if (!this.open) return;
     if (this.split) {
-      // 대화상자 — A 를 떼는 순간 확인 (누름은 무시)
+      // 대화상자 — A 를 떼는 순간 커서가 얹힌 것을 실행 (수량 줄이면 확인)
       if (held) { this.aHoldTicks++; return; }
-      if (this.aHoldTicks > 0) { this.aHoldTicks = 0; this.aConsumed = false; this.confirmSplit(); }
+      if (this.aHoldTicks > 0) { this.aHoldTicks = 0; this.aConsumed = false; this.activateSplit(); }
       return;
     }
     if (held) {

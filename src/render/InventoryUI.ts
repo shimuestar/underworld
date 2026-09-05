@@ -18,7 +18,7 @@ import {
   unbindQuickslot,
 } from '../core/Inventory';
 import { beginDrag } from './DragDrop';
-import { adjustSplit, makeSplit, renderSplitDialog, type SplitState } from './SplitDialog';
+import { adjustSplit, makeSplit, renderSplitDialog, splitActivate, splitNavigate, type SplitState } from './SplitDialog';
 import { balance } from '../core/Balance';
 import { itemIcon } from './ItemIcons';
 import { attachPopup, consumablePopup } from './ItemPopup';
@@ -62,15 +62,17 @@ export class InventoryUI {
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
       if (this.split) {
-        // 대화상자 — 화살표/WASD 로 몫, Enter 확인, Esc 취소
+        // 대화상자 — 화살표/WASD 로 수량 줄·버튼 줄 커서, Enter 실행, Esc 취소
         e.preventDefault();
-        const big = balance.loot.ui.splitBigStep;
-        if (e.code === 'ArrowLeft' || e.code === 'KeyA') adjustSplit(this.split, -1);
-        else if (e.code === 'ArrowRight' || e.code === 'KeyD') adjustSplit(this.split, 1);
-        else if (e.code === 'ArrowUp' || e.code === 'KeyW') adjustSplit(this.split, big);
-        else if (e.code === 'ArrowDown' || e.code === 'KeyS') adjustSplit(this.split, -big);
-        else if (e.code === 'Enter' || e.code === 'NumpadEnter') { this.confirmSplit(); return; }
-        else if (e.code === 'Escape') { this.split = null; }
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') splitNavigate(this.split, -1, 0);
+        else if (e.code === 'ArrowRight' || e.code === 'KeyD') splitNavigate(this.split, 1, 0);
+        else if (e.code === 'ArrowUp' || e.code === 'KeyW') splitNavigate(this.split, 0, -1);
+        else if (e.code === 'ArrowDown' || e.code === 'KeyS') splitNavigate(this.split, 0, 1);
+        else if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+          const r = splitActivate(this.split);
+          if (r === 'confirm') { this.confirmSplit(); return; }
+          if (r === 'cancel') this.split = null;
+        } else if (e.code === 'Escape') { this.split = null; }
         else return;
         this.rebuild();
         return;
