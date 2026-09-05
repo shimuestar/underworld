@@ -28,7 +28,8 @@ const GRID_GAP_PX = 8;
 const PANEL_GAP_PX = 24;
 const PANEL_PAD_X = 26;
 
-type Pane = 'container' | 'bag';
+/** 커서가 있는 곳 — 컨테이너 격자 / 가방 격자 / 컨테이너 아래 버튼 줄(모두 가져오기·닫기) */
+type Pane = 'container' | 'bag' | 'buttons';
 
 /** 가져온 것이 어디로 갔는지 — 날아가는 아이콘의 목적지 표식 (data-fly) */
 function flyTargetOf(e: LootEntry): string {
@@ -44,6 +45,8 @@ export class LootUI {
   pane: Pane = 'container';
   private selC = 0;
   private selB = 0;
+  /** 버튼 줄 커서 — 0 모두 가져오기, 1 닫기 (패드·키보드로도 고를 수 있어야 한다, 2026-09-04) */
+  private selBtn = 0;
   /** 닫힐 때 main 이 Loot.closeLoot 와 uiOpen 을 되돌린다 */
   onClose: (() => void) | null = null;
   /** 패드로 조작 중 — 버튼·힌트를 패드 표기로 (main 이 틱마다 갱신) */
@@ -217,7 +220,7 @@ export class LootUI {
   /** 커서 칸의 것을 집어 든다 — 밝혀진 컨테이너 칸 또는 든 가방 칸만 */
   private pickUp(): void {
     const c = Loot.container(this.world);
-    if (!c) return;
+    if (!c || this.pane === 'buttons') return;
     if (this.pane === 'container') {
       const e = this.layout[this.selC] ?? null;
       if (!e || !e.searched) return;
@@ -233,7 +236,7 @@ export class LootUI {
   /** 들고 있는 것을 커서 칸에 놓는다 — 마우스 드래그(onDrop)와 같은 규칙 */
   private place(): void {
     const carry = this.carry;
-    if (!carry) return;
+    if (!carry || this.pane === 'buttons') return;
     this.carry = null;
     const key = this.pane === 'container' ? `c${this.selC}` : `b${this.selB}`;
     this.onDrop(carry.pane, carry.index, key); // 안에서 rebuild
@@ -345,18 +348,29 @@ export class LootUI {
   private move(dx: number, dy: number): void {
     const c = Loot.container(this.world);
     const cols = balance.items.cols;
-    if (this.pane === 'container') {
+    if (this.pane === 'buttons') {
+      // 버튼 줄 — ←→ 로 두 버튼, → 끝에서 가방으로. ↑↓ 로 컨테이너 격자(아래 끝/첫 줄)로
+      const g = this.containerGrid(c?.entries.length ?? 0);
+      if (dx > 0 && this.selBtn === 1) this.pane = 'bag';
+      else if (dx !== 0) this.selBtn = this.selBtn === 0 ? 1 : 0;
+      else if (dy < 0) { this.pane = 'container'; this.selC = Math.min(g.cols * g.rows - 1, (g.rows - 1) * cols + (this.selC % cols)); }
+      else if (dy > 0) { this.pane = 'container'; this.selC = this.selC % cols; }
+    } else if (this.pane === 'container') {
       const g = this.containerGrid(c?.entries.length ?? 0);
       const total = g.cols * g.rows;
+      const row = Math.floor(this.selC / cols);
       if (dx > 0 && this.selC % cols === cols - 1) {
         this.pane = 'bag';
       } else if (dx !== 0) {
-        const row = Math.floor(this.selC / cols);
         const col = ((this.selC % cols) + dx + cols) % cols;
         this.selC = Math.min(total - 1, row * cols + col);
+      } else if (dy !== 0 && !this.carry && ((dy > 0 && row === g.rows - 1) || (dy < 0 && row === 0))) {
+        // 격자 아래(또는 위로 감아) 버튼 줄 — 들고 있는 동안은 격자 안에서만 돈다
+        this.pane = 'buttons';
+        this.selBtn = this.selC % cols < cols / 2 ? 0 : 1;
       } else if (dy !== 0) {
-        const row = (Math.floor(this.selC / cols) + dy + g.rows) % g.rows;
-        this.selC = Math.min(total - 1, row * cols + (this.selC % cols));
+        const nrow = (row + dy + g.rows) % g.rows;
+        this.selC = Math.min(total - 1, nrow * cols + (this.selC % cols));
       }
     } else {
       const slots = this.world.inventory.length;
@@ -390,6 +404,12 @@ export class LootUI {
   private act(): void {
     const c = Loot.container(this.world);
     if (!c) { this.close(); return; }
+    if (this.pane === 'buttons') {
+      if (this.selBtn === 1) { this.close(); return; }
+      if (c.entries.length > 0) this.takeAll();
+      else this.rebuild();
+      return;
+    }
     if (this.pane === 'container') {
       const at = this.cursorEntry(c);
       if (!at) { this.shakeKey = `c${this.selC}`; this.rebuild(); return; }
@@ -468,9 +488,11 @@ export class LootUI {
   private drop(): void {
     const c = Loot.container(this.world);
     if (!c) { this.close(); return; }
+    if (this.pane === 'buttons') return;
     const at = this.pane === 'container' ? this.cursorEntry(c) : null;
     if (this.pane === 'container' && !at) { this.shakeKey = `c${this.selC}`; this.rebuild(); return; }
-    const ok = Loot.dropToFloor(this.world, this.pane, this.pane === 'container' ? at!.index : this.selB);
+    const side: 'container' | 'bag' = this.pane === 'container' ? 'container' : 'bag';
+    const ok = Loot.dropToFloor(this.world, side, side === 'container' ? at!.index : this.selB);
     if (!ok) this.shakeKey = this.pane === 'container' ? `c${this.selC}` : `b${this.selB}`;
     this.clampSel();
     this.rebuild();
@@ -494,10 +516,25 @@ export class LootUI {
     title.style.cssText = `color:${c.tier === 'boss' ? '#ffd75e' : '#e8c76a'};margin-bottom:10px;font-size:15px;`;
     left.appendChild(title);
     left.appendChild(this.buildContainer(c));
+    // 버튼 줄 — 커서(패드·키보드)로도 고른다: 격자 아래로 내려오면 여기, ←→ 로 둘 사이, A/Enter 로 실행
     const buttons = document.createElement('div');
     buttons.style.cssText = 'display:flex;gap:10px;margin-top:2px;';
-    buttons.appendChild(this.button(`모두 가져오기 (${this.padMode ? 'X' : 'T'})`, () => this.takeAll(), c.entries.length > 0));
-    buttons.appendChild(this.button(`닫기 (${this.padMode ? 'B' : 'E'})`, () => this.close(), true));
+    const labels = [`모두 가져오기 (${this.padMode ? 'X' : 'T'})`, `닫기 (${this.padMode ? 'B' : 'E'})`];
+    const runs = [() => this.takeAll(), () => this.close()];
+    const enabled = [c.entries.length > 0, true];
+    labels.forEach((label, i) => {
+      const focused = this.pane === 'buttons' && this.selBtn === i;
+      const b = this.button(label, runs[i]!, enabled[i]!, focused);
+      b.dataset['key'] = `t${i}`;
+      b.onmousemove = (ev) => {
+        if (!this.hoverAllowed(ev)) return;
+        if (this.pane === 'buttons' && this.selBtn === i) return;
+        this.pane = 'buttons';
+        this.selBtn = i;
+        this.rebuild();
+      };
+      buttons.appendChild(b);
+    });
     left.appendChild(buttons);
 
     const right = this.panel();
@@ -526,12 +563,14 @@ export class LootUI {
     return p;
   }
 
-  private button(label: string, onClick: () => void, enabled: boolean): HTMLButtonElement {
+  private button(label: string, onClick: () => void, enabled: boolean, focused = false): HTMLButtonElement {
     const b = document.createElement('button');
     b.textContent = label;
     b.disabled = !enabled;
+    // 커서가 얹힌 버튼은 컨테이너 커서 칸과 같은 푸른 테두리·바탕
     b.style.cssText =
-      'padding:6px 14px;border:1px solid #3a3a44;background:#1b1b22;color:#cfd2da;cursor:pointer;font:inherit;' +
+      `padding:6px 14px;border:1px solid ${focused ? '#7fbfff' : '#3a3a44'};background:${focused ? 'rgba(127,191,255,0.14)' : '#1b1b22'};` +
+      `color:${focused ? '#e8ecf2' : '#cfd2da'};cursor:pointer;font:inherit;` +
       (enabled ? '' : 'opacity:0.45;cursor:default;');
     b.onclick = onClick;
     return b;
