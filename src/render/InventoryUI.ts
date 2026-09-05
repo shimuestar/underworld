@@ -216,7 +216,9 @@ export class InventoryUI {
       };
       if (kind && this.hoverQ === i) {
         // 십자는 창의 오른쪽 — 칸 왼쪽에 띄운다
-        attachPopup(cell, consumablePopup(world, kind, countOf(world, kind), '', `퀵슬롯 ${i + 1} — 전투 중 ${i + 1} 키로 쓴다`), 'left');
+        const content = consumablePopup(world, kind, countOf(world, kind), ` (퀵슬롯 ${i + 1})`);
+        content.actions = [{ key: String(i + 1), label: '전투 중 사용' }, { key: '클릭', label: '고른 가방 칸을 여기에 등록 / 빈손이면 해제' }];
+        attachPopup(cell, content, 'left');
       }
       grid.appendChild(cell);
     });
@@ -281,11 +283,12 @@ export class InventoryUI {
         // 설명 팝업 — 마우스가 얹힌 칸, 없으면 고른 칸. 가방은 창의 왼쪽이라 칸 오른쪽에 띄운다
         const showPopup = this.hover === i || (this.hover < 0 && this.hoverQ < 0 && this.picked === i);
         if (showPopup) {
-          attachPopup(
-            cell,
-            consumablePopup(world, slot.kind, slot.count, '', '좌클릭 고르기 → 퀵슬롯 클릭(또는 1~4) 등록 · 우클릭 버리기'),
-            'right',
-          );
+          const content = consumablePopup(world, slot.kind, slot.count);
+          content.actions = [
+            { key: '좌클릭', label: '고르기 → 퀵슬롯 클릭(또는 1~4)에 등록' },
+            { key: '우클릭', label: '바닥에 버리기' },
+          ];
+          attachPopup(cell, content, 'right');
         }
         cell.onclick = () => {
           this.picked = this.picked === i ? -1 : i;

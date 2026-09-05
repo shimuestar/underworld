@@ -15,6 +15,8 @@ export interface PopupContent {
   usefulText?: string;
   /** 맨 아래 조작 안내 (작고 흐리게) */
   note?: string;
+  /** 조작 줄 — 한 줄에 하나씩 위에서 아래로 ("가져오기" 아래 "버리기"). 키캡은 패드면 원형 */
+  actions?: { key: string; label: string }[];
 }
 export type PopupSide = 'left' | 'right';
 
@@ -70,8 +72,21 @@ export function lootEntryPopup(world: World, e: LootEntry): PopupContent {
   return consumablePopup(world, e.kind as ItemKind, e.count);
 }
 
-/** 칸 옆에 팝업을 붙인다 — 칸은 position:relative 여야 한다. 세로는 칸 가운데에 맞춘다 */
-export function attachPopup(cell: HTMLElement, content: PopupContent, side: PopupSide): void {
+/** 키캡 글리프 — 패드는 콘솔 버튼처럼 원형, 키보드는 사각 키캡 (HUD 중앙 키캡·바닥 선 끝 키캡과 같은 결) */
+function keycap(label: string, round: boolean): HTMLSpanElement {
+  const k = document.createElement('span');
+  k.textContent = label;
+  k.style.cssText = round
+    ? 'display:inline-block;width:18px;height:18px;border:1px solid rgba(216,224,234,0.7);border-radius:50%;' +
+      'font-weight:bold;color:#e8ecf2;line-height:16px;text-align:center;margin-right:6px;box-sizing:border-box;flex:none;'
+    : 'display:inline-block;min-width:14px;padding:0 5px;border:1px solid rgba(216,224,234,0.65);border-bottom-width:3px;' +
+      'border-radius:4px;font-weight:bold;color:#e8ecf2;line-height:15px;text-align:center;margin-right:6px;flex:none;';
+  return k;
+}
+
+/** 칸 옆에 팝업을 붙인다 — 칸은 position:relative 여야 한다. 세로는 칸 가운데에 맞춘다.
+ *  조작 안내(actions)도 팝업 안에 넣는다 — 칸 아래 따로 붙이던 배지는 팝업에 가려졌다 (2026-09-04) */
+export function attachPopup(cell: HTMLElement, content: PopupContent, side: PopupSide, padGlyph = false): void {
   const box = document.createElement('div');
   box.dataset['popup'] = '1';
   const anchor = side === 'right' ? `left:calc(100% + ${GAP_PX}px);` : `right:calc(100% + ${GAP_PX}px);`;
@@ -100,6 +115,18 @@ export function attachPopup(cell: HTMLElement, content: PopupContent, side: Popu
     el.textContent = content.note;
     el.style.cssText = 'margin-top:5px;padding-top:5px;border-top:1px solid #23232b;color:#8a8f9a;font-size:11px;';
     box.appendChild(el);
+  }
+  if (content.actions && content.actions.length > 0) {
+    const list = document.createElement('div');
+    list.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #23232b;display:flex;flex-direction:column;gap:3px;font-size:11px;color:#cfd2da;';
+    for (const a of content.actions) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;white-space:nowrap;';
+      row.appendChild(keycap(a.key, padGlyph));
+      row.appendChild(document.createTextNode(a.label));
+      list.appendChild(row);
+    }
+    box.appendChild(list);
   }
   // 팝업이 붙은 칸은 이웃 칸 위로 떠야 한다
   cell.style.zIndex = '3';

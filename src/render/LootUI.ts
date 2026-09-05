@@ -323,38 +323,6 @@ export class LootUI {
     if (this.open && this.layout.some((e) => e !== null && !e.searched)) this.startSearch();
   }
 
-  /** 커서 칸 밑의 조작 배지 — "[A] 가져오기  [Y] 버리기". 패드는 고정 버튼(A/Y), 키보드는 Enter/X.
-   *  칸에 커서를 두면 무엇을 할 수 있는지 그 자리에서 보인다 (하단 힌트 줄까지 눈을 내리지 않아도) */
-  private actionBadge(primary: string, col: number, cols: number): HTMLDivElement {
-    const wrap = document.createElement('div');
-    // 가장자리 칸은 패널 밖으로 삐져나가지 않게 안쪽으로 붙인다
-    const anchor = col === 0 ? 'left:0;' : col === cols - 1 ? 'right:0;' : 'left:50%;transform:translateX(-50%);';
-    wrap.style.cssText =
-      `position:absolute;top:100%;${anchor}margin-top:5px;white-space:nowrap;` +
-      'display:flex;gap:8px;padding:3px 8px;background:rgba(12,14,18,0.94);border:1px solid #3a3a44;border-radius:5px;' +
-      'font-size:11px;color:#cfd2da;z-index:2;pointer-events:none;';
-    const key = (label: string): HTMLSpanElement => {
-      const k = document.createElement('span');
-      k.textContent = label;
-      // 패드는 콘솔 버튼처럼 원형, 키보드는 사각 키캡
-      k.style.cssText = this.padMode
-        ? 'display:inline-block;width:18px;height:18px;border:1px solid rgba(216,224,234,0.7);border-radius:50%;' +
-          'font-weight:bold;color:#e8ecf2;line-height:16px;text-align:center;margin-right:4px;box-sizing:border-box;'
-        : 'display:inline-block;min-width:14px;padding:0 5px;border:1px solid rgba(216,224,234,0.65);border-bottom-width:3px;' +
-          'border-radius:4px;font-weight:bold;color:#e8ecf2;line-height:15px;text-align:center;margin-right:4px;';
-      return k;
-    };
-    const a = document.createElement('span');
-    a.appendChild(key(this.padMode ? 'A' : 'Enter'));
-    a.appendChild(document.createTextNode(primary));
-    const d = document.createElement('span');
-    d.appendChild(key(this.padMode ? 'Y' : 'X'));
-    d.appendChild(document.createTextNode('버리기'));
-    wrap.appendChild(a);
-    wrap.appendChild(d);
-    return wrap;
-  }
-
   private button(label: string, onClick: () => void, enabled: boolean): HTMLButtonElement {
     const b = document.createElement('button');
     b.textContent = label;
@@ -398,8 +366,17 @@ export class LootUI {
       };
       cell.onclick = () => { this.pane = 'container'; this.selC = i; this.act(); };
       cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'container'; this.selC = i; this.drop(); };
-      // 커서 칸 설명 팝업 — 컨테이너는 창의 왼쪽이라 칸 오른쪽에 띄운다
-      if (here && e) attachPopup(cell, lootEntryPopup(this.world, e), 'right');
+      // 커서 칸 설명 팝업 — 컨테이너는 창의 왼쪽이라 칸 오른쪽에 띄운다. 조작 안내(가져오기 → 그 아래 버리기)도 팝업 안에
+      if (here && e) {
+        const content = lootEntryPopup(this.world, e);
+        if (e.searched) {
+          content.actions = [
+            { key: this.padMode ? 'A' : 'Enter', label: '가져오기' },
+            { key: this.padMode ? 'Y' : 'X', label: '바닥에 버리기' },
+          ];
+        }
+        attachPopup(cell, content, 'right', this.padMode);
+      }
       if (e && !e.searched) {
         // 아직 모르는 칸 — ? 로 가려 있다. 뒤지는 중이면 쿨다운처럼 한 바퀴 도는 덮개가 얹힌다
         const mark = document.createElement('span');
@@ -424,10 +401,6 @@ export class LootUI {
         count.textContent = `×${e.count}`;
         count.style.cssText = 'position:absolute;right:4px;bottom:1px;font-size:11px;color:#e8c76a;';
         cell.appendChild(count);
-        if (here) {
-          cell.style.zIndex = '2';
-          cell.appendChild(this.actionBadge('가져오기', i % g.cols, g.cols));
-        }
       }
       grid.appendChild(cell);
     }
@@ -489,14 +462,13 @@ export class LootUI {
           cell.appendChild(tag);
         }
         if (here) {
-          cell.style.zIndex = '2';
-          cell.appendChild(this.actionBadge('넣기', i % cfg.cols, cfg.cols));
-          // 가방은 창의 오른쪽이라 칸 왼쪽에 띄운다
-          attachPopup(
-            cell,
-            consumablePopup(world, slot.kind, slot.count, ' (내 가방)', `${this.padMode ? 'A' : 'Enter'} 로 컨테이너에 넣는다`),
-            'left',
-          );
+          // 가방은 창의 오른쪽이라 칸 왼쪽에 띄운다. 조작 안내(넣기 → 그 아래 버리기)는 팝업 안에
+          const content = consumablePopup(world, slot.kind, slot.count, ' (내 가방)');
+          content.actions = [
+            { key: this.padMode ? 'A' : 'Enter', label: '컨테이너에 넣기' },
+            { key: this.padMode ? 'Y' : 'X', label: '바닥에 버리기' },
+          ];
+          attachPopup(cell, content, 'left', this.padMode);
         }
       }
       grid.appendChild(cell);
