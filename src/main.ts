@@ -399,7 +399,7 @@ window.addEventListener('keydown', (e) => {
         world.dead = false;
         respawnAtAltar();
       } else {
-        location.reload();
+        reloadClean();
       }
     } else {
       restartConfirmUntil = performance.now() + 2000;
@@ -2504,7 +2504,10 @@ const sigilToast = document.getElementById('sigil-toast')!;
 const sigilToastName = sigilToast.querySelector('.name') as HTMLElement;
 const sigilToastSub = sigilToast.querySelector('.sub') as HTMLElement;
 let sigilToastUntil = 0;
+/** 테스트 일괄 지급(grantAllSkills) 동안 스킬별 토스트를 내지 않는다 — 7개가 갈아 끼워져 마지막 것만 남아 보였다 */
+let sigilToastMuted = false;
 events.on('sigil_acquired', (payload) => {
+  if (sigilToastMuted) return;
   const info = payload as {
     id: string;
     kind: 'active' | 'passive';
@@ -2692,17 +2695,28 @@ function enterTrapRoom(): void {
   showReaction('트랩 시험방 — 스킬·탄 전부 지급. 나가는 길은 일시정지 → 처음부터', 4000);
 }
 
+/** 다시 시작 — 주소의 테스트 옵션(?skills·?traproom)을 지운 채 새로 고친다.
+ *  reload() 는 주소를 그대로 두어 "처음부터 시작"이 매번 스킬 전부·시험방으로 시작했다 (2026-09-04 사용자) */
+function reloadClean(): void {
+  location.assign(location.pathname);
+}
+
 /** 테스트 — 구현된 스킬을 전부 익힌다. 패시브는 빈 부위에 새겨지고 액티브는 빈 칸에
  *  올라간다(4종이라 칸 4개에 딱 맞는다). 오염 대기는 되돌려 밸런스 검증을 더럽히지 않는다 */
 function grantAllSkills(): number {
   const pendingBefore = world.corruption.pending;
   let granted = 0;
-  for (const id of allSigilIds()) {
-    const def = sigilDef(id);
-    if (!isImplemented(def)) continue;
-    if (world.sigils.inventory.includes(id)) continue;
-    Sigils.acquire(world, id);
-    granted++;
+  sigilToastMuted = true; // 스킬별 토스트 대신 부르는 쪽이 한 줄 안내를 낸다
+  try {
+    for (const id of allSigilIds()) {
+      const def = sigilDef(id);
+      if (!isImplemented(def)) continue;
+      if (world.sigils.inventory.includes(id)) continue;
+      Sigils.acquire(world, id);
+      granted++;
+    }
+  } finally {
+    sigilToastMuted = false;
   }
   world.corruption.pending = pendingBefore;
   // 모드를 켠다 — 시뮬레이션이 매 틱 마나를 최대치로 되돌려 소비가 무효가 된다
@@ -2713,7 +2727,7 @@ function grantAllSkills(): number {
 
 function restartAfterDeath(): void {
   if (world.respawn) respawnAtAltar();
-  else location.reload();
+  else reloadClean();
 }
 /** 사망 화면 안내 — 두 갈래: 부활(골드 재물) / 던전 처음부터. 장치 바뀌면 표기도 따라온다 */
 function deathHintText(): string {
@@ -2731,7 +2745,7 @@ function deathHintText(): string {
 window.addEventListener('keydown', (e) => {
   if (!world.dead) return;
   if (e.code === 'Enter') restartAfterDeath();
-  else if (e.code === 'KeyR') location.reload();
+  else if (e.code === 'KeyR') reloadClean();
 });
 
 // ---- 제단 ----
@@ -3241,7 +3255,7 @@ function simulate(dt: number): void {
   }
   if (world.dead) {
     if (input.gamepad.pressed('interact')) restartAfterDeath();
-    else if (input.gamepad.pressed('reload')) location.reload();
+    else if (input.gamepad.pressed('reload')) reloadClean();
   }
 
   // 히트스톱 — simulate를 건너뛰되 반응 입력(릴리즈)은 버퍼에 보관 (docs/architecture.md §1)
@@ -4093,7 +4107,7 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
     setPaused(false);
     input.requestLock();
   },
-  restart: () => location.reload(),
+  restart: () => reloadClean(),
   openBindings: (mode) => {
     // 일시정지는 유지한 채 설정 화면만 덮는다 — 닫으면 다시 메뉴로 돌아온다
     pauseMenu.hide();
@@ -4220,7 +4234,10 @@ if (import.meta.env.DEV) {
 }
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)
-if (new URLSearchParams(location.search).has('skills')) grantAllSkills();
+if (new URLSearchParams(location.search).has('skills')) {
+  const n = grantAllSkills();
+  showReaction(`(테스트 ?skills) 구현된 스킬 ${n}종 지급 + 마나 무한`, 3000);
+}
 // ?traproom — 시작부터 트랩 시험방 (일시정지 메뉴와 같은 곳)
 if (new URLSearchParams(location.search).has('traproom')) enterTrapRoom();
 
