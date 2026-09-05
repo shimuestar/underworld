@@ -16,8 +16,8 @@ export interface MenuTabDef {
   hide(): void;
   /** 열려 있는 동안 매 프레임 (맵 다시 그리기 등) */
   update?(): void;
-  /** 이 탭이 화살표 키를 커서 이동에 쓰는가(가방) — 그러면 셸은 ←→ 로 탭을 바꾸지 않고, 탭이 격자 끝에서 onEdge 로 넘긴다 */
-  ownsArrows?: boolean;
+  /** 지금 화살표를 탭 전환에 쓰면 안 되는가(대화상자가 열려 있다 등) — true 면 셸은 ←→ 를 건너뛴다 */
+  blocksArrows?: () => boolean;
 }
 
 export class MenuTabs {
@@ -62,9 +62,9 @@ export class MenuTabs {
         this.hide();
         return;
       }
-      // ←→ / A·D — 커서가 없는 탭(맵·스킬)에서 탭 전환. 가방은 격자 끝에서 onEdge 로 넘긴다.
-      // 전환한 그 키가 새로 열린 가방 탭의 커서 이동으로 새지 않게 같은 이벤트의 다른 리스너를 끊는다 (stopImmediatePropagation)
-      if (this.tab(this.active)?.ownsArrows) return;
+      // ←→ / A·D — 탭 전환(키보드는 칸 이동에 화살표를 쓰지 않는다, 마우스만). 대화상자가 열려 있으면 그쪽 몫.
+      // 같은 이벤트가 다른 리스너로 새지 않게 끊는다 (stopImmediatePropagation)
+      if (this.tab(this.active)?.blocksArrows?.()) return;
       if (e.code === 'ArrowLeft' || e.code === 'KeyA') { e.preventDefault(); e.stopImmediatePropagation(); this.next(-1); }
       else if (e.code === 'ArrowRight' || e.code === 'KeyD') { e.preventDefault(); e.stopImmediatePropagation(); this.next(1); }
     });

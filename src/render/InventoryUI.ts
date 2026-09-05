@@ -107,10 +107,8 @@ export class InventoryUI {
         this.onPlacePouch?.();
         return;
       }
-      if (UP_KEYS.has(e.code)) { e.preventDefault(); this.move(0, -1); return; }
-      if (DOWN_KEYS.has(e.code)) { e.preventDefault(); this.move(0, 1); return; }
-      if (LEFT_KEYS.has(e.code)) { e.preventDefault(); this.move(-1, 0); return; }
-      if (RIGHT_KEYS.has(e.code)) { e.preventDefault(); this.move(1, 0); return; }
+      // 키보드로는 칸을 옮기지 않는다 — 마우스(hover·클릭·드래그)만 (2026-09-04 사용자). 화살표·A/D 는 셸의 탭 전환.
+      // 패드 D-패드·스틱은 그대로 커서(padMove → move)
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         e.preventDefault();
         if (e.shiftKey) this.openSplit(this.pane === 'bag' ? this.sel : -1);
@@ -229,6 +227,8 @@ export class InventoryUI {
   }
   /** B — 대화상자·들기를 취소하고, 아니면 닫는다 */
   padClose(): void { this.cancelOrClose(); }
+  /** 수량 나누기 대화상자가 열려 있는가 — 그동안 셸은 화살표로 탭을 바꾸지 않는다 */
+  get splitting(): boolean { return this.split !== null; }
 
   /** 사용 — 커서 가방 칸의 소모품을 마시기 시작한다(퀵슬롯에 없어도). 시전이 있어 창을 닫는다.
    *  못 쓰는 이유(가득·쿨다운·마시는 중)는 Items 가 item_denied 로 알린다 — 창은 그대로 */
@@ -443,7 +443,7 @@ export class InventoryUI {
     const hint = document.createElement('div');
     hint.textContent = this.padMode
       ? 'D-패드·왼 스틱 커서   Y 사용   A 고르기 → 퀵슬롯에서 A 등록(빈손 = 해제)   A 길게 집어 옮기기 → A 놓기 / B 취소   X 버리기 · X 길게 수량 나누기   Y 길게 주머니 내려놓기   B 닫기'
-      : `WASD·화살표 커서 · 클릭   E·더블클릭 사용   Enter 고르기 → 퀵슬롯 Enter/클릭(또는 1~${world.quickslots.length}) 등록(빈손 = 해제)   X·우클릭 버리기   Shift+Enter·Shift+클릭 수량 나누기   드래그로 옮기기   P 주머니 내려놓기   Esc·I 닫기`;
+      : `마우스로 칸 선택 · ←→ 탭 전환   E·더블클릭 사용   Enter/클릭 고르기 → 퀵슬롯 클릭(또는 1~${world.quickslots.length}) 등록(빈손 = 해제)   X·우클릭 버리기   Shift+Enter·Shift+클릭 수량 나누기   드래그로 옮기기   P 주머니 내려놓기   Esc·I 닫기`;
     hint.style.cssText = 'margin-top:14px;color:#6c7280;font-size:11px;line-height:1.7;white-space:normal;';
     panel.appendChild(hint);
 

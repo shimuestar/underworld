@@ -313,7 +313,7 @@ const menuUI = new MenuTabs(menuTabsPending); // 탭 정의는 아래에서 채�
 const inventoryUI = new InventoryUI(world, menuUI.body); // 가방 탭 — 소모품
 // 보관 주머니 — 가방 탭에서 빈 주머니를 발밑에 내려놓고 곧장 루팅 창으로 (loot_opened 가 창을 연다)
 inventoryUI.onClose = () => menuUI.hide(); // B·Esc 로 창 안에서 닫았다 — 셸이 uiOpen 을 되돌린다
-inventoryUI.onEdge = (dir) => menuUI.next(dir); // 격자 끝에서 한 번 더 밀면 옆 탭으로 (키보드 ←→·패드 D-패드)
+inventoryUI.onEdge = (dir) => menuUI.next(dir); // 패드 D-패드로 격자 끝에서 한 번 더 밀면 옆 탭으로 (키보드는 화살표가 곧 탭 전환)
 inventoryUI.onPlacePouch = () => {
   menuUI.hide();
   Loot.createPlayerPouch(world);
@@ -329,7 +329,7 @@ menuTabsPending.push(
     id: 'bag', label: '가방',
     status: () => `${world.inventory.filter((s) => s !== null).length}/${world.inventory.length}`,
     show: () => inventoryUI.show(), hide: () => inventoryUI.hide(),
-    ownsArrows: true, // 가방은 화살표가 커서 — 격자 끝에서 onEdge 로 탭을 넘긴다
+    blocksArrows: () => inventoryUI.splitting, // 수량 나누기 대화상자가 열려 있으면 화살표는 그쪽 몫
   },
   {
     id: 'skill', label: '스킬',
