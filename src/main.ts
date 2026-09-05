@@ -620,6 +620,8 @@ for (const name of [
   'grenade_cancelled',
   'loot_moved',
   'item_moved',
+  'loot_carry_started',
+  'loot_carry_cancelled',
   'aim_snapped',
   'arrow_recovered',
   'arrow_broken',
@@ -2296,6 +2298,12 @@ events.on('bow_draw_released', (payload) => {
 });
 // 드래그로 칸을 옮겼다 — 천에 넣는 소리를 짧게 (가져오기·넣기는 각자 소리가 있다)
 events.on('loot_moved', () => audio.play('loot_stash'));
+// 패드로 집어 들었다 / 내려놓기를 취소했다
+events.on('loot_carry_started', () => {
+  audio.play('pickup');
+  padRumble('interact');
+});
+events.on('loot_carry_cancelled', () => audio.play('loot_stash'));
 // 수류탄 차징 취소(LT 놓음·R) — 활의 시위 내리기와 같은 소리·안내
 events.on('grenade_cancelled', () => {
   audio.play('reload_end');
@@ -3109,15 +3117,16 @@ function simulate(dt: number): void {
   if (shopUI.open && input.gamepad.connected && stick.dy !== 0) shopUI.padMove(stick.dy);
   // 가방 창 — 패드 Y = 보관 주머니 내려놓기 (가방 창엔 다른 패드 조작이 없다)
   if (inventoryUI.open && input.gamepad.connected && input.gamepad.rawPressed(3)) inventoryUI.onPlacePouch?.();
-  // 루팅 창 — D-패드 네 방향(←→ 로 칸 전환), A 가져오기/넣기, X 모두, Y 바닥에 버리기, B 닫기
+  // 루팅 창 — D-패드 네 방향(←→ 로 칸 전환), A 짧게 가져오기/넣기 · 길게 집어 들기(→ 이동 → A 놓기),
+  // X 모두, Y 바닥에 버리기(들고 있으면 그것을), B 닫기(들고 있으면 취소). A 는 홀드 판정이라 매 틱 상태를 넘긴다
   if (lootUI.open && input.gamepad.connected) {
     lootUI.padMode = input.usingPad;
+    lootUI.padA(input.gamepad.rawHeld(0));
     if (input.gamepad.rawPressed(13)) lootUI.padMove(0, 1);
     else if (input.gamepad.rawPressed(12)) lootUI.padMove(0, -1);
     else if (input.gamepad.rawPressed(15)) lootUI.padMove(1, 0);
     else if (input.gamepad.rawPressed(14)) lootUI.padMove(-1, 0);
     else if (stick.dx !== 0 || stick.dy !== 0) lootUI.padMove(stick.dx, stick.dy);
-    else if (input.gamepad.rawPressed(0)) lootUI.padActivate();
     else if (input.gamepad.rawPressed(2)) lootUI.padTakeAll();
     else if (input.gamepad.rawPressed(3)) lootUI.padDrop();
     else if (input.gamepad.rawPressed(1)) lootUI.padClose();

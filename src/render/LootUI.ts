@@ -12,7 +12,7 @@ import { balance } from '../core/Balance';
 import type { LootEntry, World } from '../core/World';
 import * as Loot from '../systems/Loot';
 import { itemIconSvg, lootIconSvg } from './ItemIcons';
-import { attachPopup, consumablePopup, lootEntryPopup } from './ItemPopup';
+import { attachPopup, consumablePopup, lootEntryPopup, type PopupContent } from './ItemPopup';
 import { beginDrag } from './DragDrop';
 import { moveSlot } from '../core/Inventory';
 
@@ -51,6 +51,11 @@ export class LootUI {
    *  같은 항목 객체가 살아 있는 동안 같은 칸, 새 항목은 첫 빈 칸. 창을 열 때 다시 짠다 */
   private layout: (LootEntry | null)[] = [];
   private layoutKey: string | null = null;
+  /** 패드 집어 들기 — 들고 있는 원본 칸. A 길게로 들고, A 놓기 / B 취소 / Y 버리기 (2026-09-04) */
+  private carry: { pane: Pane; index: number } | null = null;
+  private aHoldTicks = 0;
+  /** 이번 A 누름이 '집어 들기'로 소비됐다 — 떼는 순간 놓기/가져오기로 흐르지 않게 */
+  private aConsumed = false;
   /** 뒤지기 — 지금 밝히는 중인 칸과 시작 시각(벽시계, 창은 시간 정지 중에도 돈다) */
   private searching: { entry: LootEntry; startMs: number } | null = null;
   private searchRaf: number | null = null;
@@ -81,6 +86,9 @@ export class LootUI {
     this.pane = 'container';
     this.selC = 0;
     this.selB = 0;
+    this.carry = null;
+    this.aHoldTicks = 0;
+    this.aConsumed = false;
     this.pendingFly = null;
     this.shakeKey = null;
     this.layout = [];
@@ -177,9 +185,149 @@ export class LootUI {
   // ---- 패드 — 일시정지 메뉴·상점과 같은 고정 버튼 규약 (main 이 raw 버튼으로 부른다) ----
   padMove(dx: number, dy: number): void { if (this.open) this.move(dx, dy); }
   padActivate(): void { if (this.open) this.act(); }
-  padTakeAll(): void { if (this.open) this.takeAll(); }
-  padDrop(): void { if (this.open) this.drop(); }
-  padClose(): void { this.close(); }
+  padTakeAll(): void { if (this.open && !this.carry) this.takeAll(); } // 들고 있는 동안은 잠근다 (원본이 사라진다)
+  padDrop(): void { if (this.open) (this.carry ? this.dropCarried() : this.drop()); }
+  padClose(): void { if (this.carry) this.cancelCarry(); else this.close(); }
+  get carrying(): boolean { return this.carry !== null; }
+
+  /** A 버튼 상태를 매 틱 받는다 — 짧게 떼면 가져오기/넣기(또는 들고 있으면 놓기), padPickHoldTicks 넘게 누르면 집어 들기 */
+  padA(held: boolean): void {
+    if (!this.open) return;
+    if (held) {
+      this.aHoldTicks++;
+      if (!this.carry && !this.aConsumed && this.aHoldTicks >= balance.loot.ui.padPickHoldTicks) {
+        this.aConsumed = true; // 집어 든 그 누름을 떼는 순간 놓기로 흐르지 않게
+        this.pickUp();
+      }
+      return;
+    }
+    if (this.aHoldTicks === 0) return;
+    const consumed = this.aConsumed;
+    this.aHoldTicks = 0;
+    this.aConsumed = false;
+    if (consumed) return;
+    if (this.carry) this.place();
+    else this.act();
+  }
+
+  /** 커서 칸의 것을 집어 든다 — 밝혀진 컨테이너 칸 또는 든 가방 칸만 */
+  private pickUp(): void {
+    const c = Loot.container(this.world);
+    if (!c) return;
+    if (this.pane === 'container') {
+      const e = this.layout[this.selC] ?? null;
+      if (!e || !e.searched) return;
+      this.carry = { pane: 'container', index: this.selC };
+    } else {
+      if (!this.world.inventory[this.selB]) return;
+      this.carry = { pane: 'bag', index: this.selB };
+    }
+    this.world.events.emit('loot_carry_started', { pane: this.carry.pane });
+    this.rebuild();
+  }
+
+  /** 들고 있는 것을 커서 칸에 놓는다 — 마우스 드래그(onDrop)와 같은 규칙 */
+  private place(): void {
+    const carry = this.carry;
+    if (!carry) return;
+    this.carry = null;
+    const key = this.pane === 'container' ? `c${this.selC}` : `b${this.selB}`;
+    this.onDrop(carry.pane, carry.index, key); // 안에서 rebuild
+  }
+
+  /** 취소 — 아이콘이 원래 칸으로 날아 돌아간다 */
+  private cancelCarry(): void {
+    const carry = this.carry;
+    if (!carry) return;
+    this.carry = null;
+    const cursorKey = this.pane === 'container' ? `c${this.selC}` : `b${this.selB}`;
+    const svg = this.carriedIconSvg(carry, ROW_ICON_PX);
+    if (svg) this.pendingFly = { svg, from: this.rectOf(cursorKey), toKey: `cell:${carry.pane === 'container' ? 'c' : 'b'}${carry.index}` };
+    this.world.events.emit('loot_carry_cancelled', {});
+    this.rebuild();
+  }
+
+  /** 들고 있는 것을 바닥에 버린다 (Y) */
+  private dropCarried(): void {
+    const carry = this.carry;
+    if (!carry) return;
+    this.carry = null;
+    const c = Loot.container(this.world);
+    if (!c) { this.close(); return; }
+    if (carry.pane === 'container') {
+      const e = this.layout[carry.index] ?? null;
+      const index = e ? c.entries.indexOf(e) : -1;
+      if (index >= 0) Loot.dropToFloor(this.world, 'container', index);
+    } else {
+      Loot.dropToFloor(this.world, 'bag', carry.index);
+    }
+    this.clampSel();
+    this.rebuild();
+  }
+
+  /** 들고 있는 것의 아이콘 SVG — 원본이 사라졌으면 null */
+  private carriedIconSvg(carry: { pane: Pane; index: number }, px: number): string | null {
+    if (carry.pane === 'container') {
+      const e = this.layout[carry.index] ?? null;
+      return e ? lootIconSvg(e, px) : null;
+    }
+    const slot = this.world.inventory[carry.index];
+    return slot ? itemIconSvg(slot.kind, px) : null;
+  }
+
+  /** 들고 있을 때 커서 칸의 팝업 — 여기에 놓으면 무슨 일이 일어나는지 미리 말한다 */
+  private carryPopup(pane: Pane, index: number): PopupContent {
+    const carry = this.carry!;
+    const world = this.world;
+    const lines: string[] = [];
+    const stackMax = balance.items.stackMax;
+    const same = carry.pane === pane && carry.index === index;
+    if (same) lines.push('원래 자리 — 놓으면 그대로 둔다');
+    else if (carry.pane === 'bag' && pane === 'bag') {
+      const src = world.inventory[carry.index];
+      const dst = world.inventory[index];
+      if (!dst) lines.push('빈 칸으로 옮긴다');
+      else if (src && dst.kind === src.kind && dst.count < stackMax) lines.push(`같은 종류 — ${Math.min(stackMax - dst.count, src.count)}개 합친다 (나머지는 제자리)`);
+      else lines.push('자리를 맞바꾼다');
+    } else if (carry.pane === 'container' && pane === 'container') {
+      lines.push(this.layout[index] ? '자리를 맞바꾼다' : '빈 칸으로 옮긴다');
+    } else if (carry.pane === 'container' && pane === 'bag') {
+      const e = this.layout[carry.index] ?? null;
+      const dst = world.inventory[index];
+      if (e && (e.kind === 'gold' || e.kind === 'arrow' || e.kind === 'sigil')) lines.push('칸을 차지하지 않는다 — 가져오기와 같다');
+      else if (!dst) lines.push(`빈 칸 — ${Math.min(stackMax, e?.count ?? 0)}개 들어간다`);
+      else if (e && dst.kind === e.kind) {
+        const n = Math.min(stackMax - dst.count, e.count);
+        lines.push(n > 0 ? `같은 종류 — ${n}개 합친다` : '가득 — 들어갈 자리가 없다');
+      } else lines.push('다른 종류 — 여기엔 안 들어간다');
+    } else {
+      lines.push(this.layout[index] ? '통째로 넣는다 (같은 종류면 합친다)' : '통째로 넣어 이 칸에 둔다');
+    }
+    return {
+      title: '여기에 놓기',
+      lines,
+      actions: [
+        { key: this.padMode ? 'A' : 'Enter', label: '놓기' },
+        { key: this.padMode ? 'B' : 'Esc', label: '취소 — 원래 칸으로' },
+        { key: this.padMode ? 'Y' : 'X', label: '바닥에 버리기' },
+      ],
+    };
+  }
+
+  /** 들고 있는 아이콘 — 커서 칸 위에 크게 떠 있다 */
+  private carriedOverlay(): HTMLElement | null {
+    const carry = this.carry;
+    if (!carry) return null;
+    const svg = this.carriedIconSvg(carry, ICON_PX);
+    if (!svg) return null;
+    const el = document.createElement('div');
+    el.dataset['carried'] = '1';
+    el.innerHTML = svg;
+    el.style.cssText =
+      `position:absolute;left:50%;top:50%;transform:translate(-50%,-58%) scale(${balance.loot.ui.padCarryScale});line-height:0;` +
+      'pointer-events:none;z-index:4;filter:drop-shadow(0 6px 10px rgba(0,0,0,0.8)) brightness(1.2);';
+    return el;
+  }
 
   /** 컨테이너 격자 크기 — 가방과 같은 열 수, 줄 수는 가방과 같거나 내용이 넘치면 더 */
   private containerGrid(entries: number): { cols: number; rows: number } {
@@ -329,6 +477,7 @@ export class LootUI {
     const c = Loot.container(world);
     if (!c) { this.close(); return; } // 슬라임이 먹었다 등 — 컨테이너가 사라졌다
     this.syncLayout(c);
+    if (this.carry && !this.carriedIconSvg(this.carry, ICON_PX)) this.carry = null; // 든 것이 사라졌다(뒤지기 갱신 등)
     const panel = document.createElement('div');
     // 폭은 고정 — 툴팁 길이에 따라 창이 늘고 줄면 눈이 어지럽다. 긴 문장은 접어 내린다
     panel.style.cssText = 'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;width:860px;box-sizing:border-box;';
@@ -357,7 +506,7 @@ export class LootUI {
 
     const hint = document.createElement('div');
     hint.textContent = this.padMode
-      ? 'D-패드 이동 · ←→ 칸 전환   A 가져오기/넣기   X 모두 가져오기   Y 바닥에 버리기   B 닫기'
+      ? 'D-패드·왼 스틱 이동 · ←→ 칸 전환   A 가져오기/넣기 · A 길게 집어 들기 → A 놓기 / B 취소   X 모두 가져오기   Y 바닥에 버리기   B 닫기'
       : 'WASD·화살표 이동 · ←→ 칸 전환   Enter·좌클릭 가져오기/넣기   T 모두 가져오기   X·우클릭 바닥에 버리기   E / Esc 닫기';
     hint.style.cssText = 'margin-top:14px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;white-space:pre-line;';
     panel.appendChild(hint);
@@ -412,8 +561,13 @@ export class LootUI {
       cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'container'; this.selC = i; this.drop(); };
       // 드래그 — 밝혀진 칸만 집을 수 있다. 놓는 곳에 따라 배치 바꿈 / 가방 칸에 통째로
       if (e && e.searched) cell.onpointerdown = (ev) => beginDrag(ev, lootIconSvg(e, ICON_PX), (key) => this.onDrop('container', i, key));
-      // 커서 칸 설명 팝업 — 컨테이너는 창의 왼쪽이라 칸 오른쪽에 띄운다. 조작 안내(가져오기 → 그 아래 버리기)도 팝업 안에
-      if (here && e) {
+      // 들고 있는 동안: 원본 칸은 흐리게, 커서 칸엔 든 아이콘과 "여기에 놓기" 팝업
+      if (this.carry && this.carry.pane === 'container' && this.carry.index === i) cell.style.opacity = '0.35';
+      if (here && this.carry) {
+        const overlay = this.carriedOverlay();
+        if (overlay) cell.appendChild(overlay);
+        attachPopup(cell, this.carryPopup('container', i), 'right', this.padMode);
+      } else if (here && e) {
         const content = lootEntryPopup(this.world, e);
         if (e.searched) {
           content.actions = [
@@ -490,6 +644,12 @@ export class LootUI {
       cell.onclick = () => { this.pane = 'bag'; this.selB = i; this.act(); };
       cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'bag'; this.selB = i; this.drop(); };
       if (slot) cell.onpointerdown = (ev) => beginDrag(ev, itemIconSvg(slot.kind, ICON_PX), (key) => this.onDrop('bag', i, key));
+      if (this.carry && this.carry.pane === 'bag' && this.carry.index === i) cell.style.opacity = '0.35';
+      if (here && this.carry) {
+        const overlay = this.carriedOverlay();
+        if (overlay) cell.appendChild(overlay);
+        attachPopup(cell, this.carryPopup('bag', i), 'left', this.padMode);
+      }
       if (slot) {
         // 같은 종류의 첫 칸이 날아온 아이콘의 목적지 — 실제로 addItem 이 쌓는 자리와 같다
         if (!flyMarked.has(slot.kind)) { cell.dataset['fly'] = `b:${slot.kind}`; flyMarked.add(slot.kind); }
@@ -508,7 +668,7 @@ export class LootUI {
           tag.style.cssText = 'position:absolute;left:4px;top:1px;font-size:10px;color:#8a8f9a;';
           cell.appendChild(tag);
         }
-        if (here) {
+        if (here && !this.carry) {
           // 가방은 창의 오른쪽이라 칸 왼쪽에 띄운다. 조작 안내(넣기 → 그 아래 버리기)는 팝업 안에
           const content = consumablePopup(world, slot.kind, slot.count, ' (내 가방)');
           content.actions = [
@@ -556,7 +716,9 @@ export class LootUI {
     const fly = this.pendingFly;
     this.pendingFly = null;
     if (!fly) return;
-    let target = this.root.querySelector<HTMLElement>(`[data-fly="${fly.toKey}"]`);
+    let target = fly.toKey.startsWith('cell:')
+      ? this.root.querySelector<HTMLElement>(`[data-key="${fly.toKey.slice(5)}"]`) // 취소 — 원래 칸으로
+      : this.root.querySelector<HTMLElement>(`[data-fly="${fly.toKey}"]`);
     if (!target && fly.toKey.startsWith('b:')) target = this.root.querySelector<HTMLElement>('[data-fly-empty="1"]');
     if (!target) return;
     const to = target.getBoundingClientRect();

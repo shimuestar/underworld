@@ -251,6 +251,11 @@ export class GamepadInput {
     return this.now.has(button) && !this.prev.has(button);
   }
 
+  /** 매핑을 안 거친 버튼 홀드 — 메뉴 안의 '길게 누르기'(집어 들기) 판정용 */
+  rawHeld(button: number): boolean {
+    return this.now.has(button);
+  }
+
   /** 이번 폴링에 새로 눌린 버튼 하나 — 리매핑 화면이 "아무 버튼이나 누르세요"에 쓴다 */
   firstNewButton(): number | null {
     for (const b of this.now) if (!this.prev.has(b)) return b;
