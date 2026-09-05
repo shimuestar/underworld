@@ -28,6 +28,8 @@ export interface PauseMenuActions {
   openBindings(mode: 'kb' | 'pad'): void;
   /** 트랩 시험방 — 함정 8종이 깔린 특수 층으로 */
   trapRoom(): void;
+  /** 몬스터 시험방 — 소환 탭으로 종족별 마리 수를 골라 무한 사냥하는 특수 층으로 */
+  monsterRoom(): void;
   /** 미니맵 켜기/끄기 — 왼쪽 위 안내 글도 함께 (키가 아니라 여기서만, 2026-09-04) */
   toggleMinimap(): void;
   minimapOn(): boolean;
@@ -105,7 +107,13 @@ export class PauseMenu {
         run: actions.trapRoom,
       },
       {
-        label: '7. 미니맵 켜기 / 끄기',
+        label: '7. 몬스터 시험방',
+        hint: () => '소환 탭에서 종족별 1·3·6 마리 — 전리품·경험치 없음, HP·MP 자동 회복. 나오는 길은 처음부터 시작',
+        enabled: () => true,
+        run: actions.monsterRoom,
+      },
+      {
+        label: '8. 미니맵 켜기 / 끄기',
         hint: () =>
           actions.minimapOn()
             ? '지금 켜짐 — 끄면 왼쪽 위 안내 글도 함께 사라진다 (화면을 비운다)'

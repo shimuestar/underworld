@@ -1229,6 +1229,14 @@ export class World {
   godMode = false;
   /** 스킬 테스트(U · ?skills) — 켜 있는 동안 마나가 매 틱 최대치로 돌아온다 */
   skillTestMode = false;
+  /** 몬스터 시험방 — 출구 봉인·전리품·경험치 없음, HP/MP 자동 회복 (2026-09-04) */
+  monsterRoom = false;
+  /** 소환 목표 — 종족별 유지할 마리 수(자동 소환이 켜지면 죽은 만큼 3초 뒤 되채운다) */
+  summonTargets: Record<string, number> = {};
+  /** 자동 재소환 대기열 — { 종족, 소환 시각(tick) } */
+  summonQueue: { type: string; at: number }[] = [];
+  /** 자동 소환 켜짐 */
+  summonAuto = false;
   /** 서리 연속 시전 — 이펙트 크기용. 창(comboWindowTicks) 안에 이어지면 count 가 는다 */
   frostCombo = { count: 0, lastTick: -1_000_000 };
 

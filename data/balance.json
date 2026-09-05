@@ -852,7 +852,7 @@
     "_crosshairNote": "십자선 — 점 둘레의 네 선. gapPx 는 점과 선 사이 기본 간격, 활 당김 흔들림이 최대면 swayGapPx 만큼 더 벌어진다(손이 떨리면 조준이 넓어진다). 선은 패드 조준(LT) 중, 활을 꺼내 들었을 때, 그리고 총을 쏜 뒤 afterShotMs 동안 보인다(키보드도 패드와 같은 십자선 — 2026-09-04 사용자). 권총 연사 열(recoilHeat)도 흔들림처럼 선을 벌린다",
     "crosshair": { "gapPx": 4, "swayGapPx": 14, "afterShotMs": 2000 },
     "_menuTabsNote": "메뉴 창(I·패드 Menu) — 탭 순서는 order 가 정하고 셸은 개수를 세지 않는다(탭을 더 넣으려면 여기에 id 추가 + main 에 정의). rememberLast: 다시 열 때 마지막 탭. map: 큰 지도 셀 px(화면 높이 maxHeightFrac 에 맞게 줄어든다). 패드 Menu 열기/닫기·LB/RB 좌우(빙글)·B 닫기, 키보드 I 가방·M 맵·Tab 스킬·Esc 닫기, 마우스는 헤더 클릭 (2026-09-04 사용자 확정)",
-    "menuTabs": { "order": ["map", "bag", "skill"], "rememberLast": true, "map": { "cellPx": 20, "maxHeightFrac": 0.7 } },
+    "menuTabs": { "order": ["map", "bag", "skill", "summon"], "rememberLast": true, "map": { "cellPx": 20, "maxHeightFrac": 0.7 } },
     "_compassNote": "나침반 — 상단 중앙 가로 띠(widthPx×heightPx). 정면 ±arcDeg/2 만 펼치고 밖은 양 끝 화살촉. 표식: 위협(미니맵과 같은 조건, nearM~farM 로 크기 nearScale~farScale, maxCount) > 피격 쐐기 > 소리 핑 > 목표(출구·입구·제단·상자, 미니맵 안개로 본 것만·출구는 쇠창살 열리면 항상, 거리 숫자) > 주머니(loot.radiusM 안 maxCount) > 감지한 함정(trapRadiusM). 중앙 ±centerLabelDeg 안 표식 하나만 이름표(몬스터·주머니는 이름 없음). 방위 글자는 letterPx, N 은 northPx 로 더 크고 노란색(2026-09-04 사용자). 항상 표시, 조작 없음",
     "compass": {
       "widthPx": 360, "heightPx": 52, "arcDeg": 120, "tickEveryDeg": 15, "majorEveryDeg": 45, "centerLabelDeg": 3, "edgeChevron": true, "letterPx": 13, "northPx": 16,
@@ -963,5 +963,11 @@
       "chainTier3ReachRatio": 0.20,
       "altarBypassRatio": 0.05
     }
+  },
+  "_monsterRoomNote": "몬스터 시험방 (2026-09-04) — 무한 사냥 테스트 층. 메뉴 창 '소환' 탭(시험방에서만 보임)에서 종족별 1·3·6 마리를 시선 앞 부채꼴(summon.minDist~maxDist m, ±arcDeg/2, 벽·플레이어(minPlayerDist)·다른 적과 안 겹치는 자리, tries 번 시도하며 각도를 넓힘)에 놓는다. 소환 몬스터는 전리품·경험치 없음. 자동 소환은 죽은 마리당 autoRespawnDelayTicks 뒤 그 종족 1마리(목표 수 유지). 플레이어 HP·MP 는 초당 regen.* 만큼 자동 회복. 출구 없음",
+  "monsterRoom": {
+    "autoRespawnDelayTicks": 180,
+    "regen": { "healthPerSec": 25, "manaPerSec": 15 },
+    "summon": { "minDist": 2, "maxDist": 10, "arcDeg": 90, "minPlayerDist": 2, "tries": 48, "counts": [1, 3, 6] }
   }
 }

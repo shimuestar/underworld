@@ -56,6 +56,9 @@ import z01f1 from '../data/levels/z01_f1.json';
 import z01f2 from '../data/levels/z01_f2.json';
 import z01f3 from '../data/levels/z01_f3.json';
 import testTraps from '../data/levels/test_traps.json';
+import testMonsters from '../data/levels/test_monsters.json';
+import * as Summon from './systems/Summon';
+import { SummonPanel } from './render/SummonPanel';
 
 // 1구역 층 순서 — 출구에서 E 를 누르면 다음 층으로 내려간다. 마지막 층을 나가면 구역 클리어.
 // 층마다 스폰(S)이 곧 그 층의 입구이고, 출구(X)가 다음 층의 입구로 이어진다
@@ -63,6 +66,8 @@ const ZONE = [z01f1, z01f2, z01f3];
 /** 트랩 시험방 — 층 번호 대역 밖의 특수 층. 일시정지 메뉴(또는 ?traproom)로 들어간다.
  *  출구는 영구 봉인, 위층 계단 없음 — 나가는 길은 '처음부터 시작' */
 const TRAP_ROOM = 99;
+/** 몬스터 시험방 층 번호 — 소환 탭으로 종족별 마리 수를 골라 무한 사냥 (2026-09-04) */
+const MONSTER_ROOM = 98;
 let floorIndex = 0;
 let levelJson: (typeof ZONE)[number] = ZONE[0]!;
 /** 열쇠로 자물쇠를 딴 층 — 오르내리거나 부활해도 다시 잠기지 않는다 */
@@ -320,6 +325,13 @@ inventoryUI.onPlacePouch = () => {
 };
 const skillUI = new SkillUI(world, menuUI.body); // 스킬 탭 — 부위 부착 · 퀵슬롯
 const mapPanel = new MapPanel(world, awareness, (x, z) => minimap.isRevealedAt(x, z), menuUI.body); // 맵 탭 — 큰 지도
+const summonUI = new SummonPanel(world, menuUI.body); // 소환 탭 — 몬스터 시험방에서만 (available)
+summonUI.onEdge = (dir) => menuUI.next(dir);
+summonUI.onNotice = (msg) => showReaction(msg, 2500);
+summonUI.onAction = () => {
+  audio.play('ui_tab');
+  padRumble('interact');
+};
 menuTabsPending.push(
   {
     id: 'map', label: '맵', status: () => minimap.floorTitleText,
@@ -335,6 +347,12 @@ menuTabsPending.push(
     id: 'skill', label: '스킬',
     status: () => `액티브 ${world.skillSlots.filter((slot) => slot !== null).length}/${balance.skills.quickslots}`,
     show: () => skillUI.show(menuUI.altar), hide: () => skillUI.hide(),
+  },
+  {
+    id: 'summon', label: '소환',
+    status: () => (world.summonAuto ? '자동 ON' : `${world.enemies.filter((e) => e.alive).length}마리`),
+    available: () => world.monsterRoom, // 시험방 밖에서는 탭이 없다
+    show: () => summonUI.show(), hide: () => summonUI.hide(), update: () => summonUI.update(),
   },
 );
 menuUI.onOpenChange = (open) => setUiOpen(open);
@@ -2695,6 +2713,22 @@ function enterTrapRoom(): void {
   showReaction('트랩 시험방 — 스킬·탄 전부 지급. 나가는 길은 일시정지 → 처음부터', 4000);
 }
 
+/** 몬스터 시험방 — 소환 탭에서 종족별 1·3·6 마리를 시선 앞에 놓고 무한 사냥한다 (2026-09-04 사용자 기획).
+ *  전리품·경험치 없음(소환수 noLoot), HP·MP 는 자동 회복, 출구 없음. 스킬은 전부 익히되 마나는 소모·회복이 보이게 스킬 테스트(무한)는 끈다 */
+function enterMonsterRoom(): void {
+  world.dead = false;
+  loadFloor(MONSTER_ROOM);
+  grantAllSkills();
+  world.skillTestMode = false;
+  world.weapon.grenades = balance.weapons.grenade.ammoMax;
+  world.weapon.arrows = balance.weapons.bow.ammoMax;
+  world.weapon.reserve = balance.weapons.pistol.ammoMax;
+  world.player.health = balance.player.healthMax;
+  world.mana.value = balance.mana.max;
+  world.player.dots = {};
+  showReaction('몬스터 시험방 — 소환 탭(I·Menu)에서 몬스터를 놓는다. 나가는 길은 일시정지 → 처음부터', 4000);
+}
+
 /** 다시 시작 — 주소의 테스트 옵션(?skills·?traproom)을 지운 채 새로 고친다.
  *  reload() 는 주소를 그대로 두어 "처음부터 시작"이 매번 스킬 전부·시험방으로 시작했다 (2026-09-04 사용자) */
 function reloadClean(): void {
@@ -2949,8 +2983,18 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
 
   floorIndex = index;
   const trapRoom = index === TRAP_ROOM;
-  minimap.setFloorTitle(trapRoom ? '트랩 시험방' : `지하 ${index + 1}층`); // 맵 탭은 미니맵의 층 이름을 그대로 읽는다
-  levelJson = trapRoom ? (testTraps as unknown as typeof z01f1) : ZONE[index]!;
+  const monsterRoom = index === MONSTER_ROOM;
+  world.monsterRoom = monsterRoom;
+  // 소환 상태는 시험방 것 — 층을 옮기면 비운다 (들어올 때도 새로 시작)
+  world.summonTargets = {};
+  world.summonQueue = [];
+  world.summonAuto = false;
+  minimap.setFloorTitle(trapRoom ? '트랩 시험방' : monsterRoom ? '몬스터 시험방' : `지하 ${index + 1}층`); // 맵 탭은 미니맵의 층 이름을 그대로 읽는다
+  levelJson = trapRoom
+    ? (testTraps as unknown as typeof z01f1)
+    : monsterRoom
+      ? (testMonsters as unknown as typeof z01f1)
+      : ZONE[index]!;
   traveling = false;
 
   const saved = floorStates.get(index);
@@ -3014,7 +3058,8 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
         (enemyDef(e.type).boss || (e as { boss?: boolean }).boss === true),
     ) && !unlockedFloors.has(index);
   if (trapRoom) world.exitNeedsKey = true; // 시험방 출구는 영구 봉인 — 진행과 섞이지 않는다
-  world.canAscend = index > 0 && !trapRoom;
+  if (monsterRoom) world.exitNeedsKey = false; // 출구가 없다 — Exit 은 시험방에서 돌지 않는다
+  world.canAscend = index > 0 && !trapRoom && !monsterRoom;
   world.onEntrancePad = false;
   world.exitOpen = false; // 잠기지 않은 층은 Exit 의 첫 틱이 열어 준다
   world.onExitPad = false;
@@ -3130,6 +3175,7 @@ events.on('corruption_threshold', (payload) => {
 Mana.init(world);
 Sigils.init(world);
 Loot.init(world); // 처치 드랍 → 주머니 (Pickups 는 바닥 아이템 물리만)
+Summon.init(world); // 몬스터 시험방 — 처치 → 자동 재소환 대기열
 LifeMotes.init(world);
 Projectiles.init(world);
 initInventory(world);
@@ -3148,6 +3194,7 @@ const systems = [
   Reaction.tick,
   Sigils.tick,
   Pickups.tick,
+  Summon.tick, // 몬스터 시험방 — 자동 재소환 대기열
   LifeMotes.tick,
   Items.tick,
   Weapons.tick,
@@ -3227,6 +3274,18 @@ function simulate(dt: number): void {
       inventoryUI.padY(input.gamepad.rawHeld(3)); // Y 짧게 사용 · 길게 보관 주머니 내려놓기
     }
   }
+  // 소환 탭(몬스터 시험방) — D-패드·왼 스틱 커서([1][3][6] → 오른쪽 패널), A 실행. B·LB/RB 는 셸이 맡는다
+  if (summonUI.open) {
+    summonUI.padMode = input.lastDevice === 'pad';
+    if (input.gamepad.connected) {
+      if (input.gamepad.rawPressed(13)) summonUI.padMove(0, 1);
+      else if (input.gamepad.rawPressed(12)) summonUI.padMove(0, -1);
+      else if (input.gamepad.rawPressed(15)) summonUI.padMove(1, 0);
+      else if (input.gamepad.rawPressed(14)) summonUI.padMove(-1, 0);
+      else if (stick.dx !== 0 || stick.dy !== 0) summonUI.padMove(stick.dx, stick.dy);
+      else if (input.gamepad.rawPressed(0)) summonUI.padA();
+    }
+  }
   // 루팅 창 — D-패드 네 방향(←→ 로 칸 전환), A 짧게 가져오기/넣기 · 길게 집어 들기(→ 이동 → A 놓기),
   // X 모두, Y 바닥에 버리기(들고 있으면 그것을), B 닫기(들고 있으면 취소). A 는 홀드 판정이라 매 틱 상태를 넘긴다
   if (lootUI.open && input.gamepad.connected && (input.gamepad.pressed('melee') || input.gamepad.pressed('ranged'))) {
@@ -3281,6 +3340,12 @@ function simulate(dt: number): void {
     if (keep) restoreResources(keep);
     // 스킬 테스트 — 마나만 무한. 무적과 같은 자리·같은 방식 (시스템은 손대지 않는다)
     if (world.skillTestMode) world.mana.value = balance.mana.max;
+    // 몬스터 시험방 — HP·MP 가 소모되되 초당 regen 만큼 자동으로 찬다 (2026-09-04 사용자)
+    if (world.monsterRoom && !world.dead) {
+      const rg = balance.monsterRoom.regen;
+      world.player.health = Math.min(balance.player.healthMax, world.player.health + rg.healthPerSec / 60);
+      world.mana.value = Math.min(balance.mana.max, world.mana.value + rg.manaPerSec / 60);
+    }
   } else {
     // 시스템이 멈춘 사이(사망·창 열림·클리어) 채널이 스스로 못 끊는다 —
     // 그냥 두면 빔이 화면에 얼어붙고 전류음이 남는다
@@ -4127,6 +4192,11 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
     setPaused(false);
     input.requestLock();
   },
+  monsterRoom: () => {
+    enterMonsterRoom();
+    setPaused(false);
+    menuUI.show('summon'); // 들어서자마자 소환 탭 — 시간은 멈춰 있다
+  },
 },
 // 패드가 연결돼 있으면 메뉴 오른쪽에 현재 매핑 다이어그램을 함께 띄운다
 () => (input.gamepad.connected ? padDiagramSvg((a) => input.gamepad.binding(a), -1) : null));
@@ -4229,6 +4299,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__stage = stage; // 씬 그래프 검증용
   (window as unknown as Record<string, unknown>).__audio = audio; // 소리 재생 호출 추적용(헤드리스)
   (window as unknown as Record<string, unknown>).__lootUI = lootUI; // 루팅 창 패드 경로 검증용
+  (window as unknown as Record<string, unknown>).__summonUI = summonUI; // 몬스터 시험방 소환 탭 검증용
   (window as unknown as Record<string, unknown>).__compass = compass;
   (window as unknown as Record<string, unknown>).__menuUI = menuUI;
 }
@@ -4240,6 +4311,10 @@ if (new URLSearchParams(location.search).has('skills')) {
 }
 // ?traproom — 시작부터 트랩 시험방 (일시정지 메뉴와 같은 곳)
 if (new URLSearchParams(location.search).has('traproom')) enterTrapRoom();
+if (new URLSearchParams(location.search).has('monsterroom')) {
+  enterMonsterRoom();
+  menuUI.show('summon');
+}
 
 loop.start();
 events.emit('loop_started', { tickRate: balance.loop.tickRate, level: levelJson.id });

@@ -377,6 +377,15 @@ export function enemyDef(type: string): EnemyDef {
   return def as EnemyDef;
 }
 
+/** 구현된 적 종류 — health·damage 를 가진 것만 (몬스터 시험방 소환 목록). 정의 순서를 지킨다 */
+export function implementedEnemyTypes(): string[] {
+  const en = entitiesJson.enemies as unknown as Record<string, unknown>;
+  return Object.keys(en).filter((k) => {
+    const v = en[k];
+    return typeof v === 'object' && v !== null && 'health' in v && 'damage' in v; // _note 문자열은 뺀다
+  });
+}
+
 /** 적 피격 상자(AABB) — 총알·화살·마법 공용. 서 있으면 발 위치의 기둥(공중이면 jumpY 만큼 떠서).
  *  죽은 척(엎어짐)이면 몸이 정면(-sin yaw, -cos yaw)으로 키만큼 누워 있으니 발에서 그쪽으로 뻗은
  *  낮은 상자다 — 기둥을 그대로 쓰면 보이는 몸을 쏴도 빈 공간만 맞아 반응이 없다(2026-09-03) */

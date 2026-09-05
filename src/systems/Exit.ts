@@ -18,6 +18,7 @@ export function init(_world: World): void {}
 
 export function tick(world: World, _dt: number): void {
   if (world.cleared) return;
+  if (world.monsterRoom) return; // 몬스터 시험방 — 출구가 없고 보스를 잡아도 봉인 해제 개념이 없다 (2026-09-04)
   const p = world.player;
   // 오르내림은 붙들어야 한다 — 스치듯 눌러 실수로 층을 넘지 않게 (의식적 결정).
   // 상호작용 키(E·패드 B)든 근접 키(우클릭 — 한 키 체계)든 붙들면 찬다

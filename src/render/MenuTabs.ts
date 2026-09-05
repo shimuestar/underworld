@@ -18,6 +18,8 @@ export interface MenuTabDef {
   update?(): void;
   /** 지금 화살표를 탭 전환에 쓰면 안 되는가(대화상자가 열려 있다 등) — true 면 셸은 ←→ 를 건너뛴다 */
   blocksArrows?: () => boolean;
+  /** 지금 이 탭이 있는가 — false 면 헤더에서 빠지고 고를 수 없다 (몬스터 시험방의 '소환' 탭처럼 상황 탭) */
+  available?: () => boolean;
 }
 
 export class MenuTabs {
@@ -73,16 +75,20 @@ export class MenuTabs {
   /** 데이터(order)가 정한 순서의 탭 — 정의 없는 id 는 건너뛴다 */
   private get tabs(): MenuTabDef[] {
     const order = balance.hud.menuTabs.order as readonly string[];
-    return order.map((id) => this.defs.find((t) => t.id === id)).filter((t): t is MenuTabDef => t !== undefined);
+    return order
+      .map((id) => this.defs.find((t) => t.id === id))
+      .filter((t): t is MenuTabDef => t !== undefined && (t.available?.() ?? true));
   }
+  /** 지금 고를 수 있는 탭만 — 없는(available false) 탭은 undefined */
   private tab(id: string): MenuTabDef | undefined {
-    return this.defs.find((t) => t.id === id);
+    return this.tabs.find((t) => t.id === id);
   }
 
   /** 열기 — 탭을 주지 않으면 마지막으로 보던 탭(rememberLast) 또는 첫 탭 */
   show(id?: string, altar = false): void {
     this.altar = altar;
-    const remembered = balance.hud.menuTabs.rememberLast && this.active ? this.active : (this.tabs[0]?.id ?? '');
+    const remembered =
+      balance.hud.menuTabs.rememberLast && this.active && this.tab(this.active) ? this.active : (this.tabs[0]?.id ?? '');
     const target = id && this.tab(id) ? id : remembered;
     if (!this.open) {
       this.open = true;
@@ -133,7 +139,14 @@ export class MenuTabs {
   /** 매 프레임 — 헤더 상태 글·활성 탭 갱신 */
   update(): void {
     if (!this.open) return;
-    this.tab(this.active)?.update?.();
+    const cur = this.tab(this.active);
+    if (!cur) { // 보던 탭이 사라졌다(시험방을 나왔다) — 첫 탭으로
+      this.defs.find((t) => t.id === this.active)?.hide();
+      this.active = '';
+      if (this.tabs[0]) this.select(this.tabs[0].id);
+      return;
+    }
+    cur.update?.();
     this.renderHeader();
   }
 
