@@ -14,9 +14,11 @@ import {
   itemDef,
   dropSlot,
   moveSlot,
+  splitSlot,
   unbindQuickslot,
 } from '../core/Inventory';
 import { beginDrag } from './DragDrop';
+import { adjustSplit, makeSplit, renderSplitDialog, type SplitState } from './SplitDialog';
 import { balance } from '../core/Balance';
 import { itemIcon } from './ItemIcons';
 import { attachPopup, consumablePopup } from './ItemPopup';
@@ -42,6 +44,8 @@ export class InventoryUI {
   /** 마우스가 얹힌 가방 칸 / 퀵슬롯 칸 (-1 = 없음) — 설명 팝업이 여기 붙는다. 없으면 고른 칸에 */
   private hover = -1;
   private hoverQ = -1;
+  /** 수량 나누기 대화상자 — Shift+클릭한 가방 스택 */
+  private split: SplitState | null = null;
   /** 보관 주머니 내려놓기 — P 키·패드 Y·버튼. main 이 Loot.createPlayerPouch 로 잇는다 */
   onPlacePouch: (() => void) | null = null;
 
@@ -57,6 +61,20 @@ export class InventoryUI {
     // (전투 키와 헷갈리지 않게, 창이 열려 있을 때는 등록 전용이다)
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
+      if (this.split) {
+        // 대화상자 — 화살표/WASD 로 몫, Enter 확인, Esc 취소
+        e.preventDefault();
+        const big = balance.loot.ui.splitBigStep;
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') adjustSplit(this.split, -1);
+        else if (e.code === 'ArrowRight' || e.code === 'KeyD') adjustSplit(this.split, 1);
+        else if (e.code === 'ArrowUp' || e.code === 'KeyW') adjustSplit(this.split, big);
+        else if (e.code === 'ArrowDown' || e.code === 'KeyS') adjustSplit(this.split, -big);
+        else if (e.code === 'Enter' || e.code === 'NumpadEnter') { this.confirmSplit(); return; }
+        else if (e.code === 'Escape') { this.split = null; }
+        else return;
+        this.rebuild();
+        return;
+      }
       if (e.code === 'KeyP') {
         // 보관 주머니 — 빈 주머니를 발밑에 내려놓고 루팅 창으로 넘어간다 (main 이 잇는다)
         e.preventDefault();
@@ -77,6 +95,7 @@ export class InventoryUI {
     this.picked = -1;
     this.hover = -1;
     this.hoverQ = -1;
+    this.split = null;
     this.root.style.display = 'flex';
     this.rebuild();
   }
@@ -101,6 +120,23 @@ export class InventoryUI {
     if (slot) bindQuickslot(this.world, index, slot.kind);
     else unbindQuickslot(this.world, index);
     this.picked = -1;
+    this.rebuild();
+  }
+
+  /** Shift+클릭한 스택을 나누는 대화상자 — 빈 칸이 없으면 열지 않는다 */
+  private openSplit(index: number): void {
+    const slot = this.world.inventory[index];
+    if (!slot || slot.count < 2 || !this.world.inventory.includes(null)) return;
+    this.split = makeSplit(index, slot.kind, slot.count);
+    this.picked = -1;
+    this.rebuild();
+  }
+  private confirmSplit(): void {
+    const s = this.split;
+    if (!s) return;
+    this.split = null;
+    const to = splitSlot(this.world, s.index, s.amount);
+    if (to >= 0) this.picked = to; // 새 칸을 고른 상태로 — 바로 퀵슬롯에 꽂거나 끌 수 있게
     this.rebuild();
   }
 
@@ -175,6 +211,16 @@ export class InventoryUI {
     panel.appendChild(hint);
 
     this.root.replaceChildren(panel);
+    if (this.split) {
+      this.root.appendChild(
+        renderSplitDialog(this.split, {
+          padMode: false,
+          onAdjust: (d) => { if (this.split) { adjustSplit(this.split, d); this.rebuild(); } },
+          onConfirm: () => this.confirmSplit(),
+          onCancel: () => { this.split = null; this.rebuild(); },
+        }),
+      );
+    }
   }
 
   // ---- 퀵슬롯 ----
@@ -321,9 +367,11 @@ export class InventoryUI {
             { key: '좌클릭', label: '고르기 → 퀵슬롯 클릭(또는 1~4)에 등록' },
             { key: '우클릭', label: '바닥에 버리기' },
           ];
+          if (slot.count >= 2) content.actions.push({ key: 'Shift+클릭', label: '수량 나누기' });
           attachPopup(cell, content, 'right');
         }
-        cell.onclick = () => {
+        cell.onclick = (ev) => {
+          if (ev.shiftKey) { this.openSplit(i); return; } // Shift+클릭 = 수량 나누기
           this.picked = this.picked === i ? -1 : i;
           this.rebuild();
         };
@@ -334,7 +382,7 @@ export class InventoryUI {
           this.rebuild();
         };
         const dragIcon = itemIcon(slot.kind, ICON_PX).outerHTML;
-        cell.onpointerdown = (ev) => beginDrag(ev, dragIcon, (key) => this.onDrop('bag', i, key));
+        cell.onpointerdown = (ev) => { if (!ev.shiftKey) beginDrag(ev, dragIcon, (key) => this.onDrop('bag', i, key)); };
       }
       cell.onmousemove = (ev) => {
         if ((ev.movementX === 0 && ev.movementY === 0) || this.hover === i) return; // 유령 이동은 무시 (LootUI 규약)

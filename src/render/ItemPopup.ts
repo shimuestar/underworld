@@ -73,7 +73,7 @@ export function lootEntryPopup(world: World, e: LootEntry): PopupContent {
 }
 
 /** 키캡 글리프 — 패드는 콘솔 버튼처럼 원형, 키보드는 사각 키캡 (HUD 중앙 키캡·바닥 선 끝 키캡과 같은 결) */
-function keycap(label: string, round: boolean): HTMLSpanElement {
+export function keycap(label: string, round: boolean): HTMLSpanElement {
   const k = document.createElement('span');
   k.textContent = label;
   k.style.cssText = round

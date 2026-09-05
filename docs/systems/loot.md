@@ -106,3 +106,16 @@
 5. 데이터: `loot.ui.padPickHoldMs`(집기 홀드), `loot.ui.padCarryScale`(들고 있을 때 아이콘 배율). 규칙은 마우스와 같은 `moveSlot`·`takeStackTo`·`stashStackTo` 를 그대로 쓴다 — 입력만 다르다.
 
 추천은 1~3안(A 길게). 지금 A 짧게 = 빠른 이동이 살아 있고, 길게 = 정밀 배치라 한 버튼에 두 층이 자연스럽다.
+
+## 수량 나누기 (2026-09-04)
+
+가방의 스택(2개 이상)을 둘로 가른다 — `Inventory.splitSlot(index, amount)`: amount 개를 떼어 첫 빈 칸에 새 스택으로(빈 칸이 없으면 거부, 개수 불변).
+대화상자(`render/SplitDialog.ts`)는 루팅 창·가방 창 공용: 원래 칸/새 칸 몫과 비율 막대, −/+ 버튼, 확인·취소.
+
+| 여는 법 | 조정 | 확인 / 취소 |
+|---|---|---|
+| 마우스 Shift+클릭 · 키보드 Shift+Enter(루팅 창) | ←→ ±1, ↑↓ ±`loot.ui.splitBigStep` | Enter / Esc |
+| 패드 X 길게(`loot.ui.padSplitHoldTicks`; 짧게는 모두 가져오기) | D-패드·스틱 ←→ ±1, ↑↓ ±big | A / B |
+
+나눈 뒤 커서(루팅 창)·고른 칸(가방 창)이 새 칸으로 옮겨져 바로 끌어다 놓거나 집어 들 수 있다. 컨테이너 항목은 종류별로 합쳐져
+있어(mergeEntry) 나누지 않는다 — 부분 이동은 컨테이너→가방 칸 드래그(들어가는 만큼)나 Enter(1개씩)로. 이벤트 `item_split`.

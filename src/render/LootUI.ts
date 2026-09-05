@@ -14,7 +14,8 @@ import * as Loot from '../systems/Loot';
 import { itemIconSvg, lootIconSvg } from './ItemIcons';
 import { attachPopup, consumablePopup, lootEntryPopup, type PopupContent } from './ItemPopup';
 import { beginDrag } from './DragDrop';
-import { moveSlot } from '../core/Inventory';
+import { moveSlot, splitSlot } from '../core/Inventory';
+import { adjustSplit, makeSplit, renderSplitDialog, type SplitState } from './SplitDialog';
 
 const UP_KEYS = new Set(['KeyW', 'ArrowUp']);
 const DOWN_KEYS = new Set(['KeyS', 'ArrowDown']);
@@ -63,6 +64,10 @@ export class LootUI {
   private aHoldTicks = 0;
   /** 이번 A 누름이 '집어 들기'로 소비됐다 — 떼는 순간 놓기/가져오기로 흐르지 않게 */
   private aConsumed = false;
+  /** 수량 나누기 대화상자 (가방 스택) — X 길게 / Shift+Enter / Shift+클릭 */
+  private split: SplitState | null = null;
+  private xHoldTicks = 0;
+  private xConsumed = false;
   /** 뒤지기 — 지금 밝히는 중인 칸과 시작 시각(벽시계, 창은 시간 정지 중에도 돈다) */
   private searching: { entry: LootEntry; startMs: number } | null = null;
   private searchRaf: number | null = null;
@@ -77,6 +82,19 @@ export class LootUI {
 
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
+      if (this.split) {
+        // 대화상자 — 화살표/WASD 로 몫을 정하고 Enter 확인, Esc 취소. 다른 키는 삼킨다
+        e.preventDefault();
+        const big = balance.loot.ui.splitBigStep;
+        if (LEFT_KEYS.has(e.code)) this.adjustSplit(-1);
+        else if (RIGHT_KEYS.has(e.code)) this.adjustSplit(1);
+        else if (UP_KEYS.has(e.code)) this.adjustSplit(big);
+        else if (DOWN_KEYS.has(e.code)) this.adjustSplit(-big);
+        else if (e.code === 'Enter' || e.code === 'NumpadEnter') this.confirmSplit();
+        else if (e.code === 'Escape' || e.code === 'KeyE') this.cancelSplit();
+        return;
+      }
+      if ((e.code === 'Enter' || e.code === 'NumpadEnter') && e.shiftKey) { e.preventDefault(); this.openSplit(); return; }
       if (UP_KEYS.has(e.code)) { e.preventDefault(); this.move(0, -1); return; }
       if (DOWN_KEYS.has(e.code)) { e.preventDefault(); this.move(0, 1); return; }
       if (LEFT_KEYS.has(e.code)) { e.preventDefault(); this.move(-1, 0); return; }
@@ -96,6 +114,9 @@ export class LootUI {
     this.carry = null;
     this.aHoldTicks = 0;
     this.aConsumed = false;
+    this.split = null;
+    this.xHoldTicks = 0;
+    this.xConsumed = false;
     this.pendingFly = null;
     this.shakeKey = null;
     this.layout = [];
@@ -190,16 +211,90 @@ export class LootUI {
   }
 
   // ---- 패드 — 일시정지 메뉴·상점과 같은 고정 버튼 규약 (main 이 raw 버튼으로 부른다) ----
-  padMove(dx: number, dy: number): void { if (this.open) this.move(dx, dy); }
+  padMove(dx: number, dy: number): void {
+    if (!this.open) return;
+    if (this.split) {
+      // 대화상자 — ←→ ±1, ↑(dy<0) +big, ↓ −big
+      const big = balance.loot.ui.splitBigStep;
+      if (dx !== 0) this.adjustSplit(dx > 0 ? 1 : -1);
+      else if (dy !== 0) this.adjustSplit(dy < 0 ? big : -big);
+      return;
+    }
+    this.move(dx, dy);
+  }
   padActivate(): void { if (this.open) this.act(); }
-  padTakeAll(): void { if (this.open && !this.carry) this.takeAll(); } // 들고 있는 동안은 잠근다 (원본이 사라진다)
-  padDrop(): void { if (this.open) (this.carry ? this.dropCarried() : this.drop()); }
-  padClose(): void { if (this.carry) this.cancelCarry(); else this.close(); }
+  padTakeAll(): void { if (this.open && !this.carry && !this.split) this.takeAll(); } // 들고 있는 동안은 잠근다 (원본이 사라진다)
+  padDrop(): void { if (this.open && !this.split) (this.carry ? this.dropCarried() : this.drop()); }
+  padClose(): void {
+    if (this.split) this.cancelSplit();
+    else if (this.carry) this.cancelCarry();
+    else this.close();
+  }
   get carrying(): boolean { return this.carry !== null; }
+  get splitting(): boolean { return this.split !== null; }
+
+  /** X 버튼 상태를 매 틱 받는다 — 짧게 떼면 모두 가져오기, padSplitHoldTicks 넘게 누르면 커서 가방 스택 수량 나누기 */
+  padX(held: boolean): void {
+    if (!this.open) return;
+    if (held) {
+      this.xHoldTicks++;
+      if (!this.xConsumed && !this.split && !this.carry && this.xHoldTicks >= balance.loot.ui.padSplitHoldTicks) {
+        this.xConsumed = true;
+        this.openSplit();
+      }
+      return;
+    }
+    if (this.xHoldTicks === 0) return;
+    const consumed = this.xConsumed;
+    this.xHoldTicks = 0;
+    this.xConsumed = false;
+    if (consumed || this.split) return;
+    this.padTakeAll();
+  }
+
+  /** 커서 가방 칸의 스택(2개 이상)을 나누는 대화상자를 연다 — 빈 칸이 없으면 거부 */
+  private openSplit(): void {
+    if (this.pane !== 'bag' || this.carry) return;
+    const slot = this.world.inventory[this.selB];
+    if (!slot || slot.count < 2) { this.shakeKey = `b${this.selB}`; this.rebuild(); return; }
+    if (!this.world.inventory.includes(null)) {
+      this.world.events.emit('loot_denied', { reason: 'full', kind: slot.kind }); // 나눌 빈 칸이 없다
+      this.shakeKey = `b${this.selB}`;
+      this.rebuild();
+      return;
+    }
+    this.split = makeSplit(this.selB, slot.kind, slot.count);
+    this.rebuild();
+  }
+  private adjustSplit(delta: number): void {
+    if (!this.split) return;
+    adjustSplit(this.split, delta);
+    this.rebuild();
+  }
+  private confirmSplit(): void {
+    const s = this.split;
+    if (!s) return;
+    this.split = null;
+    const to = splitSlot(this.world, s.index, s.amount);
+    if (to >= 0) { this.pane = 'bag'; this.selB = to; } // 커서가 새 칸으로 — 바로 끌어다 놓거나 집어 들 수 있게
+    else this.shakeKey = `b${s.index}`;
+    this.rebuild();
+  }
+  private cancelSplit(): void {
+    if (!this.split) return;
+    this.split = null;
+    this.rebuild();
+  }
 
   /** A 버튼 상태를 매 틱 받는다 — 짧게 떼면 가져오기/넣기(또는 들고 있으면 놓기), padPickHoldTicks 넘게 누르면 집어 들기 */
   padA(held: boolean): void {
     if (!this.open) return;
+    if (this.split) {
+      // 대화상자 — A 를 떼는 순간 확인 (누름은 무시)
+      if (held) { this.aHoldTicks++; return; }
+      if (this.aHoldTicks > 0) { this.aHoldTicks = 0; this.aConsumed = false; this.confirmSplit(); }
+      return;
+    }
     if (held) {
       this.aHoldTicks++;
       if (!this.carry && !this.aConsumed && this.aHoldTicks >= balance.loot.ui.padPickHoldTicks) {
@@ -547,6 +642,16 @@ export class LootUI {
     wrap.appendChild(left);
     wrap.appendChild(right);
     this.root.replaceChildren(wrap);
+    if (this.split) {
+      this.root.appendChild(
+        renderSplitDialog(this.split, {
+          padMode: this.padMode,
+          onAdjust: (d) => this.adjustSplit(d),
+          onConfirm: () => this.confirmSplit(),
+          onCancel: () => this.cancelSplit(),
+        }),
+      );
+    }
     this.playFx();
     if (this.open && this.layout.some((e) => e !== null && !e.searched)) this.startSearch();
   }
@@ -684,9 +789,14 @@ export class LootUI {
         this.selB = i;
         this.rebuild();
       };
-      cell.onclick = () => { this.pane = 'bag'; this.selB = i; this.act(); };
+      cell.onclick = (ev) => {
+        this.pane = 'bag';
+        this.selB = i;
+        if (ev.shiftKey) this.openSplit(); // Shift+클릭 = 수량 나누기
+        else this.act();
+      };
       cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'bag'; this.selB = i; this.drop(); };
-      if (slot) cell.onpointerdown = (ev) => beginDrag(ev, itemIconSvg(slot.kind, ICON_PX), (key) => this.onDrop('bag', i, key));
+      if (slot) cell.onpointerdown = (ev) => { if (!ev.shiftKey) beginDrag(ev, itemIconSvg(slot.kind, ICON_PX), (key) => this.onDrop('bag', i, key)); };
       if (this.carry && this.carry.pane === 'bag' && this.carry.index === i) cell.style.opacity = '0.35';
       if (here && this.carry) {
         const overlay = this.carriedOverlay();
@@ -718,6 +828,7 @@ export class LootUI {
             { key: this.padMode ? 'A' : 'Enter', label: '컨테이너에 넣기' },
             { key: this.padMode ? 'Y' : 'X', label: '바닥에 버리기' },
           ];
+          if (slot.count >= 2) content.actions.push({ key: this.padMode ? 'X 길게' : 'Shift+Enter', label: '수량 나누기' });
           attachPopup(cell, content, 'left', this.padMode);
         }
       }

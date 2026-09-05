@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { addItem, bindQuickslot, countOf, dropSlot, hasRoom, initInventory, isUseful, itemDef, moveSlot, takeItem, unbindQuickslot } from '../core/Inventory';
+import { addItem, bindQuickslot, countOf, dropSlot, hasRoom, initInventory, isUseful, itemDef, moveSlot, splitSlot, takeItem, unbindQuickslot } from '../core/Inventory';
 import { ITEM_KINDS, World, type ItemKind } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Items from './Items';
@@ -512,5 +512,32 @@ describe('칸 이동 — 드래그 (2026-09-04)', () => {
     expect(moveSlot(world, 3, 4)).toBe('none'); // 빈 칸에선 집을 게 없다
     expect(moveSlot(world, 0, 0)).toBe('none');
     expect(countOf(world, 'potion')).toBe(7); // 개수는 변하지 않는다
+  });
+});
+
+describe('수량 나누기 (2026-09-04)', () => {
+  it('스택에서 n개를 떼어 첫 빈 칸에 새 스택으로 — 개수는 그대로', () => {
+    for (let i = 0; i < 5; i++) addItem(world, 'potion');
+    addItem(world, 'mana');
+    const split: unknown[] = [];
+    world.events.on('item_split', (p) => split.push(p));
+    expect(splitSlot(world, 0, 2)).toBe(2); // 첫 빈 칸은 [2]
+    expect(world.inventory[0]).toEqual({ kind: 'potion', count: 3 });
+    expect(world.inventory[2]).toEqual({ kind: 'potion', count: 2 });
+    expect(countOf(world, 'potion')).toBe(5);
+    expect(split).toEqual([{ from: 0, to: 2, kind: 'potion', amount: 2 }]);
+  });
+
+  it('1개 스택·전부·0개·빈 칸 없음은 거부한다', () => {
+    addItem(world, 'mana'); // [0] 마나 1
+    expect(splitSlot(world, 0, 1)).toBe(-1); // 나눌 게 없다
+    for (let i = 0; i < 4; i++) addItem(world, 'potion'); // [1] 물약 4
+    expect(splitSlot(world, 1, 4)).toBe(-1); // 전부
+    expect(splitSlot(world, 1, 0)).toBe(-1);
+    expect(splitSlot(world, 7, 1)).toBe(-1); // 빈 칸에서
+    // 빈 칸이 없으면 거부 — 나머지 칸을 다 채운다
+    while (world.inventory.includes(null)) world.inventory[world.inventory.indexOf(null)] = { kind: 'food', count: 1 };
+    expect(splitSlot(world, 1, 2)).toBe(-1);
+    expect(world.inventory[1]).toEqual({ kind: 'potion', count: 4 });
   });
 });

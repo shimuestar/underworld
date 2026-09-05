@@ -622,6 +622,7 @@ for (const name of [
   'item_moved',
   'loot_carry_started',
   'loot_carry_cancelled',
+  'item_split',
   'aim_snapped',
   'arrow_recovered',
   'arrow_broken',
@@ -2304,6 +2305,7 @@ events.on('loot_carry_started', () => {
   padRumble('interact');
 });
 events.on('loot_carry_cancelled', () => audio.play('loot_stash'));
+events.on('item_split', () => audio.play('loot_stash')); // 스택을 갈랐다
 // 수류탄 차징 취소(LT 놓음·R) — 활의 시위 내리기와 같은 소리·안내
 events.on('grenade_cancelled', () => {
   audio.play('reload_end');
@@ -3127,9 +3129,9 @@ function simulate(dt: number): void {
     else if (input.gamepad.rawPressed(15)) lootUI.padMove(1, 0);
     else if (input.gamepad.rawPressed(14)) lootUI.padMove(-1, 0);
     else if (stick.dx !== 0 || stick.dy !== 0) lootUI.padMove(stick.dx, stick.dy);
-    else if (input.gamepad.rawPressed(2)) lootUI.padTakeAll();
     else if (input.gamepad.rawPressed(3)) lootUI.padDrop();
     else if (input.gamepad.rawPressed(1)) lootUI.padClose();
+    lootUI.padX(input.gamepad.rawHeld(2)); // X 짧게 모두 가져오기 · 길게 수량 나누기 (홀드 판정이라 매 틱)
   }
   if (world.dead) {
     if (input.gamepad.pressed('interact')) restartAfterDeath();

@@ -85,6 +85,19 @@ export function moveSlot(world: World, from: number, to: number): 'moved' | 'mer
   return result;
 }
 
+/** 수량 나누기 — index 칸의 스택에서 amount 개를 떼어 첫 빈 칸에 새 스택으로. 새 칸 번호를 돌려준다(-1 = 안 됨:
+ *  스택이 아니거나, amount 가 1~count-1 밖이거나, 빈 칸이 없다). 개수는 변하지 않는다 (2026-09-04) */
+export function splitSlot(world: World, index: number, amount: number): number {
+  const slot = world.inventory[index];
+  if (!slot || amount < 1 || amount >= slot.count) return -1;
+  const empty = world.inventory.indexOf(null);
+  if (empty < 0) return -1;
+  slot.count -= amount;
+  world.inventory[empty] = { kind: slot.kind, count: amount };
+  world.events.emit('item_split', { from: index, to: empty, kind: slot.kind, amount });
+  return empty;
+}
+
 /** 한 개라도 더 들어갈 자리가 있는가 — 자석이 물기 전에 묻는다 */
 export function hasRoom(world: World, kind: ItemKind): boolean {
   const stackMax = balance.items.stackMax;
