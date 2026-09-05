@@ -76,14 +76,16 @@ function pressReaction(world: World): void {
 }
 
 describe('공격 상태 머신 타이밍 (goblin_spear: windup 34t)', () => {
-  it('chase→windup 1t, windup 34t, active_perfect 6t, active_normal 12t, impact에서 피해', () => {
+  it('chase→windup 1t, windup 34t, active_perfect 6t, 코앞이라 닿는 순간(minActiveTicks 뒤) active_normal 1t, impact에서 피해', () => {
     const world = makeWorld();
     world.enemies.push(makeSpear(12, 10)); // 거리 2.0 < attackRange 2.4
 
     expect(tickUntil(world, 'windup')).toBe(1);
     expect(tickUntil(world, 'active_perfect')).toBe(enemyDef('goblin_spear').attack.windupTicks);
     expect(tickUntil(world, 'active_normal')).toBe(balance.reaction.windowPerfectTicks);
-    expect(tickUntil(world, 'impact')).toBe(balance.reaction.windowNormalTicks);
+    // 닿는 순간 판정(hitOnContact) — 2.0m 에서는 창끝이 이미 몸에 닿아 있어 완벽 창(6틱)이 지나자마자 친다.
+    // 12틱 일반 창을 다 기다리던 옛 규약(동작이 끝난 뒤 판정)은 2026-09-04 에 바뀌었다
+    expect(tickUntil(world, 'impact')).toBe(1);
 
     Enemies.tick(world, DT); // impact 적용
     expect(world.player.health).toBe(
@@ -345,7 +347,7 @@ describe('패링 격돌 — 적만 굳는다', () => {
   }
 
   it('완벽 패링 — 적 스태거, 플레이어는 경직 없음', () => {
-    const world = parryAt(3.5, 10);
+    const world = parryAt(3.5, 7); // 창끝이 몸에 닿기 직전(gap ≈ 0.03) — 8틱이면 닿아 다음 틱 impact
     const enemy = world.enemies[0]!;
     expect(enemy.ai).toBe('staggered');
     expect(world.player.stunTicks).toBe(0); // 성공했으니 벌이 없다
@@ -376,7 +378,7 @@ describe('패링 격돌 — 적만 굳는다', () => {
     const events: { kind: string }[] = [];
     world.events.on('guard_clash', (payload) => events.push(payload as { kind: string }));
     tickUntil(world, 'active_perfect');
-    for (let i = 0; i < 10; i++) Enemies.tick(world, DT);
+    for (let i = 0; i < 7; i++) Enemies.tick(world, DT); // 창끝이 닿기 직전 — 8틱이면 닿는 순간 판정으로 넘어간다
     pressReaction(world);
     expect(events[0]!.kind).toBe('parry_perfect');
   });
@@ -668,7 +670,7 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
   });
 
   it('창끝이 방패에 닿는 순간 완벽 패링: 스태거 + 히트스톱 4t', () => {
-    const world = strikeAt(3.5, 10); // gap ≈ 0.12 < perfectBand
+    const world = strikeAt(3.5, 7); // gap ≈ 0.03 < perfectBand (8틱이면 닿는다 — 닿는 순간 판정)
     const results: unknown[] = [];
     world.events.on('parry_attempt', (payload) => results.push(payload));
 
@@ -732,7 +734,7 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
   });
 
   it('스태거 적에 입력 → 처형', () => {
-    const world = strikeAt(3.5, 10);
+    const world = strikeAt(3.5, 7);
     pressReaction(world); // 완벽 패링 → 스태거
     const kills: unknown[] = [];
     world.events.on('melee_kill', (payload) => kills.push(payload));
@@ -743,7 +745,7 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
   });
 
   it('근접 키(해머)로도 처형이 나간다', () => {
-    const world = strikeAt(3.5, 10);
+    const world = strikeAt(3.5, 7);
     pressReaction(world); // 완벽 패링 → 스태거
     expect(world.enemies[0]!.ai).toBe('staggered');
     const kills: unknown[] = [];
@@ -759,7 +761,7 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
   });
 
   it('해머를 휘두르는 중이면 근접 키가 처형으로 가로채지 않는다', () => {
-    const world = strikeAt(3.5, 10);
+    const world = strikeAt(3.5, 7);
     pressReaction(world); // 완벽 패링 → 스태거
     expect(world.enemies[0]!.ai).toBe('staggered');
 
@@ -777,7 +779,7 @@ describe('반응 판정 분기 — 무기 끝 위치 기반', () => {
   });
 
   it('근접 키는 패링·회피·반사에는 쓰이지 않는다 — 처형 전용', () => {
-    const world = strikeAt(3.5, 10); // 무기 끝이 완벽 대역에 들어온 순간
+    const world = strikeAt(3.5, 7); // 무기 끝이 완벽 대역에 들어온 순간
     const attempts: unknown[] = [];
     world.events.on('parry_attempt', (payload) => attempts.push(payload));
 

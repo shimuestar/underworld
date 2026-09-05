@@ -9,6 +9,7 @@ import { World } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
+import * as Reaction from './Reaction';
 import * as Sigils from './Sigils';
 
 const DT = 1 / 60;
@@ -71,13 +72,26 @@ function ticksFromSwingToHit(type: string, dist: number): number {
 }
 
 describe('닿는 순간 판정 — hitOnContact', () => {
-  it('구울 할퀴기는 무기 끝이 몸에 닿으면 곧바로 친다 — 6+12 틱 창을 다 기다리지 않는다', () => {
+  it('구울 할퀴기는 무기 끝이 몸에 닿으면 곧바로 친다 — 6+12 틱 창을 다 기다리지 않는다 (코앞이라도 minActiveTicks 는 남긴다)', () => {
     const n = ticksFromSwingToHit('ghoul', 1.0);
-    expect(n).toBeLessThanOrEqual(4); // 접촉 → 다음 틱 impact 전이 → 그다음 틱 피해
+    const full = balance.reaction.windowPerfectTicks + balance.reaction.windowNormalTicks;
+    expect(n).toBeLessThan(full);
+    expect(n).toBeLessThanOrEqual(balance.contact.minActiveTicks + 2); // 최소 창이 지나면 접촉 → 다음 틱 impact → 피해
+    expect(n).toBeGreaterThanOrEqual(balance.contact.minActiveTicks); // 그 전엔 치지 않는다 — 패링할 틈
   });
 
-  it('플래그가 없는 고블린 러너는 지금처럼 창(6+12틱)이 끝난 뒤에 친다', () => {
-    const n = ticksFromSwingToHit('goblin_runner', 1.0);
+  it('코앞의 할퀴기라도 최소 창 안에 반응하면 패링이 성립한다 (완벽 — 창끝이 이미 몸 안)', () => {
+    const e = faceOff('ghoul', 1.0);
+    for (let i = 0; i < 300 && e.ai !== 'active_perfect'; i++) step();
+    for (let i = 0; i < 3; i++) step();
+    world.input = { ...Input.emptySnapshot(), reactionPressed: true };
+    Reaction.tick(world, DT);
+    expect(e.ai).toBe('staggered');
+    expect(world.freezeTicks).toBe(balance.reaction.hitstopPerfectTicks);
+  });
+
+  it('플래그가 없는 족장 내려찍기(바닥 범위 공격)는 지금처럼 창(6+12틱)이 끝난 뒤에 친다', () => {
+    const n = ticksFromSwingToHit('goblin_chieftain', 1.5);
     const full = balance.reaction.windowPerfectTicks + balance.reaction.windowNormalTicks;
     expect(n).toBeGreaterThanOrEqual(full);
   });

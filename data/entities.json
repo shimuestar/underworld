@@ -9,7 +9,7 @@
       "radius": 0.5, "height": 1.6,
       "aggroRange": 16, "attackRange": 2.2,
       "behavior": "charge",
-      "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 18, "recoverTicks": 30, "impactRangeMul": 1.3, "parryable": true },
+      "attack": { "hitOnContact": true, "type": "contact", "arcDeg": 140, "windupTicks": 18, "recoverTicks": 30, "impactRangeMul": 1.3, "parryable": true },
       "counters": { "pistol": "poor", "rifle": "good", "grenade": "good", "flash": "poor", "melee": "best", "magic": "best", "deflect": "none" },
       "drops": []
     },
@@ -23,9 +23,9 @@
       "frontalShieldBlocksProjectiles": true, "shieldArcDeg": 120,
       "_knockbackNote": "찌르기 밀림 — 기본 playerKnockback.thrust(1.6m/8틱)의 2배인 3.2m. 미는 시간도 함께 2배(16틱)로 둬서 속도는 그대로다 (12m/s) — 거리만 늘리고 시간을 두면 순간이동처럼 보인다",
       "_recoverNote": "2026-08-27: 명중 후 후딜 7 → 20 틱. 찌르는 동안 방패가 내려가 있는데(SHIELD_DOWN_STATES) 후딜이 0.12초뿐이라 화살·총으로 그 틈을 노리는 게 사실상 불가능했다. 빗나갔을 때(whiffRecoverTicks 63)만 노릴 수 있던 것을 명중했을 때도 노릴 수 있게 연다 — 방패병을 원거리로 상대하는 유일한 창구다", "_thrustNote": "찌르기 — 창끝이 판정 창(6+12틱) 동안 뒤로 당긴 자리에서 최대 사거리까지 나간다. strikeEase 1.8 = 앞쪽에서 확 뻗고 끝에서 천천히 밀어붙인다(1이면 등속). 등속이던 시절엔 0.3초 내내 스르르 나와 '느리게 찌른다'는 소리를 들었다. 경직(recoverTicks·whiffRecoverTicks)은 2026-08 에 30% 줄였다",
-      "attack": { "type": "thrust", "arcDeg": 50, "strikeEase": 1.8, "windupTicks": 10, "recoverTicks": 20, "whiffRecoverTicks": 63, "impactRangeMul": 1.2, "playerKnockback": 3.2, "playerKnockbackTicks": 16, "parryable": true, "telegraph": "blue" },
-      "shieldBash": { "type": "bash", "arcDeg": 110, "damage": 16, "playerKnockback": 3.2, "windupTicks": 9, "recoverTicks": 20, "impactRangeMul": 1.0, "parryable": true, "telegraph": "blue" },
-      "chargeAttack": { "type": "thrust", "arcDeg": 55, "strikeEase": 1.8, "chargeSpeed": 11.5, "minRange": 4.5, "windupTicks": 11, "recoverTicks": 10, "whiffRecoverTicks": 63, "impactRangeMul": 1.2, "playerKnockback": 3.2, "playerKnockbackTicks": 16, "parryable": true, "telegraph": "blue" },
+      "attack": { "hitOnContact": true, "type": "thrust", "arcDeg": 50, "strikeEase": 1.8, "windupTicks": 10, "recoverTicks": 20, "whiffRecoverTicks": 63, "impactRangeMul": 1.2, "playerKnockback": 3.2, "playerKnockbackTicks": 16, "parryable": true, "telegraph": "blue" },
+      "shieldBash": { "hitOnContact": true, "type": "bash", "arcDeg": 110, "damage": 16, "playerKnockback": 3.2, "windupTicks": 9, "recoverTicks": 20, "impactRangeMul": 1.0, "parryable": true, "telegraph": "blue" },
+      "chargeAttack": { "hitOnContact": true, "type": "thrust", "arcDeg": 55, "strikeEase": 1.8, "chargeSpeed": 11.5, "minRange": 4.5, "windupTicks": 11, "recoverTicks": 10, "whiffRecoverTicks": 63, "impactRangeMul": 1.2, "playerKnockback": 3.2, "playerKnockbackTicks": 16, "parryable": true, "telegraph": "blue" },
       "counters": { "pistol": "poor", "rifle": "poor", "grenade": "good", "flash": "good", "melee": "best", "magic": "good", "deflect": "none" },
       "drops": ["sig_fireball"], "dropsOnDeath": true
     },
@@ -39,9 +39,9 @@
       "behavior": "swarm",
       "_wanderNote": "대기 중 생성 지점 주변을 잰걸음으로 배회한다 — 제자리 조각상처럼 서 있지 않게 (벽 매복 개체는 배회 없음)",
       "idleWander": { "radius": 3.5, "speedMul": 0.5, "pauseTicks": 55 },
-      "attack": { "type": "contact", "arcDeg": 150, "windupTicks": 13, "recoverTicks": 18, "whiffRecoverTicks": 42, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
+      "attack": { "hitOnContact": true, "type": "contact", "arcDeg": 150, "windupTicks": 13, "recoverTicks": 18, "whiffRecoverTicks": 42, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
       "_leapNote": "도약 — 26틱 × 15 = 6.5m. 예고 시점 좌표로만 날아가므로 옆으로 비키면 헛짚는다. leapHeight 만큼 공중으로 포물선을 그리며 몸을 던진다. 슬라임과 같은 즉발 접촉(적색·회피 전용) — 패링 가능(청색)이던 시절엔 착지 후 판정 창 탓에 점프가 위협적이지 않았다 (2026-08-30)",
-      "chargeAttack": { "type": "contact", "arcDeg": 150, "leapHeight": 1.9, "chargeSpeed": 15, "chargeRunTicks": 26, "minRange": 3.2, "maxRange": 7, "windupTicks": 30, "recoverTicks": 30, "whiffRecoverTicks": 75, "impactRangeMul": 1.25, "playerKnockback": 0.9, "parryable": false, "telegraph": "red", "cooldownTicks": 200 },
+      "chargeAttack": { "hitOnContact": true, "type": "contact", "arcDeg": 150, "leapHeight": 1.9, "chargeSpeed": 15, "chargeRunTicks": 26, "minRange": 3.2, "maxRange": 7, "windupTicks": 30, "recoverTicks": 30, "whiffRecoverTicks": 75, "impactRangeMul": 1.25, "playerKnockback": 0.9, "parryable": false, "telegraph": "red", "cooldownTicks": 200 },
       "_wallNote": "벽거미 — 추격 중 벽이 닿으면 붙어 오르고, 벽을 따라 기다가 사거리에 들면 적색 도약으로 덮친다. 예고 시점 좌표로만 날아가 옆 대시가 정답. 붙은 채 맞으면 떨어져 뻗는다. 흰 거미는 지상 유지 (역할 분담)",
       "wallCrawl": {
         "height": 1.9, "speedMul": 0.9, "attachRange": 2.2, "climbTicks": 24,
@@ -81,11 +81,11 @@
         "dropDurTicks": 20, "dropDamage": 22, "dropAoeRadius": 1.6, "dropWhiffTicks": 55,
         "groundTicks": 300, "reascendMinDist": 7, "ascendDurTicks": 18, "fallStunTicks": 90
       },
-      "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 24, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue", "latches": true },
+      "attack": { "hitOnContact": true, "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 24, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue", "latches": true },
       "_faceSuckNote": "낙하가 명중하면 얼굴에 붙어 흡혈한다 — 화면을 가리고, 빨 때마다 제 몸을 채운다. 해머 한 방이면 떼어 걷어차고, maxSucks 번 빨면 배불러 스스로 뛰어내린다",
       "faceSuck": { "intervalTicks": 55, "damage": 10, "heal": 8, "maxSucks": 3, "_mashNote": "6 → 3 (2026-09-01, 구울 파먹기와 동일)", "mashToEscape": 3, "kickDistance": 5, "kickStunTicks": 50, "selfDetachHop": 3 },
       "_leapNote": "지상에서도 4m 밖이면 얼굴로 뛰어든다 — 맞으면 흡혈 부착. 적색(회피 전용), 예고 시점 좌표로만 난다",
-      "chargeAttack": { "type": "contact", "arcDeg": 130, "leapHeight": 1.7, "chargeSpeed": 14, "chargeRunTicks": 20, "minRange": 4, "maxRange": 9, "windupTicks": 33, "recoverTicks": 40, "whiffRecoverTicks": 60, "impactRangeMul": 1.2, "playerKnockback": 0.4, "parryable": false, "telegraph": "red", "cooldownTicks": 200, "latches": true },
+      "chargeAttack": { "hitOnContact": true, "type": "contact", "arcDeg": 130, "leapHeight": 1.7, "chargeSpeed": 14, "chargeRunTicks": 20, "minRange": 4, "maxRange": 9, "windupTicks": 33, "recoverTicks": 40, "whiffRecoverTicks": 60, "impactRangeMul": 1.2, "playerKnockback": 0.4, "parryable": false, "telegraph": "red", "cooldownTicks": 200, "latches": true },
       "counters": { "pistol": "best", "rifle": "best", "grenade": "poor", "flash": "good", "melee": "good", "magic": "good", "deflect": "none" },
       "drops": []
     },
@@ -123,8 +123,8 @@
       "gooTrail": true,
       "behavior": "swarm",
       "_bossNote": "1층의 주인 — 죽어야 출구 쇠창살이 오른다. 눈이 없고 귀가 밝다(4배). 핵심 기믹은 새끼 분리: 제 체력을 떼어 새끼 다섯을 유지하는 10초 박자 소환. 화상 중엔 말라붙어 못 떼어낸다 — 불이 무리를 끊는 정답",
-      "attack": { "type": "contact", "arcDeg": 160, "windupTicks": 40, "recoverTicks": 45, "whiffRecoverTicks": 60, "impactRangeMul": 1.35, "playerKnockback": 2.2, "parryable": false, "telegraph": "red" },
-      "chargeAttack": { "type": "contact", "arcDeg": 160, "leapHeight": 2.4, "chargeSpeed": 12, "chargeRunTicks": 30, "minRange": 3.5, "maxRange": 10, "windupTicks": 38, "recoverTicks": 50, "whiffRecoverTicks": 80, "impactRangeMul": 1.35, "playerKnockback": 2.6, "parryable": false, "telegraph": "red", "cooldownTicks": 260 },
+      "attack": { "hitOnContact": true, "type": "contact", "arcDeg": 160, "windupTicks": 40, "recoverTicks": 45, "whiffRecoverTicks": 60, "impactRangeMul": 1.35, "playerKnockback": 2.2, "parryable": false, "telegraph": "red" },
+      "chargeAttack": { "hitOnContact": true, "type": "contact", "arcDeg": 160, "leapHeight": 2.4, "chargeSpeed": 12, "chargeRunTicks": 30, "minRange": 3.5, "maxRange": 10, "windupTicks": 38, "recoverTicks": 50, "whiffRecoverTicks": 80, "impactRangeMul": 1.35, "playerKnockback": 2.6, "parryable": false, "telegraph": "red", "cooldownTicks": 260 },
       "_summonNote": "새끼 분리 — 소환이 공짜 인플레가 되지 않게 체력을 대가로 치른다. maxAlive 는 층의 새끼 총수(분열체 포함) 기준",
       "summonAttack": { "type": "summon", "windupTicks": 48, "recoverTicks": 40, "impactRangeMul": 1, "parryable": false, "telegraph": "purple",
         "_broodNote": "타이머 구동 (2026-09-01) — 전투 개시에 5마리, 이후 cooldownTicks(10초) 박자마다 살아 있는 새끼를 빼고 부족분만 즉시(시전 없이) 충원. 화상·빙결 중엔 박자를 미룬다. healthCost 는 5마리 기준 — 낳은 수에 비례해 깎인다. 소환된 새끼는 noLoot: 드랍·골드·XP 없음, 생명 입자만",
@@ -171,9 +171,9 @@
           "stunTicks": 180
         }
       },
-      "attack": { "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 26, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
+      "attack": { "hitOnContact": true, "type": "contact", "arcDeg": 140, "windupTicks": 16, "recoverTicks": 26, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": true, "telegraph": "blue" },
       "_swoopNote": "몸통 박치기 — 1초 조용한 정지 비행 후 적색 섬광·비명과 동시에 20m/s 직선 관통 돌진. 몸이 닿는 그 틱에 즉시 타격(판정 창 없음), 멈추지 않고 목표를 지나 등 뒤로 빠진다. 적색 = 회피 전용 (옆 대시·방어가 답, 패링 불가). 돌진·후퇴 저공 구간이 해머의 창",
-      "chargeAttack": { "type": "contact", "arcDeg": 150, "chargeSpeed": 20, "chargeRunTicks": 40, "minRange": 2, "maxRange": 10, "windupTicks": 60, "recoverTicks": 40, "whiffRecoverTicks": 70, "impactRangeMul": 1.2, "playerKnockback": 1.2, "parryable": false, "telegraph": "red", "cooldownTicks": 160 },
+      "chargeAttack": { "hitOnContact": true, "type": "contact", "arcDeg": 150, "chargeSpeed": 20, "chargeRunTicks": 40, "minRange": 2, "maxRange": 10, "windupTicks": 60, "recoverTicks": 40, "whiffRecoverTicks": 70, "impactRangeMul": 1.2, "playerKnockback": 1.2, "parryable": false, "telegraph": "red", "cooldownTicks": 160 },
       "counters": { "pistol": "good", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "poor", "magic": "good", "deflect": "best" },
       "drops": []
     },
@@ -193,9 +193,9 @@
       "eatsItems": true,
       "gooTrail": true,
       "behavior": "swarm",
-      "attack": { "type": "contact", "arcDeg": 150, "windupTicks": 26, "recoverTicks": 34, "whiffRecoverTicks": 50, "impactRangeMul": 1.25, "parryable": false, "telegraph": "red" },
+      "attack": { "hitOnContact": true, "type": "contact", "arcDeg": 150, "windupTicks": 26, "recoverTicks": 34, "whiffRecoverTicks": 50, "impactRangeMul": 1.25, "parryable": false, "telegraph": "red" },
       "_pounceNote": "도약 몸통 박치기 — 부풀었다가 예고 시점 좌표로 몸을 던진다. 적색(회피 전용)이라 옆 대시가 정답",
-      "chargeAttack": { "type": "contact", "arcDeg": 150, "leapHeight": 1.6, "chargeSpeed": 13, "chargeRunTicks": 24, "minRange": 2.6, "maxRange": 6.5, "windupTicks": 30, "recoverTicks": 40, "whiffRecoverTicks": 70, "impactRangeMul": 1.3, "playerKnockback": 1.4, "parryable": false, "telegraph": "red", "cooldownTicks": 160 },
+      "chargeAttack": { "hitOnContact": true, "type": "contact", "arcDeg": 150, "leapHeight": 1.6, "chargeSpeed": 13, "chargeRunTicks": 24, "minRange": 2.6, "maxRange": 6.5, "windupTicks": 30, "recoverTicks": 40, "whiffRecoverTicks": 70, "impactRangeMul": 1.3, "playerKnockback": 1.4, "parryable": false, "telegraph": "red", "cooldownTicks": 160 },
       "counters": { "pistol": "poor", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "good", "magic": "best", "deflect": "none" },
       "drops": []
     },
@@ -210,7 +210,7 @@
       "_gooNote": "새끼는 점액을 안 남긴다 — 무리가 되면 장판이 화면을 뒤덮는다",
       "eatsItems": true,
       "behavior": "swarm",
-      "attack": { "type": "contact", "arcDeg": 150, "windupTicks": 20, "recoverTicks": 26, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": false, "telegraph": "red" },
+      "attack": { "hitOnContact": true, "type": "contact", "arcDeg": 150, "windupTicks": 20, "recoverTicks": 26, "whiffRecoverTicks": 40, "impactRangeMul": 1.2, "parryable": false, "telegraph": "red" },
       "counters": { "pistol": "poor", "rifle": "good", "grenade": "best", "flash": "poor", "melee": "best", "magic": "best", "deflect": "none" },
       "drops": []
     },

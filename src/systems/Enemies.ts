@@ -2442,7 +2442,15 @@ export function contactDist(def: ReturnType<typeof enemyDef>): number {
   return def.radius + balance.player.radius + balance.contact.padM;
 }
 
-/** 휘두르는 도중 닿았는가 — 무기 끝이 가드(몸) 안에 들었거나(gap<=0) 몸이 부딛쳤고, 공격이 나를 향한다(호·사거리) */
+/** 타격 창에 들어선 뒤 흐른 틱 — 접촉 판정은 contact.minActiveTicks 뒤부터 열린다(코앞에서도 패링할 틈) */
+function activeElapsed(enemy: EnemyState): number {
+  return enemy.ai === 'active_perfect'
+    ? balance.reaction.windowPerfectTicks - enemy.timer
+    : balance.reaction.windowPerfectTicks + (balance.reaction.windowNormalTicks - enemy.timer);
+}
+
+/** 휘두르는 도중 닿았는가 — 무기 끝이 가드(몸) 안에 들었거나(gap<=0) 몸이 부딛쳤고, 공격이 나를 향한다(호·사거리).
+ *  타격 창 경과가 minActiveTicks 미만이면 아직 아니다 */
 function strikeContacts(
   world: World,
   enemy: EnemyState,
@@ -2451,6 +2459,7 @@ function strikeContacts(
   dist: number,
 ): boolean {
   const p = world.player;
+  if (activeElapsed(enemy) < balance.contact.minActiveTicks) return false;
   const gap = dist - balance.player.radius - (enemy.weaponTipDist ?? 0);
   if (gap > 0 && dist > contactDist(def)) return false;
   return attackReaches(def, enemy, attack, p.x, p.z);
