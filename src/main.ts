@@ -347,7 +347,7 @@ menuTabsPending.push(
   },
   {
     id: 'skill', label: '스킬',
-    status: () => `액티브 ${world.skillSlots.filter((slot) => slot !== null).length}/${balance.skills.quickslots}`,
+    status: () => `${world.skillSlots.filter((slot) => slot !== null).length}/${balance.skills.quickslots}`, // 퀵슬롯에 올린 수 ('액티브' 표기는 뺐다 — 2026-09-04 사용자)
     show: () => skillUI.show(menuUI.altar), hide: () => skillUI.hide(),
   },
   {

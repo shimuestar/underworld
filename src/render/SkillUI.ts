@@ -93,7 +93,7 @@ export class SkillUI {
 
     const hint = document.createElement('div');
     hint.textContent =
-      '액티브 클릭 = 고르기 → 스킬 칸 클릭(또는 Z·X·C·V) = 올리기   ·   빈손으로 칸 클릭 = 비우기   ·   ' +
+      '스킬 클릭 = 고르기 → 스킬 칸 클릭(또는 Z·X·C·V) = 올리기   ·   빈손으로 칸 클릭 = 비우기   ·   ' +
       '패시브 각인은 가방 탭(I)의 몸에 새긴다   ·   Tab 닫기';
     hint.style.cssText = 'margin-top:14px;color:#6c7280;font-size:11px;';
     panel.appendChild(hint);
@@ -147,7 +147,7 @@ export class SkillUI {
     const world = this.world;
     const list = document.createElement('div');
     const head = document.createElement('div');
-    head.textContent = '액티브 — 골라서 퀵슬롯에 올린다';
+    head.textContent = '익힌 스킬 — 골라서 퀵슬롯에 올린다';
     head.style.cssText = 'color:#9fe870;margin-bottom:6px;';
     list.appendChild(head);
     const owned = world.sigils.inventory.map((id) => sigilDef(id)).filter(isActiveSkill);
