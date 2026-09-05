@@ -35,6 +35,15 @@ export interface LevelDef {
   lighting: { ambient: number; torches: number[][] };
   glyphs?: GlyphDef[];
   triggers?: TriggerDef[];
+  /** 입구 계단(스폰이 등진 벽감)을 그리는가 — 기본 true. 시험방처럼 "내려온 자리"가 없는 층은 false (2026-09-04) */
+  entranceStairs?: boolean;
+  /** 바닥 표식 — 'center' 는 방 가운데를 알리는 고리+십자 (몬스터 시험방) */
+  floorMarks?: FloorMarkDef[];
+}
+
+export interface FloorMarkDef {
+  cell: number[];
+  kind: 'center';
 }
 
 /** 격자에서 찾아낸 잠긴 문 하나. dirX/dirZ 는 미닫이가 밀려 들어갈 방향(셀 단위) */
@@ -84,6 +93,10 @@ export class Level {
   readonly rayBlockers: { minX: number; maxX: number; minZ: number; maxZ: number }[] = [];
   readonly exitPos: { x: number; z: number } | null;
   readonly glyphs: GlyphDef[];
+  /** 입구 계단을 그리는가 (LevelDef.entranceStairs, 기본 true) */
+  readonly entranceStairs: boolean;
+  /** 바닥 표식 (LevelDef.floorMarks) */
+  readonly floorMarks: FloorMarkDef[];
   /** 잠긴 문(D·G) — 미닫이가 밀려 들어갈 축도 여기서 정한다 */
   readonly doors: DoorCell[];
 
@@ -149,6 +162,8 @@ export class Level {
       : null;
 
     this.glyphs = def.glyphs ?? [];
+    this.entranceStairs = def.entranceStairs ?? true;
+    this.floorMarks = def.floorMarks ?? [];
     this.levers = (def.triggers ?? []).filter(
       (trigger) => trigger.type === 'lever' && (trigger.opens || trigger.resets),
     );
@@ -950,7 +965,7 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       // 별도 메시로 세우면 벽과 재질·이음매가 갈려 "벽에 상자를 끼운" 것처럼 보인다.
       // 같은 병합 목록에 넣으므로 벽과 문자 그대로 한 몸이다.
       // 격자는 그대로 '#' 이라 몸은 여전히 막힌다 (보이는 것만 판다)
-      if (row === alcove.row && col === alcove.col) {
+      if (level.entranceStairs && row === alcove.row && col === alcove.col) {
         let list = byColor.get(color);
         if (!list) byColor.set(color, (list = []));
         list.push(...alcoveFrameGeoms(cs, level.ceiling, alcove.x, alcove.z, alcove.yaw));
@@ -1138,9 +1153,10 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
         group.add(light);
       }
 
-      if (ch === 'S') {
+      if (ch === 'S' && level.entranceStairs) {
         // 입구 — 이 층으로 내려온 계단. 스폰 칸이 아니라 등진 벽 칸을 파고 들어간다.
-        // 격자는 여전히 '#' 이라 몸은 못 들어가고, 눈에만 벽감으로 보인다
+        // 격자는 여전히 '#' 이라 몸은 못 들어가고, 눈에만 벽감으로 보인다.
+        // entranceStairs false 인 층(시험방)은 계단이 없다 — 가운데 공터에 계단이 떠 보이던 문제 (2026-09-04 사용자)
         group.add(buildStairwell(alcove.x, alcove.z, cs, true, alcove.yaw));
       }
     }
@@ -1150,6 +1166,28 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   for (const glyph of level.glyphs) {
     const mesh = buildGlyphMesh(glyph, level);
     if (mesh) group.add(mesh);
+  }
+
+  // 바닥 표식 — 'center': 방 가운데를 알리는 고리 + 십자. 빛을 받지 않는 재질이라 어두운 홀에서도 읽힌다.
+  // 바닥에서 살짝 띄워 z-fighting 을 피한다 (몬스터 시험방, 2026-09-04 사용자)
+  for (const mark of level.floorMarks) {
+    const mx = (mark.cell[1]! + 0.5) * cs;
+    const mz = (mark.cell[0]! + 0.5) * cs;
+    const markMat = new THREE.MeshBasicMaterial({ color: 0xd8c27a, transparent: true, opacity: 0.85 });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(cs * 0.28, cs * 0.32, 48), markMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(mx, 0.02, mz);
+    ring.name = 'floorMark';
+    group.add(ring);
+    const inner = new THREE.Mesh(new THREE.RingGeometry(cs * 0.05, cs * 0.07, 32), markMat);
+    inner.rotation.x = -Math.PI / 2;
+    inner.position.set(mx, 0.02, mz);
+    group.add(inner);
+    for (const [sx, sz] of [[1, 0], [0, 1]] as const) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.08 + cs * 0.9 * sx, 0.02, 0.08 + cs * 0.9 * sz), markMat);
+      bar.position.set(mx, 0.02, mz);
+      group.add(bar);
+    }
   }
 
   // 횃불 — 위치는 레벨 데이터([row, col]), 광원 파라미터는 balance.
