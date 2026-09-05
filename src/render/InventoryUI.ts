@@ -27,6 +27,8 @@ import { attachPopup, consumablePopup, equipPopup, sigilPopup, type PopupContent
 import { equipIcon, sigilIcon } from './ItemIcons';
 import { sigilDef } from '../core/SigilData';
 import { equipDef, slotLabel, type EquipSlot } from '../core/EquipData';
+import { isActiveSkill, SIGIL_SLOTS, type SigilSlot } from '../core/SigilData';
+import { BODY_ANCHORS, BODY_H, BODY_W, buildBodySvg, SLOT_LABELS, type BodySvgOptions } from './BodyDoll';
 import * as Sigils from '../systems/Sigils';
 import * as Equipment from '../systems/Equipment';
 import type { ItemKind, World } from '../core/World';
@@ -39,7 +41,7 @@ const ICON_PX = 28;
 /** 두 열 사이 간격 — 가방 5×4 격자(352px) | 퀵슬롯 십자(208px) */
 const COLUMN_GAP_PX = 28;
 /** 창 폭 고정 — 안내 문장 길이에 따라 창이 늘고 줄지 않게 (LootUI 와 같은 규약). 352 + 28 + 208 + 여백 26×2 */
-const PANEL_PX = 820; // 인형(2열) + 가방 격자(5열) + 퀵슬롯 십자
+const PANEL_PX = 1100; // 몸 패널(실루엣 + 장비 7) + 가방 격자(5열) + 퀵슬롯 십자
 /** 퀵슬롯 십자 — HUD 마름모 넷과 같은 자리(위 1·오른쪽 2·아래 3·왼쪽 4, 시계 방향). grid-area 'row / col' */
 const CROSS_AREAS = ['1 / 2', '2 / 3', '3 / 2', '2 / 1'];
 /** 십자 안 커서 이동 — [칸][방향(0 ←, 1 →, 2 ↑, 3 ↓)] → 다음 칸, -1 = 가방으로, null = 제자리 */
@@ -55,8 +57,37 @@ const LEFT_KEYS = new Set(['KeyA', 'ArrowLeft']);
 const RIGHT_KEYS = new Set(['KeyD', 'ArrowRight']);
 
 type Pane = 'bag' | 'quick' | 'doll';
-/** 인형(장비 칸) 배치 — 2열: [투구 목걸이] [갑옷 반지1] [부츠 반지2] [짐칸] */
-const DOLL_ORDER: EquipSlot[] = ['head', 'neck', 'body', 'ring1', 'feet', 'ring2', 'pack'];
+/** 몸 패널의 칸 — 장비 7(실루엣 둘레) + 각인 소켓 5(실루엣 위). 위치는 패널 좌표(px).
+ *  실루엣(BodyDoll 360×250)은 DOLL_BODY_SCALE 로 줄여 가운데에 놓고, 소켓 덮개는 그 소켓 자리에 얹는다 (2026-09-04) */
+type DollCell =
+  | { key: string; kind: 'equip'; slot: EquipSlot; x: number; y: number }
+  | { key: string; kind: 'sigil'; slot: SigilSlot; x: number; y: number };
+const DOLL_BODY_SCALE = 0.8;
+const DOLL_BODY_X = 64;
+const DOLL_BODY_Y = 56;
+const DOLL_W = 416;
+const DOLL_H = 348;
+const SOCKET_PX = 28;
+const DOLL_EQUIP: EquipSlot[] = ['head', 'neck', 'body', 'ring1', 'feet', 'ring2', 'pack'];
+const DOLL_CELLS: DollCell[] = [
+  { key: 'd0', kind: 'equip', slot: 'head', x: 0, y: 0 },
+  { key: 'd1', kind: 'equip', slot: 'neck', x: 352, y: 0 },
+  { key: 'd2', kind: 'equip', slot: 'body', x: 0, y: 76 },
+  { key: 'd3', kind: 'equip', slot: 'ring1', x: 352, y: 76 },
+  { key: 'd4', kind: 'equip', slot: 'feet', x: 0, y: 152 },
+  { key: 'd5', kind: 'equip', slot: 'ring2', x: 352, y: 152 },
+  { key: 'd6', kind: 'equip', slot: 'pack', x: 176, y: 276 },
+  ...SIGIL_SLOTS.map((slot, i): DollCell => ({
+    key: `s${i}`, kind: 'sigil', slot,
+    x: DOLL_BODY_X + BODY_ANCHORS[slot].x * DOLL_BODY_SCALE - SOCKET_PX / 2,
+    y: DOLL_BODY_Y + BODY_ANCHORS[slot].y * DOLL_BODY_SCALE - SOCKET_PX / 2,
+  })),
+];
+/** 칸의 중심 (커서 이동·드롭 판정) */
+function dollCenter(c: DollCell): { x: number; y: number } {
+  const half = c.kind === 'equip' ? CELL_PX / 2 : SOCKET_PX / 2;
+  return { x: c.x + half, y: c.y + half };
+}
 
 export class InventoryUI {
   private readonly root: HTMLDivElement;
@@ -229,8 +260,14 @@ export class InventoryUI {
 
   /** 인형 칸의 장비를 벗어 가방으로 — 가방이 가득이면 Equipment 가 equip_denied 로 알린다 */
   private unequipCursor(): void {
-    const slot = DOLL_ORDER[this.selD]!;
-    if (this.world.equipment[slot]) Equipment.unequip(this.world, slot);
+    const cell = DOLL_CELLS[this.selD]!;
+    if (cell.kind === 'equip') {
+      if (this.world.equipment[cell.slot]) Equipment.unequip(this.world, cell.slot);
+    } else if (this.world.sigils.equipped[cell.slot]) {
+      // 각인 떼기는 제단에서만 — 떼면 가방 아이템으로 (Sigils.detach 가 가득이면 거부한다)
+      if (this.altar) Sigils.detach(this.world, cell.slot);
+      else this.world.events.emit('sigil_detach_denied', { id: this.world.sigils.equipped[cell.slot], slot: cell.slot, reason: 'not_altar' });
+    }
     this.rebuild();
   }
 
@@ -286,21 +323,24 @@ export class InventoryUI {
     const rows = Math.max(1, Math.ceil(slots / cols));
     const q = this.world.quickslots.length;
     if (this.pane === 'doll') {
-      // 인형 — 2열 격자. 오른쪽 열에서 한 번 더 오른쫙 = 가방, 왼쪽 열에서 왼쫙 = 이전 탭
-      const n = DOLL_ORDER.length;
-      const dcol = this.selD % 2;
-      const drow = Math.floor(this.selD / 2);
-      const drows = Math.ceil(n / 2);
-      if (dx > 0) {
-        if (dcol === 0 && this.selD + 1 < n) this.selD++;
-        else { this.pane = 'bag'; this.sel = Math.min(slots - 1, Math.min(drow, rows - 1) * cols); }
-      } else if (dx < 0) {
-        if (dcol === 1) this.selD--;
-        else if (!this.carry) { this.onEdge?.(-1); return; }
-      } else if (dy !== 0) {
-        const nrow = (drow + dy + drows) % drows;
-        this.selD = Math.min(n - 1, nrow * 2 + dcol);
-      }
+      // 몸 패널 — 누른 방향으로 가장 가까운 칸(장비·소켓). 오른쪽으로 더 갈 곳이 없으면 가방, 왼쪽이면 이전 탭
+      const cur = dollCenter(DOLL_CELLS[this.selD]!);
+      let best = -1;
+      let bestScore = Infinity;
+      DOLL_CELLS.forEach((c, i) => {
+        if (i === this.selD) return;
+        const o = dollCenter(c);
+        const ox = o.x - cur.x;
+        const oy = o.y - cur.y;
+        const along = dx * ox + dy * oy;
+        if (along <= 8) return; // 그 방향 앞쪽에 있어야 한다
+        const across = Math.abs(dx !== 0 ? oy : ox);
+        const score = along + across * 2.2;
+        if (score < bestScore) { bestScore = score; best = i; }
+      });
+      if (best >= 0) this.selD = best;
+      else if (dx > 0) { this.pane = 'bag'; this.sel = 0; }
+      else if (dx < 0 && !this.carry) { this.onEdge?.(-1); return; }
       this.rebuild();
       return;
     }
@@ -308,8 +348,9 @@ export class InventoryUI {
       const row = Math.floor(this.sel / cols);
       const col = this.sel % cols;
       if (dx < 0 && col === 0) {
-        this.pane = 'doll'; // 왼쪽 끝에서 한 번 더 — 인형(장비 칸)의 오른쪽 열
-        this.selD = Math.min(DOLL_ORDER.length - 1, Math.min(row, Math.ceil(DOLL_ORDER.length / 2) - 1) * 2 + 1);
+        this.pane = 'doll'; // 왼쪽 끝에서 한 번 더 — 몸 패널의 오른쪽 열(목걸이·반지)
+        const rightCol = ['d1', 'd3', 'd5'][Math.min(row, 2)]!;
+        this.selD = Math.max(0, DOLL_CELLS.findIndex((c) => c.key === rightCol));
         this.rebuild();
         return;
       }
@@ -401,7 +442,7 @@ export class InventoryUI {
   private place(): void {
     // 인형 칸 위에서 놓기 — 든 가방 칸의 장비를 그 칸에 걸친다 (부위가 다르면 무시)
     if (this.pane === 'doll' && this.carry) {
-      Equipment.equipTo(this.world, this.carry.index, DOLL_ORDER[this.selD]!);
+      this.dropOnDoll(this.carry.index, this.selD);
       this.carry = null;
       this.rebuild();
       return;
@@ -441,12 +482,13 @@ export class InventoryUI {
   /** 드래그/놓기 — 가방↔가방(이동·합침·교환), 가방→퀵슬롯(등록), 퀵슬롯↔퀵슬롯(교환), 퀵슬롯→빈 곳(해제) */
   private onDrop(from: 'bag' | 'quick' | 'doll', fromIdx: number, key: string | null): void {
     const world = this.world;
-    const to = key?.startsWith('b') ? 'bag' : key?.startsWith('q') ? 'quick' : key?.startsWith('d') ? 'doll' : null;
-    const toIdx = key ? Number.parseInt(key.slice(1), 10) : -1;
+    const to = key?.startsWith('b') ? 'bag' : key?.startsWith('q') ? 'quick' : key?.startsWith('d') || key?.startsWith('s') ? 'doll' : null;
+    const toIdx = to === 'doll' ? DOLL_CELLS.findIndex((c) => c.key === key) : key ? Number.parseInt(key.slice(1), 10) : -1;
     if (from === 'doll') {
-      // 인형 → 가방: 벗어서 그 칸(비어 있으면)으로. 그 밖은 그대로
-      if (to === 'bag') {
-        const slot = DOLL_ORDER[fromIdx]!;
+      // 몸 → 가방: 장비를 벗어서 그 칸(비어 있으면)으로. 소켓의 각인은 끌어낼 수 없다(제단에서 떼기)
+      const cell = DOLL_CELLS[fromIdx]!;
+      if (to === 'bag' && cell.kind === 'equip') {
+        const slot = cell.slot;
         const prevId = world.equipment[slot];
         const wasEmpty = world.inventory[toIdx] === null;
         if (prevId && Equipment.unequip(world, slot) === 'ok' && wasEmpty) {
@@ -461,8 +503,8 @@ export class InventoryUI {
       this.rebuild();
       return;
     }
-    if (from === 'bag' && to === 'doll') {
-      Equipment.equipTo(world, fromIdx, DOLL_ORDER[toIdx]!); // 부위가 다르면 아무 일도 없다
+    if (from === 'bag' && to === 'doll' && toIdx >= 0) {
+      this.dropOnDoll(fromIdx, toIdx);
       this.pane = 'doll';
       this.selD = toIdx;
       this.picked = -1;
@@ -522,7 +564,7 @@ export class InventoryUI {
     const arrows = document.createElement('span');
     arrows.textContent = `화살 ${world.weapon.arrows ?? 0}/${balance.weapons.bow.ammoMax}`;
     const worn = document.createElement('span');
-    worn.textContent = `장비 ${DOLL_ORDER.filter((s) => world.equipment[s]).length}/${DOLL_ORDER.length}`;
+    worn.textContent = `장비 ${DOLL_EQUIP.filter((s) => world.equipment[s]).length}/${DOLL_EQUIP.length} · 각인 ${SIGIL_SLOTS.filter((s) => world.sigils.equipped[s]).length}/${SIGIL_SLOTS.length}`;
     counters.append(worn, gold, arrows);
     head.append(title, counters);
     panel.appendChild(head);
@@ -564,9 +606,26 @@ export class InventoryUI {
   }
 
   /** 들고 있을 때 커서 칸의 팝업 — 놓으면 무슨 일이 일어나는지 */
+  /** 가방 칸을 몸 패널 칸에 놓는다 — 장비 칸이면 걸치기(부위 다르면 무시), 소켓이면 그 부위의 패시브 각인만 새기기 */
+  private dropOnDoll(fromIdx: number, dollIdx: number): void {
+    const cell = DOLL_CELLS[dollIdx];
+    const slot = this.world.inventory[fromIdx];
+    if (!cell || !slot) return;
+    if (cell.kind === 'equip') {
+      if (slot.kind === 'equip') Equipment.equipTo(this.world, fromIdx, cell.slot);
+      return;
+    }
+    if (slot.kind === 'sigil' && slot.sigilId && sigilDef(slot.sigilId).slot === cell.slot && !isActiveSkill(sigilDef(slot.sigilId))) {
+      Sigils.learnFromBag(this.world, fromIdx); // 부위가 맞는 패시브만 — 안 되는 이유는 Sigils 가 알린다
+    }
+  }
+
   private carryPopup(pane: Pane, index: number): PopupContent {
     if (pane === 'doll') {
-      return { title: `${slotLabel(DOLL_ORDER[index]!)}에 걸치기`, lines: ['부위가 맞아야 한다 — 걸치면 든 칸으로 옛것이 돌아온다'] };
+      const cell = DOLL_CELLS[index]!;
+      return cell.kind === 'equip'
+        ? { title: `${slotLabel(cell.slot)}에 걸치기`, lines: ['부위가 맞아야 한다 — 걸치면 든 칸으로 옛것이 돌아온다'] }
+        : { title: `${SLOT_LABELS[cell.slot]}에 새기기`, lines: ['그 부위의 패시브 각인만 — 새기면 몸에 박히고 오염이 붙는다'] };
     }
     const world = this.world;
     const carry = this.carry!;
@@ -698,75 +757,139 @@ export class InventoryUI {
   }
 
   // ---- 가방 ----
-  /** 인형 — 장비 칸 7개(2열). 걸친 것은 아이콘·이름, 빈 칸은 부위 이름. Y/E·A·X = 벗기, 드래그로 가방 ↔ 인형 */
+  /** 몸 패널 — 실루엣(각인 소켓 5) 둘레에 장비 칸 7. 걸친 것은 아이콘·이름, 빈 칸은 부위 이름.
+   *  장비: Y/E·A·X = 벗기, 드래그로 가방 ↔ 몸. 각인: 가방의 패시브를 Y/E·A 로 새기거나 소켓에 끌어 놓기, 제단 앞에서 소켓 = 떼기 */
   private buildDoll(): HTMLElement {
     const world = this.world;
     const box = document.createElement('div');
     box.style.cssText = 'flex:none;';
-    const wornCount = DOLL_ORDER.filter((s) => world.equipment[s]).length;
+    const wornCount = DOLL_EQUIP.filter((s) => world.equipment[s]).length;
+    const sigilCount = SIGIL_SLOTS.filter((s) => world.sigils.equipped[s]).length;
     const title = document.createElement('div');
-    title.textContent = `장비 ${wornCount}/${DOLL_ORDER.length}`;
+    title.textContent = `몸 — 장비 ${wornCount}/${DOLL_EQUIP.length} · 각인 ${sigilCount}/${SIGIL_SLOTS.length}`;
     title.style.cssText = `color:${this.pane === 'doll' ? '#7fbfff' : '#8a8f9a'};margin-bottom:6px;`;
     box.appendChild(title);
-    const grid = document.createElement('div');
-    grid.style.cssText = `display:grid;grid-template-columns:repeat(2, ${CELL_PX}px);gap:${GAP_PX}px;`;
-    DOLL_ORDER.forEach((slot, i) => {
-      const id = world.equipment[slot];
-      const cell = document.createElement('div');
-      cell.dataset['key'] = `d${i}`;
-      const here = this.pane === 'doll' && this.selD === i;
-      const canDrop = this.carry !== null || this.picked >= 0;
-      cell.style.cssText =
-        CELL +
-        `border:1px ${id ? 'solid' : 'dashed'} ${here ? '#7fbfff' : canDrop ? '#e8c76a' : '#3a3a44'};` +
-        `background:${here ? 'rgba(127,191,255,0.12)' : id ? 'rgba(232,199,106,0.07)' : 'rgba(255,255,255,0.02)'};cursor:pointer;`;
-      const label = document.createElement('div');
-      label.textContent = slotLabel(slot);
-      label.style.cssText = 'position:absolute;top:2px;left:5px;font-size:10px;color:#8a8f9a;';
-      cell.appendChild(label);
-      if (id) {
-        const icon = equipIcon(id, ICON_PX);
-        icon.style.cssText += 'position:absolute;left:50%;top:30px;transform:translate(-50%,-50%);';
-        cell.appendChild(icon);
-        const name = document.createElement('div');
-        name.textContent = equipDef(id).name.slice(0, 5);
-        name.style.cssText = `position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:${equipDef(id).color};`;
-        cell.appendChild(name);
-        const dragIcon = equipIcon(id, ICON_PX).outerHTML;
-        cell.onpointerdown = (ev) => beginDrag(ev, dragIcon, (key) => this.onDrop('doll', i, key));
-        cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'doll'; this.selD = i; this.unequipCursor(); };
-      } else {
-        const empty = document.createElement('div');
-        empty.textContent = '비어 있음';
-        empty.style.cssText = 'position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:#555c66;';
-        cell.appendChild(empty);
-      }
-      cell.onclick = () => { this.pane = 'doll'; this.selD = i; this.act(); };
-      cell.ondblclick = () => { this.pane = 'doll'; this.selD = i; this.useCursor(); };
-      cell.onmousemove = (ev) => {
-        if (!this.hoverAllowed(ev)) return;
-        if (this.pane === 'doll' && this.selD === i) return;
-        this.pane = 'doll';
-        this.selD = i;
-        this.rebuild();
-      };
-      if (here && this.carry) {
-        attachPopup(cell, this.carryPopup('doll', i), 'right', this.padMode);
-      } else if (here && id) {
-        const content = equipPopup(world, id, ' — 걸친 것', slot);
-        content.usefulText = '걸치고 있다';
-        content.actions = [
-          { key: this.key('Y', 'E'), label: '벗기 → 가방' },
-          { key: this.key('A 길게', '드래그'), label: '가방 칸으로 끌어 벗기' },
-        ];
-        attachPopup(cell, content, 'right', this.padMode);
-      } else if (here) {
-        attachPopup(cell, { title: `${slotLabel(slot)} — 비어 있음`, lines: ['가방의 장비를 Y/E·A 로 걸치거나 여기로 끌어 놓는다', slot === 'pack' ? '벨트 또는 가방 — 하나만. 가방 칸을 늘린다' : ''] .filter(Boolean) }, 'right', this.padMode);
-      }
-      grid.appendChild(cell);
-    });
-    box.appendChild(grid);
+    const area = document.createElement('div');
+    area.style.cssText = `position:relative;width:${DOLL_W}px;height:${DOLL_H}px;`;
+
+    // 실루엣 — 소켓 강조: 커서, 들고 있는(고른) 각인의 부위는 target/blocked
+    const hover: NonNullable<BodySvgOptions['hover']> = {};
+    const cur = DOLL_CELLS[this.selD];
+    if (this.pane === 'doll' && cur?.kind === 'sigil') hover[cur.slot] = 'cursor';
+    const held = this.carry ? world.inventory[this.carry.index] : this.picked >= 0 ? world.inventory[this.picked] : null;
+    if (held?.kind === 'sigil' && held.sigilId && !isActiveSkill(sigilDef(held.sigilId))) {
+      const d = sigilDef(held.sigilId);
+      hover[d.slot] = world.sigils.equipped[d.slot] ? 'blocked' : 'target';
+    }
+    const { svg } = buildBodySvg(world, { hover });
+    svg.setAttribute('width', String(BODY_W * DOLL_BODY_SCALE));
+    svg.setAttribute('height', String(BODY_H * DOLL_BODY_SCALE));
+    svg.style.cssText = `position:absolute;left:${DOLL_BODY_X}px;top:${DOLL_BODY_Y}px;display:block;`;
+    area.appendChild(svg);
+
+    DOLL_CELLS.forEach((c, i) => area.appendChild(c.kind === 'equip' ? this.equipCell(c, i) : this.socketOverlay(c, i)));
+    box.appendChild(area);
     return box;
+  }
+
+  /** 장비 칸 하나 (몸 패널 절대 좌표) */
+  private equipCell(c: DollCell & { kind: 'equip' }, i: number): HTMLDivElement {
+    const world = this.world;
+    const slot = c.slot;
+    const id = world.equipment[slot];
+    const cell = document.createElement('div');
+    cell.dataset['key'] = c.key;
+    const here = this.pane === 'doll' && this.selD === i;
+    const canDrop = this.carry !== null || this.picked >= 0;
+    cell.style.cssText =
+      CELL +
+      `position:absolute;left:${c.x}px;top:${c.y}px;` +
+      `border:1px ${id ? 'solid' : 'dashed'} ${here ? '#7fbfff' : canDrop ? '#e8c76a' : '#3a3a44'};` +
+      `background:${here ? 'rgba(127,191,255,0.12)' : id ? 'rgba(232,199,106,0.07)' : 'rgba(255,255,255,0.02)'};cursor:pointer;`;
+    const label = document.createElement('div');
+    label.textContent = slotLabel(slot);
+    label.style.cssText = 'position:absolute;top:2px;left:5px;font-size:10px;color:#8a8f9a;';
+    cell.appendChild(label);
+    if (id) {
+      const icon = equipIcon(id, ICON_PX);
+      icon.style.cssText += 'position:absolute;left:50%;top:30px;transform:translate(-50%,-50%);';
+      cell.appendChild(icon);
+      const name = document.createElement('div');
+      name.textContent = equipDef(id).name.slice(0, 5);
+      name.style.cssText = `position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:${equipDef(id).color};`;
+      cell.appendChild(name);
+      const dragIcon = equipIcon(id, ICON_PX).outerHTML;
+      cell.onpointerdown = (ev) => beginDrag(ev, dragIcon, (key) => this.onDrop('doll', i, key));
+      cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'doll'; this.selD = i; this.unequipCursor(); };
+    } else {
+      const empty = document.createElement('div');
+      empty.textContent = '비어 있음';
+      empty.style.cssText = 'position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:#555c66;';
+      cell.appendChild(empty);
+    }
+    cell.onclick = () => { this.pane = 'doll'; this.selD = i; this.act(); };
+    cell.ondblclick = () => { this.pane = 'doll'; this.selD = i; this.useCursor(); };
+    cell.onmousemove = (ev) => {
+      if (!this.hoverAllowed(ev)) return;
+      if (this.pane === 'doll' && this.selD === i) return;
+      this.pane = 'doll';
+      this.selD = i;
+      this.rebuild();
+    };
+    if (here && this.carry) {
+      attachPopup(cell, this.carryPopup('doll', i), 'right', this.padMode);
+    } else if (here && id) {
+      const content = equipPopup(world, id, ' — 걸친 것', slot);
+      content.usefulText = '걸치고 있다';
+      content.actions = [
+        { key: this.key('Y', 'E'), label: '벗기 → 가방' },
+        { key: this.key('A 길게', '드래그'), label: '가방 칸으로 끌어 벗기' },
+      ];
+      attachPopup(cell, content, 'right', this.padMode);
+    } else if (here) {
+      attachPopup(cell, {
+        title: `${slotLabel(slot)} — 비어 있음`,
+        lines: ['가방의 장비를 Y/E·A 로 걸치거나 여기로 끌어 놓는다', slot === 'pack' ? '벨트 또는 가방 — 하나만. 가방 칸을 늘린다' : ''].filter(Boolean),
+      }, 'right', this.padMode);
+    }
+    return cell;
+  }
+
+  /** 각인 소켓 덮개 — 실루엣 소켓 자리에 얹는 투명 칸. 커서·클릭·드롭·팝업을 받는다 */
+  private socketOverlay(c: DollCell & { kind: 'sigil' }, i: number): HTMLDivElement {
+    const world = this.world;
+    const slot = c.slot;
+    const id = world.sigils.equipped[slot];
+    const cell = document.createElement('div');
+    cell.dataset['key'] = c.key;
+    const here = this.pane === 'doll' && this.selD === i;
+    cell.style.cssText = `position:absolute;left:${c.x}px;top:${c.y}px;width:${SOCKET_PX}px;height:${SOCKET_PX}px;border-radius:50%;cursor:pointer;`;
+    cell.onclick = () => { this.pane = 'doll'; this.selD = i; this.act(); };
+    cell.ondblclick = () => { this.pane = 'doll'; this.selD = i; this.useCursor(); };
+    cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'doll'; this.selD = i; this.unequipCursor(); };
+    cell.onmousemove = (ev) => {
+      if (!this.hoverAllowed(ev)) return;
+      if (this.pane === 'doll' && this.selD === i) return;
+      this.pane = 'doll';
+      this.selD = i;
+      this.rebuild();
+    };
+    if (here && this.carry) {
+      attachPopup(cell, this.carryPopup('doll', i), 'right', this.padMode);
+    } else if (here && id) {
+      const content = sigilPopup(world, id, ' — 새긴 것');
+      content.usefulText = '새겨져 있다 — 효과가 켜져 있다';
+      content.actions = this.altar
+        ? [{ key: this.key('Y', 'E'), label: '떼기 → 가방 (다시 새기면 오염을 다시 낸다)' }]
+        : [{ key: '제단', label: '떼기는 제단 앞에서만' }];
+      attachPopup(cell, content, 'right', this.padMode);
+    } else if (here) {
+      attachPopup(cell, {
+        title: `${SLOT_LABELS[slot]} — 비어 있음`,
+        lines: ['가방의 패시브 각인을 Y/E·A 로 새기거나 여기로 끌어 놓는다', '부위가 맞는 각인만 — 새기면 오염이 붙는다'],
+      }, 'right', this.padMode);
+    }
+    return cell;
   }
 
   private buildBag(): HTMLElement {
@@ -863,7 +986,7 @@ export class InventoryUI {
         const known = world.sigils.inventory.includes(slot.sigilId);
         const sell = (balance.sigil.sellGold as Record<string, number>)[sigilDef(slot.sigilId).tier] ?? 0;
         content.actions = [
-          { key: this.key('Y', 'E'), label: known ? '새기기 — 이미 익힌 각인' : '새기기 (몸에 박힌다 · 스킬 탭과 같다)' },
+          { key: this.key('Y', 'E'), label: known ? '새기기 — 이미 새긴 각인' : '새기기 (왼쪽 실루엣의 부위에 박힌다)' },
           { key: this.key('A 길게', '드래그'), label: '집어 옮기기' },
           { key: this.key('X', 'X'), label: this.altar ? `팔기 ◆ ${sell}` : '바닥에 버리기' },
         ];

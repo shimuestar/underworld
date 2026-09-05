@@ -14,7 +14,7 @@ import { balance } from '../core/Balance';
 import { equipDef, allEquipIds } from '../core/EquipData';
 import { enemyDef } from '../core/Entities';
 import { addItem, autoBind, dropSlot, hasRoom, itemDef, addSigil, addEquip } from '../core/Inventory';
-import { sigilDef } from '../core/SigilData';
+import { sigilDef, isActiveSkill } from '../core/SigilData';
 import {
   findFreeSpot,
   scatterAwayFromPlayer,
@@ -198,7 +198,10 @@ export function groundItemName(item: GroundItemState): string {
   if (item.kind === 'ammo') return '탄약';
   if (item.kind === 'grenade') return '수류탄';
   if (item.kind === 'battery') return '배터리';
-  if (item.kind === 'sigil') return item.sigilId ? `${sigilDef(item.sigilId).name} (각인)` : '각인';
+  if (item.kind === 'sigil') {
+    if (!item.sigilId) return '각인';
+    return `${sigilDef(item.sigilId).name} (${isActiveSkill(sigilDef(item.sigilId)) ? '스킬' : '각인'})`; // 액티브는 아이템이 아닌 스킬
+  }
   if (item.kind === 'equip') return item.equipId ? `${equipDef(item.equipId).name} (장비)` : '장비';
   return '';
 }
@@ -384,9 +387,17 @@ function takeOneImpl(world: World, c: Container, index: number, announceDeny: bo
     return 'taken';
   }
   if (e.kind === 'sigil') {
-    // 각인은 가방 아이템 — 빈 칸이 있어야 한다. 스킬 탭에서 새긴다 (2026-09-04 아이템화)
-    if (!hasRoom(world, 'sigil')) return deny('full');
     const sigilId = e.sigilId;
+    // 액티브 스킬은 아이템이 아니다 — 가져가는 순간 익힌다 (Sigils 가 sigil_taken 을 받아 acquire)
+    if (sigilId && isActiveSkill(sigilDef(sigilId))) {
+      e.count--;
+      if (e.count <= 0) c.entries.splice(index, 1);
+      world.events.emit('sigil_taken', { sigilId, from: c.ref.kind });
+      world.events.emit('loot_taken', { kind: 'sigil', count: 1, from, sigilId, active: true });
+      return 'taken';
+    }
+    // 패시브 각인은 가방 아이템 — 빈 칸이 있어야 한다. 가방 탭의 몸에 새긴다 (2026-09-04)
+    if (!hasRoom(world, 'sigil')) return deny('full');
     addSigil(world, sigilId ?? '');
     e.count--;
     if (e.count <= 0) c.entries.splice(index, 1);

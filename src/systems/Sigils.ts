@@ -51,9 +51,15 @@ export function init(world: World): void {
     if (!enemyDef(enemyType).dropsOnDeath) return;
     dropAll(world, enemyType, x, z);
   });
+
+  // 액티브 스킬 각인 — 아이템이 아니다. 바닥(Pickups)·주머니·상자(Loot)에서 가져가는 순간 익힌다 (2026-09-04 개념 변경)
+  world.events.on('sigil_taken', (payload) => {
+    const t = payload as { sigilId: string };
+    if (t.sigilId) acquire(world, t.sigilId);
+  });
 }
 
-/** 스킬 교체 입력. (바닥 각인 줍기는 2026-09-04 부터 Pickups 가 소모품처럼 E 로 집는다 — 가방 아이템) */
+/** 스킬 교체 입력. (패시브 각인 줍기는 Pickups 가 소모품처럼 E 로 집어 가방에 넣는다) */
 export function tick(world: World, _dt: number): void {
   if (world.input.cycleSkill) cycleSkill(world);
 }

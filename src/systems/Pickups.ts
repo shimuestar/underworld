@@ -7,6 +7,7 @@
 // 2026-09-04: 처치 드랍 굴림은 Loot 로 옮겼다 — 이제 적은 아이템이 아니라 주머니를 떨군다.
 
 import { balance } from '../core/Balance';
+import { isActiveSkill, sigilDef } from '../core/SigilData';
 import { addItem, recoverGrave, addSigil, addEquip } from '../core/Inventory';
 import type { ItemKind, World } from '../core/World';
 
@@ -207,6 +208,13 @@ export function tick(world: World, dt: number): void {
       continue;
     }
     // 소모품 — 가방으로. 가방이 가득이면 몸까지 왔다가 원자리로 튕겨 돌아간다 (연출·소리는 main 이 pickup_bounced 로)
+    // 액티브 스킬 각인은 아이템이 아니다 — 집는 순간 익힌다 (Sigils 가 sigil_taken 을 받아 acquire). 2026-09-04 개념 변경
+    if (item.kind === 'sigil' && item.sigilId && isActiveSkill(sigilDef(item.sigilId))) {
+      world.groundItems.splice(i, 1);
+      world.events.emit('sigil_taken', { sigilId: item.sigilId, from: 'ground' });
+      world.events.emit('item_picked', { kind: item.kind, sigilId: item.sigilId, active: true });
+      continue;
+    }
     const put =
       item.kind === 'sigil' ? addSigil(world, item.sigilId ?? '')
       : item.kind === 'equip' ? addEquip(world, item.equipId ?? '')

@@ -209,8 +209,8 @@ describe('자석 흡수 — 골드·화살·각인', () => {
     expect(world.gold).toBe(10);
   });
 
-  it('각인은 자석에 걸리지 않고 소모품처럼 바라보며 E 로 집는다 — 가방 아이템이 된다 (2026-09-04 아이템화)', () => {
-    world.groundItems.push({ id: 1, kind: 'sigil', sigilId: 'sig_fireball', x: 10, z: 8.5 }); // 1.5m 앞
+  it('패시브 각인은 자석에 걸리지 않고 소모품처럼 바라보며 E 로 집는다 — 가방 아이템이 된다 (2026-09-04 아이템화)', () => {
+    world.groundItems.push({ id: 1, kind: 'sigil', sigilId: 'sig_dash', x: 10, z: 8.5 }); // 1.5m 앞 (척추 패시브)
     Pickups.tick(world, DT);
     expect(world.groundItems).toHaveLength(1); // 자석 아님
     Sigils.tick(world, DT);
@@ -219,9 +219,20 @@ describe('자석 흡수 — 골드·화살·각인', () => {
     press(world);
     expect(absorb()).toBeGreaterThan(0);
     const bag = world.inventory.find((s) => s?.kind === 'sigil');
-    expect(bag?.sigilId).toBe('sig_fireball');
-    expect(world.skillSlots[0] ?? null).toBeNull(); // 익힌 게 아니다 — 스킬 탭에서 새긴다
+    expect(bag?.sigilId).toBe('sig_dash');
+    expect(world.sigils.equipped.spine).toBeNull(); // 새긴 게 아니다 — 가방 탭의 몸에서 새긴다
     expect(world.quickslots.includes('sigil')).toBe(false); // 퀵슬롯 자동 등록 없음
+  });
+
+  it('액티브 스킬 각인은 아이템이 아니다 — E 로 집는 순간 익혀 스킬 칸에 오른다 (2026-09-04 개념 변경)', () => {
+    Sigils.init(world);
+    world.groundItems.push({ id: 1, kind: 'sigil', sigilId: 'sig_fireball', x: 10, z: 8.5 });
+    Pickups.tick(world, DT);
+    press(world);
+    expect(absorb()).toBeGreaterThan(0); // 소모품처럼 날아와 몸에 닿는 순간
+    expect(world.inventory.some((s) => s?.kind === 'sigil')).toBe(false); // 가방을 거치지 않는다
+    expect(world.sigils.inventory).toContain('sig_fireball');
+    expect(world.skillSlots[0]).toBe('sig_fireball');
   });
 });
 

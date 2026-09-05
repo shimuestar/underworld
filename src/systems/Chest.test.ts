@@ -7,7 +7,7 @@ import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { addEquip, bagSigilIds, initInventory } from '../core/Inventory';
-import { sigilDef } from '../core/SigilData';
+import { isActiveSkill, sigilDef } from '../core/SigilData';
 import { World, type ChestState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnChests } from '../level/Spawner';
@@ -161,7 +161,7 @@ describe('전리품 — 상자 속(chestItems)', () => {
     expect(golds[0]).toEqual(expect.objectContaining({ x: chest.x, z: chest.z }));
   });
 
-  it('각인을 정확히 1줄 준다 — 가져가면 가방 아이템이 되고, 스킬 탭에서 새겨야 익힌다 (바닥에 안 떨어진다)', () => {
+  it('각인을 정확히 1줄 준다 — 패시브는 가방 아이템(가방 탭의 몸에서 새긴다), 액티브는 가져가는 순간 익힌다 (바닥에 안 떨어진다)', () => {
     Sigils.init(world);
     const chest = putChest(world, 6 + 1.5, 6);
     const acquired: { id: string }[] = [];
@@ -175,16 +175,23 @@ describe('전리품 — 상자 속(chestItems)', () => {
     const idx = chest.chestItems!.indexOf(sigils[0]!);
     revealAll(world, chest);
     expect(Loot.takeOne(world, idx)).toBe('taken');
-    expect(bagSigilIds(world)).toEqual([id]); // 가방으로 — 아직 익히지 않았다
-    expect(acquired).toHaveLength(0);
-    expect(world.sigils.inventory).not.toContain(id);
     expect(chest.chestItems!.some((e) => e.kind === 'sigil')).toBe(false);
-    // 스킬 탭 — 가방의 각인을 새긴다
-    const slot = world.inventory.findIndex((s) => s?.kind === 'sigil');
-    expect(['attached', 'learned']).toContain(Sigils.learnFromBag(world, slot));
-    expect(acquired.map((a) => a.id)).toEqual([id]);
-    expect(world.sigils.inventory).toContain(id);
-    expect(bagSigilIds(world)).toEqual([]);
+    if (isActiveSkill(sigilDef(id))) {
+      // 액티브 스킬 — 아이템이 아니다. 가져가는 순간 익힌다 (2026-09-04 개념 변경)
+      expect(bagSigilIds(world)).toEqual([]);
+      expect(acquired.map((a) => a.id)).toEqual([id]);
+      expect(world.sigils.inventory).toContain(id);
+    } else {
+      expect(bagSigilIds(world)).toEqual([id]); // 패시브 — 가방으로, 아직 새기지 않았다
+      expect(acquired).toHaveLength(0);
+      expect(world.sigils.inventory).not.toContain(id);
+      // 가방 탭의 몸 — 가방의 각인을 새긴다
+      const slot = world.inventory.findIndex((s) => s?.kind === 'sigil');
+      expect(Sigils.learnFromBag(world, slot)).toBe('attached');
+      expect(acquired.map((a) => a.id)).toEqual([id]);
+      expect(world.sigils.inventory).toContain(id);
+      expect(bagSigilIds(world)).toEqual([]);
+    }
   });
 
   it('장비 한 줄 — chest.equipChance 안이면 들어가고, 몸에 걸친 것·가방에 든 것은 뽑지 않는다 (2026-09-04)', () => {
@@ -222,6 +229,7 @@ describe('전리품 — 상자 속(chestItems)', () => {
     interact(world);
     const idx = chest.chestItems!.findIndex((e) => e.kind === 'sigil');
     expect(idx).toBeGreaterThanOrEqual(0);
+    chest.chestItems![idx]!.sigilId = 'sig_dash'; // 패시브로 고정 — 액티브는 아이템이 아니라 가방과 무관하게 익힌다
     revealAll(world, chest);
     world.inventory = world.inventory.map(() => ({ kind: 'potion' as const, count: balance.items.stackMax }));
     expect(Loot.takeOne(world, idx)).toBe('full');

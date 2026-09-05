@@ -2015,9 +2015,11 @@ events.on('item_picked', (payload) => {
     return;
   }
   if (kind === 'sigil') {
-    // 각인은 가방 아이템 (2026-09-04) — 새기는 것은 스킬 탭에서
+    // 패시브 각인은 가방 아이템 (2026-09-04) — 가방 탭의 몸에 새긴다. 액티브는 집는 순간 익혀 sigil_acquired 토스트가 뜬다
     audio.play('pickup');
-    showReaction(`✦ ${sigilId ? sigilDef(sigilId).name : '각인'} — 가방에 들어왔다. 스킬 탭(Tab)에서 새긴다`, 2400);
+    if (!(payload as { active?: boolean }).active) {
+      showReaction(`✦ ${sigilId ? sigilDef(sigilId).name : '각인'} — 가방에 들어왔다. 가방 탭(I)의 몸에 새긴다`, 2400);
+    }
     return;
   }
   audio.play(ITEM_SOUND[kind] ?? 'pickup_potion');
@@ -2581,7 +2583,7 @@ events.on('sigil_learn_denied', (payload) => {
   showReaction(
     d.reason === 'known'
       ? `${sigilDef(d.id).name} — 이미 익힌 각인이다. 제단에서 팔 수 있다`
-      : `${sigilDef(d.id).name} — ${PART[d.slot ?? ''] ?? d.slot}이 차 있다. 제단에서 떼고 새긴다`,
+      : `${sigilDef(d.id).name} — ${PART[d.slot ?? ''] ?? d.slot}이 차 있다. 제단 앞에서 가방 탭의 몸 소켓을 눌러 떼고 새긴다`,
     2400,
   );
   audio.play('shop_deny');

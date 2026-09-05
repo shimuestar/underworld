@@ -68,7 +68,9 @@ export function lootEntryPopup(world: World, e: LootEntry): PopupContent {
   if (e.kind === 'sigil') {
     if (!e.sigilId) return { title: '각인', lines: [] };
     const c = sigilPopup(world, e.sigilId);
-    c.note = '가져가면 가방에 들어간다 — 스킬 탭에서 새긴다';
+    c.note = isActiveSkill(sigilDef(e.sigilId))
+      ? '액티브 — 가져가면 바로 익힌다. 스킬 탭(Tab)에서 퀵슬롯에 올린다'
+      : '패시브 각인 — 가져가면 가방에 들어간다. 가방 탭(I)의 몸에 새긴다';
     return c;
   }
   if (e.kind === 'equip') {
@@ -104,13 +106,13 @@ export function sigilPopup(world: World, sigilId: string, where = ''): PopupCont
   const def = sigilDef(sigilId);
   const active = isActiveSkill(def);
   const lines: string[] = def.desc ? [def.desc] : [];
-  lines.push(active ? '액티브 — 익히면 스킬 칸(Z·X·C·V)에 오른다' : `패시브 — ${PART_LABEL[def.slot] ?? def.slot}에 새긴다`);
+  lines.push(active ? '액티브 스킬 — 아이템이 아니다. 익히면 스킬 칸(Z·X·C·V)에 오른다' : `패시브 각인 — ${PART_LABEL[def.slot] ?? def.slot}에 새긴다`);
   lines.push(`새길 때 오염 +${(balance.corruption.slotCost as Record<string, number>)[def.slot] ?? 0}`);
   const known = world.sigils.inventory.includes(sigilId);
   const partFull = !active && world.sigils.equipped[def.slot] !== null;
   const sell = (balance.sigil.sellGold as Record<string, number>)[def.tier] ?? 0;
   return {
-    title: `${def.name} (각인)${where}`,
+    title: `${def.name} (${active ? '스킬' : '각인'})${where}`,
     lines,
     useful: !known && !partFull,
     usefulText: known

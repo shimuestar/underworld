@@ -107,7 +107,8 @@ describe('스킬 드랍과 획득', () => {
     Sigils.tick(world, DT);
     expect(world.sigils.inventory).toHaveLength(0);
 
-    // 각인은 가방 아이템 (2026-09-04) — 바라보며 E 로 집는다(Pickups). 착지 유예(landNoMagnetTicks)가 지나야 집힌다
+    // 화염구는 액티브 스킬 — 아이템이 아니다. 바라보며 E 로 집는 순간 익혀 스킬 칸에 오른다 (2026-09-04 개념 변경).
+    // 착지 유예(landNoMagnetTicks)가 지나야 집힌다
     initInventory(world);
     const drop = world.groundItems[0]!;
     world.player.x = drop.x;
@@ -118,15 +119,11 @@ describe('스킬 드랍과 획득', () => {
     world.input = { ...Input.emptySnapshot(), interactPressed: true };
     Pickups.tick(world, DT);
     world.input = Input.emptySnapshot();
-    for (let i = 0; i < 120 && world.groundItems.length > 0; i++) Pickups.tick(world, DT);
+    for (let i = 0; i < 120 && world.groundItems.length > 0; i++) Pickups.tick(world, DT); // 날아오는 시간
     expect(world.groundItems).toHaveLength(0);
-    expect(world.sigils.inventory).toEqual([]); // 아직 익히지 않았다
-    const slot = world.inventory.findIndex((s) => s?.kind === 'sigil');
-    expect(world.inventory[slot]!.sigilId).toBe('sig_fireball');
-    expect(Sigils.learnFromBag(world, slot)).toBe('learned'); // 스킬 탭에서 익힌다
+    expect(world.inventory.some((s) => s?.kind === 'sigil')).toBe(false); // 가방을 거치지 않는다
     expect(world.sigils.inventory).toEqual(['sig_fireball']);
     expect(world.skillSlots[0]).toBe('sig_fireball');
-    expect(world.inventory[slot]).toBeNull(); // 가방에서 빠졌다
   });
 
   it('처형으로 죽여도 한 번만 떨어진다 (melee_kill + enemy_died 중복 방지)', () => {

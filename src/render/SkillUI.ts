@@ -1,21 +1,14 @@
-// Tab 창 — 스킬. 패시브는 몸 실루엣의 부위에 새기고(각인), 액티브는 리스트에서 골라
-// 스킬 퀵슬롯(Z·X·C·V)에 올린다. 가방·소모품은 I 창(InventoryUI)이 따로 맡는다.
+// Tab 창 — 스킬(액티브). 익힌 액티브 스킬을 리스트에서 골라 스킬 퀵슬롯(Z·X·C·V)에 올린다.
+// 2026-09-04 개념 변경: 각인은 전부 패시브(가방 아이템)이고 몸 실루엣·새기기는 가방 탭(InventoryUI)으로 옮겼다.
+// 액티브 스킬은 아이템이 아니다 — 획득하는 순간 이 리스트에 등록된다.
 //
-// 조작: 소지 패시브 클릭 = 그 부위에 새기기 / 제단에서 몸 위의 소켓 클릭 = 떼기
-//       액티브 클릭 = 고르기 → 스킬 칸 클릭(또는 Z·X·C·V) = 올리기 / 빈손으로 칸 클릭 = 비우기
+// 조작: 액티브 클릭 = 고르기 → 스킬 칸 클릭(또는 Z·X·C·V) = 올리기 / 빈손으로 칸 클릭 = 비우기
 
 import { balance } from '../core/Balance';
-import { isActiveSkill, sigilDef, SIGIL_SLOTS, type SigilDef, type SigilSlot } from '../core/SigilData';
+import { isActiveSkill, sigilDef, type SigilDef } from '../core/SigilData';
 import type { World } from '../core/World';
 import * as Sigils from '../systems/Sigils';
 
-const SLOT_LABELS: Record<SigilSlot, string> = {
-  eye: '눈',
-  rightArm: '오른팔',
-  leftArm: '왼팔',
-  heart: '심장',
-  spine: '척추',
-};
 export const SKILL_KEYS = ['Z', 'X', 'C', 'V'];
 
 function swatch(color: string): HTMLElement {
@@ -25,33 +18,6 @@ function swatch(color: string): HTMLElement {
     `background:${color};box-shadow:0 0 6px ${color};vertical-align:baseline;`;
   return dot;
 }
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
-function svgEl<K extends keyof SVGElementTagNameMap>(
-  tag: K,
-  attrs: Record<string, string | number>,
-): SVGElementTagNameMap[K] {
-  const el = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
-  return el;
-}
-
-/** 실루엣 위 소켓 자리와 이름표 자리 (정면 — 그림의 오른팔이 보는 사람의 왼쪽).
- *  이름표는 좌우로 나눠 겹치지 않게 했고, 소켓에서 이름표로 가는 안내선을 긋는다 */
-const BODY_ANCHORS: Record<
-  SigilSlot,
-  { x: number; y: number; side: 'left' | 'right'; labelY: number }
-> = {
-  eye: { x: 180, y: 42, side: 'right', labelY: 42 },
-  heart: { x: 193, y: 104, side: 'right', labelY: 96 },
-  leftArm: { x: 233, y: 122, side: 'right', labelY: 140 },
-  rightArm: { x: 127, y: 122, side: 'left', labelY: 122 },
-  spine: { x: 180, y: 140, side: 'left', labelY: 164 },
-};
-const BODY_W = 360;
-const BODY_H = 250;
-const BODY_LINE = '#3a3f4a';
-const BODY_FILL = '#1c1f27';
 
 
 export class SkillUI {
@@ -118,81 +84,21 @@ export class SkillUI {
     title.style.cssText = 'color:#9fe870;margin-bottom:12px;font-size:15px;';
     panel.appendChild(title);
 
-    // 위: 패시브 — 실루엣 + 소지 패시브
-    const passiveRow = document.createElement('div');
-    passiveRow.style.cssText = 'display:flex;gap:22px;align-items:flex-start;';
-    const { svg, sockets } = this.buildBody();
-    passiveRow.appendChild(svg);
-    passiveRow.appendChild(this.buildPassiveList(sockets));
-    panel.appendChild(passiveRow);
-
-    // 아래: 액티브 — 스킬 퀵슬롯 + 리스트
+    // 액티브 — 스킬 퀵슬롯 + 익힌 리스트 (패시브 각인·몸 실루엣은 가방 탭)
     const activeBox = document.createElement('div');
-    activeBox.style.cssText = 'margin-top:14px;border-top:1px solid #23232b;padding-top:12px;';
+    activeBox.style.cssText = 'padding-top:4px;';
     activeBox.appendChild(this.buildSkillSlots());
     activeBox.appendChild(this.buildActiveList());
     panel.appendChild(activeBox);
 
     const hint = document.createElement('div');
     hint.textContent =
-      '소지 패시브 클릭 = 부위에 새기기   ·   ' +
-      (this.altarMode ? '몸 위의 소켓 클릭 = 떼기   ·   ' : '떼기는 제단에서   ·   ') +
-      '액티브 클릭 = 고르기 → 스킬 칸 클릭(또는 Z·X·C·V) = 올리기   ·   빈손으로 칸 클릭 = 비우기   ·   Tab 닫기   ·   가방은 I';
+      '액티브 클릭 = 고르기 → 스킬 칸 클릭(또는 Z·X·C·V) = 올리기   ·   빈손으로 칸 클릭 = 비우기   ·   ' +
+      '패시브 각인은 가방 탭(I)의 몸에 새긴다   ·   Tab 닫기';
     hint.style.cssText = 'margin-top:14px;color:#6c7280;font-size:11px;';
     panel.appendChild(hint);
 
     this.root.replaceChildren(panel);
-  }
-
-  /** 소지한 패시브 — 새겨지지 않은 것만. 클릭하면 그 부위에 새긴다 */
-  private buildPassiveList(sockets: Record<SigilSlot, SVGCircleElement>): HTMLElement {
-    const world = this.world;
-    const list = document.createElement('div');
-    list.style.cssText = 'flex:1;min-width:250px;';
-    const head = document.createElement('div');
-    head.textContent = '패시브 — 부위에 새겨야 켜진다';
-    head.style.cssText = 'color:#9fe870;margin-bottom:6px;';
-    list.appendChild(head);
-
-    // 가방에 든 패시브 각인 (2026-09-04 아이템화) — 새기면 가방에서 빠져 몸에 박힌다
-    const owned: { index: number; def: SigilDef }[] = [];
-    world.inventory.forEach((slot, index) => {
-      if (slot?.kind === 'sigil' && slot.sigilId && !isActiveSkill(sigilDef(slot.sigilId))) owned.push({ index, def: sigilDef(slot.sigilId) });
-    });
-    if (owned.length === 0) {
-      const empty = document.createElement('div');
-      empty.textContent = '가방에 패시브 각인이 없다 — 주머니·상자·처형 드랍에서 각인을 집어 오면 여기서 새긴다';
-      empty.style.color = '#555c66';
-      list.appendChild(empty);
-    }
-    for (const { index, def } of owned) {
-      const known = world.sigils.inventory.includes(def.id);
-      const occupied = world.sigils.equipped[def.slot] !== null;
-      const blocked = known || occupied;
-      const row = skillRow(def, null);
-      row.style.cursor = blocked ? 'default' : 'pointer';
-      const h = row.querySelector('.head') as HTMLElement;
-      h.appendChild(badge(`→ ${SLOT_LABELS[def.slot]}`, '#8a8f9a'));
-      h.appendChild(
-        known
-          ? badge('이미 새겨진 각인 — 제단에서 판다', '#8a8f9a')
-          : occupied
-            ? badge('부위 사용 중', '#e04444')
-            : badge(`클릭해서 새기기 · 오염 +${(balance.corruption.slotCost as Record<string, number>)[def.slot] ?? 0}`, '#7fbfff'),
-      );
-      if (!def.slice) h.appendChild(badge('이 빌드에선 효과 없음', '#e04444'));
-      const socket = sockets[def.slot];
-      row.onmouseenter = () => socket.setAttribute('data-hover', blocked ? 'blocked' : 'target');
-      row.onmouseleave = () => socket.removeAttribute('data-hover');
-      if (!blocked) {
-        row.onclick = () => {
-          Sigils.learnFromBag(world, index);
-          this.rebuild();
-        };
-      }
-      list.appendChild(row);
-    }
-    return list;
   }
 
   /** 스킬 퀵슬롯 — Z·X·C·V. 고른 액티브가 있으면 클릭으로 올리고, 없으면 비운다 */
@@ -245,34 +151,11 @@ export class SkillUI {
     head.style.cssText = 'color:#9fe870;margin-bottom:6px;';
     list.appendChild(head);
     const owned = world.sigils.inventory.map((id) => sigilDef(id)).filter(isActiveSkill);
-    // 가방에 든 액티브 각인 — 익히면(오염) 목록에 들고 빈 칸에 오른다 (2026-09-04 아이템화)
-    const inBag: { index: number; def: SigilDef }[] = [];
-    world.inventory.forEach((slot, index) => {
-      if (slot?.kind === 'sigil' && slot.sigilId && isActiveSkill(sigilDef(slot.sigilId))) inBag.push({ index, def: sigilDef(slot.sigilId) });
-    });
-    if (owned.length === 0 && inBag.length === 0) {
+    if (owned.length === 0) {
       const empty = document.createElement('div');
       empty.textContent = '없음';
       empty.style.color = '#555c66';
       list.appendChild(empty);
-    }
-    if (inBag.length > 0) {
-      const bagGrid = document.createElement('div');
-      bagGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:2px 18px;margin-bottom:8px;';
-      for (const { index, def } of inBag) {
-        const known = world.sigils.inventory.includes(def.id);
-        const row = skillRow(def, null);
-        row.style.cursor = known ? 'default' : 'pointer';
-        const h = row.querySelector('.head') as HTMLElement;
-        h.appendChild(
-          known
-            ? badge('가방 — 이미 익힌 각인, 제단에서 판다', '#8a8f9a')
-            : badge(`가방 — 클릭해서 익히기 · 오염 +${(balance.corruption.slotCost as Record<string, number>)[def.slot] ?? 0}`, '#7fbfff'),
-        );
-        if (!known) row.onclick = () => { Sigils.learnFromBag(world, index); this.rebuild(); };
-        bagGrid.appendChild(row);
-      }
-      list.appendChild(bagGrid);
     }
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:2px 18px;';
@@ -300,114 +183,6 @@ export class SkillUI {
     return list;
   }
 
-  /** 몸 실루엣 — 부위마다 소켓. 장착된 각인의 색으로 그 부위 윤곽이 물들고 소켓이 빛난다 */
-  private buildBody(): { svg: SVGSVGElement; sockets: Record<SigilSlot, SVGCircleElement> } {
-    const world = this.world;
-    const svg = svgEl('svg', {
-      width: BODY_W,
-      height: BODY_H,
-      viewBox: `0 0 ${BODY_W} ${BODY_H}`,
-    });
-    svg.style.cssText = 'flex:none;display:block;';
-    const style = svgEl('style', {});
-    style.textContent =
-      '.part{fill:' + BODY_FILL + ';stroke:' + BODY_LINE + ';stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
-      '.limb{fill:none;stroke:' + BODY_LINE + ';stroke-width:13;stroke-linecap:round}' +
-      '.socket{fill:#10131a;stroke:#555c66;stroke-width:2;stroke-dasharray:3 3}' +
-      '.socket.on{stroke-dasharray:none}' +
-      '.socket[data-hover=target]{stroke:#fff;stroke-width:3;stroke-dasharray:none;animation:sockpulse .7s ease-in-out infinite alternate}' +
-      '.socket[data-hover=blocked]{stroke:#e04444;stroke-width:3;stroke-dasharray:none}' +
-      '@keyframes sockpulse{from{r:9}to{r:12}}' +
-      '.lead{stroke:#3a3f4a;stroke-width:1}' +
-      '.lbl{font:12px monospace;fill:#8a8f9a}' +
-      '.val{font:12px monospace}';
-    svg.appendChild(style);
-
-    // 부위별 색 — 장착된 각인 색, 없으면 기본 윤곽색
-    const tint = (slot: SigilSlot): string => {
-      const id = world.sigils.equipped[slot];
-      return id ? sigilDef(id).color : BODY_LINE;
-    };
-    const glow = (el: SVGElement, color: string): void => {
-      el.style.filter = `drop-shadow(0 0 5px ${color})`;
-    };
-
-    // 머리·몸통·팔·다리 (정면). 그림의 오른팔 = 보는 사람의 왼쪽
-    const head = svgEl('circle', { class: 'part', cx: 180, cy: 42, r: 21 });
-    const torso = svgEl('path', {
-      class: 'part',
-      d: 'M160,68 L200,68 Q212,68 212,82 L212,164 Q212,172 204,172 L156,172 Q148,172 148,164 L148,82 Q148,68 160,68 Z',
-    });
-    const rightArm = svgEl('line', { class: 'limb', x1: 152, y1: 80, x2: 126, y2: 132 });
-    const leftArm = svgEl('line', { class: 'limb', x1: 208, y1: 80, x2: 234, y2: 132 });
-    const legL = svgEl('line', { class: 'limb', x1: 168, y1: 176, x2: 163, y2: 238 });
-    const legR = svgEl('line', { class: 'limb', x1: 192, y1: 176, x2: 197, y2: 238 });
-    const spine = svgEl('line', {
-      class: 'lead', x1: 180, y1: 74, x2: 180, y2: 166, 'stroke-dasharray': '4 3', 'stroke-width': 2,
-    });
-    for (const el of [legL, legR, rightArm, leftArm, torso, head, spine]) svg.appendChild(el);
-
-    // 장착 부위 물들이기
-    const partOf: Record<SigilSlot, SVGElement> = { eye: head, heart: torso, spine, rightArm, leftArm };
-    for (const slot of SIGIL_SLOTS) {
-      const id = world.sigils.equipped[slot];
-      if (!id) continue;
-      const color = tint(slot);
-      partOf[slot].setAttribute('stroke', color);
-      if (slot === 'heart') torso.setAttribute('fill', '#1f1a24'); // 심장이 뛰면 몸통이 살짝 따뜻해진다
-      glow(partOf[slot], color);
-    }
-
-    // 소켓 + 이름표
-    const sockets = {} as Record<SigilSlot, SVGCircleElement>;
-    for (const slot of SIGIL_SLOTS) {
-      const a = BODY_ANCHORS[slot];
-      const id = world.sigils.equipped[slot];
-      const labelX = a.side === 'left' ? 112 : 248;
-      const lead = svgEl('line', {
-        class: 'lead', x1: a.x, y1: a.y, x2: a.side === 'left' ? labelX + 4 : labelX - 4, y2: a.labelY,
-      });
-      svg.appendChild(lead);
-
-      const socket = svgEl('circle', { class: 'socket' + (id ? ' on' : ''), cx: a.x, cy: a.y, r: 9 });
-      socket.dataset.slot = slot;
-      if (id) {
-        const def = sigilDef(id);
-        socket.setAttribute('fill', def.color);
-        socket.setAttribute('stroke', def.color);
-        glow(socket, def.color);
-        if (this.altarMode) {
-          socket.style.cursor = 'pointer';
-          socket.onclick = () => {
-            Sigils.detach(world, slot);
-            this.rebuild();
-          };
-        }
-      }
-      svg.appendChild(socket);
-      sockets[slot] = socket;
-
-      const anchor = a.side === 'left' ? 'end' : 'start';
-      const lbl = svgEl('text', { class: 'lbl', x: labelX, y: a.labelY - 3, 'text-anchor': anchor });
-      lbl.textContent = SLOT_LABELS[slot];
-      svg.appendChild(lbl);
-      const val = svgEl('text', { class: 'val', x: labelX, y: a.labelY + 11, 'text-anchor': anchor });
-      if (id) {
-        const def = sigilDef(id);
-        val.textContent = def.name;
-        val.setAttribute('fill', def.color);
-        if (this.altarMode) {
-          val.style.cursor = 'pointer';
-          val.onclick = socket.onclick;
-        }
-      } else {
-        val.textContent = '비어 있음';
-        val.setAttribute('fill', '#555c66');
-      }
-      svg.appendChild(val);
-    }
-    return { svg, sockets };
-  }
 }
 
 function badge(text: string, color: string): HTMLElement {
