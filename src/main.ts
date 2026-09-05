@@ -3934,6 +3934,7 @@ function pollPadWhilePaused(): void {
   // connected 를 먼저 보면(구 코드) 일시정지 중 끊긴 패드를 영영 다시 못 알아본다:
   // 패드가 빠지면 게임이 멈추고, 멈춘 동안엔 여기 말고는 폴링할 곳이 없다
   pad.poll();
+  input.notePadInput(); // 일시정지 중에도 패드를 만지면 즉시 패드 표기로 (키보드로 멈췄다가 패드를 집는 경우)
   updatePauseNotice();
   if (!pad.connected) return;
   if (pad.touched) audio.unlock(); // 패드를 만졌다 — 멈춰 있던 소리도 함께 깨워 본다

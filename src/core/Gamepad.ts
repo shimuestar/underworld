@@ -171,7 +171,10 @@ export class GamepadInput {
       if (b.pressed || b.value >= threshold) this.now.add(i);
     });
 
-    this.sawInput = this.now.size > 0 || this.axesRaw.some((a) => Math.abs(a) > 0.5);
+    // '만졌다' 판정 — 버튼 하나, 또는 스틱이 데드존을 넘는 만큼만 움직여도. 예전 0.5 문턱은 살짝 젓는 조준·걷기를
+    // 놓쳐 키보드로 놀다 패드를 집어도 안내가 한참 키보드 표기로 남았다 (2026-09-04 사용자: 즉시 전환)
+    const stickMin = Math.max(balance.input.gamepad.moveDeadzone, balance.input.gamepad.lookDeadzone);
+    this.sawInput = this.now.size > 0 || this.axesRaw.some((a) => Math.abs(a) > stickMin);
     if (this.sawInput) this.lastInputMs = performance.now();
   }
 

@@ -93,6 +93,10 @@ export class Input {
   get lastDevice(): 'kb' | 'pad' {
     return this.device;
   }
+  /** 틱(sample) 밖에서 패드를 폴링하는 곳(일시정지 메뉴)이 '패드를 만졌다'를 알린다 — 곧바로 패드 표기로 바뀐다 */
+  notePadInput(): void {
+    if (this.gamepad.touched) this.device = 'pad';
+  }
   private keys = new Set<string>();
   private dx = 0;
   private dy = 0;
