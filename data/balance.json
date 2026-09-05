@@ -652,7 +652,7 @@
 
   "_ghoulGrappleNote": "구울 파먹기 — 붙잡히면 이동·공격이 잠기고, 근접 키를 mashToEscape 번 연타해야 밀쳐낸다. 시선은 자유",
   "ghoulGrapple": {
-    "biteDamage": 4,
+    "biteDamage": 5,
     "biteIntervalTicks": 26,
     "_mashNote": "6 → 3 (2026-09-01 — 물리면 너무 오래 갇힌다)",
     "mashToEscape": 3,
