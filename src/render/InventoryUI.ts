@@ -584,8 +584,12 @@ export class InventoryUI {
         count.style.cssText = 'position:absolute;bottom:3px;right:5px;font-size:11px;color:#cfd2da;';
         cell.appendChild(count);
 
-        // 지금 써도 값어치가 없으면 흐리게 — "마셔도 안 나가는" 이유를 미리 보여 준다
-        if (!isUseful(world, slot.kind) && !(this.carry && this.carry.index === i)) cell.style.opacity = '0.45';
+        // 지금 써도 값어치가 없으면(만피의 체력 물약·만마나의 마나 물약·버프 중인 음식) 흐리게 — "마셔도 안 나가는" 이유를
+        // 미리 보여 준다. 칸이 아니라 아이콘·개수에만 건다 — 칸에 걸면 자식인 설명 팝업까지 흐려진다 (2026-09-04)
+        if (!isUseful(world, slot.kind) && !(this.carry && this.carry.index === i)) {
+          icon.style.opacity = '0.45';
+          count.style.opacity = '0.45';
+        }
 
         const bound = world.quickslots.indexOf(slot.kind);
         if (bound >= 0) {
