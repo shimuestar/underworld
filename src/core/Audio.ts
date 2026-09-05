@@ -153,10 +153,19 @@ export class GameAudio {
   /** 이어지는 전류음 — 채널 시전이 끝날 때 끈다 */
   private beam: { gain: GainNode; nodes: (OscillatorNode | AudioBufferSourceNode)[] } | null = null;
 
-  /** 사용자 제스처(클릭) 시점에 호출 — 오디오 컨텍스트 생성/재개 */
+  /** 마지막 재개 시도 시각 — 멈춘 컨텍스트에 resume 을 매 틱 던지지 않게 (500ms 에 한 번) */
+  private lastResumeTry = 0;
+
+  /** 사용자 제스처(클릭·키·패드) 또는 포커스 복귀 시점에 호출 — 오디오 컨텍스트 생성/재개.
+   *  브라우저는 창을 벗어났다 돌아오면 컨텍스트를 멈춰 두기도 한다(Safari 는 interrupted) — 제스처 없이는
+   *  거부될 수 있으므로 여러 계기에서 되풀이 부른다. 성공하면 statechange 로 running 이 된다 */
   unlock(): void {
     if (!this.ctx) {
       this.ctx = new AudioContext();
+      // 브라우저가 멈추면(백그라운드·전환) 화면이 보이는 동안 스스로 되살리기를 시도한다
+      this.ctx.addEventListener('statechange', () => {
+        if (this.ctx && this.ctx.state !== 'running' && !document.hidden) this.unlock();
+      });
       // 마스터 컴프레서 — 소리가 겹칠 때 뭉개지지 않고 펀치가 살도록
       const compressor = this.ctx.createDynamicsCompressor();
       compressor.threshold.value = -18;
@@ -166,7 +175,22 @@ export class GameAudio {
       compressor.connect(this.ctx.destination);
       this.out = compressor;
     }
-    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    if (this.ctx.state !== 'running') {
+      const now = performance.now();
+      if (now - this.lastResumeTry < 500) return;
+      this.lastResumeTry = now;
+      void this.ctx.resume().catch(() => {}); // 제스처 없이 거부되면 다음 계기에 다시
+    }
+  }
+
+  /** 소리가 실제로 나올 수 있는 상태인가 — 일시정지 안내용 */
+  get running(): boolean {
+    return this.ctx?.state === 'running';
+  }
+
+  /** 컨텍스트가 만들어졌는가 (첫 클릭 전에는 없다 — 그때는 '멈춤'이 아니라 '아직') */
+  get created(): boolean {
+    return this.ctx !== null;
   }
 
   /** 채널 시전(관통 뇌창) — 붙들고 있는 동안 이어지는 전류음.

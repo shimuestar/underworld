@@ -3060,6 +3060,7 @@ const systems = [
 
 function simulate(dt: number): void {
   world.input = input.sample();
+  if (input.gamepad.touched) audio.unlock(); // 창 전환 뒤 멈춘 소리 — 패드 입력도 재개 계기로 (500ms 에 한 번만 시도)
 
   // 상호작용은 전용 키(E·패드 B)만 — 근접 키(우클릭·RT)는 더 이상 상호작용으로 바뀌지 않는다
   // (2026-09-04 사용자 결정: 문·주머니 앞에서 휘두르려다 창이 열리는 사고를 없앤다).
@@ -3920,7 +3921,9 @@ function pollPadWhilePaused(): void {
   // connected 를 먼저 보면(구 코드) 일시정지 중 끊긴 패드를 영영 다시 못 알아본다:
   // 패드가 빠지면 게임이 멈추고, 멈춘 동안엔 여기 말고는 폴링할 곳이 없다
   pad.poll();
+  updatePauseNotice();
   if (!pad.connected) return;
+  if (pad.touched) audio.unlock(); // 패드를 만졌다 — 멈춰 있던 소리도 함께 깨워 본다
   if (gamepadUI.open) {
     gamepadUI.poll();
     return;
@@ -3977,7 +3980,10 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
 // 패드가 연결돼 있으면 메뉴 오른쪽에 현재 매핑 다이어그램을 함께 띄운다
 () => (input.gamepad.connected ? padDiagramSvg((a) => input.gamepad.binding(a), -1) : null));
 
+/** 창 포커스 상실(알트탭·다른 창·탭 숨김)로 멈췄는가 — 돌아온 뒤 안내와 재개 규칙이 다르다 */
+let pausedByFocusLoss = false;
 function setPaused(paused: boolean): void {
+  if (!paused) pausedByFocusLoss = false;
   if (loop.isPaused === paused) return;
   loop.setPaused(paused);
   world.paused = paused;
@@ -3999,10 +4005,56 @@ document.addEventListener('pointerlockchange', () => {
   // 꽂혀만 있고 키보드로 노는 사람에게는 그대로 걸려야 하므로 active 로 가른다
   else if (!world.uiOpen && !input.gamepad.active) setPaused(true);
 });
+// ---- 창을 벗어났다 돌아오기 ----
+// 브라우저 규칙: 포커스를 잃었다 되찾으면 페이지가 새 제스처(클릭·키)를 받기 전까지 게임패드 노출과 오디오 재개가
+// 막힐 수 있다(핑거프린팅·자동재생 정책). 없앨 수는 없으니 ① 어떤 계기에서든 소리 재개를 시도하고
+// ② 한 번의 제스처(아무 키·클릭)로 재개·패드·소리가 다 살아나게 하며 ③ 메뉴에 이유를 적어 둔다 (2026-09-04)
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) setPaused(true);
+  if (document.hidden) {
+    if (!loop.isPaused) pausedByFocusLoss = true;
+    setPaused(true);
+  } else {
+    onFocusRegained();
+  }
 });
-window.addEventListener('blur', () => setPaused(true));
+window.addEventListener('blur', () => {
+  if (!loop.isPaused) pausedByFocusLoss = true;
+  setPaused(true);
+});
+window.addEventListener('focus', onFocusRegained);
+function onFocusRegained(): void {
+  audio.unlock(); // 제스처 없이도 되살아나는 브라우저에선 여기서 곧바로 돌아온다
+  input.gamepad.resetEdges(); // 사이에 멈춰 있던 버튼 상태가 유령 엣지가 되지 않게
+}
+// 아무 키·클릭 = 제스처. 소리를 깨우고, 패드 사용자가 창 전환으로 멈춘 상태라면 메뉴를 거치지 않고 바로 재개한다
+// (Esc 한 번 → 다시 클릭 한 번의 두 단계를 한 단계로)
+window.addEventListener(
+  'keydown',
+  (e) => {
+    audio.unlock();
+    if (
+      e.code !== 'Escape' && // Esc 는 메뉴가 '계속'으로 처리한다
+      pausedByFocusLoss && loop.isPaused && pauseMenu.open && !gamepadUI.open && input.lastDevice === 'pad'
+    ) {
+      setPaused(false);
+    }
+  },
+  { capture: true },
+);
+window.addEventListener('pointerdown', () => audio.unlock(), { capture: true });
+/** 일시정지 메뉴 안내 — 창 전환 뒤 패드·소리가 잠든 이유. 매 프레임(pollPadWhilePaused) 갱신 */
+function updatePauseNotice(): void {
+  if (!pauseMenu.open) return;
+  let text: string | null = null;
+  if (pausedByFocusLoss && input.lastDevice === 'pad') {
+    text = input.gamepad.connected
+      ? '창을 벗어났다 돌아왔다 — 패드가 반응하지 않으면 화면을 한 번 클릭하거나 아무 키를 누른다 (브라우저 규칙). 그 한 번으로 게임·패드·소리가 함께 돌아온다'
+      : '창을 벗어난 사이 브라우저가 패드를 감췄다 — 화면을 한 번 클릭하거나 아무 키를 누르면 게임·패드·소리가 함께 돌아온다';
+  } else if (audio.created && !audio.running) {
+    text = '소리가 멈춰 있다 — 화면을 클릭하거나 아무 키를 누르면 다시 켜진다 (브라우저 규칙)';
+  }
+  pauseMenu.setNotice(text);
+}
 // 패드를 집어 들면 멈춰 있던 게임이 풀린다 — 패드에는 포인터 락을 잡을 방법이 없다.
 // 창이 뒤에 있을 때(document.hidden)는 그대로 멈춰 둔다
 window.addEventListener('gamepadconnected', () => {

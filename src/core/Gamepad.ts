@@ -175,6 +175,12 @@ export class GamepadInput {
     if (this.sawInput) this.lastInputMs = performance.now();
   }
 
+  /** 엣지 상태를 비운다 — 창 포커스를 잃었다 되찾은 뒤, 사이에 멈춰 있던 버튼 상태가 유령 엣지가 되지 않게 */
+  resetEdges(): void {
+    this.prev = new Set<number>();
+    this.now = new Set<number>();
+  }
+
   /** 이번 poll 에서 실제 입력이 있었나 — "마지막으로 쓴 장치" 판정용 */
   private sawInput = false;
   get touched(): boolean {

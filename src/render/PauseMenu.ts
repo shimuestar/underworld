@@ -49,6 +49,8 @@ export class PauseMenu {
   private readonly rows: HTMLDivElement[] = [];
   private readonly labels: HTMLSpanElement[] = [];
   private readonly hints: HTMLSpanElement[] = [];
+  /** 상황 안내 — 창 전환 뒤 패드·소리가 잠든 이유 같은 것 (main 이 setNotice 로 갈아 끼운다) */
+  private readonly notice: HTMLDivElement;
   private readonly items: MenuItem[];
   open = false;
   private selected = 0;
@@ -159,6 +161,12 @@ export class PauseMenu {
     foot.style.cssText = 'color:#6c7280;font-size:11px;margin-top:14px;';
     this.panel.appendChild(foot);
 
+    this.notice = document.createElement('div');
+    this.notice.style.cssText =
+      'display:none;margin-top:10px;padding:8px 10px;border:1px solid #6b4a2f;background:rgba(107,74,47,0.18);' +
+      'color:#e8c76a;font-size:12px;line-height:1.5;max-width:460px;white-space:normal;';
+    this.panel.appendChild(this.notice);
+
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
       const digit = this.items.findIndex((_, i) => e.code === `Digit${i + 1}`);
@@ -188,6 +196,17 @@ export class PauseMenu {
         this.activate(0);
       }
     });
+  }
+
+  /** 상황 안내 줄 — null 이면 숨긴다. 같은 글이면 DOM 을 건드리지 않는다 */
+  setNotice(text: string | null): void {
+    const shown = this.notice.style.display !== 'none';
+    if (!text) {
+      if (shown) this.notice.style.display = 'none';
+      return;
+    }
+    if (!shown) this.notice.style.display = 'block';
+    if (this.notice.textContent !== text) this.notice.textContent = text;
   }
 
   /** 패드로 커서를 옮긴다 — 일시정지 중에는 키보드 핸들러가 안 돌 수도 있다

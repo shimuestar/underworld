@@ -89,6 +89,10 @@ export class Input {
   get usingPad(): boolean {
     return this.device === 'pad' && this.gamepad.connected;
   }
+  /** 마지막으로 쓴 장치 — 패드가 브라우저에 가려져(포커스 상실) connected 가 꺼진 뒤에도 "패드 사용자"였는지 안다 */
+  get lastDevice(): 'kb' | 'pad' {
+    return this.device;
+  }
   private keys = new Set<string>();
   private dx = 0;
   private dy = 0;
