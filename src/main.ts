@@ -302,6 +302,7 @@ events.on('player_died', () => console.log('[metrics] 사망 시점 스냅샷', 
 events.on('zone_cleared', () => console.log('[metrics] 클리어 스냅샷', metrics.snapshot(world)));
 const inventoryUI = new InventoryUI(world); // I — 가방·소모품
 // 보관 주머니 — 가방 창에서 빈 주머니를 발밑에 내려놓고 곧장 루팅 창으로 (loot_opened 가 창을 연다)
+inventoryUI.onClose = () => setUiOpen(false); // B·Esc 로 창 안에서 닫았다
 inventoryUI.onPlacePouch = () => {
   inventoryUI.hide();
   Loot.createPlayerPouch(world);
@@ -3131,8 +3132,22 @@ function simulate(dt: number): void {
   // 메뉴 스틱 — 왼 스틱을 D-패드처럼 (한 번 밀면 한 칸, 계속 밀면 반복). 루팅 창·상점 공용
   const stick = menuStickStep();
   if (shopUI.open && input.gamepad.connected && stick.dy !== 0) shopUI.padMove(stick.dy);
-  // 가방 창 — 패드 Y = 보관 주머니 내려놓기 (가방 창엔 다른 패드 조작이 없다)
-  if (inventoryUI.open && input.gamepad.connected && input.gamepad.rawPressed(3)) inventoryUI.onPlacePouch?.();
+  // 가방 창 — 루팅 창과 같은 패드 규약: D-패드·왼 스틱 커서, A 고르기/등록(길게 집어 옮기기), X 버리기(길게 나누기),
+  // Y 보관 주머니 내려놓기, B 닫기(들기·대화상자는 취소). A·X 는 홀드 판정이라 매 틱 상태를 넘긴다
+  if (inventoryUI.open) {
+    inventoryUI.padMode = input.lastDevice === 'pad';
+    if (input.gamepad.connected) {
+      inventoryUI.padA(input.gamepad.rawHeld(0));
+      if (input.gamepad.rawPressed(13)) inventoryUI.padMove(0, 1);
+      else if (input.gamepad.rawPressed(12)) inventoryUI.padMove(0, -1);
+      else if (input.gamepad.rawPressed(15)) inventoryUI.padMove(1, 0);
+      else if (input.gamepad.rawPressed(14)) inventoryUI.padMove(-1, 0);
+      else if (stick.dx !== 0 || stick.dy !== 0) inventoryUI.padMove(stick.dx, stick.dy);
+      else if (input.gamepad.rawPressed(3)) inventoryUI.onPlacePouch?.();
+      else if (input.gamepad.rawPressed(1)) inventoryUI.padClose();
+      inventoryUI.padX(input.gamepad.rawHeld(2));
+    }
+  }
   // 루팅 창 — D-패드 네 방향(←→ 로 칸 전환), A 짧게 가져오기/넣기 · 길게 집어 들기(→ 이동 → A 놓기),
   // X 모두, Y 바닥에 버리기(들고 있으면 그것을), B 닫기(들고 있으면 취소). A 는 홀드 판정이라 매 틱 상태를 넘긴다
   if (lootUI.open && input.gamepad.connected && (input.gamepad.pressed('melee') || input.gamepad.pressed('ranged'))) {
