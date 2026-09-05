@@ -2621,10 +2621,13 @@ function respawnAtAltar(): void {
   events.emit('respawned', { x: point.x, z: point.z, tribute });
 }
 
+/** 마지막으로 총을 쏜 시각 — 그 뒤 afterShotMs 동안 십자선을 유지한다 (키보드도 패드와 같은 조준 느낌) */
+let lastShotMs = -Infinity;
 events.on('shot_fired', (payload) => {
   const shot = payload as {
     ex: number; ey: number; ez: number; hitEnemy: boolean; blocked?: boolean;
   };
+  lastShotMs = performance.now();
   padRumble('shot'); // 원거리는 손에서 나가는 순간 — 반동
   stage.spawnTracer(shot.ex, shot.ey, shot.ez);
   stage.triggerRecoil();
@@ -3723,12 +3726,15 @@ function render(alpha: number): void {
   stage.setLockOn(world.lockOnId); // 락온 마름모 — 잡힌 적 머리 위
   // 조준(LT) 연출 — 십자선 + 부드러운 FOV 줌 (누르고 있다는 게 몸에 온다)
   const aiming = input.usingPad && world.input.padAiming && !world.dead && !world.uiOpen;
-  // 활은 조준 무기 — 꺼내 들면 장치와 무관하게 십자선을 켠다 (2026-09-04 사용자). 당김 흔들림이 클수록 선이 벌어진다(정확도 표시)
-  const bowOut = world.weapon.ranged === 'bow' && !world.dead && !world.uiOpen;
-  crosshairEl.classList.toggle('aim', aiming || bowOut);
+  // 십자선(네 선)은 패드·키보드가 같다: 패드 조준(LT) 중, 활을 꺼내 들었을 때, 총을 쏜 뒤 afterShotMs 동안 (2026-09-04 사용자 — 패드 기준 통일).
+  // 활 당김 흔들림·권총 연사 열이 클수록 선이 벌어진다(정확도 표시)
   const ch = balance.hud.crosshair;
+  const bowOut = world.weapon.ranged === 'bow' && !world.dead && !world.uiOpen;
+  const recentlyShot = performance.now() - lastShotMs < ch.afterShotMs && !world.dead && !world.uiOpen;
+  crosshairEl.classList.toggle('aim', aiming || bowOut || recentlyShot);
   const swayFrac = bowOut ? Math.min(1, (p.aimSwayAmp ?? 0) / ((balance.weapons.bow.sway.ampMaxDeg * Math.PI) / 180)) : 0;
-  crosshairEl.style.setProperty('--ch-gap', `${ch.gapPx + ch.swayGapPx * swayFrac}px`);
+  const heatFrac = world.weapon.ranged === 'pistol' ? Math.min(1, (world.weapon.recoilHeat ?? 0) / balance.weapons.pistol.recoil.heatMax) : 0;
+  crosshairEl.style.setProperty('--ch-gap', `${ch.gapPx + ch.swayGapPx * Math.max(swayFrac, heatFrac)}px`);
   // 활 당김 확대 — 당긴 시간만큼 아주 조금 다가간다 (상한 1). 놓으면 bowDrawTotal 이 0 이 되어 스르르 돌아온다
   const bowZoom = balance.weapons.bow.zoom;
   const bowZoomTarget =
