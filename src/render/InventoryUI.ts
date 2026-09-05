@@ -17,6 +17,7 @@ import {
 } from '../core/Inventory';
 import { balance } from '../core/Balance';
 import { itemIcon } from './ItemIcons';
+import { attachPopup, consumablePopup } from './ItemPopup';
 import type { ItemKind, World } from '../core/World';
 
 const CELL_PX = 64;
@@ -36,6 +37,9 @@ export class InventoryUI {
   open = false;
   /** 퀵슬롯에 꽂으려고 골라 둔 가방 칸 (-1 = 없음) */
   private picked = -1;
+  /** 마우스가 얹힌 가방 칸 / 퀵슬롯 칸 (-1 = 없음) — 설명 팝업이 여기 붙는다. 없으면 고른 칸에 */
+  private hover = -1;
+  private hoverQ = -1;
   /** 보관 주머니 내려놓기 — P 키·패드 Y·버튼. main 이 Loot.createPlayerPouch 로 잇는다 */
   onPlacePouch: (() => void) | null = null;
 
@@ -69,6 +73,8 @@ export class InventoryUI {
   show(): void {
     this.open = true;
     this.picked = -1;
+    this.hover = -1;
+    this.hoverQ = -1;
     this.root.style.display = 'flex';
     this.rebuild();
   }
@@ -76,6 +82,8 @@ export class InventoryUI {
   hide(): void {
     this.open = false;
     this.picked = -1;
+    this.hover = -1;
+    this.hoverQ = -1;
     this.root.style.display = 'none';
   }
 
@@ -200,8 +208,23 @@ export class InventoryUI {
       }
 
       cell.onclick = () => this.assign(i);
+      cell.onmousemove = (ev) => {
+        if ((ev.movementX === 0 && ev.movementY === 0) || this.hoverQ === i) return; // 유령 이동은 무시 (LootUI 규약)
+        this.hoverQ = i;
+        this.hover = -1;
+        this.rebuild();
+      };
+      if (kind && this.hoverQ === i) {
+        // 십자는 창의 오른쪽 — 칸 왼쪽에 띄운다
+        attachPopup(cell, consumablePopup(world, kind, countOf(world, kind), '', `퀵슬롯 ${i + 1} — 전투 중 ${i + 1} 키로 쓴다`), 'left');
+      }
       grid.appendChild(cell);
     });
+    grid.onmouseleave = () => {
+      if (this.hoverQ < 0) return;
+      this.hoverQ = -1;
+      this.rebuild();
+    };
     box.appendChild(grid);
     return box;
   }
@@ -232,7 +255,6 @@ export class InventoryUI {
         `cursor:${slot ? 'pointer' : 'default'};`;
 
       if (slot) {
-        const def = itemDef(slot.kind);
         const icon = itemIcon(slot.kind, ICON_PX);
         icon.style.cssText +=
           'position:absolute;left:50%;top:24px;transform:translate(-50%,-50%);';
@@ -256,7 +278,15 @@ export class InventoryUI {
           cell.appendChild(tag);
         }
 
-        cell.title = `${def.name} — 좌클릭 고르기 / 우클릭 버리기`;
+        // 설명 팝업 — 마우스가 얹힌 칸, 없으면 고른 칸. 가방은 창의 왼쪽이라 칸 오른쪽에 띄운다
+        const showPopup = this.hover === i || (this.hover < 0 && this.hoverQ < 0 && this.picked === i);
+        if (showPopup) {
+          attachPopup(
+            cell,
+            consumablePopup(world, slot.kind, slot.count, '', '좌클릭 고르기 → 퀵슬롯 클릭(또는 1~4) 등록 · 우클릭 버리기'),
+            'right',
+          );
+        }
         cell.onclick = () => {
           this.picked = this.picked === i ? -1 : i;
           this.rebuild();
@@ -268,8 +298,19 @@ export class InventoryUI {
           this.rebuild();
         };
       }
+      cell.onmousemove = (ev) => {
+        if ((ev.movementX === 0 && ev.movementY === 0) || this.hover === i) return; // 유령 이동은 무시 (LootUI 규약)
+        this.hover = i;
+        this.hoverQ = -1;
+        this.rebuild();
+      };
       grid.appendChild(cell);
     });
+    grid.onmouseleave = () => {
+      if (this.hover < 0) return;
+      this.hover = -1;
+      this.rebuild();
+    };
     box.appendChild(grid);
     return box;
   }
