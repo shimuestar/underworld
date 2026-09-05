@@ -105,7 +105,7 @@ export function tick(world: World, _dt: number): void {
       if (!attackReaches(def, enemy, attack, p.x, p.z)) continue;
       // 무기 끝이 가드 안까지 왔는가.
       // perfectParryOnly(족장)는 일반 대역을 받지 않는다 — 정확히 닿는 순간만 성립한다
-      const band = def.perfectParryOnly ? space.perfectBand : space.guardDepth;
+      const band = def.perfectParryOnly ? space.perfectBand + world.modifiers.perfectBandBonus : space.guardDepth;
       const gap = dist - balance.player.radius - (enemy.weaponTipDist ?? 0);
       if (gap <= band && (!parryTarget || gap < parryTarget.gap)) {
         parryTarget = { enemy, gap };
@@ -138,7 +138,7 @@ export function tick(world: World, _dt: number): void {
     // 무기가 방패에 닿은 순간 = 완벽. 단 parryAlwaysNormal(족장)은 완벽 대역에서만
     // 패링이 성립하므로(perfectParryOnly) 매번 완벽 판정이 나온다 — 그러면 "완벽"이
     // 특별하지 않고, 연쇄·마나까지 매 패링마다 최대로 붙는다. 결과는 일반 패링으로 낮춘다
-    const perfect = parryTarget.gap <= space.perfectBand && !def.parryAlwaysNormal;
+    const perfect = parryTarget.gap <= space.perfectBand + world.modifiers.perfectBandBonus && !def.parryAlwaysNormal; // 가죽 투구
     world.freezeTicks = perfect ? reaction.hitstopPerfectTicks : reaction.hitstopNormalTicks;
 
     if (def.boss && def.parriesToStagger) {
@@ -262,7 +262,7 @@ export function tick(world: World, _dt: number): void {
 
   if (windupTarget && freshPress) {
     // 조기 입력 — 실패. 경직 20t (마나 절반 소실은 Mana)
-    p.stunTicks = reaction.failStunTicks;
+    p.stunTicks = Math.round(reaction.failStunTicks * world.modifiers.stunMul); // 쇠 투구·인내 반지
     world.events.emit('parry_attempt', {
       result: 'fail',
       chain: 0,

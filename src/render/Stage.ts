@@ -2,6 +2,7 @@
 // World 상태(플레이어, 랜턴, 무기, 적)를 읽어 씬에 반영만 한다.
 
 import * as THREE from 'three';
+import { equipColor } from '../core/EquipData';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
 import { currentAttack, enemyDef, healthBarState, shieldLowered } from '../core/Entities';
@@ -4523,7 +4524,7 @@ export class Stage {
   }
 
   /** 바닥 아이템 비주얼 — 각인(팔면체 보석) / 포션(붉은 약병) / 골드(낮은 더미) */
-  private makeGroundItem(kind: GroundItemState['kind'], sigilId?: string, tier?: 'normal' | 'boss'): THREE.Group {
+  private makeGroundItem(kind: GroundItemState['kind'], sigilId?: string, tier?: 'normal' | 'boss', equipId?: string): THREE.Group {
     const group = new THREE.Group();
     if (kind === 'grave') {
       // 비석 — 봉분 위 잿빛 돌판 + 둥근 머리. 돌이라 부유·회전하지 않는다 (grounded)
@@ -4690,6 +4691,17 @@ export class Stage {
       pile.name = 'gem';
       group.add(pile);
       group.add(new THREE.PointLight(GOLD_COLOR, 0.5, 3.5, 0));
+    } else if (kind === 'equip') {
+      // 장비 — 납작한 상자에 그 장비의 색, 살짝 발광 (프리미티브). 바닥에 놓인다(grounded)
+      const c = equipId ? equipColor(equipId) : 0x8a8f9a;
+      const box = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.16, 0.24),
+        new THREE.MeshLambertMaterial({ color: c, emissive: c, emissiveIntensity: 0.25 }),
+      );
+      box.position.y = 0.08;
+      box.name = 'gem';
+      group.add(box);
+      group.add(new THREE.PointLight(c, 0.45, 2.5, 0));
     } else if (kind === 'pouch') {
       // 전리품 주머니 — 눌린 가죽 자루 + 목 매듭. 돌지 않고 바닥에 얌전히 놓인다(grounded).
       // 보스 것은 금빛에 점광원 — 뒤져 볼 가치가 멀리서 보인다
@@ -4743,6 +4755,7 @@ export class Stage {
         : kind === 'battery' ? 0xd8c23a
         : kind === 'key' ? KEY_COLOR
         : kind === 'pouch' ? (tier === 'boss' ? GOLD_COLOR : 0xd9a15c)
+        : kind === 'equip' ? (equipId ? equipColor(equipId) : GROUND_ITEM_COLOR)
         : sigilId ? sigilColor(sigilId) : GROUND_ITEM_COLOR;
       const pillar = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, PILLAR_HEIGHT, 0)]),
@@ -4872,7 +4885,7 @@ export class Stage {
       seen.add(item.id);
       let group = this.groundItemVisuals.get(item.id);
       if (!group) {
-        group = this.makeGroundItem(item.kind, item.sigilId, item.pouchTier);
+        group = this.makeGroundItem(item.kind, item.sigilId, item.pouchTier, item.equipId);
         this.groundItemVisuals.set(item.id, group);
         this.scene.add(group);
       }
@@ -4893,11 +4906,11 @@ export class Stage {
       // 화살은 눕혀 둔 것이라 물약처럼 가슴 높이에서 까딱거리면 안 된다
       const grounded =
         item.kind === 'gold' || item.kind === 'arrow' || item.kind === 'grave' ||
-        item.kind === 'ammo' || item.kind === 'grenade' || item.kind === 'battery' || item.kind === 'pouch';
+        item.kind === 'ammo' || item.kind === 'grenade' || item.kind === 'battery' || item.kind === 'pouch' || item.kind === 'equip';
       const bob =
         item.y ??
         (grounded
-          ? (item.kind === 'gold' ? 0.12 : item.kind === 'grave' || item.kind === 'pouch' ? 0 : GROUND_ARROW_Y)
+          ? (item.kind === 'gold' ? 0.12 : item.kind === 'grave' || item.kind === 'pouch' || item.kind === 'equip' ? 0 : GROUND_ARROW_Y)
           : 0.55 + Math.sin(now / 400 + item.id) * 0.1);
       group.position.set(item.x, bob, item.z);
       // 빛 기둥 — 바닥에 놓여 있을 때만(날아오거나 튕기거나 떨어지는 중엔 끈다), 발밑 고정. 바라보는 주머니는 더 밝다

@@ -7,14 +7,14 @@
 // 2026-09-04: 처치 드랍 굴림은 Loot 로 옮겼다 — 이제 적은 아이템이 아니라 주머니를 떨군다.
 
 import { balance } from '../core/Balance';
-import { addItem, recoverGrave, addSigil } from '../core/Inventory';
+import { addItem, recoverGrave, addSigil, addEquip } from '../core/Inventory';
 import type { ItemKind, World } from '../core/World';
 
 /** 바닥에 놓인 높이 (kind별) — 자석에 걸리기 전 기준 높이 */
 function restHeight(kind: string): number {
   if (kind === 'gold') return 0.12;
   if (kind === 'arrow') return balance.pickups.arrow.restHeight; // 눕혀 놓인 화살
-  if (kind === 'ammo' || kind === 'grenade' || kind === 'battery') return 0.14; // 기믹 전리품
+  if (kind === 'ammo' || kind === 'grenade' || kind === 'battery' || kind === 'equip') return 0.14; // 기믹 전리품·장비
   return 0.55;
 }
 
@@ -26,7 +26,7 @@ function wants(world: World, kind: string): boolean {
 }
 
 /** 손(E)으로 집는 종류 — 소모품 셋 + 각인(2026-09-04 아이템화). 자석에 걸리지 않고 바라보며 E */
-const CONSUMABLE_KINDS: ReadonlySet<string> = new Set(['potion', 'mana', 'food', 'sigil']);
+const CONSUMABLE_KINDS: ReadonlySet<string> = new Set(['potion', 'mana', 'food', 'sigil', 'equip']);
 
 /** 지금 집을 수 있는 바닥 소모품 — 반경·시야각(loot.pickup) 안에서 가장 가까운 것.
  *  날아오는 중·유예 중·튕겨 돌아가는 중은 뺀다 */
@@ -179,9 +179,10 @@ export function tick(world: World, dt: number): void {
     }
     if (item.kind === 'gold') {
       world.groundItems.splice(i, 1);
-      world.gold += item.amount ?? 0;
+      const goldAmt = Math.round((item.amount ?? 0) * world.modifiers.goldMul); // 탐욕 반지·도둑 조끼
+      world.gold += goldAmt;
       world.events.emit('gold_picked', {
-        amount: item.amount ?? 0, total: world.gold,
+        amount: goldAmt, total: world.gold,
         x: item.originX ?? item.x, z: item.originZ ?? item.z,
       });
       continue;
@@ -206,7 +207,10 @@ export function tick(world: World, dt: number): void {
       continue;
     }
     // 소모품 — 가방으로. 가방이 가득이면 몸까지 왔다가 원자리로 튕겨 돌아간다 (연출·소리는 main 이 pickup_bounced 로)
-    const put = item.kind === 'sigil' ? addSigil(world, item.sigilId ?? '') : addItem(world, item.kind as ItemKind);
+    const put =
+      item.kind === 'sigil' ? addSigil(world, item.sigilId ?? '')
+      : item.kind === 'equip' ? addEquip(world, item.equipId ?? '')
+      : addItem(world, item.kind as ItemKind);
     if (!put) {
       item.magnet = false;
       item.bounceTicks = balance.loot.bounce.ticks;
@@ -216,7 +220,7 @@ export function tick(world: World, dt: number): void {
       continue;
     }
     world.groundItems.splice(i, 1);
-    world.events.emit('item_picked', { kind: item.kind, sigilId: item.sigilId });
+    world.events.emit('item_picked', { kind: item.kind, sigilId: item.sigilId, equipId: item.equipId });
   }
 
   if (blocked) world.events.emit('inventory_full', {});

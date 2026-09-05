@@ -36,7 +36,7 @@ type Pane = 'container' | 'bag' | 'buttons';
 function flyTargetOf(e: LootEntry): string {
   if (e.kind === 'gold') return 'gold';
   if (e.kind === 'arrow') return 'arrow';
-  if (e.kind === 'sigil') return 'title';
+  if (e.kind === 'sigil' || e.kind === 'equip') return 'title';
   return `b:${e.kind}`;
 }
 

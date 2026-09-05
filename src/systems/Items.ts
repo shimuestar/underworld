@@ -78,7 +78,7 @@ function drink(world: World, kind: ItemKind, index: number): void {
   const p = world.player;
   const hpBefore = p.health;
   const manaBefore = world.mana.value;
-  if (def.heal > 0) p.health = Math.min(balance.player.healthMax, p.health + def.heal);
+  if (def.heal > 0) p.health = Math.min(balance.player.healthMax, p.health + def.heal * world.modifiers.potionHealMul); // 활력 목걸이
   if (def.restore > 0) {
     world.mana.value = Math.min(balance.mana.max, world.mana.value + def.restore);
   }
@@ -106,7 +106,7 @@ export function use(world: World, index: number): boolean {
 /** 종류로 바로 쓰기 시작한다 — 가방 창의 '사용'(퀵슬롯에 없어도 된다, 2026-09-04). index 는 안내·HUD 용
  *  (퀵슬롯 번호, 없으면 -1). 실패 이유는 use 와 같이 item_denied 로 */
 export function useKind(world: World, kind: ItemKind, index: number = world.quickslots.indexOf(kind)): boolean {
-  if (kind === 'sigil') return false; // 각인은 마시지 않는다 — Sigils.learnFromBag
+  if (kind === 'sigil' || kind === 'equip') return false; // 각인·장비는 마시지 않는다 (Sigils.learnFromBag / Equipment.equipFromBag)
   if (world.itemChannel) {
     world.events.emit('item_denied', { index, kind, reason: 'busy' });
     return false;
@@ -128,7 +128,7 @@ export function useKind(world: World, kind: ItemKind, index: number = world.quic
     return false;
   }
 
-  world.itemChannel = { kind, index, ticks: 0, total: balance.items.channelTicks };
+  world.itemChannel = { kind, index, ticks: 0, total: Math.max(1, Math.round(balance.items.channelTicks * world.modifiers.itemChannelMul)) }; // 벨트가 줄인다
   world.events.emit('item_channel_started', { kind, index, ticks: balance.items.channelTicks });
   return true;
 }

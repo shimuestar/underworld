@@ -58,6 +58,8 @@ import z01f3 from '../data/levels/z01_f3.json';
 import testTraps from '../data/levels/test_traps.json';
 import testMonsters from '../data/levels/test_monsters.json';
 import * as Summon from './systems/Summon';
+import * as Equipment from './systems/Equipment';
+import { equipDef, slotLabel, type EquipSlot } from './core/EquipData';
 import { SummonPanel } from './render/SummonPanel';
 
 // 1구역 층 순서 — 출구에서 E 를 누르면 다음 층으로 내려간다. 마지막 층을 나가면 구역 클리어.
@@ -2006,7 +2008,12 @@ const ITEM_SOUND: Record<string, 'pickup_potion' | 'pickup_mana' | 'pickup_food'
 };
 events.on('item_picked', (payload) => {
   padRumble('pickup');
-  const { kind, sigilId } = payload as { kind: ItemKind; sigilId?: string };
+  const { kind, sigilId, equipId } = payload as { kind: ItemKind; sigilId?: string; equipId?: string };
+  if (kind === 'equip') {
+    audio.play('pickup');
+    showReaction(`${equipId ? equipDef(equipId).name : '장비'} — 가방에 들어왔다. 가방 탭(I)에서 걸친다`, 2400);
+    return;
+  }
   if (kind === 'sigil') {
     // 각인은 가방 아이템 (2026-09-04) — 새기는 것은 스킬 탭에서
     audio.play('pickup');
@@ -2565,6 +2572,19 @@ events.on('sigil_learn_denied', (payload) => {
       : `${sigilDef(d.id).name} — ${PART[d.slot ?? ''] ?? d.slot}이 차 있다. 제단에서 떼고 새긴다`,
     2400,
   );
+  audio.play('shop_deny');
+});
+// 장비 — 걸치기/벗기 안내 (2026-09-04)
+events.on('equip_changed', (payload) => {
+  const d = payload as { slot: EquipSlot; id: string | null; prev: string | null };
+  audio.play('pickup');
+  padRumble('pickup');
+  if (d.id) showReaction(`${equipDef(d.id).name} 을(를) ${slotLabel(d.slot)}에 걸쳤다${d.prev ? ` — ${equipDef(d.prev).name} 은(는) 가방으로` : ''}`, 2200);
+  else if (d.prev) showReaction(`${equipDef(d.prev).name} 을(를) 벗었다 — 가방으로`, 2000);
+});
+events.on('equip_denied', (payload) => {
+  const d = payload as { id: string; reason: string };
+  showReaction(`${equipDef(d.id).name} — 가방을 비워야 한다 (칸이 줄어들어 든 것이 안 들어간다)`, 2600);
   audio.play('shop_deny');
 });
 events.on('sigil_detach_denied', () => {
@@ -3204,6 +3224,7 @@ Mana.init(world);
 Sigils.init(world);
 Loot.init(world); // 처치 드랍 → 주머니 (Pickups 는 바닥 아이템 물리만)
 Summon.init(world); // 몬스터 시험방 — 처치 → 자동 재소환 대기열
+Equipment.init(world); // 장비 — 파생 수치·가방 칸을 장비 상태에 맞춘다
 LifeMotes.init(world);
 Projectiles.init(world);
 initInventory(world);
@@ -4328,6 +4349,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__audio = audio; // 소리 재생 호출 추적용(헤드리스)
   (window as unknown as Record<string, unknown>).__lootUI = lootUI; // 루팅 창 패드 경로 검증용
   (window as unknown as Record<string, unknown>).__summonUI = summonUI; // 몬스터 시험방 소환 탭 검증용
+  (window as unknown as Record<string, unknown>).__equipment = Equipment; // 장비 검증용
   (window as unknown as Record<string, unknown>).__compass = compass;
   (window as unknown as Record<string, unknown>).__menuUI = menuUI;
 }

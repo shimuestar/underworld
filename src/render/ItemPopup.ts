@@ -3,6 +3,7 @@
 // DOM 만 만든다 — 무엇을 설명할지(효과·유용성·가방 수)는 Inventory 의 규칙을 그대로 읽는다.
 
 import { balance } from '../core/Balance';
+import { equipDef, describeEffect, slotLabel, slotsFor } from '../core/EquipData';
 import { countOf, isUseful, itemDef } from '../core/Inventory';
 import { sigilDef, isActiveSkill } from '../core/SigilData';
 import type { ItemKind, LootEntry, World } from '../core/World';
@@ -67,7 +68,29 @@ export function lootEntryPopup(world: World, e: LootEntry): PopupContent {
     c.note = '가져가면 가방에 들어간다 — 스킬 탭에서 새긴다';
     return c;
   }
+  if (e.kind === 'equip') {
+    if (!e.equipId) return { title: '장비', lines: [] };
+    const c = equipPopup(world, e.equipId);
+    c.note = '가져가면 가방에 들어간다 — 가방 탭에서 걸친다';
+    return c;
+  }
   return consumablePopup(world, e.kind as ItemKind, e.count);
+}
+
+/** 장비 설명 — 부위·효과·지금 걸친 것과 비교 (2026-09-04) */
+export function equipPopup(world: World, equipId: string, where = ''): PopupContent {
+  const def = equipDef(equipId);
+  const lines: string[] = [def.desc];
+  for (const [k, v] of Object.entries(def.effects)) lines.push(describeEffect(k, v));
+  const target = slotsFor(def.slot).find((s) => world.equipment[s] === null) ?? slotsFor(def.slot)[0]!;
+  const worn = world.equipment[target];
+  if (worn) lines.push(`지금 ${slotLabel(target)}: ${equipDef(worn).name} — 걸치면 맞바꾼다`);
+  return {
+    title: `${def.name} (${slotLabel(target)})${where}`,
+    lines,
+    useful: true,
+    usefulText: worn ? `${equipDef(worn).name} 과 바꿔 걸친다` : `${slotLabel(target)} 칸이 비어 있다 — 바로 걸친다`,
+  };
 }
 
 const PART_LABEL: Record<string, string> = { eye: '눈', rightArm: '오른팔', leftArm: '왼팔', heart: '심장', spine: '척추' };

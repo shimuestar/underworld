@@ -441,7 +441,7 @@ export function tick(world: World, dt: number): void {
   const stam = balance.player.stamina;
   const sprinting = input.sprint && !st.exhausted && st.value > 0;
   if (sprinting) {
-    if (spendStamina(st, stam.sprintDrainPerTick, stam.regenDelayTicks)) {
+    if (spendStamina(st, stam.sprintDrainPerTick * world.modifiers.sprintDrainMul, stam.regenDelayTicks)) { // 질주 부츠
       world.events.emit('stamina_empty', {});
     }
   }
@@ -454,7 +454,7 @@ export function tick(world: World, dt: number): void {
     strideTicks = 0;
     world.events.emit('footstep', { sprint: sprinting });
   }
-  let speed = sprinting ? balance.player.sprintSpeed : balance.player.moveSpeed;
+  let speed = (sprinting ? balance.player.sprintSpeed : balance.player.moveSpeed) * world.modifiers.moveSpeedMul; // 무거운 장비
   if (st.exhausted) speed *= stam.exhaustedSpeedMul; // 숨이 차 제대로 못 걷는다
   if (webbed) speed *= balance.web.moveSpeedMul; // 거미줄에 발이 묶인다
   // 점액 장판 — 슬라임이 기어간 자리. 밟는 동안 미끄러워 느리다

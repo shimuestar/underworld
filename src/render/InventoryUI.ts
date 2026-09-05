@@ -23,10 +23,12 @@ import * as Items from '../systems/Items';
 import { adjustSplit, makeSplit, renderSplitDialog, splitActivate, splitNavigate, type SplitState } from './SplitDialog';
 import { balance } from '../core/Balance';
 import { itemIcon } from './ItemIcons';
-import { attachPopup, consumablePopup, sigilPopup, type PopupContent } from './ItemPopup';
-import { sigilIcon } from './ItemIcons';
+import { attachPopup, consumablePopup, equipPopup, sigilPopup, type PopupContent } from './ItemPopup';
+import { equipIcon, sigilIcon } from './ItemIcons';
 import { sigilDef } from '../core/SigilData';
+import { equipDef } from '../core/EquipData';
 import * as Sigils from '../systems/Sigils';
+import * as Equipment from '../systems/Equipment';
 import type { ItemKind, World } from '../core/World';
 
 const CELL_PX = 64;
@@ -221,6 +223,14 @@ export class InventoryUI {
     this.rebuild();
   }
 
+  /** 장비 걸치기 — 커서 칸의 장비를 몸에. 맞바꾼 것은 같은 칸으로 돌아온다 (2026-09-04) */
+  private equipCursor(): void {
+    if (this.pane !== 'bag') return;
+    Equipment.equipFromBag(this.world, this.sel);
+    if (this.picked === this.sel) this.picked = -1;
+    this.rebuild();
+  }
+
   /** Y — 짧게 떼면 커서 가방 칸 사용, padPouchHoldTicks 넘게 누르면 보관 주머니 내려놓기 */
   padY(held: boolean): void {
     if (!this.open) return;
@@ -251,6 +261,7 @@ export class InventoryUI {
     const slot = this.world.inventory[this.sel];
     if (!slot) return;
     if (slot.kind === 'sigil') { this.learnCursor(); return; } // 각인은 마시지 않는다 — 새긴다
+    if (slot.kind === 'equip') { this.equipCursor(); return; } // 장비는 걸친다
     if (!Items.useKind(this.world, slot.kind)) { this.rebuild(); return; }
     this.hide();
     this.onClose?.();
@@ -305,6 +316,7 @@ export class InventoryUI {
       const cur = this.world.inventory[this.sel];
       if (!cur) { this.rebuild(); return; }
       if (cur.kind === 'sigil') { this.learnCursor(); return; } // 각인은 퀵슬롯에 못 간다 — A 도 새기기
+      if (cur.kind === 'equip') { this.equipCursor(); return; } // 장비도 — A 는 걸치기
       this.picked = this.picked === this.sel ? -1 : this.sel;
       this.rebuild();
       return;
@@ -640,15 +652,16 @@ export class InventoryUI {
 
       if (slot) {
         const isSigil = slot.kind === 'sigil' && !!slot.sigilId;
-        const icon = isSigil ? sigilIcon(slot.sigilId!, ICON_PX) : itemIcon(slot.kind, ICON_PX);
+        const isEquip = slot.kind === 'equip' && !!slot.equipId;
+        const icon = isSigil ? sigilIcon(slot.sigilId!, ICON_PX) : isEquip ? equipIcon(slot.equipId!, ICON_PX) : itemIcon(slot.kind, ICON_PX);
         icon.style.cssText += 'position:absolute;left:50%;top:24px;transform:translate(-50%,-50%);';
         cell.appendChild(icon);
 
         const count = document.createElement('div');
         // 각인은 스택이 없다 — 개수 대신 이름 앞 글자. 이미 익힌 중복이면 흐리게
-        count.textContent = isSigil ? sigilDef(slot.sigilId!).name.slice(0, 4) : `×${slot.count}`;
-        count.style.cssText = isSigil
-          ? `position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:${sigilDef(slot.sigilId!).color};`
+        count.textContent = isSigil ? sigilDef(slot.sigilId!).name.slice(0, 4) : isEquip ? equipDef(slot.equipId!).name.slice(0, 5) : `×${slot.count}`;
+        count.style.cssText = isSigil || isEquip
+          ? `position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:${isSigil ? sigilDef(slot.sigilId!).color : equipDef(slot.equipId!).color};`
           : 'position:absolute;bottom:3px;right:5px;font-size:11px;color:#cfd2da;';
         cell.appendChild(count);
         if (isSigil && world.sigils.inventory.includes(slot.sigilId!)) icon.style.opacity = '0.5';
@@ -668,7 +681,7 @@ export class InventoryUI {
           cell.appendChild(tag);
         }
         cell.oncontextmenu = (e) => { e.preventDefault(); this.pane = 'bag'; this.sel = i; this.dropCursor(); };
-        const dragIcon = (isSigil ? sigilIcon(slot.sigilId!, ICON_PX) : itemIcon(slot.kind, ICON_PX)).outerHTML;
+        const dragIcon = (isSigil ? sigilIcon(slot.sigilId!, ICON_PX) : isEquip ? equipIcon(slot.equipId!, ICON_PX) : itemIcon(slot.kind, ICON_PX)).outerHTML;
         cell.onpointerdown = (ev) => { if (!ev.shiftKey) beginDrag(ev, dragIcon, (key) => this.onDrop('bag', i, key)); };
       }
       cell.onclick = (ev) => {
@@ -690,6 +703,14 @@ export class InventoryUI {
         const overlay = this.carriedOverlay();
         if (overlay) cell.appendChild(overlay);
         attachPopup(cell, this.carryPopup('bag', i), 'right', this.padMode);
+      } else if (here && slot && slot.kind === 'equip' && slot.equipId) {
+        const content = equipPopup(world, slot.equipId);
+        content.actions = [
+          { key: this.key('Y', 'E'), label: '걸치기 (같은 부위 것과 맞바꾼다)' },
+          { key: this.key('A 길게', '드래그'), label: '집어 옮기기' },
+          { key: this.key('X', 'X'), label: '바닥에 버리기' },
+        ];
+        attachPopup(cell, content, 'right', this.padMode);
       } else if (here && slot && slot.kind === 'sigil' && slot.sigilId) {
         const content = sigilPopup(world, slot.sigilId);
         const known = world.sigils.inventory.includes(slot.sigilId);

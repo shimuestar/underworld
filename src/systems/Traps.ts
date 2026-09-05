@@ -18,6 +18,7 @@ import {
   type TrapState,
   type World,
   type DotKind,
+  damagePlayer,
 } from '../core/World';
 
 let nextTrapProjId = 870000; // 매복(850000)·상자 골드(900000) 대역 사이
@@ -70,7 +71,7 @@ function hurtPlayer(
     blocked = playerBlocks(world, trap.x, trap.z, balance.block.arcDeg);
     if (blocked) amount = raw * balance.block.chipDamageRatio;
   }
-  p.health -= amount;
+  amount = damagePlayer(world, amount, { trap: true }); // 갑옷·징 박힌 부츠
   if (opt.knockback && opt.knockbackTicks) {
     const dx = p.x - trap.x;
     const dz = p.z - trap.z;
@@ -249,8 +250,8 @@ function tickDots(world: World): void {
       const amount = d.accum;
       d.accum = 0;
       if (amount > 0) {
-        p.health -= amount;
-        world.events.emit(`${kind}_tick`, { amount, health: p.health });
+        const applied = damagePlayer(world, amount);
+        world.events.emit(`${kind}_tick`, { amount: applied, health: p.health });
         if (p.health <= 0) {
           p.health = 0;
           world.dead = true;

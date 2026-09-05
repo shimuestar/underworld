@@ -147,6 +147,8 @@ export function shopState(world: World, item: ShopItem): ShopState {
       break;
   }
 
+  price = Math.round(price * (1 - world.modifiers.shopDiscount)); // 상인의 목걸이
+
   // 재입고 시각이 지났으면 가득 찬 것으로 본다 (여기서 쓰지는 않는다 — 조회는 순수하게)
   const readyTick = world.shopReadyTick[item] ?? 0;
   let stock = world.shopStock[item] ?? stockMax;

@@ -68,10 +68,10 @@ beforeEach(() => {
 });
 
 describe('가방 칸', () => {
-  it('5×4 = 20칸 (2026-09-04 요청으로 5×2 에서 확장), 퀵슬롯 4칸 (HUD 마름모 넷)', () => {
+  it('기본 5×3 = 15칸 (2026-09-04 장비 도입으로 4행 → 3행, 짐칸 장비가 늘린다), 퀵슬롯 4칸 (HUD 마름모 넷)', () => {
     expect(CFG.cols).toBe(5);
-    expect(CFG.rows).toBe(4);
-    expect(world.inventory).toHaveLength(20);
+    expect(CFG.rows).toBe(3);
+    expect(world.inventory).toHaveLength(15);
     expect(world.quickslots).toHaveLength(4);
     expect(world.quickslots.length).toBeGreaterThanOrEqual(ITEM_KINDS.length); // 종류가 셋이라 남는다
     expect(world.inventory.every((s) => s === null)).toBe(true);

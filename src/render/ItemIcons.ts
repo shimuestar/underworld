@@ -6,6 +6,7 @@
 // 칸 안에 그대로 있어야 "이게 뭐였지"가 안 생긴다.
 
 import { itemDef } from '../core/Inventory';
+import { equipDef } from '../core/EquipData';
 import { sigilColor } from '../core/SigilData';
 import type { ItemKind, LootEntry } from '../core/World';
 
@@ -75,9 +76,48 @@ export function sigilIcon(sigilId: string, size: number): HTMLSpanElement {
   return span;
 }
 
+/** 장비 아이콘 — 부위별 실루엣, 색은 그 장비의 색 (2026-09-04) */
+export function equipIconSvg(equipId: string, size: number): string {
+  const def = equipDef(equipId);
+  const c = def.color;
+  let body: string;
+  switch (def.slot) {
+    case 'head':
+      body = `<path d="M5 14A7 7 0 0 1 19 14V17H5Z" fill="${c}" stroke="${OUTLINE}" stroke-width="1.4"/><path d="M4 17H20V19.5H4Z" fill="${c}" stroke="${OUTLINE}" stroke-width="1.2"/>`;
+      break;
+    case 'body':
+      body = `<path d="M8 4L12 6L16 4L20 7L18 10L17 20H7L6 10L4 7Z" fill="${c}" stroke="${OUTLINE}" stroke-width="1.4" stroke-linejoin="round"/>`;
+      break;
+    case 'feet':
+      body = `<path d="M7 4H13V12L19 15V19H5V4Z" fill="${c}" stroke="${OUTLINE}" stroke-width="1.4" stroke-linejoin="round"/>`;
+      break;
+    case 'ring':
+      body = `<circle cx="12" cy="14" r="6" fill="none" stroke="${c}" stroke-width="3"/><path d="M9 6L12 3L15 6L12 9Z" fill="${c}" stroke="${OUTLINE}" stroke-width="1"/>`;
+      break;
+    case 'neck':
+      body = `<path d="M5 4Q12 16 19 4" fill="none" stroke="${c}" stroke-width="1.8"/><path d="M9 14L12 11L15 14L12 20Z" fill="${c}" stroke="${OUTLINE}" stroke-width="1.2"/>`;
+      break;
+    default:
+      body = def.packKind === 'belt'
+        ? `<rect x="3" y="10" width="18" height="5" fill="${c}" stroke="${OUTLINE}" stroke-width="1.2"/><rect x="9.5" y="8.5" width="5" height="8" fill="none" stroke="#e8c76a" stroke-width="1.4"/>`
+        : `<path d="M5 9H19V20H5Z" fill="${c}" stroke="${OUTLINE}" stroke-width="1.4"/><path d="M5 9L7 5H17L19 9Z" fill="${c}" stroke="${OUTLINE}" stroke-width="1.2"/><path d="M9 13H15" stroke="${OUTLINE}" stroke-width="1.2"/>`;
+  }
+  return (
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" ` +
+    `style="display:block;filter:drop-shadow(0 0 4px ${c});">${body}</svg>`
+  );
+}
+export function equipIcon(equipId: string, size: number): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.style.cssText = 'display:block;line-height:0;';
+  span.innerHTML = equipIconSvg(equipId, size);
+  return span;
+}
+
 export function itemIconSvg(kind: ItemKind, size: number): string {
   const def = itemDef(kind);
   if (kind === 'sigil') return octahedronSvg(def.color, size); // 어느 각인인지 모를 때의 폴백 색
+  if (kind === 'equip') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="display:block;"><rect x="5" y="6" width="14" height="12" fill="${def.color}" stroke="${OUTLINE}" stroke-width="1.4"/></svg>`;
   const shape = SHAPES[def.icon];
   const body = shape
     ? shape(def.color)
@@ -116,6 +156,8 @@ export function lootIconSvg(entry: LootEntry, size: number): string {
       `<path d="M5 19L18 6" stroke="${ARROW_WOOD}" stroke-width="2.2" stroke-linecap="round"/>` +
       `<path d="M15.2 4.2L20 4L19.8 8.8Z" fill="#9a9aa4" stroke="${OUTLINE}" stroke-width="1"/>` +
       `<path d="M5.5 15.5L3.5 17.5M8.5 18.5L6.5 20.5" stroke="#e8ddc0" stroke-width="1.6" stroke-linecap="round"/>`;
+  } else if (entry.kind === 'equip') {
+    return entry.equipId ? equipIconSvg(entry.equipId, size) : itemIconSvg('equip', size);
   } else {
     return entry.sigilId ? sigilIconSvg(entry.sigilId, size) : itemIconSvg('sigil', size);
   }

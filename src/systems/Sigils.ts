@@ -9,14 +9,11 @@ import { enemyDef } from '../core/Entities';
 import { addSigil } from '../core/Inventory';
 import { isActiveSkill, sigilDef, type SigilSlot } from '../core/SigilData';
 import { scatterAwayFromPlayer, type Modifiers, type World } from '../core/World';
+import { defaultModifiers as defaultModifiersCore, recomputeModifiers } from '../core/Modifiers';
 
+/** 기본 파생 수치 — core/Modifiers 의 것을 그대로 (테스트·World 초기화가 여기서 부른다) */
 export function defaultModifiers(): Modifiers {
-  return {
-    dodgeDistanceMul: 1,
-    dodgeIFrameTicks: balance.reaction.dodgeIFrameTicks,
-    ambientVisionBoost: 0,
-    revealTrapsRadius: 0,
-  };
+  return defaultModifiersCore();
 }
 
 let nextGroundItemId = 1;
@@ -208,16 +205,5 @@ export function assignSkill(world: World, index: number, sigilId: string | null)
 /** 부위에 새겨진 패시브로 Modifiers 재계산. 갖고만 있는 패시브는 꺼져 있다.
  *  페널티는 없다 (2026-08) — 스킬은 순수 강화, 대가는 오염 정산뿐 */
 export function recompute(world: World): void {
-  const mods = defaultModifiers();
-
-  for (const id of Object.values(world.sigils.equipped)) {
-    if (!id) continue;
-    const effects = sigilDef(id).effects;
-    if (effects['dodgeDistanceMul']) mods.dodgeDistanceMul = effects['dodgeDistanceMul'];
-    if (effects['iFrameTicks']) mods.dodgeIFrameTicks = effects['iFrameTicks'];
-    if (effects['ambientVisionBoost']) mods.ambientVisionBoost = effects['ambientVisionBoost'];
-    if (effects['revealTrapsRadius']) mods.revealTrapsRadius = effects['revealTrapsRadius'];
-  }
-
-  world.modifiers = mods;
+  recomputeModifiers(world); // 각인 + 장비 (core/Modifiers)
 }

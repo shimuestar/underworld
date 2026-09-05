@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile, enemyHitBox } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius, damagePlayer } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -1185,8 +1185,7 @@ function moveProjectiles(world: World, dt: number): void {
           const chipRatio =
             (balance.block.chipRatioByKind as Record<string, number>)[proj.kind ?? ''] ??
             balance.block.chipDamageRatio;
-          const damage = blocked ? proj.damage * chipRatio : proj.damage;
-          p.health -= damage;
+          const damage = damagePlayer(world, blocked ? proj.damage * chipRatio : proj.damage);
 
           // 뒤로 밀림 — 날아온 방향으로. 마법이 가장 세고 화살은 거의 없다
           const kb = balance.playerKnockback as unknown as Record<string, number>;
@@ -1428,8 +1427,7 @@ function explodeFireball(
   const p = world.player;
   const playerDist = Math.hypot(p.x - x, p.z - z);
   if (playerDist <= radius && p.iframeTicks <= 0) {
-    const damage = damageAt(playerDist);
-    p.health -= damage;
+    const damage = damagePlayer(world, damageAt(playerDist));
     world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'fireball', srcX: x, srcZ: z });
     if (p.health <= 0) {
       p.health = 0;
@@ -1500,8 +1498,7 @@ function implodeBolt(
     pushPlayer(p, x - p.x, z - p.z, Math.min(sp.pullDistance * falloff, dist), sp.pullTicks);
   }
   if (directPlayer) return; // 직격 피해와 중복되지 않게 (밀림은 직격 쪽이 덮어쓴다)
-  const damage = sp.damage * falloff;
-  p.health -= damage;
+  const damage = damagePlayer(world, sp.damage * falloff);
   world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'implode', srcX: x, srcZ: z });
   if (p.health <= 0) {
     p.health = 0;
@@ -1618,8 +1615,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
   const p = world.player;
   const playerDist = Math.hypot(p.x - proj.x, p.z - proj.z);
   if (playerDist <= grenade.radius && p.iframeTicks <= 0) {
-    const damage = damageAt(playerDist);
-    p.health -= damage;
+    const damage = damagePlayer(world, damageAt(playerDist));
     world.events.emit('player_damaged', { amount: damage, health: p.health, source: 'explosion', srcX: proj.x, srcZ: proj.z });
     if (p.health <= 0) {
       p.health = 0;

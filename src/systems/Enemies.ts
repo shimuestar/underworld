@@ -10,7 +10,7 @@
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, findWallNormal, noiseField, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, type EnemyState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, findWallNormal, noiseField, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, type EnemyState, type World, damagePlayer } from '../core/World';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -482,10 +482,10 @@ function tickFaceSuck(world: World, enemy: EnemyState, def: ReturnType<typeof en
   if (enemy.timer <= 0) {
     enemy.timer = fs.intervalTicks;
     enemy.suckCount = (enemy.suckCount ?? 0) + 1;
-    p.health -= fs.damage;
+    const suckDmg = damagePlayer(world, fs.damage);
     enemy.health = Math.min(def.health, enemy.health + fs.heal); // 빤 만큼 제 몸이 찬다
     world.events.emit('leech_suck', { count: enemy.suckCount, max: fs.maxSucks });
-    world.events.emit('player_damaged', { amount: fs.damage, health: p.health, source: 'leech_suck' });
+    world.events.emit('player_damaged', { amount: suckDmg, health: p.health, source: 'leech_suck' });
     if (p.health <= 0) {
       p.health = 0;
       world.dead = true;
@@ -607,10 +607,9 @@ function batGraze(
     return;
   }
   const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
-  const dmg = blocked ? def.damage * balance.block.chipDamageRatio : def.damage;
+  const dmg = damagePlayer(world, blocked ? def.damage * balance.block.chipDamageRatio : def.damage);
   // 방패에 챙! — 칩 피해만 남기고 박쥐는 그대로 뚫고 지나간다
   if (blocked) world.events.emit('block_hit', { amount: dmg, kind: 'bat' });
-  p.health -= dmg;
   pushPlayer(p, gdx, gdz, def.chargeAttack?.playerKnockback ?? 1, balance.playerKnockback.ticks);
   world.events.emit('player_damaged', {
     amount: dmg, health: p.health, blocked,
@@ -922,9 +921,8 @@ function pounceStrike(
   const idx = p.x - enemy.x;
   const idz = p.z - enemy.z;
   const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
-  const dmg = blocked ? wc.pounceDamage * balance.block.chipDamageRatio : wc.pounceDamage;
+  const dmg = damagePlayer(world, blocked ? wc.pounceDamage * balance.block.chipDamageRatio : wc.pounceDamage);
   if (blocked) world.events.emit('block_hit', { amount: dmg, kind: 'wall_pounce' });
-  p.health -= dmg;
   pushPlayer(p, idx, idz, wc.pounceKnockback, balance.playerKnockback.ticks);
   world.events.emit('player_damaged', {
     amount: dmg, health: p.health, blocked, srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'wall_pounce',
@@ -1251,8 +1249,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         attachFace(world, enemy, def);
         return;
       }
-      const dmg = blocked ? lurk.dropDamage * balance.block.chipDamageRatio : lurk.dropDamage;
-      p.health -= dmg;
+      const dmg = damagePlayer(world, blocked ? lurk.dropDamage * balance.block.chipDamageRatio : lurk.dropDamage);
       pushPlayer(p, idx, idz, 1.6, balance.playerKnockback.ticks);
       world.events.emit('player_damaged', {
         amount: dmg, health: p.health, blocked, srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'leech_drop',
@@ -1845,10 +1842,10 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       enemy.timer--;
       if (enemy.timer <= 0) {
         enemy.timer = grip.biteIntervalTicks;
-        p.health -= grip.biteDamage;
+        const bite = damagePlayer(world, grip.biteDamage);
         world.events.emit('ghoul_bite', { enemyId: enemy.id });
         world.events.emit('player_damaged', {
-          amount: grip.biteDamage, health: p.health, srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'ghoul_bite',
+          amount: bite, health: p.health, srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id, source: 'ghoul_bite',
         });
         if (p.health <= 0) {
           p.health = 0;
@@ -1910,8 +1907,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         const base = attack.damage ?? def.damage; // 공격별 피해 재정의 (방패 밀쳐내기 등)
         // 방어 관통 비율도 공격별로 열어 둔다 — 돌격처럼 몸으로 받으면 안 되는 기술은 더 아프다
         const chip = attack.blockedDamageRatio ?? balance.block.chipDamageRatio;
-        const damage = blocked ? base * chip : base;
-        p.health -= damage;
+        const damage = damagePlayer(world, blocked ? base * chip : base);
         if (enemy.parryStreak !== undefined) enemy.parryStreak = 0; // 연속 패링 끊김
 
         // 뒤로 밀림 — 무기가 무거울수록 크게. 방어 중이면 버티므로 1/3
@@ -1932,7 +1928,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           // 단 blockCannotStagger(족장)는 튕기지 않는다 — 막아도 공격이 끊기지 않고
           // 플레이어만 굳는다. 보스는 패링하거나 비켜야 한다
           const clash = balance.block;
-          p.stunTicks = Math.max(p.stunTicks, clash.clashPlayerStunTicks);
+          p.stunTicks = Math.max(p.stunTicks, Math.round(clash.clashPlayerStunTicks * world.modifiers.stunMul)); // 쇠 투구·인내 반지
           world.events.emit('block_hit', { amount: damage, kind: 'melee' });
           if (!def.blockCannotStagger) {
             enemy.recoiled = true;

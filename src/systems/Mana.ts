@@ -92,7 +92,7 @@ export function tick(world: World, _dt: number): void {
 
   // 기본 충전 — regenCap(현재 최대치)까지 자동 회복 (전투 여부 무관)
   if (mana.value < balance.mana.regenCap) {
-    mana.value = Math.min(balance.mana.regenCap, mana.value + balance.mana.regenPerTick);
+    mana.value = Math.min(balance.mana.regenCap, mana.value + balance.mana.regenPerTick * world.modifiers.manaRegenMul); // 마력 반지
   }
 
   const active = world.enemies.some((e) => e.alive && e.ai !== 'idle');

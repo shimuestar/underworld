@@ -32,7 +32,7 @@ export function itemColor(kind: ItemKind): number {
 /** 가방·퀵슬롯 칸을 balance 크기로 잡는다. World 는 데이터에 의존하지 않으므로 여기서 채운다 */
 export function initInventory(world: World): void {
   const cfg = balance.items;
-  world.inventory = new Array<InventorySlot | null>(cfg.cols * cfg.rows).fill(null);
+  world.inventory = new Array<InventorySlot | null>(cfg.cols * cfg.rows + Math.max(0, Math.round(world.modifiers?.bagSlots ?? 0))).fill(null);
   world.quickslots = new Array<ItemKind | null>(cfg.quickslots).fill(null);
   world.itemCooldown = 0;
 }
@@ -46,6 +46,44 @@ export function addSigil(world: World, sigilId: string): boolean {
   return true;
 }
 
+/** 장비를 가방에 넣는다 — 한 칸에 한 개, 퀵슬롯 없음 (2026-09-04) */
+export function addEquip(world: World, equipId: string): boolean {
+  const empty = world.inventory.indexOf(null);
+  if (empty < 0) return false;
+  world.inventory[empty] = { kind: 'equip', count: 1, equipId };
+  world.events.emit('item_gained', { kind: 'equip', count: 1, equipId });
+  return true;
+}
+
+/** 기본 가방 칸 — items.cols × rows. 짐칸 장비(bagSlots)가 더한다 */
+export function bagBaseSlots(): number {
+  return balance.items.cols * balance.items.rows;
+}
+export function bagSizeFor(world: World): number {
+  return bagBaseSlots() + Math.max(0, Math.round(world.modifiers.bagSlots));
+}
+
+/** 가방 칸 수를 바꾼다 — 늘리면 빈 칸을 붙이고, 줄이면 든 것(+reserve 만큼 여유)이 들어갈 때만 앞으로 모아 줄인다.
+ *  안 들어가면 false, 아무것도 바꾸지 않는다 ("가방을 비우라" — 사용자 결정 6-A) */
+export function resizeInventory(world: World, size: number, reserve = 0): boolean {
+  const inv = world.inventory;
+  if (size === inv.length) return true;
+  if (size > inv.length) {
+    world.inventory = [...inv, ...new Array<InventorySlot | null>(size - inv.length).fill(null)];
+  } else {
+    const items = inv.filter((s): s is InventorySlot => s !== null);
+    if (items.length + reserve > size) return false;
+    const next = new Array<InventorySlot | null>(size).fill(null);
+    // 자리를 지키되(칸 번호가 size 안이면 그대로), 밀려난 것은 빈 칸에 차례로
+    const overflow: InventorySlot[] = [];
+    inv.forEach((s, i) => { if (!s) return; if (i < size) next[i] = s; else overflow.push(s); });
+    for (const s of overflow) next[next.indexOf(null)] = s;
+    world.inventory = next;
+  }
+  world.events.emit('inventory_resized', { size });
+  return true;
+}
+
 /** 가방에 든 각인 id 목록 (중복 포함) */
 export function bagSigilIds(world: World): string[] {
   const out: string[] = [];
@@ -56,6 +94,7 @@ export function bagSigilIds(world: World): string[] {
 /** 가방에 한 개 넣는다. 자리가 없으면 false — 부르는 쪽이 바닥에 남겨 둔다. 각인은 addSigil 로 */
 export function addItem(world: World, kind: ItemKind): boolean {
   if (kind === 'sigil') throw new Error('각인은 addSigil(world, sigilId) 로 넣는다');
+  if (kind === 'equip') throw new Error('장비는 addEquip(world, equipId) 로 넣는다');
   const stackMax = balance.items.stackMax;
   // 쌓을 자리를 먼저 찾는다 — 새 칸부터 쓰면 같은 물약이 칸을 여럿 잡아먹는다
   for (const slot of world.inventory) {
@@ -87,7 +126,7 @@ export function moveSlot(world: World, from: number, to: number): 'moved' | 'mer
     inv[to] = src;
     inv[from] = null;
     result = 'moved';
-  } else if (dst.kind === src.kind && src.kind !== 'sigil' && dst.count < balance.items.stackMax) { // 각인은 합치지 않는다
+  } else if (dst.kind === src.kind && src.kind !== 'sigil' && src.kind !== 'equip' && dst.count < balance.items.stackMax) { // 각인·장비는 합치지 않는다
     const n = Math.min(balance.items.stackMax - dst.count, src.count);
     dst.count += n;
     src.count -= n;
@@ -118,7 +157,7 @@ export function splitSlot(world: World, index: number, amount: number): number {
 /** 한 개라도 더 들어갈 자리가 있는가 — 자석이 물기 전에 묻는다. 각인은 빈 칸이어야 한다 */
 export function hasRoom(world: World, kind: ItemKind): boolean {
   const stackMax = balance.items.stackMax;
-  if (kind === 'sigil') return world.inventory.includes(null);
+  if (kind === 'sigil' || kind === 'equip') return world.inventory.includes(null);
   return world.inventory.some(
     (slot) => slot === null || (slot.kind === kind && slot.count < stackMax),
   );
@@ -130,13 +169,13 @@ let nextGraveId = 960000;
 /** 죽음 — 가방을 통째로 비워 그 자리 비석에 담는다. 스킬(각인)·기본 무기·탄약·골드는
  *  잃지 않는다: 순수하게 가방 소모품만이다. 가방이 비어 있었으면 비석도 서지 않는다 */
 export function spillInventoryToGrave(world: World, x: number, z: number): boolean {
-  const spill: { kind: ItemKind; count: number; sigilId?: string }[] = [];
+  const spill: { kind: ItemKind; count: number; sigilId?: string; equipId?: string }[] = [];
   for (let i = 0; i < world.inventory.length; i++) {
     const slot = world.inventory[i];
     if (!slot) continue;
-    const found = spill.find((s) => s.kind === slot.kind && s.sigilId === slot.sigilId);
+    const found = spill.find((s) => s.kind === slot.kind && s.sigilId === slot.sigilId && s.equipId === slot.equipId);
     if (found) found.count += slot.count;
-    else spill.push({ kind: slot.kind, count: slot.count, ...(slot.sigilId ? { sigilId: slot.sigilId } : {}) });
+    else spill.push({ kind: slot.kind, count: slot.count, ...(slot.sigilId ? { sigilId: slot.sigilId } : {}), ...(slot.equipId ? { equipId: slot.equipId } : {}) });
     world.inventory[i] = null;
   }
   if (spill.length === 0) return false;
@@ -148,12 +187,15 @@ export function spillInventoryToGrave(world: World, x: number, z: number): boole
 /** 비석 회수 — 들어가는 만큼 가방에 담는다. 가방이 차면 남은 것은 비석에 남는다 */
 export function recoverGrave(
   world: World,
-  grave: { graveItems?: { kind: ItemKind; count: number; sigilId?: string }[] },
+  grave: { graveItems?: { kind: ItemKind; count: number; sigilId?: string; equipId?: string }[] },
 ): 'all' | 'partial' | 'none' {
   const items = grave.graveItems ?? [];
   let took = 0;
   for (const stack of items) {
-    const put = (): boolean => (stack.kind === 'sigil' ? addSigil(world, stack.sigilId ?? '') : addItem(world, stack.kind));
+    const put = (): boolean =>
+      stack.kind === 'sigil' ? addSigil(world, stack.sigilId ?? '')
+      : stack.kind === 'equip' ? addEquip(world, stack.equipId ?? '')
+      : addItem(world, stack.kind);
     while (stack.count > 0 && put()) {
       stack.count--;
       took++;
@@ -206,16 +248,17 @@ export function dropSlot(world: World, index: number): void {
       z: at.z,
       noMagnetTicks: balance.items.dropNoMagnetTicks,
       ...(slot.sigilId ? { sigilId: slot.sigilId } : {}),
+      ...(slot.equipId ? { equipId: slot.equipId } : {}),
     });
   }
-  world.events.emit('item_dropped', { kind: slot.kind, count: slot.count, sigilId: slot.sigilId });
+  world.events.emit('item_dropped', { kind: slot.kind, count: slot.count, sigilId: slot.sigilId, equipId: slot.equipId });
 }
 
 /** 퀵슬롯에 종류를 등록한다. 이미 다른 칸에 있으면 자리를 맞바꾼다 —
  *  같은 물약이 두 칸을 차지하면 다섯 칸이 금방 의미를 잃는다 */
 export function bindQuickslot(world: World, index: number, kind: ItemKind): void {
   if (index < 0 || index >= world.quickslots.length) return;
-  if (kind === 'sigil') return; // 각인은 마시는 것이 아니다 — 스킬 탭에서 새긴다
+  if (kind === 'sigil' || kind === 'equip') return; // 각인·장비는 마시는 것이 아니다
   const already = world.quickslots.indexOf(kind);
   const displaced = world.quickslots[index] ?? null;
   world.quickslots[index] = kind;
@@ -233,7 +276,7 @@ export function unbindQuickslot(world: World, index: number): void {
 /** 등록 안 된 종류를 처음 주우면 빈 칸에 자동으로 꽂는다 —
  *  Tab 을 한 번도 안 열어도 물약을 쓸 수 있어야 한다 */
 export function autoBind(world: World, kind: ItemKind): void {
-  if (kind === 'sigil') return;
+  if (kind === 'sigil' || kind === 'equip') return;
   if (world.quickslots.includes(kind)) return;
   const empty = world.quickslots.indexOf(null);
   if (empty < 0) return;
@@ -244,7 +287,7 @@ export function autoBind(world: World, kind: ItemKind): void {
 /** 지금 이 종류를 써서 값어치가 있는가 — 가득 찬 자원에 부으면 그냥 버리는 것이다.
  *  음식은 둘 중 하나만 모자라도 먹을 값어치가 있다 (옛 Pickups.wants 규칙과 같다) */
 export function isUseful(world: World, kind: ItemKind): boolean {
-  if (kind === 'sigil') return true; // 흐리게 그리지 않는다 — 각인은 마시는 값어치가 아니라 새기는 것
+  if (kind === 'sigil' || kind === 'equip') return true; // 흐리게 그리지 않는다 — 마시는 값어치가 아니라 새기는/걸치는 것
   const def = itemDef(kind);
   if (def.heal > 0 && world.player.health < balance.player.healthMax) return true;
   if (def.restore > 0 && world.mana.value < balance.mana.max) return true;
@@ -257,5 +300,6 @@ export function itemCounts(world: World): Record<ItemKind, number> {
   const out = {} as Record<ItemKind, number>;
   for (const kind of ITEM_KINDS) out[kind] = countOf(world, kind);
   out.sigil = countOf(world, 'sigil');
+  out.equip = countOf(world, 'equip');
   return out;
 }

@@ -11,8 +11,9 @@
 //  - 주머니는 부활해도 남고(비석과 같은 규칙), 층을 오갈 때도 그대로다(FloorState).
 
 import { balance } from '../core/Balance';
+import { equipDef } from '../core/EquipData';
 import { enemyDef } from '../core/Entities';
-import { addItem, autoBind, dropSlot, hasRoom, itemDef, addSigil } from '../core/Inventory';
+import { addItem, autoBind, dropSlot, hasRoom, itemDef, addSigil, addEquip } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
 import {
   findFreeSpot,
@@ -37,7 +38,7 @@ export function isConsumable(kind: LootKind): kind is ItemKind {
 export function mergeEntry(entries: LootEntry[], e: LootEntry): void {
   if (e.count <= 0) return;
   const same = entries.find((x) =>
-    x.kind === e.kind && (e.kind !== 'sigil' || x.sigilId === e.sigilId),
+    x.kind === e.kind && (e.kind !== 'sigil' || x.sigilId === e.sigilId) && (e.kind !== 'equip' || x.equipId === e.equipId),
   );
   if (same) {
     same.count += e.count;
@@ -186,6 +187,7 @@ export function groundItemName(item: GroundItemState): string {
   if (item.kind === 'grenade') return '수류탄';
   if (item.kind === 'battery') return '배터리';
   if (item.kind === 'sigil') return item.sigilId ? `${sigilDef(item.sigilId).name} (각인)` : '각인';
+  if (item.kind === 'equip') return item.equipId ? `${equipDef(item.equipId).name} (장비)` : '장비';
   return '';
 }
 
@@ -350,7 +352,7 @@ function takeOneImpl(world: World, c: Container, index: number, announceDeny: bo
   };
   if (e.kind === 'gold') {
     // 골드는 카운터 — 한 번에 전부, 항상 들어간다. 획득 표기는 컨테이너 자리에서 뜬다
-    const amount = e.count;
+    const amount = Math.round(e.count * world.modifiers.goldMul); // 탐욕 반지·도둑 조끼
     world.gold += amount;
     c.entries.splice(index, 1);
     world.events.emit('gold_picked', { amount, total: world.gold, x: c.x, z: c.z });
@@ -377,6 +379,15 @@ function takeOneImpl(world: World, c: Container, index: number, announceDeny: bo
     e.count--;
     if (e.count <= 0) c.entries.splice(index, 1);
     world.events.emit('loot_taken', { kind: 'sigil', count: 1, from, sigilId });
+    return 'taken';
+  }
+  if (e.kind === 'equip') {
+    // 장비도 가방 아이템 — 빈 칸이 있어야 한다. 가방 탭에서 걸친다 (2026-09-04)
+    if (!hasRoom(world, 'equip')) return deny('full');
+    addEquip(world, e.equipId ?? '');
+    e.count--;
+    if (e.count <= 0) c.entries.splice(index, 1);
+    world.events.emit('loot_taken', { kind: 'equip', count: 1, from, equipId: e.equipId });
     return 'taken';
   }
   // 소모품 — 가방에 자리가 있을 때만 1개씩
@@ -427,11 +438,11 @@ export function stashStackTo(world: World, slotIndex: number): LootEntry | null 
   if (!c) return null;
   const slot = world.inventory[slotIndex];
   if (!slot) return null;
-  const { kind, count, sigilId } = slot;
+  const { kind, count, sigilId, equipId } = slot;
   world.inventory[slotIndex] = null;
-  mergeEntry(c.entries, { kind, count, searched: true, ...(sigilId ? { sigilId } : {}) });
+  mergeEntry(c.entries, { kind, count, searched: true, ...(sigilId ? { sigilId } : {}), ...(equipId ? { equipId } : {}) });
   world.events.emit('loot_stashed', { kind, count, to: c.ref.kind });
-  return c.entries.find((x) => x.kind === kind && x.sigilId === sigilId) ?? null;
+  return c.entries.find((x) => x.kind === kind && x.sigilId === sigilId && x.equipId === equipId) ?? null;
 }
 
 /** 커서 줄에서 하나(골드·화살은 들어가는 만큼) 가져온다 */
@@ -441,7 +452,7 @@ export function takeOne(world: World, index: number): TakeResult {
   return takeOneImpl(world, c, index, true);
 }
 
-const TAKE_ORDER: Record<LootKind, number> = { gold: 0, sigil: 1, arrow: 2, potion: 3, mana: 3, food: 3 };
+const TAKE_ORDER: Record<LootKind, number> = { gold: 0, sigil: 1, equip: 1, arrow: 2, potion: 3, mana: 3, food: 3 };
 
 /** 모두 가져오기 — 골드 → 각인 → 화살 → 소모품 순. 못 들어간 것은 남고, 거부 알림은 한 번만
  *  (소모품이 남았으면 '가방 가득', 화살만 남았으면 '화살통 가득') */
@@ -479,7 +490,7 @@ export function stash(world: World, slotIndex: number): boolean {
   if (!slot) return false;
   slot.count--;
   if (slot.count <= 0) world.inventory[slotIndex] = null;
-  mergeEntry(c.entries, { kind: slot.kind, count: 1, searched: true, ...(slot.sigilId ? { sigilId: slot.sigilId } : {}) }); // 내가 넣은 것은 바로 보인다
+  mergeEntry(c.entries, { kind: slot.kind, count: 1, searched: true, ...(slot.sigilId ? { sigilId: slot.sigilId } : {}), ...(slot.equipId ? { equipId: slot.equipId } : {}) }); // 내가 넣은 것은 바로 보인다
   world.events.emit('loot_stashed', { kind: slot.kind, count: 1, to: c.ref.kind });
   return true;
 }
@@ -512,10 +523,13 @@ export function dropToFloor(world: World, side: 'container' | 'bag', index: numb
   if (e.kind === 'gold') {
     const at = spot();
     world.groundItems.push({ id: nextLootId++, kind: 'gold', amount: e.count, x: at.x, z: at.z, noMagnetTicks: grace });
-  } else if (e.kind === 'sigil') {
+  } else if (e.kind === 'sigil' || e.kind === 'equip') {
     for (let i = 0; i < Math.max(1, e.count); i++) {
       const at = spot();
-      world.groundItems.push({ id: nextLootId++, kind: 'sigil', sigilId: e.sigilId, x: at.x, z: at.z, noMagnetTicks: grace });
+      world.groundItems.push({
+        id: nextLootId++, kind: e.kind, x: at.x, z: at.z, noMagnetTicks: grace,
+        ...(e.sigilId ? { sigilId: e.sigilId } : {}), ...(e.equipId ? { equipId: e.equipId } : {}),
+      });
     }
   } else {
     for (let i = 0; i < e.count; i++) {

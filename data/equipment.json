@@ -1,0 +1,24 @@
+{
+  "_comment": "장비 (2026-09-04 사용자 기획, A안). 7칸: head 투구 · body 갑옷 · feet 부츠 · ring 반지×2(ring1/ring2) · neck 목걸이 · pack 짐칸(벨트 또는 가방, 하나만). 효과는 규칙 수정 위주 — *Mul 은 곱, perfectBandBonus·bagSlots·shopDiscount 는 더한다(core/Modifiers). 각인과 달리 오염이 없다. 가방 칸 = items.cols×rows(5×3=15) + pack 의 bagSlots. 벨트는 칸을 조금 늘리고 물약을 빨리 마시게(itemChannelMul), 가방은 칸을 많이 늘리되 큰 것은 무겁다(moveSpeedMul)",
+  "_effectKeys": "damageTakenMul(받는 피해) trapDamageMul(함정 피해, 추가 곱) moveSpeedMul sprintDrainMul(질주 스태미나) dodgeDistanceMul manaRegenMul goldMul perfectBandBonus(m, 완벽 패링 대역) stunMul(플레이어 경직) shopDiscount(0~1) itemChannelMul(마시는 시간) potionHealMul bagSlots",
+  "slotLabels": { "head": "투구", "body": "갑옷", "feet": "부츠", "ring": "반지", "neck": "목걸이", "pack": "짐칸" },
+  "items": {
+    "helm_leather": { "name": "가죽 투구", "slot": "head", "tier": 1, "color": "#a0785a", "price": 60, "desc": "완벽 패링 대역이 조금 넓다", "effects": { "perfectBandBonus": 0.1 } },
+    "helm_iron": { "name": "쇠 투구", "slot": "head", "tier": 2, "color": "#8a8f9a", "price": 120, "desc": "경직이 짧다. 무겁다", "effects": { "stunMul": 0.7, "moveSpeedMul": 0.97 } },
+    "armor_padded": { "name": "누빔 갑옷", "slot": "body", "tier": 1, "color": "#7a6a4a", "price": 80, "desc": "피해를 조금 덜 받는다", "effects": { "damageTakenMul": 0.92 } },
+    "armor_chain": { "name": "쇠사슬 갑옷", "slot": "body", "tier": 2, "color": "#9aa0b0", "price": 160, "desc": "피해를 꽤 덜 받는다. 무겁다", "effects": { "damageTakenMul": 0.85, "moveSpeedMul": 0.95 } },
+    "vest_thief": { "name": "도둑 조끼", "slot": "body", "tier": 1, "color": "#4a5a3a", "price": 90, "desc": "골드를 더 줍는다. 얇다", "effects": { "goldMul": 1.15, "damageTakenMul": 0.97 } },
+    "boots_light": { "name": "가벼운 부츠", "slot": "feet", "tier": 1, "color": "#c9b58a", "price": 70, "desc": "회피가 멀리 간다", "effects": { "dodgeDistanceMul": 1.15 } },
+    "boots_spiked": { "name": "징 박힌 부츠", "slot": "feet", "tier": 1, "color": "#5a5a66", "price": 80, "desc": "함정 피해를 절반만 받는다", "effects": { "trapDamageMul": 0.5 } },
+    "boots_runner": { "name": "질주 부츠", "slot": "feet", "tier": 2, "color": "#d06a3a", "price": 130, "desc": "질주가 스태미나를 덜 쓴다", "effects": { "sprintDrainMul": 0.7 } },
+    "ring_mana": { "name": "마력 반지", "slot": "ring", "tier": 1, "color": "#3a7ce0", "price": 90, "desc": "마나가 빨리 찬다", "effects": { "manaRegenMul": 1.3 } },
+    "ring_greed": { "name": "탐욕 반지", "slot": "ring", "tier": 1, "color": "#ffcc3a", "price": 90, "desc": "골드를 더 줍는다", "effects": { "goldMul": 1.2 } },
+    "ring_grit": { "name": "인내 반지", "slot": "ring", "tier": 2, "color": "#b04a4a", "price": 140, "desc": "경직이 짧다", "effects": { "stunMul": 0.75 } },
+    "neck_merchant": { "name": "상인의 목걸이", "slot": "neck", "tier": 1, "color": "#e8c76a", "price": 110, "desc": "제단 가격이 싸다", "effects": { "shopDiscount": 0.2 } },
+    "neck_vigor": { "name": "활력 목걸이", "slot": "neck", "tier": 2, "color": "#e0384a", "price": 150, "desc": "물약이 더 많이 회복한다", "effects": { "potionHealMul": 1.25 } },
+    "belt_small": { "name": "작은 벨트", "slot": "pack", "packKind": "belt", "tier": 1, "color": "#6b4a2e", "price": 60, "desc": "가방 +5칸. 물약을 빨리 마신다", "effects": { "bagSlots": 5, "itemChannelMul": 0.8 } },
+    "belt_large": { "name": "큰 벨트", "slot": "pack", "packKind": "belt", "tier": 2, "color": "#8a5a30", "price": 140, "desc": "가방 +10칸. 물약을 아주 빨리 마신다", "effects": { "bagSlots": 10, "itemChannelMul": 0.65 } },
+    "bag_small": { "name": "작은 가방", "slot": "pack", "packKind": "bag", "tier": 1, "color": "#5a6b3a", "price": 70, "desc": "가방 +10칸", "effects": { "bagSlots": 10 } },
+    "bag_large": { "name": "큰 가방", "slot": "pack", "packKind": "bag", "tier": 2, "color": "#3a5a4a", "price": 160, "desc": "가방 +15칸. 무겁다", "effects": { "bagSlots": 15, "moveSpeedMul": 0.97 } }
+  }
+}

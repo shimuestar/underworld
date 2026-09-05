@@ -2,6 +2,7 @@
 // 이 객체의 상태와 이벤트 버스를 통해서만 통신한다.
 
 import type { ProjectileSplashDef } from './Entities';
+import type { EquipSlot } from './EquipData';
 import { sigilDef, type SigilSlot } from './SigilData';
 import type { Events } from './Events';
 import type { InputSnapshot } from './Input';
@@ -118,6 +119,28 @@ export interface Modifiers {
   ambientVisionBoost: number;
   /** 함정 감지 — 이 반경(m) 안의 함정을 알아챈다. 0 = 없음 */
   revealTrapsRadius: number;
+  // ---- 장비 (2026-09-04, core/Modifiers 가 각인과 함께 합산) ----
+  /** 받는 피해 배율 (갑옷) — damagePlayer 가 모든 피해 경로에서 적용 */
+  damageTakenMul: number;
+  /** 함정 피해 추가 배율 (부츠) */
+  trapDamageMul: number;
+  moveSpeedMul: number;
+  /** 질주 스태미나 소모 배율 */
+  sprintDrainMul: number;
+  manaRegenMul: number;
+  /** 골드 획득 배율 (바닥·주머니) */
+  goldMul: number;
+  /** 완벽 패링 대역에 더하는 거리(m) */
+  perfectBandBonus: number;
+  /** 플레이어 경직 시간 배율 (패링 실패·방패 격돌) */
+  stunMul: number;
+  /** 제단 가격 할인 0~1 */
+  shopDiscount: number;
+  /** 소모품 마시는 시간 배율 */
+  itemChannelMul: number;
+  potionHealMul: number;
+  /** 가방 칸 추가 (짐칸 — 벨트·가방) */
+  bagSlots: number;
 }
 
 export interface CorruptionState {
@@ -641,7 +664,7 @@ export interface BarrelState {
 }
 
 /** 가방에 들어가는 종류 — 소모품 셋 + 각인(2026-09-04 아이템화: 스택 불가, sigilId 를 든다). 골드는 가방을 쓰지 않는다 */
-export type ItemKind = 'potion' | 'mana' | 'food' | 'sigil';
+export type ItemKind = 'potion' | 'mana' | 'food' | 'sigil' | 'equip';
 
 /** 소모품 종류 — 퀵슬롯·마시기·자동 등록 대상. 각인은 여기 없다 */
 export const ITEM_KINDS: ItemKind[] = ['potion', 'mana', 'food'];
@@ -652,6 +675,8 @@ export interface InventorySlot {
   count: number;
   /** kind==='sigil' — 어느 각인인가 */
   sigilId?: string;
+  /** kind==='equip' — 어느 장비인가 (2026-09-04) */
+  equipId?: string;
 }
 
 /** 전리품 종류 — 주머니·상자 안에 들어가는 것: 가방 소모품 + 골드 + 화살 (+ 상자의 각인) */
@@ -661,6 +686,8 @@ export interface LootEntry {
   kind: LootKind;
   count: number;
   sigilId?: string;
+  /** kind==='equip' — 장비 id 별 한 줄 */
+  equipId?: string;
   /** 뒤져서 정체가 드러났다 — 창에서 한 칸씩 차례로(1초) 밝혀진다. 드러나기 전엔 가져갈 수 없다. 내가 넣은 것은 처음부터 참 */
   searched?: boolean;
 }
@@ -683,15 +710,17 @@ export interface LifeMoteState {
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
-  kind: 'sigil' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow' | 'key' | 'grave' | 'ammo' | 'grenade' | 'battery' | 'pouch';
+  kind: 'sigil' | 'equip' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow' | 'key' | 'grave' | 'ammo' | 'grenade' | 'battery' | 'pouch';
   x: number;
   z: number;
   /** kind==='sigil' 일 때만 */
   sigilId?: string;
+  /** kind==='equip' 일 때만 */
+  equipId?: string;
   /** kind==='gold' 일 때 획득량 */
   amount?: number;
   /** kind==='grave' — 죽으며 떨어뜨린 가방 내용물. 회수 시 들어가는 만큼 다시 담는다 (각인은 sigilId 별 한 줄) */
-  graveItems?: { kind: ItemKind; count: number; sigilId?: string }[];
+  graveItems?: { kind: ItemKind; count: number; sigilId?: string; equipId?: string }[];
   /** 자석 흡수 중 — 공중으로 떠서 플레이어에게 날아간다 */
   magnet?: boolean;
   /** 자석이 물기 직전 놓여 있던 자리 — 골드 획득 표기가 이 자리에서 떠오른다 */
@@ -1049,6 +1078,15 @@ export interface EnemyState {
 
 /** 피격 밀림 시작 — (dirX,dirZ) 방향으로 distance 만큼 ticks 동안 밀린다.
  *  balance는 호출하는 시스템이 읽어 넘긴다 (World는 데이터에 의존하지 않는다) */
+/** 플레이어 피해 적용 — 장비 배율(damageTakenMul, 함정은 trapDamageMul 도)을 거쳐 체력을 깎고 실제 깎인 양을 돌려준다.
+ *  적·투사체·함정의 모든 피해 경로가 이 문을 지난다 (2026-09-04 장비) */
+export function damagePlayer(world: World, amount: number, opts?: { trap?: boolean }): number {
+  let applied = amount * world.modifiers.damageTakenMul;
+  if (opts?.trap) applied *= world.modifiers.trapDamageMul;
+  world.player.health -= applied;
+  return applied;
+}
+
 export function pushPlayer(
   player: PlayerState,
   dirX: number,
@@ -1155,6 +1193,8 @@ export class World {
   quickslots: (ItemKind | null)[] = [];
   /** 스킬 퀵슬롯 — 액티브 스킬 id. 키보드 Z·X·C·V (Sigils.ensureSkillSlots 가 칸 수를 맞춘다) */
   skillSlots: (string | null)[] = [];
+  /** 몸에 걸친 장비 — 칸별 장비 id (2026-09-04). 효과는 modifiers 로 합산, 오염 없음 */
+  equipment: Record<EquipSlot, string | null> = { head: null, body: null, feet: null, ring1: null, ring2: null, neck: null, pack: null };
   /** 선택된 스킬 칸 — Q(패드 cycleSkill)로 회전, 가운데 클릭(패드 cast)으로 쓴다 */
   selectedSkill = 0;
 
