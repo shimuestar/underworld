@@ -97,6 +97,12 @@ export function use(world: World, index: number): boolean {
     world.events.emit('item_denied', { index, reason: 'empty' });
     return false;
   }
+  return useKind(world, kind, index);
+}
+
+/** 종류로 바로 쓰기 시작한다 — 가방 창의 '사용'(퀵슬롯에 없어도 된다, 2026-09-04). index 는 안내·HUD 용
+ *  (퀵슬롯 번호, 없으면 -1). 실패 이유는 use 와 같이 item_denied 로 */
+export function useKind(world: World, kind: ItemKind, index: number = world.quickslots.indexOf(kind)): boolean {
   if (world.itemChannel) {
     world.events.emit('item_denied', { index, kind, reason: 'busy' });
     return false;

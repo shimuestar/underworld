@@ -19,6 +19,7 @@ import {
   unbindQuickslot,
 } from '../core/Inventory';
 import { beginDrag } from './DragDrop';
+import * as Items from '../systems/Items';
 import { adjustSplit, makeSplit, renderSplitDialog, splitActivate, splitNavigate, type SplitState } from './SplitDialog';
 import { balance } from '../core/Balance';
 import { itemIcon } from './ItemIcons';
@@ -65,6 +66,8 @@ export class InventoryUI {
   private aConsumed = false;
   private xHoldTicks = 0;
   private xConsumed = false;
+  private yHoldTicks = 0;
+  private yConsumed = false;
   /** 수량 나누기 대화상자 */
   private split: SplitState | null = null;
   /** 패드로 조작 중 — 안내·글리프를 패드 표기로 (main 이 틱마다 갱신) */
@@ -114,6 +117,7 @@ export class InventoryUI {
         return;
       }
       if (e.code === 'KeyX' || e.code === 'Delete') { e.preventDefault(); this.dropCursor(); return; }
+      if (e.code === 'KeyE') { e.preventDefault(); this.useCursor(); return; } // 사용 — 창을 닫고 마시기 시작
       if (e.code === 'Escape') { e.preventDefault(); this.cancelOrClose(); return; }
       // 숫자 키 — 고른 게 있으면 그 칸에 꽂고, 없으면 해제 (창 안에서는 등록 전용이다)
       const digit = Number.parseInt(e.code.replace('Digit', ''), 10);
@@ -136,6 +140,8 @@ export class InventoryUI {
     this.aConsumed = false;
     this.xHoldTicks = 0;
     this.xConsumed = false;
+    this.yHoldTicks = 0;
+    this.yConsumed = false;
     this.split = null;
     this.root.style.display = 'flex';
     this.rebuild();
@@ -202,8 +208,37 @@ export class InventoryUI {
     if (consumed || this.split) return;
     this.dropCursor();
   }
+  /** Y — 짧게 떼면 커서 가방 칸 사용, padPouchHoldTicks 넘게 누르면 보관 주머니 내려놓기 */
+  padY(held: boolean): void {
+    if (!this.open) return;
+    if (held) {
+      this.yHoldTicks++;
+      if (!this.yConsumed && !this.split && !this.carry && this.yHoldTicks >= balance.loot.ui.padPouchHoldTicks) {
+        this.yConsumed = true;
+        this.onPlacePouch?.();
+      }
+      return;
+    }
+    if (this.yHoldTicks === 0) return;
+    const consumed = this.yConsumed;
+    this.yHoldTicks = 0;
+    this.yConsumed = false;
+    if (consumed || this.split || this.carry) return;
+    this.useCursor();
+  }
   /** B — 대화상자·들기를 취소하고, 아니면 닫는다 */
   padClose(): void { this.cancelOrClose(); }
+
+  /** 사용 — 커서 가방 칸의 소모품을 마시기 시작한다(퀵슬롯에 없어도). 시전이 있어 창을 닫는다.
+   *  못 쓰는 이유(가득·쿨다운·마시는 중)는 Items 가 item_denied 로 알린다 — 창은 그대로 */
+  private useCursor(): void {
+    if (this.pane !== 'bag') return;
+    const slot = this.world.inventory[this.sel];
+    if (!slot) return;
+    if (!Items.useKind(this.world, slot.kind)) { this.rebuild(); return; }
+    this.hide();
+    this.onClose?.();
+  }
 
   // ---- 커서 ----
   private move(dx: number, dy: number): void {
@@ -389,7 +424,7 @@ export class InventoryUI {
 
     // 보관 주머니 — 가방을 비워 두고 싶을 때. 넣어 둔 것은 층을 오가도·죽어도 그 자리에 남는다
     const stash = document.createElement('button');
-    stash.textContent = `주머니 내려놓기 (${this.key('Y', 'P')}) — 여기에 아이템을 보관한다`;
+    stash.textContent = `주머니 내려놓기 (${this.key('Y 길게', 'P')}) — 여기에 아이템을 보관한다`;
     stash.style.cssText =
       'margin-top:16px;padding:6px 14px;border:1px solid #3a3a44;background:#1b1b22;color:#cfd2da;cursor:pointer;font:inherit;';
     stash.onclick = () => this.onPlacePouch?.();
@@ -397,8 +432,8 @@ export class InventoryUI {
 
     const hint = document.createElement('div');
     hint.textContent = this.padMode
-      ? 'D-패드·왼 스틱 커서   A 고르기 → 퀵슬롯에서 A 등록(빈손 = 해제)   A 길게 집어 옮기기 → A 놓기 / B 취소   X 버리기 · X 길게 수량 나누기   Y 주머니 내려놓기   B 닫기'
-      : `WASD·화살표 커서 · 클릭   Enter 고르기 → 퀵슬롯 Enter/클릭(또는 1~${world.quickslots.length}) 등록(빈손 = 해제)   X·우클릭 버리기   Shift+Enter·Shift+클릭 수량 나누기   드래그로 옮기기   P 주머니 내려놓기   Esc·I 닫기`;
+      ? 'D-패드·왼 스틱 커서   Y 사용   A 고르기 → 퀵슬롯에서 A 등록(빈손 = 해제)   A 길게 집어 옮기기 → A 놓기 / B 취소   X 버리기 · X 길게 수량 나누기   Y 길게 주머니 내려놓기   B 닫기'
+      : `WASD·화살표 커서 · 클릭   E·더블클릭 사용   Enter 고르기 → 퀵슬롯 Enter/클릭(또는 1~${world.quickslots.length}) 등록(빈손 = 해제)   X·우클릭 버리기   Shift+Enter·Shift+클릭 수량 나누기   드래그로 옮기기   P 주머니 내려놓기   Esc·I 닫기`;
     hint.style.cssText = 'margin-top:14px;color:#6c7280;font-size:11px;line-height:1.7;white-space:normal;';
     panel.appendChild(hint);
 
@@ -608,6 +643,7 @@ export class InventoryUI {
         if (ev.shiftKey) { this.openSplit(i); return; } // Shift+클릭 = 수량 나누기
         this.act();
       };
+      cell.ondblclick = () => { this.pane = 'bag'; this.sel = i; this.useCursor(); }; // 더블클릭 = 사용
       cell.onmousemove = (ev) => {
         if (!this.hoverAllowed(ev)) return;
         if (this.pane === 'bag' && this.sel === i) return;
@@ -623,6 +659,7 @@ export class InventoryUI {
       } else if (here && slot) {
         const content = consumablePopup(world, slot.kind, slot.count);
         content.actions = [
+          { key: this.key('Y', 'E'), label: isUseful(world, slot.kind) ? '사용 (창이 닫히고 마신다)' : '사용 — 지금은 값어치 없음' },
           { key: this.key('A', 'Enter'), label: isPicked ? '고르기 해제' : '고르기 → 퀵슬롯에 등록' },
           { key: this.key('A 길게', '드래그'), label: '집어 옮기기' },
           { key: this.key('X', 'X'), label: '바닥에 버리기' },

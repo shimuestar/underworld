@@ -541,3 +541,28 @@ describe('수량 나누기 (2026-09-04)', () => {
     expect(world.inventory[1]).toEqual({ kind: 'potion', count: 4 });
   });
 });
+
+describe('가방 창에서 바로 쓰기 — useKind (2026-09-04)', () => {
+  it('퀵슬롯에 없는 종류도 마시기 시작하고, 시전이 끝나면 소모된다', () => {
+    addItem(world, 'potion');
+    world.quickslots = [null, null, null, null]; // 등록 안 됨
+    world.player.health = 50;
+    const started: unknown[] = [];
+    world.events.on('item_channel_started', (p) => started.push(p));
+    expect(Items.useKind(world, 'potion')).toBe(true);
+    expect(started).toEqual([{ kind: 'potion', index: -1, ticks: balance.items.channelTicks }]);
+    for (let i = 0; i < balance.items.channelTicks + 2; i++) Items.tick(world, DT);
+    expect(countOf(world, 'potion')).toBe(0);
+    expect(world.player.health).toBeGreaterThan(50);
+  });
+
+  it('가득이면 거부(item_denied full) — 창은 Items 가 아니라 UI 가 유지한다', () => {
+    addItem(world, 'potion');
+    world.player.health = balance.player.healthMax;
+    const denied: unknown[] = [];
+    world.events.on('item_denied', (p) => denied.push(p));
+    expect(Items.useKind(world, 'potion')).toBe(false);
+    expect(denied).toEqual([{ index: world.quickslots.indexOf('potion'), kind: 'potion', reason: 'full' }]); // 처음 주우면 자동 등록되므로 0
+    expect(countOf(world, 'potion')).toBe(1);
+  });
+});

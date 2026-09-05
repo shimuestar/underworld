@@ -3143,9 +3143,9 @@ function simulate(dt: number): void {
       else if (input.gamepad.rawPressed(15)) inventoryUI.padMove(1, 0);
       else if (input.gamepad.rawPressed(14)) inventoryUI.padMove(-1, 0);
       else if (stick.dx !== 0 || stick.dy !== 0) inventoryUI.padMove(stick.dx, stick.dy);
-      else if (input.gamepad.rawPressed(3)) inventoryUI.onPlacePouch?.();
       else if (input.gamepad.rawPressed(1)) inventoryUI.padClose();
-      inventoryUI.padX(input.gamepad.rawHeld(2));
+      inventoryUI.padX(input.gamepad.rawHeld(2)); // X 짧게 버리기 · 길게 수량 나누기
+      inventoryUI.padY(input.gamepad.rawHeld(3)); // Y 짧게 사용 · 길게 보관 주머니 내려놓기
     }
   }
   // 루팅 창 — D-패드 네 방향(←→ 로 칸 전환), A 짧게 가져오기/넣기 · 길게 집어 들기(→ 이동 → A 놓기),
