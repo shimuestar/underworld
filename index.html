@@ -58,10 +58,11 @@
         transition: opacity 90ms linear;
         border-radius: 1px;
       }
-      #crosshair .chl.t { left: 1px; top: -11px; width: 2px; height: 7px; }
-      #crosshair .chl.b { left: 1px; top: 8px; width: 2px; height: 7px; }
-      #crosshair .chl.l { left: -11px; top: 1px; width: 7px; height: 2px; }
-      #crosshair .chl.r { left: 8px; top: 1px; width: 7px; height: 2px; }
+      /* 점(4px)과 선(7px) 사이 간격은 --ch-gap (main 이 활 당김 흔들림에 따라 벌린다) */
+      #crosshair .chl.t { left: 1px; top: calc(-7px - var(--ch-gap, 4px)); width: 2px; height: 7px; }
+      #crosshair .chl.b { left: 1px; top: calc(4px + var(--ch-gap, 4px)); width: 2px; height: 7px; }
+      #crosshair .chl.l { left: calc(-7px - var(--ch-gap, 4px)); top: 1px; width: 7px; height: 2px; }
+      #crosshair .chl.r { left: calc(4px + var(--ch-gap, 4px)); top: 1px; width: 7px; height: 2px; }
       #crosshair.aim .chl {
         opacity: 1;
       }

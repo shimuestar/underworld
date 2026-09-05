@@ -3694,7 +3694,12 @@ function render(alpha: number): void {
   stage.setLockOn(world.lockOnId); // 락온 마름모 — 잡힌 적 머리 위
   // 조준(LT) 연출 — 십자선 + 부드러운 FOV 줌 (누르고 있다는 게 몸에 온다)
   const aiming = input.usingPad && world.input.padAiming && !world.dead && !world.uiOpen;
-  crosshairEl.classList.toggle('aim', aiming);
+  // 활은 조준 무기 — 꺼내 들면 장치와 무관하게 십자선을 켠다 (2026-09-04 사용자). 당김 흔들림이 클수록 선이 벌어진다(정확도 표시)
+  const bowOut = world.weapon.ranged === 'bow' && !world.dead && !world.uiOpen;
+  crosshairEl.classList.toggle('aim', aiming || bowOut);
+  const ch = balance.hud.crosshair;
+  const swayFrac = bowOut ? Math.min(1, (p.aimSwayAmp ?? 0) / ((balance.weapons.bow.sway.ampMaxDeg * Math.PI) / 180)) : 0;
+  crosshairEl.style.setProperty('--ch-gap', `${ch.gapPx + ch.swayGapPx * swayFrac}px`);
   // 활 당김 확대 — 당긴 시간만큼 아주 조금 다가간다 (상한 1). 놓으면 bowDrawTotal 이 0 이 되어 스르르 돌아온다
   const bowZoom = balance.weapons.bow.zoom;
   const bowZoomTarget =

@@ -848,6 +848,8 @@
     "centerGain": { "holdMs": 900, "absorbMs": 380, "risePx": 10, "fontPx": 21, "rollIntervalMs": 30, "rollStepRatio": 0.3, "bigGold": 20, "bigXp": 45, "bigScaleMul": 1.35 },
     "_damageTakenNote": "플레이어가 받은 피해 — HP 바 위로 붉은 -N 이 떠오르며 사라진다. 폰트·외곽선·움직임(빠르게 떴다가 끝에서 느려짐, 65% 뒤 페이드)·시간(damageNumbers.ms)은 적 머리 위 피해 숫자와 같다(2026-09-04 사용자: 동일 연출). 색만 다르다 — 입힌 피해는 흰색/금색, 받은 피해는 붉은색. mergeMs 안에 같은 결로 연달아 맞으면 하나로 합산. bigAt 이상은 bigScaleMul 배(적의 bigSizeM/sizeM 과 같은 비율). 막힌 타격(칩 피해)은 회색, 독·화염 도트는 종류 색. 좌우 jitterPx 로 흔들고, 살아 있는 숫자가 있으면 그 수만큼 stackPx 위에 쌓아 겹침을 피한다",
     "damageTaken": { "risePx": 44, "fontPx": 26, "bigAt": 20, "bigScaleMul": 1.47, "mergeMs": 250, "jitterPx": 14, "stackPx": 44 },
+    "_crosshairNote": "십자선 — 점 둘레의 네 선. gapPx 는 점과 선 사이 기본 간격, 활 당김 흔들림이 최대면 swayGapPx 만큼 더 벌어진다(손이 떨리면 조준이 넓어진다). 선은 패드 조준(LT) 중 또는 활을 꺼내 들었을 때 보인다 (2026-09-04)",
+    "crosshair": { "gapPx": 4, "swayGapPx": 14 },
     "_compassNote": "나침반 — 상단 중앙 가로 띠(widthPx×heightPx). 정면 ±arcDeg/2 만 펼치고 밖은 양 끝 화살촉. 표식: 위협(미니맵과 같은 조건, nearM~farM 로 크기 nearScale~farScale, maxCount) > 피격 쐐기 > 소리 핑 > 목표(출구·입구·제단·상자, 미니맵 안개로 본 것만·출구는 쇠창살 열리면 항상, 거리 숫자) > 주머니(loot.radiusM 안 maxCount) > 감지한 함정(trapRadiusM). 중앙 ±centerLabelDeg 안 표식 하나만 이름표. 항상 표시, 조작 없음 (2026-09-04 사용자 확정)",
     "compass": {
       "widthPx": 360, "heightPx": 46, "arcDeg": 120, "tickEveryDeg": 15, "majorEveryDeg": 45, "centerLabelDeg": 3, "edgeChevron": true,
