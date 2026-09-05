@@ -307,6 +307,8 @@ const POTION_COLOR = itemColor('potion'); // HP 포션 — 붉은 약병
 const MANA_POTION_COLOR = itemColor('mana'); // 마나 물약 — 푸른 약병
 const POTION_GLASS = 0xbfe6ff;
 const GOLD_COLOR = 0xffcc3a; // 골드 더미
+const AMMO_COLOR = 0x4a4d55; // 권총탄 상자 — 어두운 회색 (놋쇠색은 골드와 헷갈렸다, 2026-09-04 사용자)
+const AMMO_GLOW = 0x8a8f9a; // 탄약의 은은한 빛·빛 선 — 어둠에서 보이되 금빛으로 읽히지 않게
 const FOOD_COLOR = itemColor('food'); // 음식 — 구운 고기
 const FOOD_BONE = 0xe8ddc0;
 
@@ -4649,9 +4651,9 @@ export class Stage {
       group.add(piece);
       group.add(new THREE.PointLight(FOOD_COLOR, 0.45, 3.5, 0));
     } else if (kind === 'ammo') {
-      // 권총탄 — 놋쇠 상자 두 개
+      // 권총탄 — 어두운 회색 상자 두 개 (희미한 잿빛 발광으로 어둠에서도 형태가 읽힌다)
       const brass = new THREE.MeshLambertMaterial({
-        color: 0xc9a54a, emissive: 0xc9a54a, emissiveIntensity: 0.3,
+        color: AMMO_COLOR, emissive: AMMO_GLOW, emissiveIntensity: 0.22,
       });
       for (const off of [-0.07, 0.07]) {
         const box = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.09, 0.2), brass);
@@ -4659,7 +4661,7 @@ export class Stage {
         box.rotation.y = off * 6;
         group.add(box);
       }
-      group.add(new THREE.PointLight(0xc9a54a, 0.4, 3, 0));
+      group.add(new THREE.PointLight(AMMO_GLOW, 0.3, 3, 0));
     } else if (kind === 'grenade') {
       const shell = new THREE.Mesh(
         new THREE.SphereGeometry(0.13, 10, 8),
@@ -4736,7 +4738,7 @@ export class Stage {
         : kind === 'mana' ? MANA_POTION_COLOR
         : kind === 'food' ? FOOD_COLOR
         : kind === 'arrow' ? 0xd8d0b8
-        : kind === 'ammo' ? 0xc9a54a
+        : kind === 'ammo' ? AMMO_GLOW
         : kind === 'grenade' ? 0x86b06a
         : kind === 'battery' ? 0xd8c23a
         : kind === 'key' ? KEY_COLOR
