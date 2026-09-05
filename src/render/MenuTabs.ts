@@ -101,9 +101,9 @@ export class MenuTabs {
     this.onOpenChange?.(false);
   }
 
-  /** 같은 탭이 열려 있으면 닫고, 아니면 그 탭으로 연다 (I·M·Tab 키) */
+  /** I·M·Tab 키 — 창이 열려 있으면(어느 탭이든) 닫고, 닫혀 있으면 그 탭으로 연다 (2026-09-04 사용자: 누르면 나오고 다시 누르면 사라진다) */
   toggleTab(id: string): void {
-    if (this.open && this.active === id) this.hide();
+    if (this.open) this.hide();
     else this.show(id);
   }
   toggle(): void {

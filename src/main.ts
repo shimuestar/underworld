@@ -369,7 +369,7 @@ events.on('loot_opened', (payload) => {
   lootUI.show();
   setUiOpen(true);
 });
-// 메뉴 창 키 — I 가방 탭 · M 맵 탭 · Tab 스킬 탭 (같은 탭이 열려 있으면 닫힌다). 마우스는 탭 헤더 클릭
+// 메뉴 창 키 — I 가방 탭 · M 맵 탭 · Tab 스킬 탭으로 열고, 열려 있으면 어느 키든 닫는다. 마우스는 탭 헤더 클릭
 window.addEventListener('keydown', (e) => {
   if (lootUI.open) return; // 루팅 창은 자기 키(E/Esc)로만 닫는다 — 다른 창을 겹쳐 열지 않게
   if (e.code === 'Tab') {
