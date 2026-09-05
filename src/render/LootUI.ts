@@ -416,7 +416,7 @@ export class LootUI {
     } else if (carry.pane === 'container' && pane === 'bag') {
       const e = this.layout[carry.index] ?? null;
       const dst = world.inventory[index];
-      if (e && (e.kind === 'gold' || e.kind === 'arrow' || e.kind === 'sigil')) lines.push('칸을 차지하지 않는다 — 가져오기와 같다');
+      if (e && (e.kind === 'gold' || e.kind === 'arrow')) lines.push('칸을 차지하지 않는다 — 가져오기와 같다');
       else if (!dst) lines.push(`빈 칸 — ${Math.min(stackMax, e?.count ?? 0)}개 들어간다`);
       else if (e && dst.kind === e.kind) {
         const n = Math.min(stackMax - dst.count, e.count);

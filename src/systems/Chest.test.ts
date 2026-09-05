@@ -5,6 +5,7 @@ import sigilsJson from '../../data/sigils.json';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
+import { bagSigilIds, initInventory } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
 import { World, type ChestState } from '../core/World';
 import { Level } from '../level/GridLoader';
@@ -73,6 +74,7 @@ function interact(world: World): void {
 let world: World;
 beforeEach(() => {
   world = makeWorld();
+  initInventory(world); // 각인은 가방 아이템 — 가방 칸이 있어야 상자에서 가져올 수 있다 (2026-09-04)
 });
 
 describe('상호작용', () => {
@@ -158,7 +160,7 @@ describe('전리품 — 상자 속(chestItems)', () => {
     expect(golds[0]).toEqual(expect.objectContaining({ x: chest.x, z: chest.z }));
   });
 
-  it('각인을 정확히 1줄 준다 — 가져가면 Sigils 가 습득시킨다 (바닥에 안 떨어진다)', () => {
+  it('각인을 정확히 1줄 준다 — 가져가면 가방 아이템이 되고, 스킬 탭에서 새겨야 익힌다 (바닥에 안 떨어진다)', () => {
     Sigils.init(world);
     const chest = putChest(world, 6 + 1.5, 6);
     const acquired: { id: string }[] = [];
@@ -166,14 +168,33 @@ describe('전리품 — 상자 속(chestItems)', () => {
     interact(world);
     const sigils = chest.chestItems!.filter((e) => e.kind === 'sigil');
     expect(sigils).toHaveLength(1);
-    expect(() => sigilDef(sigils[0]!.sigilId!)).not.toThrow();
+    const id = sigils[0]!.sigilId!;
+    expect(() => sigilDef(id)).not.toThrow();
     expect(world.groundItems.some((g) => g.kind === 'sigil')).toBe(false);
     const idx = chest.chestItems!.indexOf(sigils[0]!);
     revealAll(world, chest);
     expect(Loot.takeOne(world, idx)).toBe('taken');
-    expect(acquired.map((a) => a.id)).toEqual([sigils[0]!.sigilId]);
-    expect(world.sigils.inventory).toContain(sigils[0]!.sigilId);
+    expect(bagSigilIds(world)).toEqual([id]); // 가방으로 — 아직 익히지 않았다
+    expect(acquired).toHaveLength(0);
+    expect(world.sigils.inventory).not.toContain(id);
     expect(chest.chestItems!.some((e) => e.kind === 'sigil')).toBe(false);
+    // 스킬 탭 — 가방의 각인을 새긴다
+    const slot = world.inventory.findIndex((s) => s?.kind === 'sigil');
+    expect(['attached', 'learned']).toContain(Sigils.learnFromBag(world, slot));
+    expect(acquired.map((a) => a.id)).toEqual([id]);
+    expect(world.sigils.inventory).toContain(id);
+    expect(bagSigilIds(world)).toEqual([]);
+  });
+
+  it('가방이 가득이면 상자의 각인을 가져올 수 없다 (full)', () => {
+    const chest = putChest(world, 6 + 1.5, 6);
+    interact(world);
+    const idx = chest.chestItems!.findIndex((e) => e.kind === 'sigil');
+    expect(idx).toBeGreaterThanOrEqual(0);
+    revealAll(world, chest);
+    world.inventory = world.inventory.map(() => ({ kind: 'potion' as const, count: balance.items.stackMax }));
+    expect(Loot.takeOne(world, idx)).toBe('full');
+    expect(chest.chestItems!.some((e) => e.kind === 'sigil')).toBe(true);
   });
 
   it('이미 가진 각인은 나오지 않는다', () => {

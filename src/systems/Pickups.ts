@@ -7,7 +7,7 @@
 // 2026-09-04: 처치 드랍 굴림은 Loot 로 옮겼다 — 이제 적은 아이템이 아니라 주머니를 떨군다.
 
 import { balance } from '../core/Balance';
-import { addItem, recoverGrave } from '../core/Inventory';
+import { addItem, recoverGrave, addSigil } from '../core/Inventory';
 import type { ItemKind, World } from '../core/World';
 
 /** 바닥에 놓인 높이 (kind별) — 자석에 걸리기 전 기준 높이 */
@@ -25,7 +25,8 @@ function wants(world: World, kind: string): boolean {
   return true;
 }
 
-const CONSUMABLE_KINDS: ReadonlySet<string> = new Set(['potion', 'mana', 'food']);
+/** 손(E)으로 집는 종류 — 소모품 셋 + 각인(2026-09-04 아이템화). 자석에 걸리지 않고 바라보며 E */
+const CONSUMABLE_KINDS: ReadonlySet<string> = new Set(['potion', 'mana', 'food', 'sigil']);
 
 /** 지금 집을 수 있는 바닥 소모품 — 반경·시야각(loot.pickup) 안에서 가장 가까운 것.
  *  날아오는 중·유예 중·튕겨 돌아가는 중은 뺀다 */
@@ -71,7 +72,7 @@ export function tick(world: World, dt: number): void {
 
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
     const item = world.groundItems[i]!;
-    if (item.kind === 'sigil' || item.kind === 'pouch') continue; // 각인은 Sigils, 주머니는 Loot 담당
+    if (item.kind === 'pouch') continue; // 주머니는 Loot 담당 (각인은 소모품처럼 E 로 집는다)
     // 비석 — 돌이라 자석에 걸리지 않는다. 밟을 만큼 다가가야 유품을 다시 담아 간다
     if (item.kind === 'grave') {
       if (Math.hypot(p.x - item.x, p.z - item.z) > balance.pickups.grave.radius) continue;
@@ -205,7 +206,8 @@ export function tick(world: World, dt: number): void {
       continue;
     }
     // 소모품 — 가방으로. 가방이 가득이면 몸까지 왔다가 원자리로 튕겨 돌아간다 (연출·소리는 main 이 pickup_bounced 로)
-    if (!addItem(world, item.kind as ItemKind)) {
+    const put = item.kind === 'sigil' ? addSigil(world, item.sigilId ?? '') : addItem(world, item.kind as ItemKind);
+    if (!put) {
       item.magnet = false;
       item.bounceTicks = balance.loot.bounce.ticks;
       item.bounceFromX = item.x;
@@ -214,7 +216,7 @@ export function tick(world: World, dt: number): void {
       continue;
     }
     world.groundItems.splice(i, 1);
-    world.events.emit('item_picked', { kind: item.kind });
+    world.events.emit('item_picked', { kind: item.kind, sigilId: item.sigilId });
   }
 
   if (blocked) world.events.emit('inventory_full', {});

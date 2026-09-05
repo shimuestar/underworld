@@ -53,8 +53,31 @@ function meat(color: string): string {
 const SHAPES: Record<string, (color: string) => string> = { flask, meat };
 
 /** 아이콘 SVG 문자열. 모르는 icon 이름이면 색 네모로 물러난다 (없는 것보다 낫다) */
+/** 각인 팔면체 — 가방·전리품 공용 (색은 그 각인의 색) */
+function octahedronSvg(color: string, size: number): string {
+  const body =
+    `<path d="M12 2L19 12L12 22L5 12Z" fill="${color}" stroke="${OUTLINE}" stroke-width="1.4" stroke-linejoin="round"/>` +
+    `<path d="M5 12H19M12 2V22" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>`;
+  return (
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" ` +
+    `style="display:block;filter:drop-shadow(0 0 4px ${color});">${body}</svg>`
+  );
+}
+
+/** 각인 아이콘 (가방 칸) — sigilId 의 색 팔면체 */
+export function sigilIconSvg(sigilId: string, size: number): string {
+  return octahedronSvg(`#${sigilColor(sigilId).toString(16).padStart(6, '0')}`, size);
+}
+export function sigilIcon(sigilId: string, size: number): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.style.cssText = 'display:block;line-height:0;';
+  span.innerHTML = sigilIconSvg(sigilId, size);
+  return span;
+}
+
 export function itemIconSvg(kind: ItemKind, size: number): string {
   const def = itemDef(kind);
+  if (kind === 'sigil') return octahedronSvg(def.color, size); // 어느 각인인지 모를 때의 폴백 색
   const shape = SHAPES[def.icon];
   const body = shape
     ? shape(def.color)
@@ -94,11 +117,7 @@ export function lootIconSvg(entry: LootEntry, size: number): string {
       `<path d="M15.2 4.2L20 4L19.8 8.8Z" fill="#9a9aa4" stroke="${OUTLINE}" stroke-width="1"/>` +
       `<path d="M5.5 15.5L3.5 17.5M8.5 18.5L6.5 20.5" stroke="#e8ddc0" stroke-width="1.6" stroke-linecap="round"/>`;
   } else {
-    const c = `#${sigilColor(entry.sigilId ?? '').toString(16).padStart(6, '0')}`;
-    glow = c;
-    body =
-      `<path d="M12 2L19 12L12 22L5 12Z" fill="${c}" stroke="${OUTLINE}" stroke-width="1.4" stroke-linejoin="round"/>` +
-      `<path d="M5 12H19M12 2V22" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>`;
+    return entry.sigilId ? sigilIconSvg(entry.sigilId, size) : itemIconSvg('sigil', size);
   }
   return (
     `<svg viewBox="0 0 24 24" width="${size}" height="${size}" ` +

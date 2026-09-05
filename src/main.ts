@@ -340,7 +340,7 @@ menuTabsPending.push(
   {
     id: 'bag', label: '가방',
     status: () => `${world.inventory.filter((s) => s !== null).length}/${world.inventory.length}`,
-    show: () => inventoryUI.show(), hide: () => inventoryUI.hide(),
+    show: () => { inventoryUI.altar = menuUI.altar; inventoryUI.show(); }, hide: () => inventoryUI.hide(), // 제단 앞이면 각인을 팔 수 있다
     blocksArrows: () => inventoryUI.splitting, // 수량 나누기 대화상자가 열려 있으면 화살표는 그쪽 몫
   },
   {
@@ -2006,7 +2006,13 @@ const ITEM_SOUND: Record<string, 'pickup_potion' | 'pickup_mana' | 'pickup_food'
 };
 events.on('item_picked', (payload) => {
   padRumble('pickup');
-  const kind = (payload as { kind: ItemKind }).kind;
+  const { kind, sigilId } = payload as { kind: ItemKind; sigilId?: string };
+  if (kind === 'sigil') {
+    // 각인은 가방 아이템 (2026-09-04) — 새기는 것은 스킬 탭에서
+    audio.play('pickup');
+    showReaction(`✦ ${sigilId ? sigilDef(sigilId).name : '각인'} — 가방에 들어왔다. 스킬 탭(Tab)에서 새긴다`, 2400);
+    return;
+  }
   audio.play(ITEM_SOUND[kind] ?? 'pickup_potion');
   const def = itemDef(kind);
   const slot = world.quickslots.indexOf(kind);
@@ -2549,7 +2555,29 @@ events.on('sigil_acquired', (payload) => {
   sigilToastUntil = performance.now() + SIGIL_TOAST_MS;
 });
 
-// 이미 익힌 스킬을 또 주웠다 — 각인 대신 경험치. 같은 자리에 같은 모양으로 띄운다
+// 새기기 거부 — 이미 익힌 각인(중복)이거나 부위가 차 있다. 떼기 거부 — 가방이 가득. 매각 — 골드
+events.on('sigil_learn_denied', (payload) => {
+  const d = payload as { id: string; reason: 'known' | 'part_full'; slot?: string };
+  const PART: Record<string, string> = { eye: '눈', rightArm: '오른팔', leftArm: '왼팔', heart: '심장', spine: '척추' };
+  showReaction(
+    d.reason === 'known'
+      ? `${sigilDef(d.id).name} — 이미 익힌 각인이다. 제단에서 팔 수 있다`
+      : `${sigilDef(d.id).name} — ${PART[d.slot ?? ''] ?? d.slot}이 차 있다. 제단에서 떼고 새긴다`,
+    2400,
+  );
+  audio.play('shop_deny');
+});
+events.on('sigil_detach_denied', () => {
+  showReaction('가방이 가득 — 떼어 낸 각인을 둘 곳이 없다', 2400);
+  audio.play('shop_deny');
+});
+events.on('sigil_sold', (payload) => {
+  const d = payload as { id: string; gold: number; total: number };
+  audio.play('pickup_gold');
+  showReaction(`${sigilDef(d.id).name} 각인을 팔았다 — ◆ +${d.gold} (소지 ◆ ${d.total})`, 2000);
+});
+
+// 이미 익힌 스킬을 또 주웠다 — 각인 대신 경험치. 같은 자리에 같은 모양으로 띄운다 (직접 acquire 경로에만 남았다)
 events.on('sigil_duplicate', (payload) => {
   const info = payload as { id: string; xp: number };
   const def = sigilDef(info.id);

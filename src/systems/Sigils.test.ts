@@ -107,15 +107,26 @@ describe('스킬 드랍과 획득', () => {
     Sigils.tick(world, DT);
     expect(world.sigils.inventory).toHaveLength(0);
 
-    // 접근 → 착지 유예(landNoMagnetTicks)가 지나야 획득된다 (공통 드랍 규칙 2026-08-30).
-    // 드랍이 반대쪽 호로 밀리므로 실제 낙하점 곁으로 간다
+    // 각인은 가방 아이템 (2026-09-04) — 바라보며 E 로 집는다(Pickups). 착지 유예(landNoMagnetTicks)가 지나야 집힌다
+    initInventory(world);
     const drop = world.groundItems[0]!;
-    world.player.x = drop.x - balance.sigil.pickupRadius + 0.1;
-    world.player.z = drop.z;
-    for (let i = 0; i < balance.pickups.landNoMagnetTicks + 2; i++) Sigils.tick(world, DT);
+    world.player.x = drop.x;
+    world.player.z = drop.z + 1.2; // 1.2m 뒤에서 -Z(yaw 0)로 바라본다
+    world.player.yaw = 0;
+    for (let i = 0; i < balance.pickups.landNoMagnetTicks + 2; i++) Pickups.tick(world, DT);
+    expect(world.groundItems).toHaveLength(1); // 자석이 아니다 — E 를 눌러야
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    Pickups.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    for (let i = 0; i < 120 && world.groundItems.length > 0; i++) Pickups.tick(world, DT);
     expect(world.groundItems).toHaveLength(0);
+    expect(world.sigils.inventory).toEqual([]); // 아직 익히지 않았다
+    const slot = world.inventory.findIndex((s) => s?.kind === 'sigil');
+    expect(world.inventory[slot]!.sigilId).toBe('sig_fireball');
+    expect(Sigils.learnFromBag(world, slot)).toBe('learned'); // 스킬 탭에서 익힌다
     expect(world.sigils.inventory).toEqual(['sig_fireball']);
     expect(world.skillSlots[0]).toBe('sig_fireball');
+    expect(world.inventory[slot]).toBeNull(); // 가방에서 빠졌다
   });
 
   it('처형으로 죽여도 한 번만 떨어진다 (melee_kill + enemy_died 중복 방지)', () => {
@@ -156,7 +167,8 @@ describe('스킬 드랍과 획득', () => {
     expect(world.skillSlots[2]).toBeNull();
   });
 
-  it('패시브: 부위가 비어 있으면 줍는 순간 새겨지고, 차 있으면 리스트에만 남는다', () => {
+  it('패시브: 부위가 비어 있으면 익히는 순간 새겨지고, 차 있으면 리스트에만 남는다. 떼면 가방 아이템으로 돌아온다', () => {
+    initInventory(world);
     Sigils.acquire(world, 'sig_dash'); // 척추
     expect(world.sigils.equipped.spine).toBe('sig_dash');
     const pendingAfterFirst = world.corruption.pending;
@@ -167,6 +179,8 @@ describe('스킬 드랍과 획득', () => {
     expect(Sigils.attach(world, 'sig_moment')).toBe(false);
     expect(Sigils.detach(world, 'spine')).toBe(true);
     expect(world.modifiers.dodgeDistanceMul).toBe(1); // 떼면 효과가 사라진다
+    expect(world.inventory.some((s) => s?.kind === 'sigil' && s.sigilId === 'sig_dash')).toBe(true); // 가방으로 돌아왔다
+    expect(world.sigils.inventory).not.toContain('sig_dash'); // 몸에서 빠졌다
     expect(Sigils.attach(world, 'sig_moment')).toBe(true);
     expect(world.sigils.equipped.spine).toBe('sig_moment');
   });
@@ -451,14 +465,32 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(world.corruption.pending).toBe(pending);
   });
 
-  it('바닥에서 주운 중복 스킬도 경험치가 된다 — 아이템은 사라진다', () => {
-    Sigils.acquire(world, 'sig_darkvision'); // 패시브
+  it('바닥에서 주운 중복 각인은 가방 아이템으로 남고, 새기기는 거부되며, 제단에서 팔면 골드가 된다 (2026-09-04)', () => {
+    initInventory(world);
+    Sigils.acquire(world, 'sig_darkvision'); // 패시브 — 익힘
     const xp = world.xp;
-    world.groundItems.push({ id: 1, kind: 'sigil', sigilId: 'sig_darkvision', x: 6, z: 6 });
-    Sigils.tick(world, DT);
+    world.player.yaw = 0; // -Z 를 본다
+    world.groundItems.push({ id: 1, kind: 'sigil', sigilId: 'sig_darkvision', x: world.player.x, z: world.player.z - 1.2 }); // 1.2m 앞
+    Pickups.tick(world, DT); // 바라보는 대상으로 잡힌다
+    expect(world.itemInView?.kind).toBe('sigil');
+    world.input = { ...Input.emptySnapshot(), interactPressed: true };
+    Pickups.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    for (let i = 0; i < 120 && world.groundItems.length > 0; i++) Pickups.tick(world, DT);
     expect(world.groundItems).toHaveLength(0);
-    expect(world.sigils.inventory.filter((id) => id === 'sig_darkvision')).toHaveLength(1);
-    expect(world.xp).toBe(xp + balance.sigil.duplicateXp[sigilDef('sig_darkvision').tier]);
+    const slot = world.inventory.findIndex((s) => s?.kind === 'sigil');
+    expect(slot).toBeGreaterThanOrEqual(0);
+    expect(world.xp).toBe(xp); // 경험치로 녹지 않는다
+    const denied: unknown[] = [];
+    world.events.on('sigil_learn_denied', (p) => denied.push(p));
+    expect(Sigils.learnFromBag(world, slot)).toBe('known');
+    expect(denied).toEqual([expect.objectContaining({ id: 'sig_darkvision', reason: 'known' })]);
+    expect(world.inventory[slot]).not.toBeNull(); // 아이템은 그대로
+    const gold = world.gold;
+    const price = balance.sigil.sellGold[sigilDef('sig_darkvision').tier as keyof typeof balance.sigil.sellGold];
+    expect(Sigils.sellFromBag(world, slot)).toBe(price);
+    expect(world.gold).toBe(gold + price);
+    expect(world.inventory[slot]).toBeNull();
   });
 
   it('화살이 머리 높이에 맞으면 헤드샷 — 몸통 높이는 아니다', () => {

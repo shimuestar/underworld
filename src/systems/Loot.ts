@@ -12,7 +12,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import { addItem, autoBind, dropSlot, hasRoom, itemDef } from '../core/Inventory';
+import { addItem, autoBind, dropSlot, hasRoom, itemDef, addSigil } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
 import {
   findFreeSpot,
@@ -370,9 +370,13 @@ function takeOneImpl(world: World, c: Container, index: number, announceDeny: bo
     return 'taken';
   }
   if (e.kind === 'sigil') {
+    // 각인은 가방 아이템 — 빈 칸이 있어야 한다. 스킬 탭에서 새긴다 (2026-09-04 아이템화)
+    if (!hasRoom(world, 'sigil')) return deny('full');
     const sigilId = e.sigilId;
-    c.entries.splice(index, 1);
-    world.events.emit('loot_taken', { kind: 'sigil', count: 1, from, sigilId }); // Sigils 가 받아 습득한다
+    addSigil(world, sigilId ?? '');
+    e.count--;
+    if (e.count <= 0) c.entries.splice(index, 1);
+    world.events.emit('loot_taken', { kind: 'sigil', count: 1, from, sigilId });
     return 'taken';
   }
   // 소모품 — 가방에 자리가 있을 때만 1개씩
@@ -423,11 +427,11 @@ export function stashStackTo(world: World, slotIndex: number): LootEntry | null 
   if (!c) return null;
   const slot = world.inventory[slotIndex];
   if (!slot) return null;
-  const { kind, count } = slot;
+  const { kind, count, sigilId } = slot;
   world.inventory[slotIndex] = null;
-  mergeEntry(c.entries, { kind, count, searched: true });
+  mergeEntry(c.entries, { kind, count, searched: true, ...(sigilId ? { sigilId } : {}) });
   world.events.emit('loot_stashed', { kind, count, to: c.ref.kind });
-  return c.entries.find((x) => x.kind === kind) ?? null;
+  return c.entries.find((x) => x.kind === kind && x.sigilId === sigilId) ?? null;
 }
 
 /** 커서 줄에서 하나(골드·화살은 들어가는 만큼) 가져온다 */
@@ -475,7 +479,7 @@ export function stash(world: World, slotIndex: number): boolean {
   if (!slot) return false;
   slot.count--;
   if (slot.count <= 0) world.inventory[slotIndex] = null;
-  mergeEntry(c.entries, { kind: slot.kind, count: 1, searched: true }); // 내가 넣은 것은 바로 보인다
+  mergeEntry(c.entries, { kind: slot.kind, count: 1, searched: true, ...(slot.sigilId ? { sigilId: slot.sigilId } : {}) }); // 내가 넣은 것은 바로 보인다
   world.events.emit('loot_stashed', { kind: slot.kind, count: 1, to: c.ref.kind });
   return true;
 }
@@ -509,8 +513,10 @@ export function dropToFloor(world: World, side: 'container' | 'bag', index: numb
     const at = spot();
     world.groundItems.push({ id: nextLootId++, kind: 'gold', amount: e.count, x: at.x, z: at.z, noMagnetTicks: grace });
   } else if (e.kind === 'sigil') {
-    const at = spot();
-    world.groundItems.push({ id: nextLootId++, kind: 'sigil', sigilId: e.sigilId, x: at.x, z: at.z, noMagnetTicks: grace });
+    for (let i = 0; i < Math.max(1, e.count); i++) {
+      const at = spot();
+      world.groundItems.push({ id: nextLootId++, kind: 'sigil', sigilId: e.sigilId, x: at.x, z: at.z, noMagnetTicks: grace });
+    }
   } else {
     for (let i = 0; i < e.count; i++) {
       const at = spot();

@@ -1,9 +1,12 @@
-// 각인 — 획득(처형 드랍), 부착/해제, 파생 수치(Modifiers) 재계산.
-// 주우면 즉시 부착되어 효과가 붙는다. 부위 페널티는 폐지(2026-08), 오염만 pending에 누적.
+// 각인 — 드랍(처형·보스), 익히기/새기기/떼기, 파생 수치(Modifiers) 재계산.
+// 2026-09-04 아이템화: 각인은 가방 아이템이다(Pickups 가 E 로 집고 Loot 가 주머니·상자에서 넘긴다).
+// 스킬 탭에서 가방의 각인을 새기면(learnFromBag) 가방에서 빠져 몸에 박히고 그때 오염이 pending 에 누적된다.
+// 떼면(제단) 다시 가방 아이템으로 돌아오고, 이미 익힌 각인(중복)은 제단에서 판다(sellFromBag).
 // docs/systems/economy.md §3~4.
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
+import { addSigil } from '../core/Inventory';
 import { isActiveSkill, sigilDef, type SigilSlot } from '../core/SigilData';
 import { scatterAwayFromPlayer, type Modifiers, type World } from '../core/World';
 
@@ -51,32 +54,11 @@ export function init(world: World): void {
     if (!enemyDef(enemyType).dropsOnDeath) return;
     dropAll(world, enemyType, x, z);
   });
-
-  // 상자 안 각인 — 루팅 창에서 가져가는 순간 습득한다 (Loot 는 각인 규칙을 모른다, 2026-09-04)
-  world.events.on('loot_taken', (payload) => {
-    const t = payload as { kind: string; sigilId?: string };
-    if (t.kind === 'sigil' && t.sigilId) acquire(world, t.sigilId);
-  });
 }
 
-/** 바닥 각인 줍기 — 접근하면 자동 획득. 스킬 교체 입력도 여기서 받는다 */
+/** 스킬 교체 입력. (바닥 각인 줍기는 2026-09-04 부터 Pickups 가 소모품처럼 E 로 집는다 — 가방 아이템) */
 export function tick(world: World, _dt: number): void {
   if (world.input.cycleSkill) cycleSkill(world);
-  if (world.groundItems.length === 0) return;
-  const p = world.player;
-  for (let i = world.groundItems.length - 1; i >= 0; i--) {
-    const item = world.groundItems[i]!;
-    if (item.kind !== 'sigil') continue; // 포션·골드는 Pickups가 줍는다
-    // 착지 유예 — 바닥에 완전히 놓이기 전엔 코앞이라도 못 줍는다 (Pickups 와 같은 규칙.
-    // 각인은 Pickups 가 건너뛰므로 유예 소진도 여기서 한다)
-    if (item.noMagnetTicks && item.noMagnetTicks > 0) {
-      item.noMagnetTicks--;
-      continue;
-    }
-    if (Math.hypot(p.x - item.x, p.z - item.z) > balance.sigil.pickupRadius) continue;
-    world.groundItems.splice(i, 1);
-    acquire(world, item.sigilId!);
-  }
 }
 
 /** 스킬 퀵슬롯 칸 수를 balance 에 맞춘다 (테스트·시작 시 빈 배열로 올 수 있다) */
@@ -133,14 +115,54 @@ export function attach(world: World, sigilId: string): boolean {
   return true;
 }
 
-/** 부위의 패시브를 떼어 낸다 — 리스트에는 그대로 남는다 (다시 새길 수 있다) */
+/** 부위의 패시브를 떼어 낸다 — 가방 아이템으로 돌아간다(가방이 가득이면 못 뗀다). 다시 새기면 오염을 다시 낸다 */
 export function detach(world: World, slot: SigilSlot): boolean {
   const id = world.sigils.equipped[slot];
   if (!id) return false;
+  if (!addSigil(world, id)) {
+    world.events.emit('sigil_detach_denied', { id, slot, reason: 'bag_full' });
+    return false;
+  }
   world.sigils.equipped[slot] = null;
+  const at = world.sigils.inventory.indexOf(id);
+  if (at >= 0) world.sigils.inventory.splice(at, 1); // 몸에서 빠졌다 — 가방의 아이템이 정본
   recompute(world);
   world.events.emit('sigil_detached', { id, slot });
   return true;
+}
+
+export type LearnResult = 'attached' | 'learned' | 'part_full' | 'known' | 'none';
+
+/** 가방의 각인을 새긴다/익힌다 (2026-09-04 아이템화). 패시브는 부위가 비어 있어야 하고 새기면 가방에서 빠져 몸에 박힌다.
+ *  액티브는 익히면(오염) 목록에 들고 빈 스킬 칸에 오른다. 이미 익힌 것(중복)은 그대로 둔다 — 제단에서 판다 */
+export function learnFromBag(world: World, slotIndex: number): LearnResult {
+  const slot = world.inventory[slotIndex];
+  if (!slot || slot.kind !== 'sigil' || !slot.sigilId) return 'none';
+  const id = slot.sigilId;
+  const def = sigilDef(id);
+  if (world.sigils.inventory.includes(id)) {
+    world.events.emit('sigil_learn_denied', { id, reason: 'known' });
+    return 'known';
+  }
+  if (!isActiveSkill(def) && world.sigils.equipped[def.slot] !== null) {
+    world.events.emit('sigil_learn_denied', { id, reason: 'part_full', slot: def.slot });
+    return 'part_full';
+  }
+  world.inventory[slotIndex] = null;
+  acquire(world, id); // 패시브는 부위가 비어 있어 곧바로 새겨진다, 액티브는 익힘 + 빈 스킬 칸
+  return isActiveSkill(def) ? 'learned' : 'attached';
+}
+
+/** 제단에서 가방의 각인을 판다 — 티어별 골드(sigil.sellGold). 중복 각인의 출구 */
+export function sellFromBag(world: World, slotIndex: number): number {
+  const slot = world.inventory[slotIndex];
+  if (!slot || slot.kind !== 'sigil' || !slot.sigilId) return 0;
+  const def = sigilDef(slot.sigilId);
+  const gold = (balance.sigil.sellGold as Record<string, number>)[def.tier] ?? 0;
+  world.inventory[slotIndex] = null;
+  world.gold += gold;
+  world.events.emit('sigil_sold', { id: slot.sigilId, gold, total: world.gold });
+  return gold;
 }
 
 /** 선택 칸을 다음으로 돌린다 — 빈 칸은 건너뛰고 끝에서 처음으로 돈다. 전부 비었으면 그대로 */

@@ -4,7 +4,7 @@
 
 import { balance } from '../core/Balance';
 import { countOf, isUseful, itemDef } from '../core/Inventory';
-import { sigilDef } from '../core/SigilData';
+import { sigilDef, isActiveSkill } from '../core/SigilData';
 import type { ItemKind, LootEntry, World } from '../core/World';
 
 export interface PopupContent {
@@ -62,14 +62,36 @@ export function lootEntryPopup(world: World, e: LootEntry): PopupContent {
     };
   }
   if (e.kind === 'sigil') {
-    const def = e.sigilId ? sigilDef(e.sigilId) : null;
-    return {
-      title: def ? `${def.name} (각인)` : '각인',
-      lines: def?.desc ? [def.desc] : [],
-      note: '가져가면 곧바로 몸에 새겨진다',
-    };
+    if (!e.sigilId) return { title: '각인', lines: [] };
+    const c = sigilPopup(world, e.sigilId);
+    c.note = '가져가면 가방에 들어간다 — 스킬 탭에서 새긴다';
+    return c;
   }
   return consumablePopup(world, e.kind as ItemKind, e.count);
+}
+
+const PART_LABEL: Record<string, string> = { eye: '눈', rightArm: '오른팔', leftArm: '왼팔', heart: '심장', spine: '척추' };
+
+/** 각인 설명 — 효과·종류(패시브 부위/액티브)·오염·지금 새길 수 있는가 (2026-09-04 아이템화) */
+export function sigilPopup(world: World, sigilId: string, where = ''): PopupContent {
+  const def = sigilDef(sigilId);
+  const active = isActiveSkill(def);
+  const lines: string[] = def.desc ? [def.desc] : [];
+  lines.push(active ? '액티브 — 익히면 스킬 칸(Z·X·C·V)에 오른다' : `패시브 — ${PART_LABEL[def.slot] ?? def.slot}에 새긴다`);
+  lines.push(`새길 때 오염 +${(balance.corruption.slotCost as Record<string, number>)[def.slot] ?? 0}`);
+  const known = world.sigils.inventory.includes(sigilId);
+  const partFull = !active && world.sigils.equipped[def.slot] !== null;
+  const sell = (balance.sigil.sellGold as Record<string, number>)[def.tier] ?? 0;
+  return {
+    title: `${def.name} (각인)${where}`,
+    lines,
+    useful: !known && !partFull,
+    usefulText: known
+      ? `이미 익힌 각인 — 제단에서 ◆ ${sell} 에 판다`
+      : partFull
+        ? `${PART_LABEL[def.slot] ?? def.slot}이 차 있다 — 제단에서 떼고 새긴다`
+        : '지금 새길 수 있다',
+  };
 }
 
 /** 키캡 글리프 — 패드는 콘솔 버튼처럼 원형, 키보드는 사각 키캡 (HUD 중앙 키캡·바닥 선 끝 키캡과 같은 결) */

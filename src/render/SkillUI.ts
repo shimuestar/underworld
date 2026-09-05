@@ -154,30 +154,39 @@ export class SkillUI {
     head.style.cssText = 'color:#9fe870;margin-bottom:6px;';
     list.appendChild(head);
 
-    const equippedIds = new Set(Object.values(world.sigils.equipped).filter((v): v is string => !!v));
-    const owned = world.sigils.inventory
-      .map((id) => sigilDef(id))
-      .filter((d) => !isActiveSkill(d) && !equippedIds.has(d.id));
+    // 가방에 든 패시브 각인 (2026-09-04 아이템화) — 새기면 가방에서 빠져 몸에 박힌다
+    const owned: { index: number; def: SigilDef }[] = [];
+    world.inventory.forEach((slot, index) => {
+      if (slot?.kind === 'sigil' && slot.sigilId && !isActiveSkill(sigilDef(slot.sigilId))) owned.push({ index, def: sigilDef(slot.sigilId) });
+    });
     if (owned.length === 0) {
       const empty = document.createElement('div');
-      empty.textContent = '새길 것 없음 — 창병을 완벽 패링 후 처형하거나 보물상자를 열면 나온다';
+      empty.textContent = '가방에 패시브 각인이 없다 — 주머니·상자·처형 드랍에서 각인을 집어 오면 여기서 새긴다';
       empty.style.color = '#555c66';
       list.appendChild(empty);
     }
-    for (const def of owned) {
+    for (const { index, def } of owned) {
+      const known = world.sigils.inventory.includes(def.id);
       const occupied = world.sigils.equipped[def.slot] !== null;
+      const blocked = known || occupied;
       const row = skillRow(def, null);
-      row.style.cursor = occupied ? 'default' : 'pointer';
+      row.style.cursor = blocked ? 'default' : 'pointer';
       const h = row.querySelector('.head') as HTMLElement;
       h.appendChild(badge(`→ ${SLOT_LABELS[def.slot]}`, '#8a8f9a'));
-      h.appendChild(occupied ? badge('부위 사용 중', '#e04444') : badge('클릭해서 새기기', '#7fbfff'));
+      h.appendChild(
+        known
+          ? badge('이미 새겨진 각인 — 제단에서 판다', '#8a8f9a')
+          : occupied
+            ? badge('부위 사용 중', '#e04444')
+            : badge(`클릭해서 새기기 · 오염 +${(balance.corruption.slotCost as Record<string, number>)[def.slot] ?? 0}`, '#7fbfff'),
+      );
       if (!def.slice) h.appendChild(badge('이 빌드에선 효과 없음', '#e04444'));
       const socket = sockets[def.slot];
-      row.onmouseenter = () => socket.setAttribute('data-hover', occupied ? 'blocked' : 'target');
+      row.onmouseenter = () => socket.setAttribute('data-hover', blocked ? 'blocked' : 'target');
       row.onmouseleave = () => socket.removeAttribute('data-hover');
-      if (!occupied) {
+      if (!blocked) {
         row.onclick = () => {
-          Sigils.attach(world, def.id);
+          Sigils.learnFromBag(world, index);
           this.rebuild();
         };
       }
@@ -236,11 +245,34 @@ export class SkillUI {
     head.style.cssText = 'color:#9fe870;margin-bottom:6px;';
     list.appendChild(head);
     const owned = world.sigils.inventory.map((id) => sigilDef(id)).filter(isActiveSkill);
-    if (owned.length === 0) {
+    // 가방에 든 액티브 각인 — 익히면(오염) 목록에 들고 빈 칸에 오른다 (2026-09-04 아이템화)
+    const inBag: { index: number; def: SigilDef }[] = [];
+    world.inventory.forEach((slot, index) => {
+      if (slot?.kind === 'sigil' && slot.sigilId && isActiveSkill(sigilDef(slot.sigilId))) inBag.push({ index, def: sigilDef(slot.sigilId) });
+    });
+    if (owned.length === 0 && inBag.length === 0) {
       const empty = document.createElement('div');
       empty.textContent = '없음';
       empty.style.color = '#555c66';
       list.appendChild(empty);
+    }
+    if (inBag.length > 0) {
+      const bagGrid = document.createElement('div');
+      bagGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:2px 18px;margin-bottom:8px;';
+      for (const { index, def } of inBag) {
+        const known = world.sigils.inventory.includes(def.id);
+        const row = skillRow(def, null);
+        row.style.cursor = known ? 'default' : 'pointer';
+        const h = row.querySelector('.head') as HTMLElement;
+        h.appendChild(
+          known
+            ? badge('가방 — 이미 익힌 각인, 제단에서 판다', '#8a8f9a')
+            : badge(`가방 — 클릭해서 익히기 · 오염 +${(balance.corruption.slotCost as Record<string, number>)[def.slot] ?? 0}`, '#7fbfff'),
+        );
+        if (!known) row.onclick = () => { Sigils.learnFromBag(world, index); this.rebuild(); };
+        bagGrid.appendChild(row);
+      }
+      list.appendChild(bagGrid);
     }
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:2px 18px;';

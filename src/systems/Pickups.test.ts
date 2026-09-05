@@ -209,14 +209,19 @@ describe('자석 흡수 — 골드·화살·각인', () => {
     expect(world.gold).toBe(10);
   });
 
-  it('각인은 Pickups가 건드리지 않는다 (Sigils 담당)', () => {
-    world.groundItems.push({ id: 1, kind: 'sigil', sigilId: 'sig_fireball', x: 10, z: 10 });
+  it('각인은 자석에 걸리지 않고 소모품처럼 바라보며 E 로 집는다 — 가방 아이템이 된다 (2026-09-04 아이템화)', () => {
+    world.groundItems.push({ id: 1, kind: 'sigil', sigilId: 'sig_fireball', x: 10, z: 8.5 }); // 1.5m 앞
     Pickups.tick(world, DT);
-    expect(world.groundItems).toHaveLength(1);
-
+    expect(world.groundItems).toHaveLength(1); // 자석 아님
     Sigils.tick(world, DT);
-    expect(world.groundItems).toHaveLength(0);
-    expect(world.skillSlots[0]).toBe('sig_fireball'); // 주우면 바로 스킬 퀵슬롯 1(Z)
+    expect(world.groundItems).toHaveLength(1); // Sigils 도 더는 줍지 않는다
+    expect(world.itemInView?.kind).toBe('sigil');
+    press(world);
+    expect(absorb()).toBeGreaterThan(0);
+    const bag = world.inventory.find((s) => s?.kind === 'sigil');
+    expect(bag?.sigilId).toBe('sig_fireball');
+    expect(world.skillSlots[0] ?? null).toBeNull(); // 익힌 게 아니다 — 스킬 탭에서 새긴다
+    expect(world.quickslots.includes('sigil')).toBe(false); // 퀵슬롯 자동 등록 없음
   });
 });
 

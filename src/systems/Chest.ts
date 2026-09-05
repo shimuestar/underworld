@@ -8,6 +8,7 @@
 // 다 비운 상자는 뚜껑 열린 채 남되 대상에서 빠진다. 부활해도 다시 잠기지 않는다.
 
 import { balance } from '../core/Balance';
+import { bagSigilIds } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
 import sigilsJson from '../../data/sigils.json';
 import type { ChestState, LootEntry, World } from '../core/World';
@@ -61,7 +62,7 @@ export function open(world: World, chest: ChestState): void {
  *  slice 각인을 먼저 주고, 그게 다 떨어지면 나머지에서 뽑는다.
  *  (효과가 아직 없는 각인만 나오면 "상자를 열었는데 아무 일도 없다"가 된다) */
 function rollSigil(world: World): string | null {
-  const owned = new Set<string>(world.sigils.inventory);
+  const owned = new Set<string>([...world.sigils.inventory, ...bagSigilIds(world)]); // 몸에 박힌 것 + 가방에 든 것
 
   const all = (sigilsJson.sigils as { id: string }[]).map((s) => s.id);
   const fresh = all.filter((id) => !owned.has(id));

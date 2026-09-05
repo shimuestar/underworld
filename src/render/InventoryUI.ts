@@ -23,7 +23,10 @@ import * as Items from '../systems/Items';
 import { adjustSplit, makeSplit, renderSplitDialog, splitActivate, splitNavigate, type SplitState } from './SplitDialog';
 import { balance } from '../core/Balance';
 import { itemIcon } from './ItemIcons';
-import { attachPopup, consumablePopup, type PopupContent } from './ItemPopup';
+import { attachPopup, consumablePopup, sigilPopup, type PopupContent } from './ItemPopup';
+import { sigilIcon } from './ItemIcons';
+import { sigilDef } from '../core/SigilData';
+import * as Sigils from '../systems/Sigils';
 import type { ItemKind, World } from '../core/World';
 
 const CELL_PX = 64;
@@ -207,6 +210,17 @@ export class InventoryUI {
     if (consumed || this.split) return;
     this.dropCursor();
   }
+  /** 제단 앞에서 열렸는가 — 각인을 팔 수 있다 (X). 셸이 show 직전에 넣어 준다 */
+  altar = false;
+
+  /** 각인 새기기 — 커서 칸의 각인을 몸에 새긴다/익힌다. 안 되는 이유는 Sigils 가 sigil_learn_denied 로 알린다 */
+  private learnCursor(): void {
+    if (this.pane !== 'bag') return;
+    Sigils.learnFromBag(this.world, this.sel);
+    if (this.picked === this.sel) this.picked = -1;
+    this.rebuild();
+  }
+
   /** Y — 짧게 떼면 커서 가방 칸 사용, padPouchHoldTicks 넘게 누르면 보관 주머니 내려놓기 */
   padY(held: boolean): void {
     if (!this.open) return;
@@ -236,6 +250,7 @@ export class InventoryUI {
     if (this.pane !== 'bag') return;
     const slot = this.world.inventory[this.sel];
     if (!slot) return;
+    if (slot.kind === 'sigil') { this.learnCursor(); return; } // 각인은 마시지 않는다 — 새긴다
     if (!Items.useKind(this.world, slot.kind)) { this.rebuild(); return; }
     this.hide();
     this.onClose?.();
@@ -287,7 +302,9 @@ export class InventoryUI {
   private act(): void {
     if (this.carry) { this.place(); return; }
     if (this.pane === 'bag') {
-      if (!this.world.inventory[this.sel]) { this.rebuild(); return; }
+      const cur = this.world.inventory[this.sel];
+      if (!cur) { this.rebuild(); return; }
+      if (cur.kind === 'sigil') { this.learnCursor(); return; } // 각인은 퀵슬롯에 못 간다 — A 도 새기기
       this.picked = this.picked === this.sel ? -1 : this.sel;
       this.rebuild();
       return;
@@ -308,7 +325,9 @@ export class InventoryUI {
   private dropCursor(): void {
     if (this.carry) return;
     if (this.pane === 'bag') {
-      if (this.world.inventory[this.sel]) dropSlot(this.world, this.sel);
+      const cur = this.world.inventory[this.sel];
+      if (cur && cur.kind === 'sigil' && this.altar) Sigils.sellFromBag(this.world, this.sel); // 제단 앞 — 각인은 판다
+      else if (cur) dropSlot(this.world, this.sel);
       if (this.picked === this.sel) this.picked = -1;
     } else {
       unbindQuickslot(this.world, this.selQ);
@@ -620,14 +639,19 @@ export class InventoryUI {
       if (this.carry && this.carry.index === i) cell.style.opacity = '0.35';
 
       if (slot) {
-        const icon = itemIcon(slot.kind, ICON_PX);
+        const isSigil = slot.kind === 'sigil' && !!slot.sigilId;
+        const icon = isSigil ? sigilIcon(slot.sigilId!, ICON_PX) : itemIcon(slot.kind, ICON_PX);
         icon.style.cssText += 'position:absolute;left:50%;top:24px;transform:translate(-50%,-50%);';
         cell.appendChild(icon);
 
         const count = document.createElement('div');
-        count.textContent = `×${slot.count}`;
-        count.style.cssText = 'position:absolute;bottom:3px;right:5px;font-size:11px;color:#cfd2da;';
+        // 각인은 스택이 없다 — 개수 대신 이름 앞 글자. 이미 익힌 중복이면 흐리게
+        count.textContent = isSigil ? sigilDef(slot.sigilId!).name.slice(0, 4) : `×${slot.count}`;
+        count.style.cssText = isSigil
+          ? `position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:${sigilDef(slot.sigilId!).color};`
+          : 'position:absolute;bottom:3px;right:5px;font-size:11px;color:#cfd2da;';
         cell.appendChild(count);
+        if (isSigil && world.sigils.inventory.includes(slot.sigilId!)) icon.style.opacity = '0.5';
 
         // 지금 써도 값어치가 없으면(만피의 체력 물약·만마나의 마나 물약·버프 중인 음식) 흐리게 — "마셔도 안 나가는" 이유를
         // 미리 보여 준다. 칸이 아니라 아이콘·개수에만 건다 — 칸에 걸면 자식인 설명 팝업까지 흐려진다 (2026-09-04)
@@ -644,7 +668,7 @@ export class InventoryUI {
           cell.appendChild(tag);
         }
         cell.oncontextmenu = (e) => { e.preventDefault(); this.pane = 'bag'; this.sel = i; this.dropCursor(); };
-        const dragIcon = itemIcon(slot.kind, ICON_PX).outerHTML;
+        const dragIcon = (isSigil ? sigilIcon(slot.sigilId!, ICON_PX) : itemIcon(slot.kind, ICON_PX)).outerHTML;
         cell.onpointerdown = (ev) => { if (!ev.shiftKey) beginDrag(ev, dragIcon, (key) => this.onDrop('bag', i, key)); };
       }
       cell.onclick = (ev) => {
@@ -666,6 +690,16 @@ export class InventoryUI {
         const overlay = this.carriedOverlay();
         if (overlay) cell.appendChild(overlay);
         attachPopup(cell, this.carryPopup('bag', i), 'right', this.padMode);
+      } else if (here && slot && slot.kind === 'sigil' && slot.sigilId) {
+        const content = sigilPopup(world, slot.sigilId);
+        const known = world.sigils.inventory.includes(slot.sigilId);
+        const sell = (balance.sigil.sellGold as Record<string, number>)[sigilDef(slot.sigilId).tier] ?? 0;
+        content.actions = [
+          { key: this.key('Y', 'E'), label: known ? '새기기 — 이미 익힌 각인' : '새기기 (몸에 박힌다 · 스킬 탭과 같다)' },
+          { key: this.key('A 길게', '드래그'), label: '집어 옮기기' },
+          { key: this.key('X', 'X'), label: this.altar ? `팔기 ◆ ${sell}` : '바닥에 버리기' },
+        ];
+        attachPopup(cell, content, 'right', this.padMode);
       } else if (here && slot) {
         const content = consumablePopup(world, slot.kind, slot.count);
         content.actions = [

@@ -640,15 +640,18 @@ export interface BarrelState {
   blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
 
-/** 가방에 들어가는 소모품 종류. 골드·각인은 가방을 쓰지 않는다 */
-export type ItemKind = 'potion' | 'mana' | 'food';
+/** 가방에 들어가는 종류 — 소모품 셋 + 각인(2026-09-04 아이템화: 스택 불가, sigilId 를 든다). 골드는 가방을 쓰지 않는다 */
+export type ItemKind = 'potion' | 'mana' | 'food' | 'sigil';
 
+/** 소모품 종류 — 퀵슬롯·마시기·자동 등록 대상. 각인은 여기 없다 */
 export const ITEM_KINDS: ItemKind[] = ['potion', 'mana', 'food'];
 
-/** 가방 한 칸 — 같은 종류가 count 개 쌓여 있다. 빈 칸은 null */
+/** 가방 한 칸 — 같은 종류가 count 개 쌓여 있다. 빈 칸은 null. 각인은 count 1 에 sigilId */
 export interface InventorySlot {
   kind: ItemKind;
   count: number;
+  /** kind==='sigil' — 어느 각인인가 */
+  sigilId?: string;
 }
 
 /** 전리품 종류 — 주머니·상자 안에 들어가는 것: 가방 소모품 + 골드 + 화살 (+ 상자의 각인) */
@@ -687,8 +690,8 @@ export interface GroundItemState {
   sigilId?: string;
   /** kind==='gold' 일 때 획득량 */
   amount?: number;
-  /** kind==='grave' — 죽으며 떨어뜨린 가방 내용물. 회수 시 들어가는 만큼 다시 담는다 */
-  graveItems?: { kind: ItemKind; count: number }[];
+  /** kind==='grave' — 죽으며 떨어뜨린 가방 내용물. 회수 시 들어가는 만큼 다시 담는다 (각인은 sigilId 별 한 줄) */
+  graveItems?: { kind: ItemKind; count: number; sigilId?: string }[];
   /** 자석 흡수 중 — 공중으로 떠서 플레이어에게 날아간다 */
   magnet?: boolean;
   /** 자석이 물기 직전 놓여 있던 자리 — 골드 획득 표기가 이 자리에서 떠오른다 */
