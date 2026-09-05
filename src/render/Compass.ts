@@ -5,7 +5,6 @@
 // 가리기: 미니맵의 안개 기억을 그대로 — 본 것만(출구는 쇠창살이 열리면 항상). 항상 표시(토글 없음, 2026-09-04 사용자 결정).
 
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
 import type { World } from '../core/World';
 import type { Awareness } from './Awareness';
 
@@ -184,7 +183,7 @@ export class Compass {
       markers.push({
         bearing: bearingTo(g.x, g.z), dist: d, shape: 'circle',
         color: mine ? C.pouchMine : g.pouchTier === 'boss' ? C.pouchBoss : C.pouch, size: 4.5, alpha: 0.95, priority: 6,
-        name: mine ? '내 주머니' : g.pouchOwner ? `${enemyDef(g.pouchOwner).name ?? '전리품'}의 주머니` : '전리품 주머니', showDist: false,
+        name: '', showDist: false, // 주머니 이름은 띠에 쓰지 않는다 (2026-09-04 사용자) — 표식 색으로만
       });
     }
     // 감지한 함정 — 함정 감지 각인이 밝힌 것만
@@ -209,7 +208,7 @@ export class Compass {
       threats.push({
         bearing: bearingTo(e.x, e.z), dist: d, shape: locked ? 'diamond' : 'circle',
         color: e.ai === 'idle' ? C.threatIdle : C.threat, size: (locked ? 6 : 4.5) * scale, alpha: a, priority: locked ? 0 : 1,
-        name: enemyDef(e.type).name ?? e.type, showDist: false, ring: d <= cfg.threat.nearM,
+        name: '', showDist: false, ring: d <= cfg.threat.nearM, // 몬스터 이름은 띠에 쓰지 않는다 (2026-09-04 사용자)
       });
     }
     threats.sort((m1, m2) => m1.dist - m2.dist);
