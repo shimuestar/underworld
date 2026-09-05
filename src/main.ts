@@ -389,7 +389,7 @@ events.on('loot_opened', (payload) => {
   lootUI.show();
   setUiOpen(true);
 });
-// 메뉴 창 키 — I 가방 탭 · M 맵 탭 · Tab 스킬 탭으로 열고, 열려 있으면 어느 키든 닫는다. 마우스는 탭 헤더 클릭
+// 메뉴 창 키 — I·Tab 가방 탭 · M 맵 탭으로 열고, 열려 있으면 어느 키든 닫는다. 스킬 탭은 ←→(LB/RB) 또는 헤더 클릭 (2026-09-04: Tab 기본을 가방으로)
 window.addEventListener('keydown', (e) => {
   if (lootUI.open) return; // 루팅 창은 자기 키(E/Esc)로만 닫는다 — 다른 창을 겹쳐 열지 않게
   if (e.code === 'Tab') {
@@ -397,11 +397,11 @@ window.addEventListener('keydown', (e) => {
     // 상점에서 Tab — 스킬 탭(제단 모드: 패시브를 뗄 수 있다)으로 넘어간다 (둘이 겹쳐 뜨지 않게)
     if (shopUI.open) {
       shopUI.hide();
-      menuUI.show('skill', true);
+      menuUI.show('bag', true); // 제단 앞 — 가방 탭(몸 패널에서 각인 떼기·장비·매각)
       return;
     }
     if (world.dead) return;
-    menuUI.toggleTab('skill');
+    menuUI.toggleTab('bag'); // Tab 기본은 가방 (2026-09-04 사용자) — 스킬은 LB/RB·←→ 로
     return;
   }
   if (shopUI.open || world.dead) return;
@@ -1956,8 +1956,8 @@ events.on('cast_failed', (payload) => {
     info.reason === 'no_mana'
       ? `마나 부족 — ${info.cost} 필요 (패링·처형으로 모아야 한다)`
       : info.reason === 'not_implemented'
-        ? '이 빌드에서는 아직 쓸 수 없는 스킬이다 — Tab 에서 다른 스킬을 올린다'
-        : '빈 스킬 칸 — Tab 에서 액티브 스킬을 올린다',
+        ? '이 빌드에서는 아직 쓸 수 없는 스킬이다 — 스킬 탭에서 다른 스킬을 올린다'
+        : '빈 스킬 칸 — 스킬 탭에서 스킬을 올린다',
     2000,
   );
 });
@@ -2296,7 +2296,7 @@ events.on('item_used', (payload) => {
   if (idef.regen) flashRestoreBar('status-stamina-fill', false); // 지속 효과 시작 — 스태미너도
 });
 const DENY_TEXT: Record<string, string> = {
-  empty: '빈 퀵슬롯 — Tab 에서 등록한다',
+  empty: '빈 퀵슬롯 — 가방 탭(Tab·I)에서 등록한다',
   none: '다 썼다',
   full: '이미 가득 차 있다',
   cooldown: '아직 못 쓴다',
@@ -2568,10 +2568,10 @@ events.on('sigil_acquired', (payload) => {
     info.kind === 'passive'
       ? info.attached
         ? `패시브 — ${PART[def.slot] ?? def.slot}에 새겨졌다`
-        : `패시브 — ${PART[def.slot] ?? def.slot}이 차 있다. Tab 에서 바꾼다`
+        : `패시브 — ${PART[def.slot] ?? def.slot}이 차 있다. 가방 탭의 몸에서 바꾼다`
       : typeof info.slot === 'number' && info.slot >= 0
         ? `액티브 — ${input.usingPad ? `${padBtn('skillSelect')} + ${padBtn(`skill${info.slot + 1}` as PadAction)}` : SKILL_KEYS[info.slot]} 로 쓴다`
-        : '액티브 — Tab 에서 퀵슬롯에 올린다';
+        : '스킬 탭에서 퀵슬롯에 올린다';
   sigilToast.classList.add('visible');
   sigilToastUntil = performance.now() + SIGIL_TOAST_MS;
 });
@@ -3303,7 +3303,7 @@ function simulate(dt: number): void {
       lootUI.padClose(); // 루팅 창은 Menu 로도 닫힌다 (다른 창으로 넘어가지 않는다)
     } else if (shopUI.open) {
       shopUI.hide();
-      menuUI.show('skill', true);
+      menuUI.show('bag', true); // 제단 앞 — 가방 탭(몸 패널에서 각인 떼기·장비·매각)
     } else {
       menuUI.toggle();
     }
@@ -4174,7 +4174,7 @@ function render(alpha: number): void {
       ? `좌스틱 이동  R스틱 시선  ${padBtn('sprint')} 질주  ${padBtn('dodge')} 회피  ${padBtn('ranged')} 조준+${padBtn('melee')} 발사(${padBtn('cycleWeapon')} 무기 교체)  ${padBtn('melee')} 근접·처형  ${padBtn('interact')} 상호작용  ${padBtn('reaction')} 짧게=패링·꾹=방어\n` +
         `${padBtn('skillSelect')}+${padBtn('skill1')}·${padBtn('skill2')}·${padBtn('skill3')}·${padBtn('skill4')} 스킬  ${padBtn('itemSelect')}+D-패드 소모품  ${padBtn('inventory')} 가방→스킬  ${padBtn('reload')} 장전(활=시위 내림)  ${padBtn('lantern')} 랜턴(길게=배터리)  ${padBtn('pause')} 일시정지·키 설정`
       : 'WASD 이동  Space 질주(연타=회피)  좌클릭 원거리(휠 교체)  우클릭 근접·처형  E 상호작용  Shift 짧게=패링·꾹=방어\n' +
-        'Z·X·C·V 스킬  Q 스킬 교체·휠클릭 사용  1~5 소모품  Tab 스킬  I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  F1 지표  F2 덤프  F3 다시하기  P/O/K/G/U 테스트(U=스킬 전부)');
+        'Z·X·C·V 스킬  Q 스킬 교체·휠클릭 사용  1~5 소모품  Tab·I 가방  R 장전(활=시위 내림)  F 랜턴  B 배터리  F1 지표  F2 덤프  F3 다시하기  P/O/K/G/U 테스트(U=스킬 전부)');
 
   // 보스 줄만 색을 입힌다 — 나머지는 그대로 텍스트로 두고 필요할 때만 innerHTML 을 쓴다.
   // (HUD 문자열에는 <>& 가 들어가지 않으므로 이스케이프가 필요 없다)
