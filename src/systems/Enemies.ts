@@ -1728,6 +1728,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       enemy.timer--;
       advanceStrike(enemy, def, attack);
       chargeForward(world, enemy, def, attack, distX, distZ, dist, dt);
+      // 닿는 순간 판정(hitOnContact) — 창이 끝나길 기다리지 않는다. 이 틱은 아직 타격 창이라
+      // 같은 틱의 반응(Reaction 은 Enemies 뒤)은 패링이 되고, 다음 틱에 impact 로 넘어간다
+      if (attack.hitOnContact && strikeContacts(world, enemy, def, attack, dist)) {
+        enemy.ai = 'active_normal';
+        enemy.timer = 1;
+        break;
+      }
       if (enemy.timer <= 0) {
         enemy.ai = 'active_normal';
         enemy.timer = balance.reaction.windowNormalTicks;
@@ -1739,6 +1746,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       enemy.timer--;
       advanceStrike(enemy, def, attack);
       chargeForward(world, enemy, def, attack, distX, distZ, dist, dt);
+      if (attack.hitOnContact && enemy.timer > 1 && strikeContacts(world, enemy, def, attack, dist)) enemy.timer = 1; // 닿았다 — 다음 틱에 친다
       if (enemy.timer <= 0) enemy.ai = 'impact';
       break;
     }
@@ -1764,8 +1772,10 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         enemy.yaw = Math.atan2(-tdx, -tdz);
         moveAvoiding(world, enemy, def, tdx / tdist, tdz / tdist, attack.chargeSpeed! * slowFactor(enemy) * dt);
       }
-      // 겨눈 자리에 닿았거나(몸 반경), 플레이어가 그대로 서 있어 이미 사거리거나, 시간이 다하면 친다
-      if (tdist <= def.radius || dist <= def.attackRange || enemy.timer <= 0) {
+      // 겨눈 자리에 닿았거나(몸 반경), 플레이어가 그대로 서 있어 이미 사거리거나, 시간이 다하면 친다.
+      // hitOnContact(구울 물어뜯기)는 사거리가 아니라 몸이 부딛친 순간이다 — 옆을 스쳐 지나가면 물지 않는다
+      const nearEnough = attack.hitOnContact ? dist <= contactDist(def) : dist <= def.attackRange;
+      if (tdist <= def.radius || nearEnough || enemy.timer <= 0) {
         // 착지 — 몸통 박치기는 땅에 닿는 순간 들어간다. 비행체(박쥐)는 공중에서 치므로 유지
         if (!def.flying) enemy.jumpY = 0;
         if (attack.parryable) {
@@ -1873,7 +1883,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     }
 
     case 'impact': {
-      const connected = attackReaches(def, enemy, attack, p.x, p.z) && p.iframeTicks <= 0;
+      // 돌격의 hitOnContact 는 몸 접촉이 곧 명중 — 달리기가 끝난 자리에서 사거리(2m 남짓)로 물던 것을 없앤다.
+      // 휘두르기의 hitOnContact 는 무기 끝 모델 그대로(끝까지 뻗은 자리 = 사거리)
+      const reaches =
+        attack.hitOnContact && attack.chargeRunTicks !== undefined
+          ? dist <= contactDist(def)
+          : attackReaches(def, enemy, attack, p.x, p.z);
+      const connected = reaches && p.iframeTicks <= 0;
       if (connected) {
         // 방어(정면) — 칩 데미지만 관통. 피해가 있으므로 연쇄는 여전히 리셋된다
         const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
@@ -2419,6 +2435,25 @@ function chargeForward(
   if (dist <= def.attackRange) return; // 이미 닿는 거리 — 더 파고들지 않는다
   enemy.yaw = Math.atan2(-distX, -distZ); // 달려드는 동안은 방향을 갱신한다
   moveAvoiding(world, enemy, def, distX / dist, distZ / dist, attack.chargeSpeed * slowFactor(enemy) * dt);
+}
+
+/** 몸 접촉 거리 — 적 반지름 + 플레이어 반지름 + 여유(contact.padM). hitOnContact 공격의 "부딛쳤다" */
+export function contactDist(def: ReturnType<typeof enemyDef>): number {
+  return def.radius + balance.player.radius + balance.contact.padM;
+}
+
+/** 휘두르는 도중 닿았는가 — 무기 끝이 가드(몸) 안에 들었거나(gap<=0) 몸이 부딛쳤고, 공격이 나를 향한다(호·사거리) */
+function strikeContacts(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  attack: EnemyAttackDef,
+  dist: number,
+): boolean {
+  const p = world.player;
+  const gap = dist - balance.player.radius - (enemy.weaponTipDist ?? 0);
+  if (gap > 0 && dist > contactDist(def)) return false;
+  return attackReaches(def, enemy, attack, p.x, p.z);
 }
 
 /** 무기가 닿는 최대 거리 (적 중심 기준) — impact 판정 거리와 같아야 한다 */

@@ -66,6 +66,9 @@ export interface EnemyAttackDef {
   projectileKind?: string;
   /** 맞으면 피해·밀침 대신 들러붙어 파먹는다 — 방어로 막으면 평소처럼 흘려보낸다 (구울) */
   latches?: boolean;
+  /** 닿는 순간 판정 — 휘두르는 동안 무기 끝이 몸에 닿거나 몸이 부딛치면 창이 끝나길 기다리지 않고 바로 친다.
+   *  돌격(chargeRunTicks)이면 달리는 동안 몸이 부딛친 순간 물고, 타격 반경도 몸 접촉(contact.padM)이다 (2026-09-04 사용자) */
+  hitOnContact?: boolean;
   /** 무리 소환 내용물 — type: 'summon' 공격 전용. healthCost 만큼 제 체력을 떼어 준다 */
   brood?: {
     type: string; count: number; maxAlive: number; healthCost: number; cooldownTicks: number;
