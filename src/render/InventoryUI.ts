@@ -13,8 +13,10 @@ import {
   isUseful,
   itemDef,
   dropSlot,
+  moveSlot,
   unbindQuickslot,
 } from '../core/Inventory';
+import { beginDrag } from './DragDrop';
 import { balance } from '../core/Balance';
 import { itemIcon } from './ItemIcons';
 import { attachPopup, consumablePopup } from './ItemPopup';
@@ -102,6 +104,31 @@ export class InventoryUI {
     this.rebuild();
   }
 
+  /** 드래그로 놓았다 — 가방↔가방(이동·합침·교환), 가방→퀵슬롯(등록), 퀵슬롯↔퀵슬롯(교환), 퀵슬롯→빈 곳(해제) */
+  private onDrop(from: 'bag' | 'quick', fromIdx: number, key: string | null): void {
+    const world = this.world;
+    const to = key?.startsWith('b') ? 'bag' : key?.startsWith('q') ? 'quick' : null;
+    const toIdx = key ? Number.parseInt(key.slice(1), 10) : -1;
+    if (from === 'bag' && to === 'bag') {
+      if (moveSlot(world, fromIdx, toIdx) !== 'none') world.events.emit('loot_moved', { where: 'bag' });
+    } else if (from === 'bag' && to === 'quick') {
+      const slot = world.inventory[fromIdx];
+      if (slot) bindQuickslot(world, toIdx, slot.kind);
+    } else if (from === 'quick' && to === 'quick') {
+      if (fromIdx !== toIdx) {
+        const a = world.quickslots[fromIdx] ?? null;
+        world.quickslots[fromIdx] = world.quickslots[toIdx] ?? null;
+        world.quickslots[toIdx] = a;
+      }
+    } else if (from === 'quick' && to !== 'quick') {
+      unbindQuickslot(world, fromIdx); // 끌어내 놓으면 등록 해제
+    }
+    this.picked = -1;
+    this.hover = -1;
+    this.hoverQ = -1;
+    this.rebuild();
+  }
+
   private rebuild(): void {
     const world = this.world;
     const panel = document.createElement('div');
@@ -178,6 +205,7 @@ export class InventoryUI {
     }
     world.quickslots.forEach((kind, i) => {
       const cell = document.createElement('div');
+      cell.dataset['key'] = `q${i}`;
       const armed = this.picked >= 0;
       cell.style.cssText =
         CELL +
@@ -208,6 +236,10 @@ export class InventoryUI {
       }
 
       cell.onclick = () => this.assign(i);
+      if (kind) {
+        const dragIcon = itemIcon(kind, ICON_PX).outerHTML;
+        cell.onpointerdown = (ev) => beginDrag(ev, dragIcon, (key) => this.onDrop('quick', i, key));
+      }
       cell.onmousemove = (ev) => {
         if ((ev.movementX === 0 && ev.movementY === 0) || this.hoverQ === i) return; // 유령 이동은 무시 (LootUI 규약)
         this.hoverQ = i;
@@ -249,6 +281,7 @@ export class InventoryUI {
     grid.style.cssText = `display:grid;grid-template-columns:repeat(${cfg.cols}, ${CELL_PX}px);gap:${GAP_PX}px;`;
     world.inventory.forEach((slot, i) => {
       const cell = document.createElement('div');
+      cell.dataset['key'] = `b${i}`;
       const here = i === this.picked;
       cell.style.cssText =
         CELL +
@@ -300,6 +333,8 @@ export class InventoryUI {
           this.picked = -1;
           this.rebuild();
         };
+        const dragIcon = itemIcon(slot.kind, ICON_PX).outerHTML;
+        cell.onpointerdown = (ev) => beginDrag(ev, dragIcon, (key) => this.onDrop('bag', i, key));
       }
       cell.onmousemove = (ev) => {
         if ((ev.movementX === 0 && ev.movementY === 0) || this.hover === i) return; // 유령 이동은 무시 (LootUI 규약)

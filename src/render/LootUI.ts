@@ -13,6 +13,8 @@ import type { LootEntry, World } from '../core/World';
 import * as Loot from '../systems/Loot';
 import { itemIconSvg, lootIconSvg } from './ItemIcons';
 import { attachPopup, consumablePopup, lootEntryPopup } from './ItemPopup';
+import { beginDrag } from './DragDrop';
+import { moveSlot } from '../core/Inventory';
 
 const UP_KEYS = new Set(['KeyW', 'ArrowUp']);
 const DOWN_KEYS = new Set(['KeyS', 'ArrowDown']);
@@ -260,6 +262,48 @@ export class LootUI {
     this.rebuild();
   }
 
+  /** 드래그로 놓았다 — 원본 칸(pane, index)을 대상 key(c#/b#) 칸에. 창 밖·빈 곳이면 취소 */
+  private onDrop(from: Pane, fromIdx: number, key: string | null): void {
+    const c = Loot.container(this.world);
+    if (!c) { this.close(); return; }
+    const to: Pane | null = key?.startsWith('c') ? 'container' : key?.startsWith('b') ? 'bag' : null;
+    const toIdx = key ? Number.parseInt(key.slice(1), 10) : -1;
+    if (!to || Number.isNaN(toIdx)) { this.rebuild(); return; }
+    if (from === 'container' && to === 'container') {
+      // 배치만 — 칸을 맞바꾼다(빈 칸이면 옮김). 데이터(entries)는 그대로다
+      if (fromIdx !== toIdx) {
+        const a = this.layout[fromIdx] ?? null;
+        const b = this.layout[toIdx] ?? null;
+        for (let k = 0; k <= Math.max(fromIdx, toIdx); k++) if (this.layout[k] === undefined) this.layout[k] = null;
+        this.layout[fromIdx] = b;
+        this.layout[toIdx] = a;
+        this.world.events.emit('loot_moved', { where: 'container' });
+      }
+      this.pane = 'container';
+      this.selC = toIdx;
+    } else if (from === 'bag' && to === 'bag') {
+      if (moveSlot(this.world, fromIdx, toIdx) !== 'none') this.world.events.emit('loot_moved', { where: 'bag' });
+      this.pane = 'bag';
+      this.selB = toIdx;
+    } else if (from === 'container' && to === 'bag') {
+      const e = this.layout[fromIdx] ?? null;
+      const index = e ? c.entries.indexOf(e) : -1;
+      if (index >= 0 && Loot.takeStackTo(this.world, index, toIdx) <= 0) this.shakeKey = `b${toIdx}`;
+      this.pane = 'bag';
+      this.selB = toIdx;
+    } else if (from === 'bag' && to === 'container') {
+      const entry = Loot.stashStackTo(this.world, fromIdx);
+      if (entry && !this.layout.includes(entry)) {
+        for (let k = 0; k <= toIdx; k++) if (this.layout[k] === undefined) this.layout[k] = null;
+        if (!this.layout[toIdx]) this.layout[toIdx] = entry; // 놓은 칸에 — 차 있으면 syncLayout 이 첫 빈 칸에
+      }
+      this.pane = 'container';
+      this.selC = toIdx;
+    }
+    this.clampSel();
+    this.rebuild();
+  }
+
   private takeAll(): void {
     const c = Loot.container(this.world);
     if (!c) { this.close(); return; }
@@ -366,6 +410,8 @@ export class LootUI {
       };
       cell.onclick = () => { this.pane = 'container'; this.selC = i; this.act(); };
       cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'container'; this.selC = i; this.drop(); };
+      // 드래그 — 밝혀진 칸만 집을 수 있다. 놓는 곳에 따라 배치 바꿈 / 가방 칸에 통째로
+      if (e && e.searched) cell.onpointerdown = (ev) => beginDrag(ev, lootIconSvg(e, ICON_PX), (key) => this.onDrop('container', i, key));
       // 커서 칸 설명 팝업 — 컨테이너는 창의 왼쪽이라 칸 오른쪽에 띄운다. 조작 안내(가져오기 → 그 아래 버리기)도 팝업 안에
       if (here && e) {
         const content = lootEntryPopup(this.world, e);
@@ -443,6 +489,7 @@ export class LootUI {
       };
       cell.onclick = () => { this.pane = 'bag'; this.selB = i; this.act(); };
       cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pane = 'bag'; this.selB = i; this.drop(); };
+      if (slot) cell.onpointerdown = (ev) => beginDrag(ev, itemIconSvg(slot.kind, ICON_PX), (key) => this.onDrop('bag', i, key));
       if (slot) {
         // 같은 종류의 첫 칸이 날아온 아이콘의 목적지 — 실제로 addItem 이 쌓는 자리와 같다
         if (!flyMarked.has(slot.kind)) { cell.dataset['fly'] = `b:${slot.kind}`; flyMarked.add(slot.kind); }

@@ -4,18 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import {
-  addItem,
-  bindQuickslot,
-  countOf,
-  dropSlot,
-  hasRoom,
-  initInventory,
-  isUseful,
-  itemDef,
-  takeItem,
-  unbindQuickslot,
-} from '../core/Inventory';
+import { addItem, bindQuickslot, countOf, dropSlot, hasRoom, initInventory, isUseful, itemDef, moveSlot, takeItem, unbindQuickslot } from '../core/Inventory';
 import { ITEM_KINDS, World, type ItemKind } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Items from './Items';
@@ -498,5 +487,30 @@ describe('데이터', () => {
   it('색은 서로 다르다 — 아이콘만 보고 구분해야 한다', () => {
     const colors = ITEM_KINDS.map((k) => itemDef(k as ItemKind).color);
     expect(new Set(colors).size).toBe(colors.length);
+  });
+});
+
+describe('칸 이동 — 드래그 (2026-09-04)', () => {
+  it('빈 칸으로 옮기고, 같은 종류는 상한까지 합치고(남는 건 제자리), 다른 종류·둘 다 가득이면 맞바꾼다', () => {
+    for (let i = 0; i < 3; i++) addItem(world, 'potion'); // [0] 물약 3
+    addItem(world, 'mana'); // [1] 마나 1
+    expect(moveSlot(world, 0, 5)).toBe('moved');
+    expect(world.inventory[0]).toBeNull();
+    expect(world.inventory[5]).toEqual({ kind: 'potion', count: 3 });
+    for (let i = 0; i < 4; i++) addItem(world, 'potion'); // [5] 5개로 채우고 남은 2개는 첫 빈 칸 [0]
+    expect(world.inventory[5]!.count).toBe(CFG.stackMax);
+    expect(world.inventory[0]).toEqual({ kind: 'potion', count: 2 });
+    expect(moveSlot(world, 0, 5)).toBe('swapped'); // 대상이 가득 — 자리만 바꾼다
+    expect(world.inventory[5]!.count).toBe(2);
+    expect(world.inventory[0]!.count).toBe(CFG.stackMax);
+    expect(moveSlot(world, 0, 5)).toBe('merged'); // 3개만 들어가고 2개는 제자리
+    expect(world.inventory[5]!.count).toBe(CFG.stackMax);
+    expect(world.inventory[0]!.count).toBe(2);
+    expect(moveSlot(world, 1, 0)).toBe('swapped'); // 마나 ↔ 물약
+    expect(world.inventory[0]!.kind).toBe('mana');
+    expect(world.inventory[1]).toEqual({ kind: 'potion', count: 2 });
+    expect(moveSlot(world, 3, 4)).toBe('none'); // 빈 칸에선 집을 게 없다
+    expect(moveSlot(world, 0, 0)).toBe('none');
+    expect(countOf(world, 'potion')).toBe(7); // 개수는 변하지 않는다
   });
 });

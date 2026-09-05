@@ -57,6 +57,34 @@ export function addItem(world: World, kind: ItemKind): boolean {
   return true;
 }
 
+/** 칸 이동(드래그) — 빈 칸이면 옮기고, 같은 종류면 stackMax 까지 합치고(남는 건 제자리), 다른 종류(또는 둘 다 가득)면 맞바꾼다.
+ *  개수는 변하지 않는다 — 배치만 바뀐다 (2026-09-04) */
+export function moveSlot(world: World, from: number, to: number): 'moved' | 'merged' | 'swapped' | 'none' {
+  const inv = world.inventory;
+  if (from === to || from < 0 || to < 0 || from >= inv.length || to >= inv.length) return 'none';
+  const src = inv[from];
+  if (!src) return 'none';
+  const dst = inv[to];
+  let result: 'moved' | 'merged' | 'swapped';
+  if (!dst) {
+    inv[to] = src;
+    inv[from] = null;
+    result = 'moved';
+  } else if (dst.kind === src.kind && dst.count < balance.items.stackMax) {
+    const n = Math.min(balance.items.stackMax - dst.count, src.count);
+    dst.count += n;
+    src.count -= n;
+    if (src.count <= 0) inv[from] = null;
+    result = 'merged';
+  } else {
+    inv[to] = src;
+    inv[from] = dst;
+    result = 'swapped';
+  }
+  world.events.emit('item_moved', { from, to, kind: src.kind, result });
+  return result;
+}
+
 /** 한 개라도 더 들어갈 자리가 있는가 — 자석이 물기 전에 묻는다 */
 export function hasRoom(world: World, kind: ItemKind): boolean {
   const stackMax = balance.items.stackMax;
@@ -170,7 +198,7 @@ export function unbindQuickslot(world: World, index: number): void {
 
 /** 등록 안 된 종류를 처음 주우면 빈 칸에 자동으로 꽂는다 —
  *  Tab 을 한 번도 안 열어도 물약을 쓸 수 있어야 한다 */
-function autoBind(world: World, kind: ItemKind): void {
+export function autoBind(world: World, kind: ItemKind): void {
   if (world.quickslots.includes(kind)) return;
   const empty = world.quickslots.indexOf(null);
   if (empty < 0) return;

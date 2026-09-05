@@ -618,6 +618,8 @@ for (const name of [
   'arrow_shielded',
   'bow_draw_released',
   'grenade_cancelled',
+  'loot_moved',
+  'item_moved',
   'aim_snapped',
   'arrow_recovered',
   'arrow_broken',
@@ -1955,7 +1957,7 @@ events.on('item_picked', (payload) => {
   rootStyle.setProperty('--gain-rise', `${balance.hud.centerGain.risePx}px`);
   rootStyle.setProperty('--gain-font', `${balance.hud.centerGain.fontPx}px`);
   rootStyle.setProperty('--gain-big-mul', String(balance.hud.centerGain.bigScaleMul));
-  rootStyle.setProperty('--dmg-ms', `${balance.hud.damageTaken.ms}ms`);
+  rootStyle.setProperty('--dmg-ms', `${balance.hud.damageNumbers.ms}ms`); // 적 피해 숫자와 같은 시간
   rootStyle.setProperty('--dmg-rise', `${balance.hud.damageTaken.risePx}px`);
   rootStyle.setProperty('--dmg-font', `${balance.hud.damageTaken.fontPx}px`);
   rootStyle.setProperty('--dmg-big-mul', String(balance.hud.damageTaken.bigScaleMul));
@@ -2292,6 +2294,8 @@ events.on('bow_draw_released', (payload) => {
   audio.play('reload_end');
   showReaction('시위를 내렸다', 900);
 });
+// 드래그로 칸을 옮겼다 — 천에 넣는 소리를 짧게 (가져오기·넣기는 각자 소리가 있다)
+events.on('loot_moved', () => audio.play('loot_stash'));
 // 수류탄 차징 취소(LT 놓음·R) — 활의 시위 내리기와 같은 소리·안내
 events.on('grenade_cancelled', () => {
   audio.play('reload_end');

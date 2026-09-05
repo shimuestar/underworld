@@ -476,3 +476,39 @@ describe('넣기·버리기·닫기', () => {
     expect(ev.map((e) => e.emptied)).toEqual([true, false]);
   });
 });
+
+describe('드래그 놓기 (2026-09-04)', () => {
+  it('takeStackTo — 빈 칸엔 상한까지, 같은 종류엔 남은 자리만, 다른 종류 칸엔 안 들어간다', () => {
+    const p = pouchAt(world, 10, 8, [{ kind: 'potion', count: 7 }]);
+    openPouch(world, p);
+    const denied: unknown[] = [];
+    world.events.on('loot_denied', (x) => denied.push(x));
+    expect(Loot.takeStackTo(world, 0, 3)).toBe(balance.items.stackMax); // 빈 칸 — 상한까지
+    expect(world.inventory[3]).toEqual({ kind: 'potion', count: balance.items.stackMax });
+    expect(p.pouchItems![0]!.count).toBe(7 - balance.items.stackMax);
+    addItem(world, 'mana'); // [0] 마나
+    expect(Loot.takeStackTo(world, 0, 0)).toBe(0); // 다른 종류 칸
+    expect(denied).toHaveLength(1);
+    world.inventory[3]!.count = balance.items.stackMax - 1;
+    expect(Loot.takeStackTo(world, 0, 3)).toBe(1); // 남은 자리 하나
+    expect(Loot.takeStackTo(world, 0, 3)).toBe(0); // 가득
+    expect(Loot.takeStackTo(world, 0, 7)).toBe(1); // 마지막 하나는 새 칸
+    expect(p.pouchItems).toHaveLength(0);
+  });
+
+  it('stashStackTo — 가방 칸을 통째로 넣고, 같은 종류가 있으면 그 항목에 합쳐진 뒤 그 항목을 돌려준다', () => {
+    const p = pouchAt(world, 10, 8, [{ kind: 'food', count: 1 }]);
+    openPouch(world, p);
+    for (let i = 0; i < 3; i++) addItem(world, 'food'); // [0] 고기 3
+    const e = Loot.stashStackTo(world, 0);
+    expect(world.inventory[0]).toBeNull();
+    expect(e).toBe(p.pouchItems![0]);
+    expect(e!.count).toBe(4);
+    addItem(world, 'potion');
+    const e2 = Loot.stashStackTo(world, 0);
+    expect(e2?.kind).toBe('potion');
+    expect(e2?.searched).toBe(true); // 내가 넣은 것은 바로 보인다
+    expect(p.pouchItems).toHaveLength(2);
+    expect(Loot.stashStackTo(world, 5)).toBeNull(); // 빈 칸
+  });
+});

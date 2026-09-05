@@ -12,7 +12,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
-import { addItem, dropSlot, hasRoom, itemDef } from '../core/Inventory';
+import { addItem, autoBind, dropSlot, hasRoom, itemDef } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
 import {
   findFreeSpot,
@@ -372,6 +372,52 @@ function takeOneImpl(world: World, c: Container, index: number, announceDeny: bo
   if (e.count <= 0) c.entries.splice(index, 1);
   world.events.emit('loot_taken', { kind: e.kind, count: 1, from });
   return 'taken';
+}
+
+/** 드래그로 컨테이너 항목을 가방의 '이 칸'에 놓는다 — 소모품은 그 칸이 비었거나 같은 종류면 들어가는 만큼(stackMax) 통째로.
+ *  다른 종류가 있는 칸에는 안 들어간다(loot_denied full). 골드·화살·각인은 칸을 차지하지 않으니 takeOne 과 같다.
+ *  옮긴 개수를 돌려준다 (0 = 안 됨) (2026-09-04) */
+export function takeStackTo(world: World, entryIndex: number, slotIndex: number): number {
+  const c = container(world);
+  if (!c) return 0;
+  const e = c.entries[entryIndex];
+  if (!e || !e.searched) return 0;
+  if (!isConsumable(e.kind)) return takeOneImpl(world, c, entryIndex, true) === 'taken' ? 1 : 0;
+  const inv = world.inventory;
+  if (slotIndex < 0 || slotIndex >= inv.length) return 0;
+  const dst = inv[slotIndex];
+  const stackMax = balance.items.stackMax;
+  const room = !dst ? stackMax : dst.kind === e.kind ? stackMax - dst.count : 0;
+  const n = Math.min(room, e.count);
+  if (n <= 0) {
+    world.events.emit('loot_denied', { reason: 'full', kind: e.kind });
+    return 0;
+  }
+  if (!dst) inv[slotIndex] = { kind: e.kind, count: n };
+  else dst.count += n;
+  autoBind(world, e.kind);
+  world.events.emit('item_gained', { kind: e.kind, count: countOfKind(world, e.kind) });
+  e.count -= n;
+  if (e.count <= 0) c.entries.splice(entryIndex, 1);
+  world.events.emit('loot_taken', { kind: e.kind, count: n, from: c.ref.kind });
+  return n;
+}
+function countOfKind(world: World, kind: ItemKind): number {
+  return world.inventory.reduce((sum, s) => sum + (s && s.kind === kind ? s.count : 0), 0);
+}
+
+/** 드래그로 가방 칸을 컨테이너에 통째로 넣는다 — 같은 종류가 있으면 그 항목에 합쳐진다.
+ *  넣은 것이 담긴 항목을 돌려준다(UI 가 놓은 칸에 배치한다), 못 넣으면 null */
+export function stashStackTo(world: World, slotIndex: number): LootEntry | null {
+  const c = container(world);
+  if (!c) return null;
+  const slot = world.inventory[slotIndex];
+  if (!slot) return null;
+  const { kind, count } = slot;
+  world.inventory[slotIndex] = null;
+  mergeEntry(c.entries, { kind, count, searched: true });
+  world.events.emit('loot_stashed', { kind, count, to: c.ref.kind });
+  return c.entries.find((x) => x.kind === kind) ?? null;
 }
 
 /** 커서 줄에서 하나(골드·화살은 들어가는 만큼) 가져온다 */
