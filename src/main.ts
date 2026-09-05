@@ -11,6 +11,8 @@ import * as Reaction from './systems/Reaction';
 import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt, spawnProps, spawnTraps } from './level/Spawner';
 import { Minimap } from './render/Minimap';
+import { Awareness } from './render/Awareness';
+import { Compass } from './render/Compass';
 import { PauseMenu } from './render/PauseMenu';
 import { GamepadUI, padDiagramSvg } from './render/GamepadUI';
 import { buttonName, type PadAction } from './core/Gamepad';
@@ -271,7 +273,10 @@ const world = new World(events, {
 world.exitNeedsKey = world.enemies.some((e) => e.floorBoss || enemyDef(e.type).boss);
 
 const stage = new Stage(app);
-const minimap = new Minimap(level);
+const awareness = new Awareness(); // 위협·소리 기억 — 미니맵·나침반 공유
+const minimap = new Minimap(level, awareness);
+// 나침반 — 상단 중앙, 항상 표시 (2026-09-04). 목표 표식은 미니맵의 안개 기억으로 가린다
+const compass = new Compass(awareness, (x, z) => minimap.isRevealedAt(x, z));
 const debugOverlay = new DebugOverlay();
 
 function downloadMetrics(): void {
@@ -3684,6 +3689,7 @@ function render(alpha: number): void {
     }
   }
   minimap.update(p, world.enemies, alpha, world.exitOpen, world.godMode === true);
+  compass.update(world, hitMarks); // 위협·목표의 방향 — 조준선 바로 위
 
   stage.setLockOn(world.lockOnId); // 락온 마름모 — 잡힌 적 머리 위
   // 조준(LT) 연출 — 십자선 + 부드러운 FOV 줌 (누르고 있다는 게 몸에 온다)
@@ -4139,6 +4145,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__stage = stage; // 씬 그래프 검증용
   (window as unknown as Record<string, unknown>).__audio = audio; // 소리 재생 호출 추적용(헤드리스)
   (window as unknown as Record<string, unknown>).__lootUI = lootUI; // 루팅 창 패드 경로 검증용
+  (window as unknown as Record<string, unknown>).__compass = compass;
 }
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)

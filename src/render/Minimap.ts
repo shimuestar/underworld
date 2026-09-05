@@ -7,6 +7,7 @@
 import { balance } from '../core/Balance';
 import type { EnemyState, PlayerState } from '../core/World';
 import type { Level } from '../level/GridLoader';
+import type { Awareness } from './Awareness';
 
 // 시각 상수 (튜닝값 아님) — 지도 배율(px/unit)은 balance.minimap.pxPerUnit
 // 월드 시각물과 같은 색을 쓴다 — 지도와 실물이 일치해야 한다
@@ -39,12 +40,11 @@ export class Minimap {
   /** 층별로 밝힌 셀 — 층을 오가도, 죽어도 기억은 남는다 (무덤 회수 러닝의 길잡이) */
   private readonly revealedByLevel = new Map<string, Set<number>>();
   private revealed: Set<number>;
-  /** 공격을 주고받은 적 — id → 만료 시각(ms). 그동안 실시간 추적된다 */
-  private readonly combat = new Map<number, number>();
-  /** 소리 핑 — 시야 밖 소리가 난 자리에 잠깐 깜빡인다 */
-  private pings: { x: number; z: number; bornMs: number }[] = [];
-
-  constructor(private level: Level) {
+  constructor(
+    private level: Level,
+    /** 위협·소리 기억 — 나침반과 공유 (2026-09-04) */
+    private readonly aw: Awareness,
+  ) {
     this.cellPx = level.cellSize * balance.minimap.pxPerUnit;
     const w = level.cols * this.cellPx;
     const h = level.rows * this.cellPx;
@@ -133,8 +133,7 @@ export class Minimap {
     this.legend.style.top = `${h + 14}px`; // 층마다 행 수가 다르면 범례가 지도에서 떨어졌다
     this.reserveHudColumn(w);
     this.revealed = this.revealedSetFor(level);
-    this.combat.clear();
-    this.pings = [];
+    this.aw.reset();
     this.rebuildBase();
   }
 
@@ -204,16 +203,20 @@ export class Minimap {
     }
   }
 
-  /** 공격을 주고받았다 — 이 적은 잠시 실시간으로 추적된다 */
+  /** 공격을 주고받았다 — 이 적은 잠시 실시간으로 추적된다 (Awareness 에 위임, 나침반도 같은 기억을 읽는다) */
   notifyCombat(enemyId: number): void {
-    const cfg = balance.minimap;
-    this.combat.set(enemyId, performance.now() + cfg.combatSolidMs + cfg.combatFadeMs);
+    this.aw.notifyCombat(enemyId);
   }
 
   /** 소리가 났다 — 그 자리에 흐릿한 점이 잠깐 깜빡인다 */
   ping(x: number, z: number): void {
-    this.pings.push({ x, z, bornMs: performance.now() });
-    if (this.pings.length > 24) this.pings.shift();
+    this.aw.ping(x, z);
+  }
+
+  /** 이 자리를 본 적이 있는가 — 나침반이 목표 표식을 가릴 때 묻는다 (안개 기억 공유) */
+  isRevealedAt(x: number, z: number): boolean {
+    const cs = this.level.cellSize;
+    return this.revealed.has(Math.floor(z / cs) * 4096 + Math.floor(x / cs));
   }
 
   toggle(): void {
@@ -252,13 +255,9 @@ export class Minimap {
 
     // 소리 핑 — 흐릿한 점이 pingMs 동안 잦아든다 (신 모드에선 불필요)
     if (!god) {
-      for (let i = this.pings.length - 1; i >= 0; i--) {
-        const p = this.pings[i]!;
+      this.aw.prunePings(now);
+      for (const p of this.aw.pings) {
         const age = now - p.bornMs;
-        if (age > cfg.pingMs) {
-          this.pings.splice(i, 1);
-          continue;
-        }
         ctx.globalAlpha = 1 - age / cfg.pingMs;
         ctx.fillStyle = PING;
         ctx.beginPath();
@@ -270,27 +269,10 @@ export class Minimap {
 
     // 적 — ① 시야(카메라 호 + 벽에 안 가림) 안 ② 전투 추적(실시간, 끝은 페이드).
     // 위장 중인 천장 거머리는 눈앞이라도 안 보인다 (기습 담당)
-    const fx = -Math.sin(player.yaw);
-    const fz = -Math.cos(player.yaw);
-    const arcCos = Math.cos(((cfg.viewArcDeg / 2) * Math.PI) / 180);
     for (const enemy of enemies) {
       if (!enemy.alive) continue;
-      let alphaMul = 1;
-      if (!god) {
-        const expire = this.combat.get(enemy.id);
-        const inCombat = expire !== undefined && now < expire;
-        if (inCombat) {
-          const remain = expire - now;
-          if (remain < cfg.combatFadeMs) alphaMul = remain / cfg.combatFadeMs;
-        } else {
-          if (enemy.lurking) continue;
-          const dx = enemy.x - player.x;
-          const dz = enemy.z - player.z;
-          const dist = Math.hypot(dx, dz);
-          if (dist > 0.001 && (fx * dx + fz * dz) / dist < arcCos) continue; // 시야각 밖
-          if (!this.level.hasLineOfSight(player.x, player.z, enemy.x, enemy.z)) continue; // 벽 뒤
-        }
-      }
+      const alphaMul = this.aw.threatAlpha(enemy, player, this.level, god, now); // 규칙은 Awareness 한 곳에
+      if (alphaMul === null) continue;
       const ex = (enemy.prevX + (enemy.x - enemy.prevX) * alpha) * s;
       const ez = (enemy.prevZ + (enemy.z - enemy.prevZ) * alpha) * s;
       ctx.globalAlpha = alphaMul;
