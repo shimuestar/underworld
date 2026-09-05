@@ -18,10 +18,13 @@ export function tick(world: World, _dt: number): void {
     world.foodRegenTicks--;
     const rg = itemDef('food').regen;
     if (rg && !world.dead && world.player.health < balance.player.healthMax) {
+      const before = world.player.health;
       world.player.health = Math.min(
         balance.player.healthMax,
         world.player.health + rg.healPerTick,
       );
+      // 실제로 찬 만큼 — HUD 가 1초 단위로 묶어 '+N' 으로 띄운다 (2026-09-04)
+      world.events.emit('food_regen_tick', { amount: world.player.health - before });
     }
     if (world.foodRegenTicks === 0) world.events.emit('food_regen_ended', {});
   }

@@ -631,6 +631,7 @@ for (const name of [
   'loot_carry_started',
   'loot_carry_cancelled',
   'item_split',
+  'food_regen_tick',
   'loot_interrupt',
   'loot_interrupted',
   'aim_snapped',
@@ -1986,44 +1987,67 @@ events.on('item_picked', (payload) => {
   rootStyle.setProperty('--dmg-big-mul', String(balance.hud.damageTaken.bigScaleMul));
 }
 
-// ---- 받은 피해 숫자 — HP 바 위로 붉게 튄다 (적 머리 위 피해 숫자의 플레이어 판, 2026-09-04) ----
+// ---- 플레이어 수치 숫자 — 받은 피해는 붉게(-N), 회복은 초록/파랗게(+N) 바 위로 튄다 (적 머리 위 피해 숫자의 플레이어 판) ----
 type DamageTone = 'hit' | 'blocked' | 'poison' | 'burn';
+/** 회복 결 — heal(체력 물약·생명 입자) · mana(마나 물약) · regen(음식 지속 회복, 1초 묶음) */
+type StatTone = DamageTone | 'heal' | 'mana' | 'regen';
+type StatBar = 'hp' | 'mana';
+const GAIN_TONES: ReadonlySet<StatTone> = new Set(['heal', 'mana', 'regen']);
 const dmgTakenBox = document.getElementById('dmg-taken')!;
-let lastDmgNum: { el: HTMLElement; amount: number; at: number; tone: DamageTone } | null = null;
-function renderDamageTaken(rec: { el: HTMLElement; amount: number }): void {
+let lastStatNum: { el: HTMLElement; amount: number; at: number; tone: StatTone; bar: StatBar } | null = null;
+function renderStatNumber(rec: { el: HTMLElement; amount: number; tone: StatTone }): void {
   const cfg = balance.hud.damageTaken;
-  rec.el.textContent = `-${Math.max(1, Math.round(rec.amount))}`;
+  const n = Math.max(1, Math.round(rec.amount));
+  rec.el.textContent = GAIN_TONES.has(rec.tone) ? `+${n}` : `-${n}`;
   rec.el.classList.toggle('big', rec.amount >= cfg.bigAt);
   // 애니메이션을 처음부터 — 합산돼 커질 때 다시 튄다
   rec.el.style.animation = 'none';
   void rec.el.offsetWidth;
   rec.el.style.animation = '';
 }
-/** 받은 피해를 HP 바 위에 띄운다. mergeMs 안의 같은 결(맞음/막힘/독/화염)은 하나로 합산 */
-function showDamageTaken(amount: number, tone: DamageTone): void {
+/** 수치 변화를 해당 바(hp/mana) 위에 띄운다. mergeMs 안의 같은 결은 하나로 합산. 바마다 따로 층을 쌓는다 */
+function showStatNumber(amount: number, tone: StatTone, bar: StatBar): void {
   if (!(amount > 0)) return;
   const cfg = balance.hud.damageTaken;
   const now = performance.now();
-  if (lastDmgNum && lastDmgNum.tone === tone && now - lastDmgNum.at < cfg.mergeMs && lastDmgNum.el.isConnected) {
-    lastDmgNum.amount += amount;
-    lastDmgNum.at = now;
-    renderDamageTaken(lastDmgNum);
+  if (lastStatNum && lastStatNum.tone === tone && lastStatNum.bar === bar && now - lastStatNum.at < cfg.mergeMs && lastStatNum.el.isConnected) {
+    lastStatNum.amount += amount;
+    lastStatNum.at = now;
+    renderStatNumber(lastStatNum);
     return;
   }
   const el = document.createElement('div');
   el.className = `dmg-num ${tone}`;
-  // HP 바(왼쪽 막대) 위 — 좌우로 조금 흔들어 연타가 겹치지 않게
-  const bar = document.getElementById('status-hp')?.getBoundingClientRect();
-  const cx = bar ? bar.left + bar.width / 2 : window.innerWidth / 2;
-  const top = bar ? bar.top - 6 : window.innerHeight - 120;
+  el.dataset['bar'] = bar;
+  // 해당 바 위 — 좌우로 조금 흔들어 연타가 겹치지 않게
+  const rect = document.getElementById(bar === 'hp' ? 'status-hp' : 'status-mana')?.getBoundingClientRect();
+  const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+  const top = rect ? rect.top - 6 : window.innerHeight - 120;
   el.style.left = `${cx + (Math.random() * 2 - 1) * cfg.jitterPx}px`;
-  // 아직 사라지지 않은 숫자가 있으면 그 위에 층을 쌓는다 — 다른 결(막힘·독)이 동시에 떠도 겹치지 않게
-  el.style.top = `${top - dmgTakenBox.childElementCount * cfg.stackPx}px`;
+  // 같은 바에 아직 사라지지 않은 숫자가 있으면 그 위에 층을 쌓는다 — 다른 결이 동시에 떠도 겹치지 않게
+  const stacked = dmgTakenBox.querySelectorAll(`[data-bar="${bar}"]`).length;
+  el.style.top = `${top - stacked * cfg.stackPx}px`;
   el.addEventListener('animationend', () => el.remove());
   dmgTakenBox.appendChild(el);
-  const rec = { el, amount, at: now, tone };
-  lastDmgNum = rec;
-  renderDamageTaken(rec);
+  const rec = { el, amount, at: now, tone, bar };
+  lastStatNum = rec;
+  renderStatNumber(rec);
+}
+/** 받은 피해 — HP 바 위 붉은 -N */
+function showDamageTaken(amount: number, tone: DamageTone): void {
+  showStatNumber(amount, tone, 'hp');
+}
+// 음식 지속 회복 — 틱마다 아주 조금 차므로 regenFlushMs 마다 묶어 한 번에 띄운다 (render 가 흘린다)
+let regenAcc = 0;
+let regenFlushAt = 0;
+events.on('food_regen_tick', (payload) => { regenAcc += (payload as { amount: number }).amount; });
+function flushRegenNumber(now: number): void {
+  if (regenAcc <= 0 || now < regenFlushAt) return;
+  if (regenAcc >= 0.5) {
+    showStatNumber(regenAcc, 'regen', 'hp');
+    regenAcc = 0;
+  }
+  regenFlushAt = now + balance.hud.damageTaken.regenFlushMs;
 }
 const statPopTimers = new Map<string, number>();
 /** 획득 팝 — HUD 숫자가 잠깐 커졌다 제자리로 (연달아 먹으면 다시 처음부터) */
@@ -2182,6 +2206,9 @@ function flashRestoreBar(fillId: string, wasFull: boolean): void {
 }
 events.on('item_used', (payload) => {
   const info = payload as { kind: ItemKind; healed: number; restored: number; left: number };
+  // 회복량을 피해 숫자와 같은 연출로 — 체력은 HP 바 위 초록 +N, 마나는 마나 바 위 파란 +N (2026-09-04)
+  if (info.healed > 0) showStatNumber(info.healed, 'heal', 'hp');
+  if (info.restored > 0) showStatNumber(info.restored, 'mana', 'mana');
   audio.play(ITEM_SOUND[info.kind] ?? 'pickup_potion');
   padRumble('use'); // 꿀꺽 — 마시는 손맛
   const parts: string[] = [];
@@ -2677,9 +2704,10 @@ window.addEventListener('keydown', (e) => {
 
 // ---- 제단 ----
 events.on('life_mote_absorbed', (payload) => {
+  const healed = (payload as { healed?: number }).healed ?? 0;
+  if (healed > 0) showStatNumber(healed, 'heal', 'hp'); // 생명 입자 회복도 같은 연출
   audio.play('pickup');
   padRumble('pickup');
-  const healed = (payload as { healed: number }).healed;
   flashRestoreBar('status-hp-fill', healed <= 0);
 });
 
@@ -3690,6 +3718,7 @@ function render(alpha: number): void {
   }
   minimap.update(p, world.enemies, alpha, world.exitOpen, world.godMode === true);
   compass.update(world, hitMarks); // 위협·목표의 방향 — 조준선 바로 위
+  flushRegenNumber(performance.now()); // 음식 지속 회복 +N (1초 묶음)
 
   stage.setLockOn(world.lockOnId); // 락온 마름모 — 잡힌 적 머리 위
   // 조준(LT) 연출 — 십자선 + 부드러운 FOV 줌 (누르고 있다는 게 몸에 온다)

@@ -566,3 +566,19 @@ describe('가방 창에서 바로 쓰기 — useKind (2026-09-04)', () => {
     expect(countOf(world, 'potion')).toBe(1);
   });
 });
+
+describe('음식 지속 회복 틱 이벤트 (2026-09-04)', () => {
+  it('찰 때마다 food_regen_tick{amount} — 만피면 내지 않는다', () => {
+    const rg = itemDef('food').regen!;
+    world.foodRegenTicks = 10;
+    world.player.health = 50;
+    const got: number[] = [];
+    world.events.on('food_regen_tick', (p) => got.push((p as { amount: number }).amount));
+    for (let i = 0; i < 5; i++) Items.tick(world, DT);
+    expect(got).toHaveLength(5);
+    expect(got[0]).toBeCloseTo(rg.healPerTick, 6);
+    world.player.health = balance.player.healthMax;
+    Items.tick(world, DT);
+    expect(got).toHaveLength(5); // 만피 — 이벤트 없음
+  });
+});
