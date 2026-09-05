@@ -64,9 +64,9 @@ type DollCell =
   | { key: string; kind: 'sigil'; slot: SigilSlot; x: number; y: number };
 const DOLL_BODY_SCALE = 0.8;
 const DOLL_BODY_X = 64;
-const DOLL_BODY_Y = 56;
+const DOLL_BODY_Y = 8; // 실루엣(200px) 세로 중심(108)이 양옆 장비 세 칸(0~216)의 중심과 맞게 (2026-09-04 사용자)
 const DOLL_W = 416;
-const DOLL_H = 348;
+const DOLL_H = 304;
 const SOCKET_PX = 28;
 const DOLL_EQUIP: EquipSlot[] = ['head', 'neck', 'body', 'ring1', 'feet', 'ring2', 'pack'];
 const DOLL_CELLS: DollCell[] = [
@@ -76,7 +76,7 @@ const DOLL_CELLS: DollCell[] = [
   { key: 'd3', kind: 'equip', slot: 'ring1', x: 352, y: 76 },
   { key: 'd4', kind: 'equip', slot: 'feet', x: 0, y: 152 },
   { key: 'd5', kind: 'equip', slot: 'ring2', x: 352, y: 152 },
-  { key: 'd6', kind: 'equip', slot: 'pack', x: 176, y: 276 },
+  { key: 'd6', kind: 'equip', slot: 'pack', x: 176, y: 236 },
   ...SIGIL_SLOTS.map((slot, i): DollCell => ({
     key: `s${i}`, kind: 'sigil', slot,
     x: DOLL_BODY_X + BODY_ANCHORS[slot].x * DOLL_BODY_SCALE - SOCKET_PX / 2,
