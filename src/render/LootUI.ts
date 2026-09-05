@@ -23,6 +23,10 @@ const RIGHT_KEYS = new Set(['KeyD', 'ArrowRight']);
 const CELL_PX = 64;
 const ICON_PX = 28;
 const ROW_ICON_PX = 22;
+const GRID_GAP_PX = 8;
+/** 두 패널(컨테이너 | 가방) 사이 */
+const PANEL_GAP_PX = 24;
+const PANEL_PAD_X = 26;
 
 type Pane = 'container' | 'bag';
 
@@ -65,7 +69,7 @@ export class LootUI {
     this.root.id = 'lootui';
     this.root.style.cssText =
       'position:fixed;inset:0;display:none;align-items:center;justify-content:center;' +
-      'background:rgba(0,0,0,0.72);color:#cfd2da;font:13px/1.6 monospace;user-select:none;z-index:10;';
+      'background:rgba(0,0,0,0.4);color:#cfd2da;font:13px/1.6 monospace;user-select:none;z-index:10;'; // 뒤의 던전이 비친다
     document.body.appendChild(this.root);
 
     window.addEventListener('keydown', (e) => {
@@ -478,42 +482,48 @@ export class LootUI {
     if (!c) { this.close(); return; } // 슬라임이 먹었다 등 — 컨테이너가 사라졌다
     this.syncLayout(c);
     if (this.carry && !this.carriedIconSvg(this.carry, ICON_PX)) this.carry = null; // 든 것이 사라졌다(뒤지기 갱신 등)
-    const panel = document.createElement('div');
-    // 폭은 고정 — 툴팁 길이에 따라 창이 늘고 줄면 눈이 어지럽다. 긴 문장은 접어 내린다
-    panel.style.cssText = 'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;width:860px;box-sizing:border-box;';
+    // 두 패널 — 왼쪽 컨테이너(주머니·상자), 오른쪽 내 가방. 하나의 창으로 묶지 않는다 (2026-09-04 사용자).
+    // 배경은 반투명 — 뒤의 던전이 비쳐 '잠깐 뒤지는 중'이 읽힌다. 하단 설명줄은 없다 (조작은 칸 옆 팝업이 말한다)
+    const wrap = document.createElement('div');
+    wrap.style.cssText = `display:flex;gap:${PANEL_GAP_PX}px;align-items:flex-start;`;
 
+    const left = this.panel();
     const title = document.createElement('div');
-    title.textContent = `${c.title}   ◆ ${world.gold}`;
+    title.textContent = c.title;
     title.dataset['fly'] = 'title';
-    title.style.cssText = `color:${c.tier === 'boss' ? '#ffd75e' : '#e8c76a'};margin-bottom:12px;font-size:15px;`;
-    panel.appendChild(title);
-
-    const columns = document.createElement('div');
-    columns.style.cssText = 'display:flex;gap:28px;align-items:flex-start;';
-    columns.appendChild(this.buildContainer(c));
-    columns.appendChild(this.buildBag());
-    panel.appendChild(columns);
-
-    // 설명은 커서 칸 옆 팝업(ItemPopup)이 맡는다 — 하단 설명줄은 2026-09-04 제거
-
+    title.style.cssText = `color:${c.tier === 'boss' ? '#ffd75e' : '#e8c76a'};margin-bottom:10px;font-size:15px;`;
+    left.appendChild(title);
+    left.appendChild(this.buildContainer(c));
     const buttons = document.createElement('div');
-    buttons.style.cssText = 'display:flex;gap:10px;margin-top:16px;';
-    const takeAllBtn = this.button(`모두 가져오기 (${this.padMode ? 'X' : 'T'})`, () => this.takeAll(), c.entries.length > 0);
-    const closeBtn = this.button(`닫기 (${this.padMode ? 'B' : 'E'})`, () => this.close(), true);
-    buttons.appendChild(takeAllBtn);
-    buttons.appendChild(closeBtn);
-    panel.appendChild(buttons);
+    buttons.style.cssText = 'display:flex;gap:10px;margin-top:2px;';
+    buttons.appendChild(this.button(`모두 가져오기 (${this.padMode ? 'X' : 'T'})`, () => this.takeAll(), c.entries.length > 0));
+    buttons.appendChild(this.button(`닫기 (${this.padMode ? 'B' : 'E'})`, () => this.close(), true));
+    left.appendChild(buttons);
 
-    const hint = document.createElement('div');
-    hint.textContent = this.padMode
-      ? 'D-패드·왼 스틱 이동 · ←→ 칸 전환   A 가져오기/넣기 · A 길게 집어 들기 → A 놓기 / B 취소   X 모두 가져오기   Y 바닥에 버리기   B 닫기'
-      : 'WASD·화살표 이동 · ←→ 칸 전환   Enter·좌클릭 가져오기/넣기   T 모두 가져오기   X·우클릭 바닥에 버리기   E / Esc 닫기';
-    hint.style.cssText = 'margin-top:14px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;white-space:pre-line;';
-    panel.appendChild(hint);
+    const right = this.panel();
+    const bagTitle = document.createElement('div');
+    bagTitle.textContent = '내 가방';
+    bagTitle.style.cssText = 'color:#e8c76a;margin-bottom:10px;font-size:15px;';
+    right.appendChild(bagTitle);
+    right.appendChild(this.buildBag());
 
-    this.root.replaceChildren(panel);
+    wrap.appendChild(left);
+    wrap.appendChild(right);
+    this.root.replaceChildren(wrap);
     this.playFx();
     if (this.open && this.layout.some((e) => e !== null && !e.searched)) this.startSearch();
+  }
+
+  /** 패널 하나 — 격자 폭에 맞춘 고정 폭, 반투명 배경(뒤가 비친다) */
+  private panel(): HTMLDivElement {
+    const cols = balance.items.cols;
+    const width = cols * CELL_PX + (cols - 1) * GRID_GAP_PX + PANEL_PAD_X * 2;
+    const p = document.createElement('div');
+    p.style.cssText =
+      `width:${width}px;box-sizing:border-box;padding:18px ${PANEL_PAD_X}px 20px;` +
+      'background:rgba(21,21,27,0.78);border:1px solid rgba(70,70,84,0.9);border-radius:4px;' +
+      'backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);';
+    return p;
   }
 
   private button(label: string, onClick: () => void, enabled: boolean): HTMLButtonElement {
