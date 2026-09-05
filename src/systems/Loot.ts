@@ -67,6 +67,9 @@ export function rollLoot(enemyType: string, rng: () => number = Math.random): Lo
   if (rng() < cfg.potion.dropChance || (def.boss && cfg.potion.bossAlways)) mergeEntry(out, { kind: 'potion', count: 1 });
   if (rng() < cfg.manaPotion.dropChance || (def.boss && cfg.potion.bossAlways)) mergeEntry(out, { kind: 'mana', count: 1 });
   if (rng() < cfg.food.dropChance) mergeEntry(out, { kind: 'food', count: 1 });
+  // 대형 물약 — 흔치 않다. 보스는 대형 체력 물약 확정 (2026-09-04)
+  if (rng() < cfg.potionLarge.dropChance || (def.boss && cfg.potionLarge.bossAlways)) mergeEntry(out, { kind: 'potion_large', count: 1 });
+  if (rng() < cfg.manaPotionLarge.dropChance) mergeEntry(out, { kind: 'mana_large', count: 1 });
   // 화살 — 활을 든 적만. 이게 없으면 활은 빗나갈 때마다 순손실이라 제단에서 사 쓰는 무기가 된다
   if (def.arrowDrop) {
     let count = def.arrowDrop.min;
@@ -461,7 +464,7 @@ export function takeOne(world: World, index: number): TakeResult {
   return takeOneImpl(world, c, index, true);
 }
 
-const TAKE_ORDER: Record<LootKind, number> = { gold: 0, sigil: 1, equip: 1, arrow: 2, potion: 3, mana: 3, food: 3 };
+const TAKE_ORDER: Record<LootKind, number> = { gold: 0, sigil: 1, equip: 1, arrow: 2, potion: 3, mana: 3, potion_large: 3, mana_large: 3, food: 3 };
 
 /** 모두 가져오기 — 골드 → 각인 → 화살 → 소모품 순. 못 들어간 것은 남고, 거부 알림은 한 번만
  *  (소모품이 남았으면 '가방 가득', 화살만 남았으면 '화살통 가득') */

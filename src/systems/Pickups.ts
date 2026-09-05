@@ -26,7 +26,7 @@ function wants(world: World, kind: string): boolean {
 }
 
 /** 손(E)으로 집는 종류 — 소모품 셋 + 각인(2026-09-04 아이템화). 자석에 걸리지 않고 바라보며 E */
-const CONSUMABLE_KINDS: ReadonlySet<string> = new Set(['potion', 'mana', 'food', 'sigil', 'equip']);
+const CONSUMABLE_KINDS: ReadonlySet<string> = new Set(['potion', 'mana', 'potion_large', 'mana_large', 'food', 'sigil', 'equip']);
 
 /** 지금 집을 수 있는 바닥 소모품 — 반경·시야각(loot.pickup) 안에서 가장 가까운 것.
  *  날아오는 중·유예 중·튕겨 돌아가는 중은 뺀다 */

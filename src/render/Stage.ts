@@ -4570,10 +4570,11 @@ export class Stage {
       }
       group.add(key);
       group.add(new THREE.PointLight(KEY_COLOR, 0.9, 5, 0));
-    } else if (kind === 'potion' || kind === 'mana') {
-      const color = kind === 'mana' ? MANA_POTION_COLOR : POTION_COLOR;
+    } else if (kind === 'potion' || kind === 'mana' || kind === 'potion_large' || kind === 'mana_large') {
+      const large = kind === 'potion_large' || kind === 'mana_large';
+      const color = kind === 'mana' || kind === 'mana_large' ? itemColor(kind) : itemColor(kind);
       const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.11, 0.13, 0.24, 8),
+        new THREE.CylinderGeometry(large ? 0.15 : 0.11, large ? 0.18 : 0.13, large ? 0.3 : 0.24, 8),
         new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.5 }),
       );
       body.name = 'gem';
@@ -4748,6 +4749,7 @@ export class Stage {
         kind === 'gold' ? GOLD_COLOR
         : kind === 'potion' ? POTION_COLOR
         : kind === 'mana' ? MANA_POTION_COLOR
+        : kind === 'potion_large' || kind === 'mana_large' ? itemColor(kind)
         : kind === 'food' ? FOOD_COLOR
         : kind === 'arrow' ? 0xd8d0b8
         : kind === 'ammo' ? AMMO_GLOW

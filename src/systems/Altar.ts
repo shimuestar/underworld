@@ -10,9 +10,9 @@ import { addItem, countOf, hasRoom } from '../core/Inventory';
 import type { World } from '../core/World';
 
 /** 제단 상점 품목 */
-export type ShopItem = 'heal' | 'mana' | 'ammo' | 'arrow' | 'grenade' | 'battery';
+export type ShopItem = 'heal' | 'mana' | 'healLarge' | 'manaLarge' | 'ammo' | 'arrow' | 'grenade' | 'battery';
 
-export const SHOP_ITEMS: ShopItem[] = ['heal', 'mana', 'ammo', 'arrow', 'grenade', 'battery'];
+export const SHOP_ITEMS: ShopItem[] = ['heal', 'mana', 'healLarge', 'manaLarge', 'ammo', 'arrow', 'grenade', 'battery'];
 
 export function tick(world: World, _dt: number): void {
   const altar = world.level.altarPos;
@@ -124,6 +124,19 @@ export function shopState(world: World, item: ShopItem): ShopState {
       max = bagCap();
       bagFull = !hasRoom(world, 'mana');
       break;
+    // 대형 물약 (2026-09-04) — 2배 회복, 절반은 5초 지속. 값도 2배 남짓
+    case 'healLarge':
+      ({ price, amount, stock: stockMax } = shop.healLarge);
+      have = countOf(world, 'potion_large');
+      max = bagCap();
+      bagFull = !hasRoom(world, 'potion_large');
+      break;
+    case 'manaLarge':
+      ({ price, amount, stock: stockMax } = shop.manaLarge);
+      have = countOf(world, 'mana_large');
+      max = bagCap();
+      bagFull = !hasRoom(world, 'mana_large');
+      break;
     case 'ammo':
       ({ price, amount, stock: stockMax } = shop.ammo);
       have = w.reserve;
@@ -187,6 +200,12 @@ export function purchase(world: World, item: ShopItem): boolean {
       break;
     case 'mana':
       for (let i = 0; i < state.amount; i++) addItem(world, 'mana');
+      break;
+    case 'healLarge':
+      for (let i = 0; i < state.amount; i++) addItem(world, 'potion_large');
+      break;
+    case 'manaLarge':
+      for (let i = 0; i < state.amount; i++) addItem(world, 'mana_large');
       break;
     case 'ammo':
       w.reserve = Math.min(state.max, w.reserve + state.amount);

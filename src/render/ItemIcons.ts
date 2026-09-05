@@ -51,7 +51,19 @@ function meat(color: string): string {
   );
 }
 
-const SHAPES: Record<string, (color: string) => string> = { flask, meat };
+/** 대형 약병 — 몸통이 넓고 낮은 병에 띠 하나. 작은 병과 한눈에 구분된다 (2026-09-04) */
+function flaskLarge(color: string): string {
+  return (
+    `<path d="M9 2h6v3.5l4.6 5.5a8.4 8.4 0 1 1-15.2 0L9 5.5V2z" ` +
+    `fill="${color}" stroke="${OUTLINE}" stroke-width="1.4" stroke-linejoin="round"/>` +
+    `<rect x="8.2" y="1.2" width="7.6" height="2.6" rx="0.8" fill="${GLASS}"/>` +
+    `<path d="M4.6 15.5h14.8" stroke="rgba(255,255,255,0.35)" stroke-width="1.2"/>` +
+    `<path d="M8.4 14.2a5.2 5.2 0 0 1 2.6-3.6" fill="none" stroke="rgba(255,255,255,0.5)" ` +
+    `stroke-width="1.3" stroke-linecap="round"/>`
+  );
+}
+
+const SHAPES: Record<string, (color: string) => string> = { flask, flaskLarge, meat };
 
 /** 아이콘 SVG 문자열. 모르는 icon 이름이면 색 네모로 물러난다 (없는 것보다 낫다) */
 /** 각인 팔면체 — 가방·전리품 공용 (색은 그 각인의 색) */

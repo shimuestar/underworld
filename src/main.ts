@@ -2101,11 +2101,22 @@ function showDamageTaken(amount: number, tone: DamageTone): void {
 let regenAcc = 0;
 let regenFlushAt = 0;
 events.on('food_regen_tick', (payload) => { regenAcc += (payload as { amount: number }).amount; });
+// 대형 물약 지속분 — 체력은 음식 회복과 같은 초록 묶음, 마나는 파란 묶음 (2026-09-04)
+let manaRegenAcc = 0;
+events.on('potion_regen_tick', (payload) => {
+  const d = payload as { stat: 'hp' | 'mp'; amount: number };
+  if (d.stat === 'hp') regenAcc += d.amount;
+  else manaRegenAcc += d.amount;
+});
 function flushRegenNumber(now: number): void {
-  if (regenAcc <= 0 || now < regenFlushAt) return;
+  if ((regenAcc <= 0 && manaRegenAcc <= 0) || now < regenFlushAt) return;
   if (regenAcc >= 0.5) {
     showStatNumber(regenAcc, 'regen', 'hp');
     regenAcc = 0;
+  }
+  if (manaRegenAcc >= 0.5) {
+    showStatNumber(manaRegenAcc, 'mana', 'mana');
+    manaRegenAcc = 0;
   }
   regenFlushAt = now + balance.hud.damageTaken.regenFlushMs;
 }
@@ -2274,9 +2285,10 @@ events.on('item_used', (payload) => {
   const parts: string[] = [];
   if (info.healed > 0) parts.push(`+${Math.round(info.healed)} HP`);
   if (info.restored > 0) parts.push(`+${Math.round(info.restored)} 마나`);
-  showReaction(`${parts.join('  ')}   (남은 ${info.left}개)`, 1000);
-  // 이 아이템이 만지는 게이지만 깜빡인다 — 이미 가득했으면 끝부분만
   const idef = itemDef(info.kind);
+  if (idef.overTime) parts.push(`나머지는 ${Math.round(idef.overTime.durationTicks / 60)}초 동안`); // 대형 물약
+  showReaction(`${parts.join('  ')}   (남은 ${info.left}개)`, 1200);
+  // 이 아이템이 만지는 게이지만 깜빡인다 — 이미 가득했으면 끝부분만
   if (idef.heal > 0) flashRestoreBar('status-hp-fill', info.healed <= 0);
   if (idef.restore > 0) flashRestoreBar('status-mana-fill', info.restored <= 0);
   if (idef.regen) flashRestoreBar('status-stamina-fill', false); // 지속 효과 시작 — 스태미너도
@@ -2850,7 +2862,7 @@ events.on('altar_entered', () => {
   setUiOpen(true);
 });
 const SHOP_LABEL: Record<string, string> = {
-  heal: '체력 물약', mana: '마나 물약', ammo: '권총탄', arrow: '화살',
+  heal: '체력 물약', mana: '마나 물약', healLarge: '대형 체력 물약', manaLarge: '대형 마나 물약', ammo: '권총탄', arrow: '화살',
   grenade: '수류탄', battery: '배터리',
 };
 events.on('shop_purchased', (payload) => {

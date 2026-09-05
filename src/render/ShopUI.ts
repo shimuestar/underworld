@@ -8,6 +8,8 @@ import * as Altar from '../systems/Altar';
 const ROWS: { item: Altar.ShopItem; name: string; unit: string; bag?: boolean }[] = [
   { item: 'heal', name: '체력 물약', unit: '개', bag: true },
   { item: 'mana', name: '마나 물약', unit: '개', bag: true },
+  { item: 'healLarge', name: '대형 체력 물약', unit: '개', bag: true },
+  { item: 'manaLarge', name: '대형 마나 물약', unit: '개', bag: true },
   { item: 'ammo', name: '권총탄', unit: '발' },
   { item: 'arrow', name: '화살', unit: '대' },
   { item: 'grenade', name: '수류탄', unit: '개' },

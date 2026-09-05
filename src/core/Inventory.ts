@@ -18,6 +18,10 @@ export interface ItemDef {
   restore: number;
   /** 지속 회복(음식) — 30초 동안 HP 가 아주 천천히 차고 스태미너 회복이 빨라진다 */
   regen?: { durationTicks: number; healPerTick: number; staminaRegenMul: number };
+  /** 대형 물약 — instantRatio 만큼 즉시, 나머지는 durationTicks 동안 (2026-09-04) */
+  overTime?: { instantRatio: number; durationTicks: number };
+  /** 퀵슬롯 칸의 짧은 이름 (없으면 이름 앞 두 글자) */
+  short?: string;
 }
 
 export function itemDef(kind: ItemKind): ItemDef {

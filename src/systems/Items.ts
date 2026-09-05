@@ -29,6 +29,25 @@ export function tick(world: World, _dt: number): void {
     if (world.foodRegenTicks === 0) world.events.emit('food_regen_ended', {});
   }
 
+  // 대형 물약 지속분 — 절반은 마신 순간, 나머지는 durationTicks(5초) 동안 고르게 (2026-09-04)
+  for (const stat of ['hp', 'mp'] as const) {
+    const r = world.potionRegen[stat];
+    if (r.ticks <= 0 || r.amount <= 0) continue;
+    const step = r.amount / r.ticks;
+    r.ticks--;
+    r.amount = Math.max(0, r.amount - step);
+    if (world.dead) continue;
+    if (stat === 'hp') {
+      const before = world.player.health;
+      world.player.health = Math.min(balance.player.healthMax, world.player.health + step);
+      world.events.emit('potion_regen_tick', { stat, amount: world.player.health - before });
+    } else {
+      const before = world.mana.value;
+      world.mana.value = Math.min(balance.mana.max, world.mana.value + step);
+      world.events.emit('potion_regen_tick', { stat, amount: world.mana.value - before });
+    }
+  }
+
   // 먼저 진행분을 흘린 뒤에 이번 틱 입력을 받는다 —
   // 순서를 뒤집으면 시작한 그 틱이 한 번 더 세어져 channelTicks 보다 한 틱 짧아진다
   advanceChannel(world);
@@ -78,9 +97,19 @@ function drink(world: World, kind: ItemKind, index: number): void {
   const p = world.player;
   const hpBefore = p.health;
   const manaBefore = world.mana.value;
-  if (def.heal > 0) p.health = Math.min(balance.player.healthMax, p.health + def.heal * world.modifiers.potionHealMul); // 활력 목걸이
+  // 대형 물약은 instantRatio 만큼 즉시, 나머지는 potionRegen 에 실어 durationTicks 동안 (2026-09-04)
+  const ot = def.overTime;
+  const healTotal = def.heal * world.modifiers.potionHealMul; // 활력 목걸이
+  const restoreTotal = def.restore;
+  if (def.heal > 0) {
+    const now = ot ? healTotal * ot.instantRatio : healTotal;
+    p.health = Math.min(balance.player.healthMax, p.health + now);
+    if (ot) queueRegen(world.potionRegen.hp, healTotal - now, ot.durationTicks);
+  }
   if (def.restore > 0) {
-    world.mana.value = Math.min(balance.mana.max, world.mana.value + def.restore);
+    const now = ot ? restoreTotal * ot.instantRatio : restoreTotal;
+    world.mana.value = Math.min(balance.mana.max, world.mana.value + now);
+    if (ot) queueRegen(world.potionRegen.mp, restoreTotal - now, ot.durationTicks);
   }
   if (def.regen) world.foodRegenTicks = def.regen.durationTicks; // 겹치면 갱신 — 중첩 없음
   world.events.emit('item_used', {
@@ -90,6 +119,13 @@ function drink(world: World, kind: ItemKind, index: number): void {
     restored: world.mana.value - manaBefore,
     left: countOf(world, kind),
   });
+}
+
+/** 지속분을 싣는다 — 겹치면 양은 더하고 남은 시간은 긴 쪽으로 (한 병당 5초 안에 다 찬다) */
+function queueRegen(r: { amount: number; ticks: number }, amount: number, ticks: number): void {
+  if (amount <= 0) return;
+  r.amount += amount;
+  r.ticks = Math.max(r.ticks, ticks);
 }
 
 /** 퀵슬롯 하나를 쓰기 시작한다. 실패 이유는 item_denied 로 알린다 —

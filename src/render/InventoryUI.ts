@@ -655,7 +655,7 @@ export class InventoryUI {
           `opacity:${count > 0 ? 1 : 0.25};`;
         cell.appendChild(icon);
         const name = document.createElement('div');
-        name.textContent = `${def.name.slice(0, 2)} ${count}`;
+        name.textContent = `${def.short ?? def.name.slice(0, 2)} ${count}`;
         name.style.cssText =
           `position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;` +
           `color:${count > 0 ? '#cfd2da' : '#555c66'};`;

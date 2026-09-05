@@ -664,10 +664,10 @@ export interface BarrelState {
 }
 
 /** 가방에 들어가는 종류 — 소모품 셋 + 각인(2026-09-04 아이템화: 스택 불가, sigilId 를 든다). 골드는 가방을 쓰지 않는다 */
-export type ItemKind = 'potion' | 'mana' | 'food' | 'sigil' | 'equip';
+export type ItemKind = 'potion' | 'mana' | 'potion_large' | 'mana_large' | 'food' | 'sigil' | 'equip';
 
 /** 소모품 종류 — 퀵슬롯·마시기·자동 등록 대상. 각인은 여기 없다 */
-export const ITEM_KINDS: ItemKind[] = ['potion', 'mana', 'food'];
+export const ITEM_KINDS: ItemKind[] = ['potion', 'mana', 'potion_large', 'mana_large', 'food'];
 
 /** 가방 한 칸 — 같은 종류가 count 개 쌓여 있다. 빈 칸은 null. 각인은 count 1 에 sigilId */
 export interface InventorySlot {
@@ -710,7 +710,7 @@ export interface LifeMoteState {
 export interface GroundItemState {
   id: number;
   /** 바닥 아이템 종류 — 줍는 주체가 다르다 (sigil: Sigils / potion·gold: Pickups) */
-  kind: 'sigil' | 'equip' | 'potion' | 'mana' | 'food' | 'gold' | 'arrow' | 'key' | 'grave' | 'ammo' | 'grenade' | 'battery' | 'pouch';
+  kind: 'sigil' | 'equip' | 'potion' | 'mana' | 'potion_large' | 'mana_large' | 'food' | 'gold' | 'arrow' | 'key' | 'grave' | 'ammo' | 'grenade' | 'battery' | 'pouch';
   x: number;
   z: number;
   /** kind==='sigil' 일 때만 */
@@ -1211,6 +1211,11 @@ export class World {
   lockOnSwitchCooldown = 0;
   /** 음식 지속 회복 잔여 틱 — HP 미세 회복 + 스태미너 회복 가속 (Items 가 줄인다) */
   foodRegenTicks = 0;
+  /** 대형 물약의 지속분 — amount 를 ticks 동안 나눠 붓는다 (2026-09-04). 겹치면 양은 더하고 시간은 긴 쪽 */
+  potionRegen: { hp: { amount: number; ticks: number }; mp: { amount: number; ticks: number } } = {
+    hp: { amount: 0, ticks: 0 },
+    mp: { amount: 0, ticks: 0 },
+  };
 
   /** 마시는 중 — 끝까지 가야 효과가 난다. 끊기면 아이템은 소모되지 않는다.
    *  PlayerMove 가 이걸 보고 걸음을 늦추고, 손 연출도 여기서 읽는다 */

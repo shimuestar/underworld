@@ -28,8 +28,11 @@ const GAP_PX = 10;
 export function consumablePopup(world: World, kind: ItemKind, count: number, where = '', note?: string): PopupContent {
   const def = itemDef(kind);
   const lines: string[] = [];
-  if (def.heal > 0) lines.push(`체력 +${def.heal}`);
-  if (def.restore > 0) lines.push(`마나 +${def.restore}`);
+  const ot = def.overTime;
+  const sec = ot ? Math.round(ot.durationTicks / 60) : 0;
+  const split = (v: number): string => (ot ? ` (즉시 ${Math.round(v * ot.instantRatio)}, ${sec}초 동안 ${Math.round(v - v * ot.instantRatio)})` : '');
+  if (def.heal > 0) lines.push(`체력 +${def.heal}${split(def.heal)}`);
+  if (def.restore > 0) lines.push(`마나 +${def.restore}${split(def.restore)}`);
   if (def.regen) {
     const total = Math.round(def.regen.healPerTick * def.regen.durationTicks);
     lines.push(`${Math.round(def.regen.durationTicks / 60)}초 지속 회복 (총 +${total})`);

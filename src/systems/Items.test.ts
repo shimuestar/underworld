@@ -73,7 +73,7 @@ describe('가방 칸', () => {
     expect(CFG.rows).toBe(2);
     expect(world.inventory).toHaveLength(10);
     expect(world.quickslots).toHaveLength(4);
-    expect(world.quickslots.length).toBeGreaterThanOrEqual(ITEM_KINDS.length); // 종류가 셋이라 남는다
+    expect(ITEM_KINDS).toEqual(expect.arrayContaining(['potion', 'mana', 'potion_large', 'mana_large', 'food'])); // 대형 물약 둘 추가 (2026-09-04)
     expect(world.inventory.every((s) => s === null)).toBe(true);
   });
 
@@ -105,7 +105,7 @@ describe('가방 칸', () => {
       expect(hasRoom(world, kind)).toBe(false);
       expect(addItem(world, kind)).toBe(false);
     }
-    expect(countOf(world, 'potion') + countOf(world, 'mana') + countOf(world, 'food')).toBe(total);
+    expect(ITEM_KINDS.reduce((sum, kind) => sum + countOf(world, kind), 0)).toBe(total);
   });
 
   it('덜 찬 무더기가 있으면 칸이 다 차 있어도 자리가 있다', () => {
@@ -580,5 +580,52 @@ describe('음식 지속 회복 틱 이벤트 (2026-09-04)', () => {
     world.player.health = balance.player.healthMax;
     Items.tick(world, DT);
     expect(got).toHaveLength(5); // 만피 — 이벤트 없음
+  });
+});
+
+describe('대형 물약 (2026-09-04) — 2배 회복, 절반은 즉시·절반은 5초 동안', () => {
+  it('대형 체력 물약 — 마신 순간 절반, 300틱 뒤 전부 (총 50)', () => {
+    world.player.health = 10;
+    addItem(world, 'potion_large');
+    expect(world.quickslots[0]).toBe('potion_large'); // 자동 등록
+    drink(world, 1); // 퀵슬롯 1 (useSlot 은 1부터)
+    const def = balance.items.kinds.potion_large;
+    expect(world.player.health).toBeCloseTo(10 + def.heal * def.overTime.instantRatio, 5);
+    idle(world, Math.floor(def.overTime.durationTicks / 2));
+    expect(world.player.health).toBeGreaterThan(10 + def.heal * 0.6);
+    expect(world.player.health).toBeLessThan(10 + def.heal);
+    idle(world, def.overTime.durationTicks);
+    expect(world.player.health).toBeCloseTo(10 + def.heal, 3);
+    expect(world.potionRegen.hp.amount).toBe(0);
+  });
+
+  it('대형 마나 물약 — 마나도 같은 규칙 (총 70)', () => {
+    world.mana.value = 0;
+    addItem(world, 'mana_large');
+    drink(world, 1);
+    const def = balance.items.kinds.mana_large;
+    expect(world.mana.value).toBeCloseTo(def.restore * def.overTime.instantRatio, 5);
+    idle(world, def.overTime.durationTicks + 1);
+    expect(world.mana.value).toBeCloseTo(def.restore, 3);
+  });
+
+  it('두 병을 이어 마시면 지속분이 더해지고 시간은 긴 쪽 — 최대치를 넘지 않는다', () => {
+    world.player.health = 1;
+    addItem(world, 'potion_large');
+    addItem(world, 'potion_large');
+    drink(world, 1);
+    idle(world, CFG.useCooldownTicks);
+    drink(world, 1);
+    idle(world, balance.items.kinds.potion_large.overTime.durationTicks + 1);
+    expect(world.player.health).toBeCloseTo(Math.min(balance.player.healthMax, 1 + 100), 3);
+  });
+
+  it('모든 물약은 한 칸에 stackMax(5)까지 — 대형도 같다', () => {
+    for (let i = 0; i < CFG.stackMax + 1; i++) addItem(world, 'potion_large');
+    const slots = world.inventory.filter((s) => s?.kind === 'potion_large');
+    expect(slots).toHaveLength(2);
+    expect(slots[0]!.count).toBe(CFG.stackMax);
+    expect(slots[1]!.count).toBe(1);
+    expect(CFG.stackMax).toBe(5);
   });
 });

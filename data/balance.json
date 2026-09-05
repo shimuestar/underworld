@@ -437,6 +437,9 @@
       "equip": { "name": "장비", "color": "#8a8f9a", "icon": "equip", "heal": 0, "restore": 0 },
       "potion": { "name": "체력 물약", "color": "#e0384a", "icon": "flask", "heal": 25, "restore": 0 },
       "mana": { "name": "마나 물약", "color": "#3a7ce0", "icon": "flask", "heal": 0, "restore": 35 },
+      "_largeNote": "대형 물약 (2026-09-04 사용자) — 회복량은 기본의 2배. overTime: instantRatio 만큼 즉시, 나머지는 durationTicks(300 = 5초) 동안 천천히. short 는 퀵슬롯 칸의 짧은 이름. 스택은 다른 물약과 같이 stackMax(5)",
+      "potion_large": { "name": "대형 체력 물약", "short": "대형HP", "color": "#ff5a6e", "icon": "flaskLarge", "heal": 50, "restore": 0, "overTime": { "instantRatio": 0.5, "durationTicks": 300 } },
+      "mana_large": { "name": "대형 마나 물약", "short": "대형MP", "color": "#5a9cff", "icon": "flaskLarge", "heal": 0, "restore": 70, "overTime": { "instantRatio": 0.5, "durationTicks": 300 } },
       "_foodKindNote": "2026-08-30 개념 변경 — 물약은 응급, 음식은 지속. 먹자마자 heal 만큼만 차고, 30초(1800틱) 동안 HP 가 아주 천천히 총 ~16 차오르며(healPerTick 0.009×1800) 스태미너 회복이 25% 빨라진다. 마나는 더 이상 안 준다",
       "food": { "name": "말린 고기", "color": "#9c4a3c", "icon": "meat", "heal": 5, "restore": 0, "regen": { "durationTicks": 1800, "healPerTick": 0.009, "staminaRegenMul": 1.25 } }
     }
@@ -482,6 +485,9 @@
     },
     "_equipDropNote": "장비 드랍 — 보스 주머니는 확정 1개(bossAlways), 일반 적은 dropChance (0 = 안 떨어진다, 2026-09-04). 어느 장비인지는 전체에서 무작위",
     "equip": { "dropChance": 0, "bossAlways": true },
+    "_largeDropNote": "대형 물약 드랍 — 흔치 않다. 보스는 대형 체력 물약 확정",
+    "potionLarge": { "dropChance": 0.05, "bossAlways": true },
+    "manaPotionLarge": { "dropChance": 0.04 },
     "manaPotion": {
       "dropChance": 0.16
     },
@@ -627,6 +633,9 @@
       "cooldownTicks": 18000,
       "heal": { "price": 20, "amount": 1, "stock": 3 },
       "mana": { "price": 15, "amount": 1, "stock": 3 },
+      "_largeShopNote": "대형 물약 — 기본의 2배 회복(절반은 5초 지속)이라 값도 2배 남짓, 재고는 적게",
+      "healLarge": { "price": 45, "amount": 1, "stock": 2 },
+      "manaLarge": { "price": 35, "amount": 1, "stock": 2 },
       "ammo": { "price": 12, "amount": 20, "stock": 3 },
       "grenade": { "price": 25, "amount": 1, "stock": 2 },
       "battery": { "price": 20, "amount": 1, "stock": 1, "sparesMax": 4 },
