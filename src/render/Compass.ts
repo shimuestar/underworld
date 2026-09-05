@@ -44,6 +44,7 @@ const C = {
   pouchMine: '#7fbfff',
   trap: '#7d5cff',
   heading: '#9fe870',
+  north: '#ffd75e', // N 만 노란색·크게 — 한눈에 방위를 잡는 기준 글자
 } as const;
 const CARDINALS: [number, string][] = [[0, 'N'], [90, 'E'], [180, 'S'], [270, 'W']];
 const LOCK_PLAYER = 'player'; // Loot.PLAYER_OWNER 와 같은 값 — 내가 놓은 보관 주머니
@@ -83,9 +84,9 @@ export class Compass {
     const halfArc = ((cfg.arcDeg / 2) * Math.PI) / 180;
     const pad = 14; // 양 끝 화살촉 자리
     const usable = w / 2 - pad;
-    // 세로 배치(46px): 방위 글자 7 · 눈금선 15(시선 바늘이 가로지른다) · 표식 26/34(두 줄) · 거리·이름표 41
-    const bandY = 15;
-    const letterY = 7;
+    // 세로 배치(52px): 방위 글자 9(크게, N 은 더 크게) · 눈금선 20(시선 바늘이 가로지른다) · 표식 31/39(두 줄) · 거리·이름표 47
+    const bandY = 20;
+    const letterY = 9;
     const markerY = bandY + 11;
     const labelY = h - 5;
     const xOf = (bearing: number): number => w / 2 + (bearing / halfArc) * usable;
@@ -114,18 +115,19 @@ export class Compass {
       ctx.lineTo(x, bandY + (major ? 5 : 3));
       ctx.stroke();
     }
-    ctx.font = 'bold 10px monospace';
-    ctx.fillStyle = C.text;
     for (const [deg, letter] of CARDINALS) {
       const rel = wrap((deg * Math.PI) / 180 + p.yaw);
       if (Math.abs(rel) > halfArc) continue;
+      const north = deg === 0;
+      ctx.font = `bold ${north ? cfg.northPx : cfg.letterPx}px monospace`;
+      ctx.fillStyle = north ? C.north : C.text;
       ctx.fillText(letter, xOf(rel), letterY);
     }
     // 시선 — 눈금선을 가로지르는 초록 바늘 (글자·표식 줄은 건드리지 않는다)
     ctx.strokeStyle = C.heading;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(w / 2, bandY - 7);
+    ctx.moveTo(w / 2, bandY - 5);
     ctx.lineTo(w / 2, bandY + 7);
     ctx.stroke();
 

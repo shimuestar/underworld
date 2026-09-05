@@ -851,9 +851,9 @@
     "_statNumberNote": "같은 연출로 회복도 띄운다(2026-09-04) — 체력 물약·생명 입자 +N 초록(HP 바 위), 마나 물약 +N 파란색(마나 바 위), 음식 지속 회복은 regenFlushMs 마다 묶어 연한 초록 +N. 독·화염 감소는 종류 색 -N. 바(hp/mana)별로 따로 쌓인다",
     "_crosshairNote": "십자선 — 점 둘레의 네 선. gapPx 는 점과 선 사이 기본 간격, 활 당김 흔들림이 최대면 swayGapPx 만큼 더 벌어진다(손이 떨리면 조준이 넓어진다). 선은 패드 조준(LT) 중, 활을 꺼내 들었을 때, 그리고 총을 쏜 뒤 afterShotMs 동안 보인다(키보드도 패드와 같은 십자선 — 2026-09-04 사용자). 권총 연사 열(recoilHeat)도 흔들림처럼 선을 벌린다",
     "crosshair": { "gapPx": 4, "swayGapPx": 14, "afterShotMs": 2000 },
-    "_compassNote": "나침반 — 상단 중앙 가로 띠(widthPx×heightPx). 정면 ±arcDeg/2 만 펼치고 밖은 양 끝 화살촉. 표식: 위협(미니맵과 같은 조건, nearM~farM 로 크기 nearScale~farScale, maxCount) > 피격 쐐기 > 소리 핑 > 목표(출구·입구·제단·상자, 미니맵 안개로 본 것만·출구는 쇠창살 열리면 항상, 거리 숫자) > 주머니(loot.radiusM 안 maxCount) > 감지한 함정(trapRadiusM). 중앙 ±centerLabelDeg 안 표식 하나만 이름표. 항상 표시, 조작 없음 (2026-09-04 사용자 확정)",
+    "_compassNote": "나침반 — 상단 중앙 가로 띠(widthPx×heightPx). 정면 ±arcDeg/2 만 펼치고 밖은 양 끝 화살촉. 표식: 위협(미니맵과 같은 조건, nearM~farM 로 크기 nearScale~farScale, maxCount) > 피격 쐐기 > 소리 핑 > 목표(출구·입구·제단·상자, 미니맵 안개로 본 것만·출구는 쇠창살 열리면 항상, 거리 숫자) > 주머니(loot.radiusM 안 maxCount) > 감지한 함정(trapRadiusM). 중앙 ±centerLabelDeg 안 표식 하나만 이름표. 방위 글자는 letterPx, N 은 northPx 로 더 크고 노란색(2026-09-04 사용자). 항상 표시, 조작 없음",
     "compass": {
-      "widthPx": 360, "heightPx": 46, "arcDeg": 120, "tickEveryDeg": 15, "majorEveryDeg": 45, "centerLabelDeg": 3, "edgeChevron": true,
+      "widthPx": 360, "heightPx": 52, "arcDeg": 120, "tickEveryDeg": 15, "majorEveryDeg": 45, "centerLabelDeg": 3, "edgeChevron": true, "letterPx": 13, "northPx": 16,
       "threat": { "maxCount": 6, "nearM": 2.5, "farM": 14, "nearScale": 1.4, "farScale": 0.8 },
       "loot": { "radiusM": 8, "maxCount": 4 },
       "trapRadiusM": 12
