@@ -16,6 +16,8 @@ export interface MenuTabDef {
   hide(): void;
   /** 열려 있는 동안 매 프레임 (맵 다시 그리기 등) */
   update?(): void;
+  /** 이 탭이 화살표 키를 커서 이동에 쓰는가(가방) — 그러면 셸은 ←→ 로 탭을 바꾸지 않고, 탭이 격자 끝에서 onEdge 로 넘긴다 */
+  ownsArrows?: boolean;
 }
 
 export class MenuTabs {
@@ -37,8 +39,9 @@ export class MenuTabs {
     this.defs = defs;
     this.root = document.createElement('div');
     this.root.id = 'menuui';
+    // 헤더는 화면의 같은 자리에 고정 — 세로 가운데 정렬로 두면 탭마다 본문 높이가 달라 헤더가 위아래로 움직인다 (2026-09-04 사용자)
     this.root.style.cssText =
-      'position:fixed;inset:0;display:none;align-items:center;justify-content:center;' +
+      'position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding-top:72px;box-sizing:border-box;' +
       'background:rgba(0,0,0,0.72);color:#cfd2da;font:13px/1.6 monospace;user-select:none;z-index:10;';
     const column = document.createElement('div');
     column.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:10px;';
@@ -57,7 +60,13 @@ export class MenuTabs {
       if (e.code === 'Escape' && this.active !== 'bag') {
         e.preventDefault();
         this.hide();
+        return;
       }
+      // ←→ / A·D — 커서가 없는 탭(맵·스킬)에서 탭 전환. 가방은 격자 끝에서 onEdge 로 넘긴다.
+      // 전환한 그 키가 새로 열린 가방 탭의 커서 이동으로 새지 않게 같은 이벤트의 다른 리스너를 끊는다 (stopImmediatePropagation)
+      if (this.tab(this.active)?.ownsArrows) return;
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') { e.preventDefault(); e.stopImmediatePropagation(); this.next(-1); }
+      else if (e.code === 'ArrowRight' || e.code === 'KeyD') { e.preventDefault(); e.stopImmediatePropagation(); this.next(1); }
     });
   }
 
@@ -128,7 +137,12 @@ export class MenuTabs {
     this.renderHeader();
   }
 
+  private headerKey = '';
   private renderHeader(): void {
+    // 내용 서명이 같으면 DOM 을 건드리지 않는다 — 매 프레임 갈아 끼우면 mousedown~mouseup 사이 버튼이 바뀌어 클릭이 안 된다
+    const key = `${this.padMode ? 'p' : 'k'}|${this.active}|${this.tabs.map((t) => `${t.id}:${t.status?.() ?? ''}`).join(',')}`;
+    if (key === this.headerKey) return;
+    this.headerKey = key;
     const parts: HTMLElement[] = [];
     // 왼쪽 글리프 — 패드 LB / 마우스는 클릭이라 표기 없음
     if (this.padMode) {

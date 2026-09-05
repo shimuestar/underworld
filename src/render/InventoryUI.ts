@@ -76,6 +76,8 @@ export class InventoryUI {
   onPlacePouch: (() => void) | null = null;
   /** 창 안에서 닫았다(B·Esc) — main 이 uiOpen 을 되돌린다 */
   onClose: (() => void) | null = null;
+  /** 격자 끝에서 한 번 더 밀었다 — 셸이 옆 탭으로 넘긴다 (가방 왼쪽 끝 ← / 퀵슬롯 오른쪽 끝 →) */
+  onEdge: ((dir: number) => void) | null = null;
 
   constructor(private readonly world: World, parent: HTMLElement) {
     // 메뉴 창(MenuTabs)의 가방 탭 패널 — 배경·시간 정지는 셸이 맡고 여기는 내용만 그린다 (2026-09-04)
@@ -248,6 +250,10 @@ export class InventoryUI {
     if (this.pane === 'bag') {
       const row = Math.floor(this.sel / cols);
       const col = this.sel % cols;
+      if (dx < 0 && col === 0 && !this.carry) {
+        this.onEdge?.(-1); // 왼쪽 끝에서 한 번 더 — 이전 탭
+        return;
+      }
       if (dx > 0 && col === cols - 1) {
         this.pane = 'quick';
         this.selQ = q === CROSS_AREAS.length ? 3 : 0; // 십자의 왼쪽 칸으로 들어간다
@@ -259,6 +265,10 @@ export class InventoryUI {
     } else if (q === CROSS_AREAS.length) {
       const dir = dx < 0 ? 0 : dx > 0 ? 1 : dy < 0 ? 2 : 3;
       const next = CROSS_NAV[this.selQ]?.[dir] ?? null;
+      if (dx > 0 && this.selQ === 1 && !this.carry) {
+        this.onEdge?.(1); // 십자 오른쪽 끝에서 한 번 더 — 다음 탭
+        return;
+      }
       if (next === -1) {
         this.pane = 'bag';
         this.sel = Math.min(slots - 1, Math.floor(this.sel / cols) * cols + cols - 1); // 같은 줄의 오른쪽 끝 칸으로
@@ -267,6 +277,7 @@ export class InventoryUI {
       }
     } else {
       if (dx < 0 && this.selQ === 0) this.pane = 'bag';
+      else if (dx > 0 && this.selQ === q - 1 && !this.carry) { this.onEdge?.(1); return; }
       else if (dx !== 0) this.selQ = Math.max(0, Math.min(q - 1, this.selQ + dx));
     }
     this.rebuild();
