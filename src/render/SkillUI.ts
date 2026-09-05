@@ -62,13 +62,12 @@ export class SkillUI {
   /** 스킬 칸에 올리려고 골라 둔 액티브 (null = 없음) */
   private picked: string | null = null;
 
-  constructor(private readonly world: World) {
+  constructor(private readonly world: World, parent: HTMLElement) {
+    // 메뉴 창(MenuTabs)의 스킬 탭 패널 — 배경·시간 정지는 셸이 맡는다 (2026-09-04)
     this.root = document.createElement('div');
     this.root.id = 'skillui';
-    this.root.style.cssText =
-      'position:fixed;inset:0;display:none;align-items:center;justify-content:center;' +
-      'background:rgba(0,0,0,0.72);color:#cfd2da;font:13px/1.6 monospace;user-select:none;z-index:10;';
-    document.body.appendChild(this.root);
+    this.root.style.cssText = 'display:none;';
+    parent.appendChild(this.root);
 
     // 창 안에서 Z·X·C·V — 고른 액티브를 그 칸에 올린다 (전투 키와 같은 자리)
     window.addEventListener('keydown', (e) => {
@@ -84,7 +83,7 @@ export class SkillUI {
     this.altarMode = altarMode;
     this.open = true;
     this.picked = null;
-    this.root.style.display = 'flex';
+    this.root.style.display = 'block';
     this.rebuild();
   }
 

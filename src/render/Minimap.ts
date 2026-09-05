@@ -28,6 +28,8 @@ const ENEMY_IDLE = 'rgba(224,68,68,0.35)';
 const ENEMY_STAGGERED = '#cc9922';
 const PING = 'rgba(230,230,240,0.7)'; // 소리 핑 — 흐릿한 잿빛 점
 const EXIT_LOCKED = '#c23a3a'; // 봉인된 출구 — 붉은 쇠창살 (열리면 기본 녹색 X 가 드러난다)
+/** 큰 지도(맵 탭)가 같은 색을 쓴다 — 지도 둘이 다른 색이면 안 된다 */
+export const MINIMAP = { colors: COLORS, floor: FLOOR, fog: FOG, player: PLAYER, enemy: ENEMY, enemyIdle: ENEMY_IDLE, enemyStaggered: ENEMY_STAGGERED, ping: PING, exitLocked: EXIT_LOCKED } as const;
 
 export class Minimap {
   private readonly canvas: HTMLCanvasElement;
@@ -107,6 +109,10 @@ export class Minimap {
   /** 층 이름 표시 — main 이 층을 갈아 끼울 때 부른다 ('지하 1층' 등) */
   setFloorTitle(text: string): void {
     this.floorTitle.textContent = text;
+  }
+  /** 지금 층 이름 — 맵 탭 헤더·제목이 같은 글을 쓴다 */
+  get floorTitleText(): string {
+    return this.floorTitle.textContent ?? '';
   }
 
   private revealedSetFor(level: Level): Set<number> {

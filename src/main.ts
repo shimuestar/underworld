@@ -13,6 +13,8 @@ import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt, spawnProps, spaw
 import { Minimap } from './render/Minimap';
 import { Awareness } from './render/Awareness';
 import { Compass } from './render/Compass';
+import { MenuTabs } from './render/MenuTabs';
+import { MapPanel } from './render/MapPanel';
 import { PauseMenu } from './render/PauseMenu';
 import { GamepadUI, padDiagramSvg } from './render/GamepadUI';
 import { buttonName, type PadAction } from './core/Gamepad';
@@ -305,14 +307,40 @@ window.addEventListener('keydown', (e) => {
 // 세션 경계에서 콘솔에 스냅샷 자동 출력
 events.on('player_died', () => console.log('[metrics] 사망 시점 스냅샷', metrics.snapshot(world)));
 events.on('zone_cleared', () => console.log('[metrics] 클리어 스냅샷', metrics.snapshot(world)));
-const inventoryUI = new InventoryUI(world); // I — 가방·소모품
-// 보관 주머니 — 가방 창에서 빈 주머니를 발밑에 내려놓고 곧장 루팅 창으로 (loot_opened 가 창을 연다)
-inventoryUI.onClose = () => setUiOpen(false); // B·Esc 로 창 안에서 닫았다
+// 메뉴 창 — 탭(맵·가방·스킬)을 가진 하나의 창. 패널들은 셸의 body 에 그린다 (2026-09-04)
+const menuTabsPending: import('./render/MenuTabs').MenuTabDef[] = [];
+const menuUI = new MenuTabs(menuTabsPending); // 탭 정의는 아래에서 채운다 (order 는 데이터)
+const inventoryUI = new InventoryUI(world, menuUI.body); // 가방 탭 — 소모품
+// 보관 주머니 — 가방 탭에서 빈 주머니를 발밑에 내려놓고 곧장 루팅 창으로 (loot_opened 가 창을 연다)
+inventoryUI.onClose = () => menuUI.hide(); // B·Esc 로 창 안에서 닫았다 — 셸이 uiOpen 을 되돌린다
 inventoryUI.onPlacePouch = () => {
-  inventoryUI.hide();
+  menuUI.hide();
   Loot.createPlayerPouch(world);
 };
-const skillUI = new SkillUI(world); // Tab — 스킬 (부위 부착 · 퀵슬롯)
+const skillUI = new SkillUI(world, menuUI.body); // 스킬 탭 — 부위 부착 · 퀵슬롯
+const mapPanel = new MapPanel(world, awareness, (x, z) => minimap.isRevealedAt(x, z), menuUI.body); // 맵 탭 — 큰 지도
+menuTabsPending.push(
+  {
+    id: 'map', label: '맵', status: () => minimap.floorTitleText,
+    show: () => { mapPanel.setTitle(minimap.floorTitleText); mapPanel.show(); }, hide: () => mapPanel.hide(), update: () => mapPanel.update(),
+  },
+  {
+    id: 'bag', label: '가방',
+    status: () => `${world.inventory.filter((s) => s !== null).length}/${world.inventory.length}`,
+    show: () => inventoryUI.show(), hide: () => inventoryUI.hide(),
+  },
+  {
+    id: 'skill', label: '스킬',
+    status: () => `액티브 ${world.skillSlots.filter((slot) => slot !== null).length}/${balance.skills.quickslots}`,
+    show: () => skillUI.show(menuUI.altar), hide: () => skillUI.hide(),
+  },
+);
+menuUI.onOpenChange = (open) => setUiOpen(open);
+menuUI.onTabChange = () => {
+  audio.play('ui_tab');
+  padRumble('interact');
+};
+events.on('player_died', () => menuUI.hide());
 const shopUI = new ShopUI(world);
 /** UI 오버레이 열기/닫기 — 닫을 때 포인터 락을 바로 되찾는다.
  *  안 그러면 메뉴를 나온 뒤 커서가 남아 화면을 한 번 클릭해야 조작이 돌아온다 */
@@ -335,29 +363,28 @@ events.on('loot_opened', (payload) => {
   // 상자를 처음 여는 소리는 chest_opened 가 낸다 — 다시 뒤질 때와 주머니는 가죽 스침
   if (info.kind === 'pouch' || info.first === false) audio.play('pouch_open');
   padRumble('interact');
-  inventoryUI.hide();
-  skillUI.hide();
+  menuUI.hide();
   lootUI.show();
   setUiOpen(true);
 });
+// 메뉴 창 키 — I 가방 탭 · M 맵 탭 · Tab 스킬 탭 (같은 탭이 열려 있으면 닫힌다). 마우스는 탭 헤더 클릭
 window.addEventListener('keydown', (e) => {
-  if (lootUI.open) return; // 루팅 창은 자기 키(E/Esc)로만 닫는다 — Tab·I 가 다른 창을 겹쳐 열지 않게
+  if (lootUI.open) return; // 루팅 창은 자기 키(E/Esc)로만 닫는다 — 다른 창을 겹쳐 열지 않게
   if (e.code === 'Tab') {
     e.preventDefault();
-    // 상점에서 Tab — 스킬 창으로 넘어간다 (둘이 겹쳐 뜨지 않게). 제단에서는 패시브를 뗄 수 있다
-    inventoryUI.hide();
+    // 상점에서 Tab — 스킬 탭(제단 모드: 패시브를 뗄 수 있다)으로 넘어간다 (둘이 겹쳐 뜨지 않게)
     if (shopUI.open) {
       shopUI.hide();
-      setUiOpen(skillUI.toggle(true));
+      menuUI.show('skill', true);
       return;
     }
-    setUiOpen(skillUI.toggle());
+    if (world.dead) return;
+    menuUI.toggleTab('skill');
+    return;
   }
-  if (e.code === keyBindings.code('inventory')) {
-    if (shopUI.open || world.dead) return;
-    skillUI.hide();
-    setUiOpen(inventoryUI.toggle());
-  }
+  if (shopUI.open || world.dead) return;
+  if (e.code === keyBindings.code('inventory')) menuUI.toggleTab('bag');
+  else if (e.code === keyBindings.code('map')) menuUI.toggleTab('map');
 });
 let restartConfirmUntil = 0;
 
@@ -2906,7 +2933,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
 
   floorIndex = index;
   const trapRoom = index === TRAP_ROOM;
-  minimap.setFloorTitle(trapRoom ? '트랩 시험방' : `지하 ${index + 1}층`);
+  minimap.setFloorTitle(trapRoom ? '트랩 시험방' : `지하 ${index + 1}층`); // 맵 탭은 미니맵의 층 이름을 그대로 읽는다
   levelJson = trapRoom ? (testTraps as unknown as typeof z01f1) : ZONE[index]!;
   traveling = false;
 
@@ -3139,22 +3166,22 @@ function simulate(dt: number): void {
     setPaused(true);
     return;
   }
-  // Menu 는 창이 하나뿐인 패드를 위해 순환한다: 닫힘 → 가방 → 스킬 → 닫힘
+  // Menu = 메뉴 창 열기/닫기 (순환 폐지 — 탭은 LB/RB). 상점에서는 스킬 탭(제단 모드)으로
   if (input.gamepad.pressed('inventory')) {
     if (lootUI.open) {
       lootUI.padClose(); // 루팅 창은 Menu 로도 닫힌다 (다른 창으로 넘어가지 않는다)
     } else if (shopUI.open) {
       shopUI.hide();
-      setUiOpen(skillUI.toggle(true));
-    } else if (inventoryUI.open) {
-      inventoryUI.hide();
-      setUiOpen(skillUI.toggle());
-    } else if (skillUI.open) {
-      skillUI.hide();
-      setUiOpen(false);
+      menuUI.show('skill', true);
     } else {
-      setUiOpen(inventoryUI.toggle());
+      menuUI.toggle();
     }
+  }
+  if (menuUI.open && input.gamepad.connected) {
+    menuUI.padMode = input.lastDevice === 'pad';
+    if (input.gamepad.rawPressed(4)) menuUI.next(-1); // LB — 왼쪽 탭 (빙글)
+    else if (input.gamepad.rawPressed(5)) menuUI.next(1); // RB — 오른쪽 탭
+    else if (input.gamepad.rawPressed(1) && menuUI.active !== 'bag') menuUI.hide(); // B — 가방 탭은 InventoryUI 가 들기·대화상자 취소를 먼저
   }
   // 상점 — 일시정지 메뉴와 같은 고정 버튼 규약. uiOpen 중엔 게임 시스템이 다
   // 멈춰 있어서 A·B 가 상호작용·회피로 새지 않는다
@@ -3721,6 +3748,7 @@ function render(alpha: number): void {
   }
   minimap.update(p, world.enemies, alpha, world.exitOpen, world.godMode === true);
   compass.update(world, hitMarks); // 위협·목표의 방향 — 조준선 바로 위
+  menuUI.update(); // 메뉴 창 — 헤더 상태·맵 탭 다시 그리기
   flushRegenNumber(performance.now()); // 음식 지속 회복 +N (1초 묶음)
 
   stage.setLockOn(world.lockOnId); // 락온 마름모 — 잡힌 적 머리 위
@@ -4186,6 +4214,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__audio = audio; // 소리 재생 호출 추적용(헤드리스)
   (window as unknown as Record<string, unknown>).__lootUI = lootUI; // 루팅 창 패드 경로 검증용
   (window as unknown as Record<string, unknown>).__compass = compass;
+  (window as unknown as Record<string, unknown>).__menuUI = menuUI;
 }
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)

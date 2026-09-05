@@ -77,13 +77,12 @@ export class InventoryUI {
   /** 창 안에서 닫았다(B·Esc) — main 이 uiOpen 을 되돌린다 */
   onClose: (() => void) | null = null;
 
-  constructor(private readonly world: World) {
+  constructor(private readonly world: World, parent: HTMLElement) {
+    // 메뉴 창(MenuTabs)의 가방 탭 패널 — 배경·시간 정지는 셸이 맡고 여기는 내용만 그린다 (2026-09-04)
     this.root = document.createElement('div');
     this.root.id = 'sigilui';
-    this.root.style.cssText =
-      'position:fixed;inset:0;display:none;align-items:center;justify-content:center;' +
-      'background:rgba(0,0,0,0.72);color:#cfd2da;font:13px/1.6 monospace;user-select:none;z-index:10;';
-    document.body.appendChild(this.root);
+    this.root.style.cssText = 'display:none;';
+    parent.appendChild(this.root);
 
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
@@ -143,7 +142,7 @@ export class InventoryUI {
     this.yHoldTicks = 0;
     this.yConsumed = false;
     this.split = null;
-    this.root.style.display = 'flex';
+    this.root.style.display = 'block';
     this.rebuild();
   }
 

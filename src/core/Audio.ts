@@ -65,6 +65,7 @@ export type SoundName =
   | 'footstep_walk'
   | 'chain_locked'
   | 'unlock_chain'
+  | 'ui_tab'
   | 'shock'
   | 'freeze'
   | 'spell_impact'
@@ -695,6 +696,11 @@ export class GameAudio {
         this.tone(300, 0.08, 'triangle', 0.25, 0.02, 220);
         this.tone(1400, 0.05, 'triangle', 0.18, 0.09);
         this.tone(1750, 0.05, 'triangle', 0.16, 0.14);
+        break;
+      case 'ui_tab':
+        // 탭 넘김 — 짧고 마른 클릭
+        this.tone(880, 0.04, 'square', 0.18, 0, 1200);
+        this.noise(0.03, 0.12, 2400);
         break;
       case 'loot_stash':
         // 천 주머니에 넣는다 — 부드러운 툭

@@ -24,7 +24,8 @@ export const KEY_ACTIONS = [
   { id: 'slot3', label: '퀵슬롯 3' },
   { id: 'slot4', label: '퀵슬롯 4' },
   { id: 'slot5', label: '퀵슬롯 5' },
-  { id: 'inventory', label: '가방 · 스킬 열기' },
+  { id: 'inventory', label: '메뉴 창 — 가방 탭 열기' },
+  { id: 'map', label: '메뉴 창 — 맵 탭 열기' },
   { id: 'lockOn', label: '타겟 락온 켜기 · 끄기 (기본 비움)' },
 ] as const;
 
@@ -52,6 +53,7 @@ export const DEFAULT_KEY_BINDINGS: Record<KeyAction, string> = {
   slot4: 'Digit4',
   slot5: 'Digit5',
   inventory: 'KeyI',
+  map: 'KeyM',
   lockOn: '', // 마우스 유저는 불필요 — 원하면 설정에서 건다
 };
 
