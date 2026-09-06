@@ -1456,6 +1456,50 @@ describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만�
     expect(rayHitsEnemy(23, y, 20, -1, 0, 0, chief, enemyDef('goblin_chieftain'), 0)).toBeCloseTo(3 - 0.8, 6);
   });
 
+  it('외형 부위 표(visual, B1-2) — radius/height 배율이 기획서 §2 미터를 되돌리고, 눈 앞끝은 접촉 거리 안·낫 상한은 천장 아래', () => {
+    const v = def.visual!;
+    expect(v).toBeDefined();
+    const R = def.radius;
+    const H = def.height;
+    const m = (t: readonly [number, number, number]): number[] => [t[0] * R, t[1] * H, t[2] * R].map((n) => +n.toFixed(2));
+    // 몸통 2.3 × 1.5 × 2.6 at (0, 1.6, 0) — 피격 상자(halfX 1.25 / halfZ 1.85)가 몸통을 품는다
+    expect(m(v.body.size)).toEqual([2.3, 1.5, 2.6]);
+    expect(m(v.body.pos)).toEqual([0, 1.6, 0]);
+    expect((v.body.size[0] * R) / 2).toBeLessThanOrEqual(def.hitBox!.halfX);
+    expect((v.body.size[2] * R) / 2).toBeLessThanOrEqual(def.hitBox!.halfZ);
+    // 높은 머리 1.0 × 0.9 × 0.9 at (0, 2.35, −1.4) — 머리 앞면(−1.85)도 피격 상자 안, 꼭대기(2.8)는 height 아래
+    expect(m(v.head.size)).toEqual([1, 0.9, 0.9]);
+    expect(m(v.head.pos)).toEqual([0, 2.35, -1.4]);
+    expect(Math.abs(v.head.pos[2] * R) + (v.head.size[2] * R) / 2).toBeLessThanOrEqual(def.hitBox!.halfZ);
+    expect(v.head.pos[1] * H + (v.head.size[1] * H) / 2).toBeLessThanOrEqual(H);
+    // 약점 다섯 자리 — 눈 r0.26 (0, 2.35, −1.88) 앞끝 2.14 ≤ contactDist 2.15 / 관절 r0.30 (±1.15, 2.5, −0.8) / 심장 r0.35 (0, 0.6, −0.4) / 분출공 r0.30 (0, 1.65, −1.55)
+    expect(m(v.eye.pos)).toEqual([0, 2.35, -1.88]);
+    expect(+(v.eye.radius * R).toFixed(2)).toBe(0.26);
+    expect(Math.abs(v.eye.pos[2] * R) + v.eye.radius * R).toBeLessThanOrEqual(Enemies.contactDist(def));
+    expect(m(v.joints.pos)).toEqual([1.15, 2.5, -0.8]);
+    expect(+(v.joints.radius * R).toFixed(2)).toBe(0.3);
+    expect(m(v.heart.pos)).toEqual([0, 0.6, -0.4]);
+    expect(+(v.heart.radius * R).toFixed(2)).toBe(0.35);
+    expect(m(v.vent.pos)).toEqual([0, 1.65, -1.55]);
+    expect(+(v.vent.radius * R).toFixed(2)).toBe(0.3);
+    // 분출공은 머리(y ≥ 1.9) 아래에 있어 정면에서 가리지 않는다
+    expect(v.vent.pos[1] * H + v.vent.radius * R).toBeLessThanOrEqual(v.head.pos[1] * H - (v.head.size[1] * H) / 2 + 0.06);
+    // 낫 0.12 × 0.5 × 1.8 — 어깨 피벗 2.5 에서 45° 들어도 끝이 3.8 아래 (천장 4m)
+    expect(m(v.blade.size)).toEqual([0.12, 0.5, 1.8]);
+    expect(v.joints.pos[1] * H + v.blade.size[2] * R * Math.sin(Math.PI / 4)).toBeLessThanOrEqual(3.8);
+    // 어깨 피벗 + 위팔 + 낫이 사거리에 닿는다 (보이는 낫끝 = 판정 낫끝을 어깨 밀기 없이 그릴 수 있는 길이)
+    expect(Math.abs(v.joints.pos[2] * R) + v.upperArm.length * R + v.blade.size[2] * R).toBeGreaterThanOrEqual(def.attackRange * def.attack.impactRangeMul * 0.9);
+    // 등갑판 3장 2.1 × 0.25 × 0.8, 다리 4개 r0.22 h1.0 (±1.0, 0.5, ±1.0), 꼬리 r0.15 h1.2
+    expect(m(v.plates.size)).toEqual([2.1, 0.25, 0.8]);
+    expect(v.plates.z).toHaveLength(3);
+    expect(+(v.legs.height * H).toFixed(2)).toBe(1);
+    expect(m(v.legs.pos)).toEqual([1, 0.5, 1]);
+    expect(+(v.tail.length * R).toFixed(2)).toBe(1.2);
+    // 다른 적은 visual 블록이 없다 — 옛 인간형 외형 경로 그대로
+    expect(enemyDef('goblin_chieftain').visual).toBeUndefined();
+    expect(enemyDef('slime_mother').visual).toBeUndefined();
+  });
+
   it('보스 포효 기상 반경 — alertRadius(18) 밖의 잠든 적은 함께 깨지 않는다', () => {
     const boss = spawnEnemyAt(TYPE, 6 + 8, 6, 1);
     boss.yaw = Math.atan2(-(6 - boss.x), -(6 - boss.z)); // 플레이어를 본다

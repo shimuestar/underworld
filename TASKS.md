@@ -128,7 +128,7 @@
 ## M11 — 낫뿔 거수 (2026-09-04 기획 확정 — `docs/systems/boss_scythe_behemoth.md` §13, 3 배치 · 15 체크박스)
 
 - [x] **B1-1** 정의·스포너·테스트 — `scythe_behemoth`(attack 오른낫 파랑 + chargeAttack 빨강 hitOnContact 72틱, 임시 parriesToStagger 2 + executeDamage 240, hitBox·alertRadius·chargeOnKnockback), Spawner IMPLEMENTED, Boss.test describe
-- [ ] **B1-2** 외형 — Stage behemoth 분기(몸통·다리·높은 머리·뿔·낫 2자루 리그·등갑판·약점 구체 5개 장식), `debug/behemoth` 스크린샷 7장
+- [x] **B1-2** 외형 — Stage behemoth 분기(몸통·다리·높은 머리·뿔·낫 2자루 리그·등갑판·약점 구체 5개 장식), `debug/behemoth` 스크린샷 7장
 - [ ] **B1-3** 왼낫 교대·들이받기 — `attackAlt`/`closeAttack`, attackMode 'alt'|'close'
 - [ ] **B2-1** 약점 판정 코어 — `rayVsSphere`, `weakPoints[]`/`poseOffsets`/`rayHitsWeakPoint`, hitZonesImmune, 권총·화살 약점 우선
 - [ ] **B2-2** 패링 → 노출·머리 내림·눈 혼절 — `parryOutcome expose`, 눈 66 → staggered, 임시 parriesToStagger 제거

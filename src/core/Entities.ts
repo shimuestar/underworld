@@ -100,6 +100,38 @@ export interface EnemyAttackDef {
   splash?: ProjectileSplashDef;
 }
 
+/** 세 성분 좌표·치수 — [x, y, z]. x·z 는 def.radius 배, y 는 def.height 배 (Stage 가 곱한다) */
+export type VisualTriple = [number, number, number];
+
+/** 낫뿔 거수 외형 부위 정의(렌더 전용, 기획서 §2 표) — 좌표·치수를 radius/height 배율로 두고
+ *  Stage.buildBehemothRig 가 곱한다. radius·length·thickness 는 radius 배, legs.height 는 height 배.
+ *  색은 Stage 팔레트(튜닝값 아님). 판정(hitBox·약점 구체)과 그림이 같은 표를 읽게 하려는 자리다 */
+export interface BehemothVisualDef {
+  body: { size: VisualTriple; pos: VisualTriple };
+  /** 등갑판 — 같은 높이(y)에 z 만 다른 판 여러 장, tiltDeg 만큼 앞이 들린다 */
+  plates: { size: VisualTriple; y: number; z: number[]; tiltDeg: number };
+  /** 목 피벗 — 머리 내림(돌격 예고)의 회전축 */
+  neck: VisualTriple;
+  head: { size: VisualTriple; pos: VisualTriple };
+  eye: { radius: number; pos: VisualTriple };
+  /** 뿔 — pos 는 밑동(x 는 ± 대칭), tiltDeg 만큼 앞으로 기운다 */
+  horns: { radius: number; length: number; pos: VisualTriple; tiltDeg: number };
+  /** 어깨 관절(약점 구체이자 낫 팔 피벗) — x 는 ± 대칭 */
+  joints: { radius: number; pos: VisualTriple };
+  /** 위팔 — 관절에서 낫 힌지까지 */
+  upperArm: { thickness: number; length: number };
+  /** 낫 상자 — [폭, 날 높이, 길이]. 길이 방향이 팔 축(-z) */
+  blade: { size: VisualTriple };
+  /** 다리 — pos 는 원기둥 중심(x·z 는 ± 대칭 4개) */
+  legs: { radius: number; height: number; pos: VisualTriple };
+  heart: { radius: number; pos: VisualTriple };
+  vent: { radius: number; pos: VisualTriple };
+  /** 아래턱 — hinge 에서 앞·아래로 늘어진 상자 */
+  mouth: { size: VisualTriple; hinge: VisualTriple };
+  /** 꼬리 — root 에서 +z 로 뻗는 원기둥 */
+  tail: { radius: number; length: number; root: VisualTriple };
+}
+
 export interface EnemyDef {
   /** 표시 이름 (이름표) */
   name?: string;
@@ -265,6 +297,8 @@ export interface EnemyDef {
   /** false 면 해머 강타 뒤 wantsCharge(밀려난 뒤 확률 돌격) 우회 경로를 쓰지 않는다 —
    *  자세·쿨다운을 무시하고 달려드는 것을 막는다(거수). 없으면 기존대로 */
   chargeOnKnockback?: boolean;
+  /** 외형 부위 표(거수) — 없으면 Stage 의 기본 인간형 외형 */
+  visual?: BehemothVisualDef;
 }
 
 /** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격 */
