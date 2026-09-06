@@ -1,6 +1,7 @@
 // M7 검증 — warden(방어막·시전·반사), 보스(족장: 완벽 패링 3연속 → 스태거 → 처형 / 낫뿔 거수 배치 1 뼈대), 출구 잠금/클리어.
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { balance } from '../core/Balance';
 import { attackReaches, enemyDef, healthBarState, implementedEnemyTypes, rayHitsEnemy } from '../core/Entities';
 import { Events } from '../core/Events';
@@ -9,6 +10,14 @@ import { World, type EnemyState } from '../core/World';
 import { sigilDef } from '../core/SigilData';
 import { Level } from '../level/GridLoader';
 import { isSpawnable, spawnEnemyAt } from '../level/Spawner';
+import {
+  BEHEMOTH_TORSO,
+  ENEMY_LEAN_JITTER,
+  behemothBladeTip,
+  buildBehemothRig,
+  poseBehemothRig,
+  type BehemothPose,
+} from '../render/Stage';
 import * as Enemies from './Enemies';
 import * as Exit from './Exit';
 import * as Mana from './Mana';
@@ -1498,6 +1507,110 @@ describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만�
     // 다른 적은 visual 블록이 없다 — 옛 인간형 외형 경로 그대로
     expect(enemyDef('goblin_chieftain').visual).toBeUndefined();
     expect(enemyDef('slime_mother').visual).toBeUndefined();
+  });
+
+  /** 실제 리그를 지어(렌더러 없이 순수 지오메트리) Stage 와 같은 기울임·자세를 넣고 잰다 */
+  function measureRig(lean: number, lunge: number, crouch: number, pose: Partial<BehemothPose>) {
+    const reach = def.attackRange * def.attack.impactRangeMul;
+    const pullback = reach * balance.parrySpace.pullbackRatio;
+    const base: BehemothPose = {
+      nowMs: 0, legPhase: 0, legBlend: 0, bladeSide: 1, bladeWindup: 0, bladeStriking: false,
+      strikeProgress: 0, tipDist: pullback, recoiled: false, chargeCoil: 0, charging: false,
+      trembling: false, snap: 1,
+    };
+    const group = new THREE.Group();
+    const torso = new THREE.Group();
+    group.add(torso);
+    const flash: THREE.MeshLambertMaterial[] = [];
+    const rig = buildBehemothRig(group, torso, def, flash);
+    torso.rotation.x = lean;
+    torso.position.z = lunge;
+    torso.position.y = crouch;
+    poseBehemothRig(rig, { ...base, ...pose });
+    group.updateMatrixWorld(true);
+    const box = new THREE.Box3();
+    group.traverse((o) => {
+      if (o instanceof THREE.Mesh) box.union(new THREE.Box3().setFromObject(o, true)); // precise — 기운 원뿔의 헐거운 AABB 가 아니라 정점으로
+    });
+    const tip = behemothBladeTip(rig, 1, new THREE.Vector3());
+    return { rig, box, tip, flash, group, reach, pullback };
+  }
+
+  it('리그 천장 검사(B1-2) — 어깨→위팔→낫을 실제로 지어 모든 자세(떨림·움찔·튕김 흔들림을 더한 최악)에서 꼭대기가 3.8m 아래', () => {
+    const CEIL = 3.8; // 기획서 §2 낫 상한 (천장 4m)
+    const J = ENEMY_LEAN_JITTER;
+    const T = BEHEMOTH_TORSO;
+    // 떨림은 sin(nowMs/12)·sin(nowMs/11) 진폭 — 봉우리 근처를 몇 점 찍는다
+    const peaks = [0, 12 * Math.PI * 0.5, 11 * Math.PI * 0.5, 100, 1234];
+    const reach = def.attackRange * def.attack.impactRangeMul;
+    const pullback = reach * balance.parrySpace.pullbackRatio;
+    const cases: { name: string; lean: number; lunge: number; crouch: number; pose: Partial<BehemothPose> }[] = [
+      { name: 'rest', lean: 0, lunge: 0, crouch: 0, pose: {} },
+      { name: 'rest+flinch', lean: T.flinchLean, lunge: 0, crouch: 0, pose: {} },
+      { name: 'windup', lean: T.windupLean, lunge: 0, crouch: 0, pose: { bladeWindup: 1, tipDist: pullback } },
+      ...peaks.map((nowMs) => ({
+        name: `windup+tremble+flinch@${nowMs.toFixed(0)}`,
+        lean: T.windupLean + J.tremble + T.flinchLean, lunge: 0, crouch: 0,
+        pose: { bladeWindup: 1, tipDist: pullback, trembling: true, nowMs },
+      })),
+      ...[0, 0.25, 0.5, 0.75, 1].map((sp) => ({
+        name: `strike ${sp}`,
+        // 타격 첫 프레임은 기울임이 아직 예고값(+떨림) 근처다 — 그쪽도 잰다
+        lean: sp === 0 ? T.windupLean + J.tremble : T.strikeLean, lunge: T.strikeLunge, crouch: 0,
+        pose: { bladeStriking: true, strikeProgress: sp, tipDist: pullback + (reach - pullback) * sp },
+      })),
+      { name: 'recoil', lean: T.recoilLean + J.recoilShake, lunge: 0, crouch: 0, pose: { recoiled: true } },
+      { name: 'recoil+flinch', lean: T.recoilLean + J.recoilShake + T.flinchLean, lunge: 0, crouch: 0, pose: { recoiled: true } },
+      ...peaks.map((nowMs) => ({
+        name: `charge coil+tremble@${nowMs.toFixed(0)}`,
+        lean: T.chargeLean + J.tremble + T.flinchLean, lunge: 0, crouch: -def.height * T.chargeCrouch,
+        pose: { chargeCoil: 1, trembling: true, nowMs },
+      })),
+      { name: 'charging', lean: T.chargeLean, lunge: 0, crouch: -def.height * T.chargeCrouch, pose: { charging: true } },
+    ];
+    for (const c of cases) {
+      const { box } = measureRig(c.lean, c.lunge, c.crouch, c.pose);
+      expect(box.max.y, `${c.name} 꼭대기 ${box.max.y.toFixed(2)}m`).toBeLessThanOrEqual(CEIL);
+    }
+  });
+
+  it('보이는 낫끝 = 판정 낫끝(B1-2) — 타격 진행 0~1 에서 리그 낫끝의 앞 거리(−z)가 tipDist 와 맞고, 끝에선 정면 중심선에 온다', () => {
+    // 판정 낫끝은 적 중심에서 정면으로 tipDist 나간 점(중심선 위)이다. 어깨가 옆(x 1.15)에 있어 타격 초반의
+    // 낫끝은 중심선 옆에 있으니 앞 거리로 비교하고, 타격 끝(휩쓸기 끝)에서만 중심선 위임을 확인한다
+    const reach = def.attackRange * def.attack.impactRangeMul;
+    const pullback = reach * balance.parrySpace.pullbackRatio;
+    for (const sp of [0, 0.25, 0.5, 0.75, 1]) {
+      const tipDist = pullback + (reach - pullback) * sp;
+      const { tip } = measureRig(BEHEMOTH_TORSO.strikeLean, BEHEMOTH_TORSO.strikeLunge, 0, {
+        bladeStriking: true, strikeProgress: sp, tipDist,
+      });
+      expect(-tip.z, `strike ${sp}`).toBeCloseTo(tipDist, 1);
+    }
+    const end = measureRig(BEHEMOTH_TORSO.strikeLean, BEHEMOTH_TORSO.strikeLunge, 0, { bladeStriking: true, strikeProgress: 1, tipDist: reach });
+    expect(Math.abs(end.tip.x)).toBeLessThan(0.15);
+    expect(Math.hypot(end.tip.x, end.tip.z)).toBeCloseTo(reach, 1);
+    // 예고 끝 = 타격 시작 — 낫끝이 pullback 거리에 있어 이어진다
+    const windup = measureRig(BEHEMOTH_TORSO.windupLean, 0, 0, { bladeWindup: 1, tipDist: pullback });
+    expect(-windup.tip.z).toBeCloseTo(pullback, 1);
+  });
+
+  it('리그 구성(B1-2) — 약점 구체 5개는 group 소속·flashMaterials 밖, 낫·뿔 재질도 밖, 머리 부속(상자·뿔·턱·눈 자리)은 헤드샷 젖힘 노드 아래 한 덩어리', () => {
+    const { rig, flash, group } = measureRig(0, 0, 0, {});
+    for (const id of ['wp_eye', 'wp_joint_r', 'wp_joint_l', 'wp_heart', 'wp_vent']) {
+      const mesh = group.getObjectByName(id) as THREE.Mesh | undefined;
+      expect(mesh, id).toBeDefined();
+      expect(mesh!.parent).toBe(group);
+      expect(flash).not.toContain(mesh!.material as THREE.MeshLambertMaterial);
+    }
+    for (const m of [...rig.bladeMats, ...rig.hornMats]) expect(flash).not.toContain(m);
+    // 헤드샷 젖힘 — headShake 하나를 돌리면 머리 상자·뿔 둘·아래턱·눈 자리가 함께 움직인다 (상자만 돌아 분리돼 보이던 문제)
+    expect(rig.head.parent).toBe(rig.headShake);
+    expect(rig.jaw.parent).toBe(rig.headShake);
+    expect(rig.anchors['eye']!.parent).toBe(rig.headShake);
+    const horns = rig.headShake.children.filter((c) => c.children.some((g) => g instanceof THREE.Mesh && g.geometry instanceof THREE.ConeGeometry));
+    expect(horns).toHaveLength(2);
+    // 자세(headPitch)와 헤드샷(headShake)은 다른 노드 — 서로 덮어쓰지 않는다
+    expect(rig.headShake.parent).toBe(rig.headPitch);
   });
 
   it('보스 포효 기상 반경 — alertRadius(18) 밖의 잠든 적은 함께 깨지 않는다', () => {

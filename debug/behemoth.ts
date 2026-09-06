@@ -1,12 +1,14 @@
 // 낫뿔 거수 비주얼 미리보기 — 게임과 같은 buildBehemothRig/poseBehemothRig 로 짓고 자세를 잡는다
 // (치수는 entities.json visual 블록 × radius/height, 색은 Stage 팔레트 — 실전과 동일).
 // ?view=front(기본 정면) / side(측면·걸음) / windup(낫 예고, 파랑) / strike(낫 타격 — 낫끝이 판정 4.4m 기둥에
-// 닿는지) / strike-front(플레이어 눈높이에서 본 타격) / charge(돌격 예고 — 머리 내림·뿔·몸 빨강).
+// 닿는지) / strike-front(플레이어 눈높이에서 본 타격) / charge(돌격 예고 — 머리 내림·뿔·몸 빨강) /
+// recoil(패링·막힘 튕김 — 팔이 바깥으로 들리고 낫이 매달림. 꼭대기가 3.8m 선 아래인지).
 // 참조물: 4.4m 기둥(= attackRange, 흰색) · 플레이어 기둥(r0.4 h1.7, 몸 표면이 4.4m) · 천장 4.0m / 낫 상한 3.8m 선.
+// 안내문의 '꼭대기' 는 리그 정점(precise Box3) 최고 높이 — 어느 뷰든 3.8 아래여야 한다 (Boss.test 의 천장 검사와 같은 잣대).
 import * as THREE from 'three';
 import { balance } from '../src/core/Balance';
 import { enemyDef } from '../src/core/Entities';
-import { BEHEMOTH_TORSO, behemothBladeTip, buildBehemothRig, poseBehemothRig } from '../src/render/Stage';
+import { BEHEMOTH_TORSO, ENEMY_LEAN_JITTER, behemothBladeTip, buildBehemothRig, poseBehemothRig } from '../src/render/Stage';
 
 const def = enemyDef('scythe_behemoth');
 const view = new URLSearchParams(location.search).get('view') ?? 'front';
@@ -105,6 +107,12 @@ if (view === 'side') {
     camera.position.set(0, balance.player.eyeHeight, -(reach + balance.player.radius));
     camera.lookAt(0, 1.8, 0);
   }
+} else if (view === 'recoil') {
+  // 패링·막힘 튕김 — 뒤로 젖힘(+흔들림 진폭)에 팔이 바깥으로 들리고 낫이 매달린다. 위팔 끝·뿔끝이 3.8m 선 아래
+  torso.rotation.x = BEHEMOTH_TORSO.recoilLean + ENEMY_LEAN_JITTER.recoilShake;
+  poseBehemothRig(rig, { ...base, recoiled: true });
+  camera.position.set(7.5, 2.8, -5.5);
+  camera.lookAt(0, 2.0, -1.0);
 } else if (view === 'charge') {
   // 대지 돌격 예고 끝 — 머리 내림·−12° 웅크림·낫 접힘. 뿔·몸 빨강, 낫은 물들지 않는다
   torso.rotation.x = BEHEMOTH_TORSO.chargeLean;
@@ -120,13 +128,19 @@ if (view === 'side') {
   camera.lookAt(0, 1.6, -0.3);
 }
 
-// 낫끝·약점 좌표를 찍어 판정과 대조한다 (group 좌표 = 적 중심 기준)
+// 낫끝·약점 좌표를 찍어 판정과 대조한다 (group 좌표 = 적 중심 기준). 꼭대기는 리그 정점의 최고 높이
+group.updateMatrixWorld(true);
+const bounds = new THREE.Box3();
+group.traverse((o) => {
+  if (o instanceof THREE.Mesh) bounds.union(new THREE.Box3().setFromObject(o, true));
+});
 const tip = behemothBladeTip(rig, 1, new THREE.Vector3());
 const eye = rig.weakPoints['eye']!.position;
 const jr = rig.weakPoints['joint_r']!.position;
 note =
   `view=${view}\n` +
-  `blade_r tip (x,y,z) = ${tip.x.toFixed(2)}, ${tip.y.toFixed(2)}, ${tip.z.toFixed(2)}  → 수평 거리 ${Math.hypot(tip.x, tip.z).toFixed(2)}m (판정 ${(view.startsWith('strike') ? reach : view === 'windup' ? pullback : NaN).toFixed(2)})\n` +
+  `blade_r tip (x,y,z) = ${tip.x.toFixed(2)}, ${tip.y.toFixed(2)}, ${tip.z.toFixed(2)}  → 앞 거리 ${(-tip.z).toFixed(2)}m (판정 ${(view.startsWith('strike') ? reach : view === 'windup' ? pullback : NaN).toFixed(2)})\n` +
+  `꼭대기 ${bounds.max.y.toFixed(2)}m (낫 상한 3.8 / 천장 4.0)\n` +
   `wp_eye = ${eye.x.toFixed(2)}, ${eye.y.toFixed(2)}, ${eye.z.toFixed(2)}   wp_joint_r = ${jr.x.toFixed(2)}, ${jr.y.toFixed(2)}, ${jr.z.toFixed(2)}`;
 document.getElementById('info')!.textContent = note;
 document.title = note.replace(/\n/g, ' | ');

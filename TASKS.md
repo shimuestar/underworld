@@ -128,18 +128,18 @@
 ## M11 — 낫뿔 거수 (2026-09-04 기획 확정 — `docs/systems/boss_scythe_behemoth.md` §13, 3 배치 · 15 체크박스)
 
 - [x] **B1-1** 정의·스포너·테스트 — `scythe_behemoth`(attack 오른낫 파랑 + chargeAttack 빨강 hitOnContact 72틱, 임시 parriesToStagger 2 + executeDamage 240, hitBox·alertRadius·chargeOnKnockback), Spawner IMPLEMENTED, Boss.test describe
-- [x] **B1-2** 외형 — Stage behemoth 분기(몸통·다리·높은 머리·뿔·낫 2자루 리그·등갑판·약점 구체 5개 장식), `debug/behemoth` 스크린샷 7장
+- [x] **B1-2** 외형 — Stage behemoth 분기(몸통·다리·높은 머리·뿔·낫 2자루 리그·등갑판·약점 구체 5개 장식), `debug/behemoth` 스크린샷 6장(기본 정면·측면·낫 예고·낫 타격 측면/정면·돌격 예고 + 튕김) + 시험방 3장 — rear/head_down/roar/P2 정면/P3 는 해당 자세가 생기는 B2/B3 에서
 - [ ] **B1-3** 왼낫 교대·들이받기 — `attackAlt`/`closeAttack`, attackMode 'alt'|'close'
-- [ ] **B2-1** 약점 판정 코어 — `rayVsSphere`, `weakPoints[]`/`poseOffsets`/`rayHitsWeakPoint`, hitZonesImmune, 권총·화살 약점 우선
-- [ ] **B2-2** 패링 → 노출·머리 내림·눈 혼절 — `parryOutcome expose`, 눈 66 → staggered, 임시 parriesToStagger 제거
+- [ ] **B2-1** 약점 판정 코어 — `rayVsSphere`, `weakPoints[]`/`poseOffsets`/`rayHitsWeakPoint`, hitZonesImmune, 권총·화살 약점 우선. Stage: `poseBehemothRig` 끝의 anchors 추종 루프 제거 → `poseOffsets` 표로 구체 배치(현재 앵커 추종은 표와 어긋남 — 돌격 예고 눈 (0,1.02,−2.32) vs 표 (0,1.1,−1.95))
+- [ ] **B2-2** 패링 → 노출·머리 내림·눈 혼절 — `parryOutcome expose`, 눈 66 → staggered, 임시 parriesToStagger 제거. `BH_NECK_DOWN`·neck 피벗(visual.neck)·chargeCrouch 를 표의 charge 눈 (0,1.1,−1.95)/head_down 눈 (0,0.9,−1.9) 에 맞춰 재조정(구체만 표로 옮기면 내려간 머리 메시와 떨어진다), `debug/behemoth` 스크린샷(head_down)
 - [ ] **B2-3** 관절 파열·낫 잠김·절뚝·완벽 회피
 - [ ] **B2-4** 플레이어 상태 2종(팔 저림·진탕) + `Status.ts`
 - [ ] **B2-5** 돌격 눈멂·지형 충돌·기둥 문자 `P`
 - [ ] **B2-6** 페이즈 골격 — `boss_phase`, `phaseTarget` 큐잉, `phases[]`
-- [ ] **B3-1** P2 발구르기·심장·절뚝
-- [ ] **B3-2** 웅덩이·오염 진액·갑각 떨기·분출공 — `Hazards.ts`
-- [ ] **B3-3** 갑각판 hp 풀·골드
-- [ ] **B3-4** P3 기술 — 포효·삼연낫·광란 돌격·위압
+- [ ] **B3-1** P2 발구르기·심장·절뚝, `debug/behemoth` 스크린샷(rear)
+- [ ] **B3-2** 웅덩이·오염 진액·갑각 떨기·분출공 — `Hazards.ts`, `debug/behemoth` 스크린샷(P2 정면 — 분출공이 머리에 가리지 않는지)
+- [ ] **B3-3** 갑각판 hp 풀·골드, `debug/behemoth` 스크린샷(P3 등갑판 탈락)
+- [ ] **B3-4** P3 기술 — 포효·삼연낫·광란 돌격·위압, `debug/behemoth` 스크린샷(roar)
 - [ ] **B3-5** 아레나 f4 + `Arena.ts`
 - [ ] **B3-6** 보상·마무리 — 유일 반지·오염 정화·문서
 

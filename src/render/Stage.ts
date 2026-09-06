@@ -408,8 +408,9 @@ interface EnemyVisual {
   web?: THREE.Mesh;
   /** 몸통+머리 서브그룹 — 공격 모션(기울임/내지름)의 피벗 (발 기준) */
   torso: THREE.Group;
-  /** 머리 상자 — 헤드샷 때 젖혀진다 (거미는 머리가 따로 없어 undefined) */
-  head?: THREE.Mesh;
+  /** 머리 — 헤드샷 때 젖혀진다 (거미는 머리가 따로 없어 undefined). 인간형은 머리 상자 메시,
+   *  거수는 머리 상자·뿔·아래턱·눈 자리를 함께 묶은 headShake 그룹 — 상자만 따로 돌아 머리가 분리돼 보이지 않게 */
+  head?: THREE.Object3D;
   /** 헤드샷 젖힘이 끝나는 시각 */
   headShakeUntil?: number;
   /** 다리(골반 피벗) — 인간형만. 이동 거리에 비례해 젓는다 */
@@ -989,18 +990,31 @@ export const BEHEMOTH_TORSO = {
   /** 대지 돌격 예고 — 몸통 −12°(기획서) 웅크림 + 낮춤(height 배) */
   chargeLean: -0.21,
   chargeCrouch: 0.07,
-  /** 패링·막힘에 튕겨 젖힘 — 인간형 0.5 는 뒷다리가 뜬다 */
-  recoilLean: 0.2,
+  /** 패링·막힘에 튕겨 젖힘 — 인간형 0.5 는 뒷다리가 뜬다. 0.2 는 뿔끝(3.49m·z −1.8)이 흔들림·움찔과 함께 3.8m 를 넘겼다 */
+  recoilLean: 0.12,
+  /** 피탄 움찔 — 인간형(ENEMY_LEAN_JITTER.flinch 0.16)은 4족엔 과하고, 낫 예고 중 맞으면 들린 위팔이 3.8m 를 넘는다 */
+  flinchLean: 0.05,
+} as const;
+
+/** syncEnemies 가 자세 위에 더하는 기울임 떨림 진폭(rad) — 섬광 구간 떨림·튕김 흔들림·피탄 움찔.
+ *  거수 천장 검사(Boss.test)는 자세마다 이 합만큼 더 젖힌 최악의 경우를 잰다 */
+export const ENEMY_LEAN_JITTER = {
+  tremble: 0.05,
+  recoilShake: 0.03,
+  flinch: 0.16,
 } as const;
 
 /** 거수 팔 각도(rad) — 위팔은 어깨 피벗에서 -z 로 뻗고 +회전이 끝을 위로 올린다(족장 팔 규약).
  *  낫(β)은 월드 기울기 — 접힘(-π 쪽)에서 앞으로 뻗음(0 쪽)까지 */
 const BH_ARM_REST = 0.45; // 위팔 앞위로 — 낫이 머리 옆에 세워진 대기
 const BH_BLADE_REST = -1.25; // 낫끝 앞아래
-const BH_ARM_WINDUP = 0.75; // 관절이 솟는다 — 위팔 더 들림
+// 위팔(1.6m)의 끝+두께가 어떤 자세·떨림·움찔에서도 낫 상한 3.8m(천장 4m) 아래여야 한다 — Boss.test 가 실제 리그를 지어 잰다.
+// 어깨 2.5m 기준 경험적으로 기울임+위팔각 ≤ ~0.75rad
+const BH_ARM_WINDUP = 0.5; // 관절이 솟는다 — 위팔 더 들림
 const BH_ARM_STRIKE_END = -0.35; // 내리치며 위팔이 수평 아래로 — 낫끝이 플레이어 가슴 높이에 온다
 const BH_ARM_WINDUP_YAW = -0.12; // 예고 — 낫을 바깥으로 살짝 벌려 당긴다 (타격은 안쪽으로 휩쓴다)
-const BH_ARM_RECOIL = 0.95; // 튕겨 들린 팔
+const BH_ARM_RECOIL = 0.5; // 튕겨 들린 팔 — 높이는 예고만큼, 대신 바깥으로 벌어진다 (0.95 는 천장을 뚫었다)
+const BH_ARM_RECOIL_YAW = -0.4; // 튕김 — 낫이 바깥으로 쳐내진 그림 (높이 대신 옆으로 튄다)
 const BH_BLADE_RECOIL = -1.75; // 낫이 매달려 흔들린다
 const BH_ARM_CHARGE = 0.25; // 돌격 — 낫을 옆구리로 접어 붙인다
 const BH_BLADE_CHARGE = -2.15;
@@ -1016,9 +1030,11 @@ const BH_TIP_MIN_Y = 0.08; // 낫끝이 바닥을 뚫지 않게 (m)
 export interface BehemothRig {
   group: THREE.Group;
   torso: THREE.Group;
-  /** 목 피벗(내림) → 머리 되들기 → 머리 상자(헤드샷 젖힘은 이 메시) */
+  /** 목 피벗(내림) → 머리 되들기(자세) → 헤드샷 젖힘(머리 상자·뿔·아래턱·눈 자리를 함께) → 머리 상자.
+   *  자세와 헤드샷이 서로 다른 노드를 돌리므로 겹쳐도 싸우지 않는다 */
   neck: THREE.Group;
   headPitch: THREE.Group;
+  headShake: THREE.Group;
   head: THREE.Mesh;
   /** 아래턱 힌지 — 포효(B3)에서 벌어진다 */
   jaw: THREE.Group;
@@ -1124,13 +1140,17 @@ export function buildBehemothRig(
   const [hx, hy, hz] = M(v.head.pos);
   headPitch.position.set(hx - nx, hy - ny, hz - nz);
   neck.add(headPitch);
+  // 헤드샷 젖힘 노드 — 머리 상자·뿔·아래턱·눈 자리가 한 덩어리로 젖혀진다 (syncEnemies 의 headShake 블록이 돌린다)
+  const headShake = new THREE.Group();
+  headShake.name = 'head_shake';
+  headPitch.add(headShake);
   const headMat = lam(BEHEMOTH_COLORS.head, true);
   const [hw, hh, hd] = M(v.head.size);
   const head = new THREE.Mesh(new THREE.BoxGeometry(hw, hh, hd), headMat);
-  headPitch.add(head);
+  headShake.add(head);
   // 눈 자리 — 머리 앞면 중앙 (구체 자체는 group 소속 약점)
   const [ex, ey, ez] = M(v.eye.pos);
-  anchor('eye', headPitch, ex - hx, ey - hy, ez - hz);
+  anchor('eye', headShake, ex - hx, ey - hy, ez - hz);
   // 뿔 둘 — 머리 위에서 앞으로 기운 원뿔
   const hornMats: THREE.MeshLambertMaterial[] = [];
   const hornR = v.horns.radius * R;
@@ -1145,7 +1165,7 @@ export function buildBehemothRig(
     const horn = new THREE.Mesh(new THREE.ConeGeometry(hornR, hornL, 8), hornMat);
     horn.position.y = hornL / 2;
     pivot.add(horn);
-    headPitch.add(pivot);
+    headShake.add(pivot);
   }
   // 아래턱 — 힌지에서 앞·아래로 늘어진 상자. 포효(B3)에서 -0.8rad 벌어진다
   const jaw = new THREE.Group();
@@ -1155,7 +1175,7 @@ export function buildBehemothRig(
   const mouth = new THREE.Mesh(new THREE.BoxGeometry(mw, mh, md), lam(BEHEMOTH_COLORS.mouth, true));
   mouth.position.set(0, -mh / 2, -md / 2);
   jaw.add(mouth);
-  headPitch.add(jaw);
+  headShake.add(jaw);
 
   // 가슴 분출공·배 심장 자리 (구체는 group 소속 약점)
   const [vx, vy, vz] = M(v.vent.pos);
@@ -1247,7 +1267,7 @@ export function buildBehemothRig(
   wp('vent', v.vent.radius * R, BEHEMOTH_COLORS.vent, vx, vy, vz);
 
   return {
-    group, torso, neck, headPitch, head, jaw, arms, legs, tail,
+    group, torso, neck, headPitch, headShake, head, jaw, arms, legs, tail,
     weakPoints, anchors, bladeMats, hornMats,
     dims: { upperArm: upperLen, blade: bll, legH },
   };
@@ -1341,8 +1361,10 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
       solveBlade(armTarget, p.tipDist);
       direct = true;
     } else if (acting && p.recoiled) {
+      // 튕김 — 팔이 들리며 바깥으로 벌어지고 낫이 매달린다. 높이는 예고와 같아 천장을 못 뚫는다
       armTarget = BH_ARM_RECOIL;
       bladeWorld = BH_BLADE_RECOIL;
+      yaw = BH_ARM_RECOIL_YAW;
     } else if (acting && p.bladeWindup > 0) {
       // 예고 — 관절이 솟고(위팔 들림) 낫끝이 대기 거리에서 pullback 거리까지 뒤로 접힌다.
       // 예고 끝 = 타격 시작이라 낫끝이 이어진다
@@ -1379,7 +1401,12 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     }
   }
 
-  // 약점 구체 — 몸의 자리를 따라간다(기울임·목 내림 반영). 판정=그림의 poseOffsets 표는 B2 몫
+  // 약점 구체 — 몸의 자리(anchors)를 따라간다(기울임·목 내림·웅크림 반영). B1 임시 — 기획서 §2 렌더 규약은
+  // "torso 기울임 보간에 구체를 딸려 보내지 않고 판정과 같은 poseOffsets 표를 읽어 옮긴다"이며, 앵커 추종 결과는
+  // 표와 이미 어긋난다: 돌격 예고 눈 (0, 1.02, −2.32) vs 표 charge (0, 1.1, −1.95) — 0.37m 앞·0.08m 아래,
+  // 관절 (±1.15, 2.07, −1.30) vs (±1.15, 2.3, −0.6), 분출공 (0, 1.08, −1.86) vs (0, 1.35, −1.5), 심장 (0, 0.29, −0.52) vs (0, 0.6, −0.4).
+  // B2-1 에서 이 루프를 지우고 표로 배치할 때 구체만 옮기면 내려간 머리 메시와 눈이 떨어진다 —
+  // BH_NECK_DOWN·neck 피벗(entities visual.neck)·chargeCrouch 를 표의 charge 눈에 맞춰 함께 재조정할 것 (TASKS B2-1/B2-2 메모)
   for (const id in rig.anchors) {
     const sphere = rig.weakPoints[id];
     const node = rig.anchors[id];
@@ -3037,7 +3064,7 @@ export class Stage {
 
     const bodyMat = new THREE.MeshLambertMaterial({ color: baseColor });
     flashMaterials.push(bodyMat);
-    let headMesh: THREE.Mesh | undefined; // 헤드샷 젖힘용 — 거미는 없다
+    let headMesh: THREE.Object3D | undefined; // 헤드샷 젖힘용 — 거미는 없다. 거수는 머리 부속을 묶은 그룹
     let leechMats: { mat: THREE.MeshLambertMaterial; mul: number }[] | undefined; // 거머리 위장용
     let motherEyes: THREE.Group[] | undefined; // 어미 슬라임 눈알들 (동공이 플레이어를 따라 돈다)
     let slimeCore: EnemyVisual['slimeCore'];
@@ -3131,7 +3158,7 @@ export class Stage {
       // 낫뿔 거수 — 부위 표(entities.json visual)대로 짓는다. 안광 없음(눈은 닫힌 약점 구체),
       // 몸통 재질은 리그가 제 것을 쓰므로 공용 bodyMat 은 비워 둔다
       behemothRig = buildBehemothRig(group, torso, def, flashMaterials);
-      headMesh = behemothRig.head;
+      headMesh = behemothRig.headShake; // 상자만 돌리면 뿔·턱·눈이 제자리에 남아 머리가 분리돼 보인다
     } else if (SPIDER_TYPES.has(type)) {
       buildSpiderBody(torso, def, bodyMat, eyes, baseColor, flashMaterials);
     } else if (type === 'bat') {
@@ -3898,15 +3925,15 @@ export class Stage {
           }
         }
       }
-      if (trembling) leanTarget += Math.sin(now / 14) * 0.05;
+      if (trembling) leanTarget += Math.sin(now / 14) * ENEMY_LEAN_JITTER.tremble;
       // 피탄 움찔 — 상체가 짧게 젖혀졌다 돌아온다 (+ = 뒤로). 남은 틱 비율로 감쇠
       const flinch =
         Math.max(enemy.flinchTicks ?? 0, enemy.attackFreezeTicks ?? 0) /
         balance.weapons.pistol.flinchTicks;
-      if (flinch > 0) leanTarget += 0.16 * Math.min(1, flinch);
+      if (flinch > 0) leanTarget += (visual.behemoth ? BEHEMOTH_TORSO.flinchLean : ENEMY_LEAN_JITTER.flinch) * Math.min(1, flinch);
       // 굳은 동안 힘겹게 버티는 미세 떨림 (완전 정지는 프리즈처럼 보인다)
       if (frozenWhiff) leanTarget += Math.sin(now / 55) * 0.012;
-      if (recoiled) leanTarget += (visual.behemoth ? BEHEMOTH_TORSO.recoilLean : 0.5) + Math.sin(now / 40) * 0.03; // 뒤로 크게 젖힘 (4족은 작게)
+      if (recoiled) leanTarget += (visual.behemoth ? BEHEMOTH_TORSO.recoilLean : 0.5) + Math.sin(now / 40) * ENEMY_LEAN_JITTER.recoilShake; // 뒤로 크게 젖힘 (4족은 작게)
       // 빙결 — 보간 계수를 0으로 두면 지금 자세(달리던·찌르던 중간)가 그대로 굳는다
       const solidIce = (enemy.freezeTicks ?? 0) > 0;
       const snap = solidIce ? 0 : striking ? 0.55 : 0.3; // 타격은 빠르게, 복귀는 부드럽게
