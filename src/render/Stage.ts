@@ -4267,8 +4267,8 @@ export class Stage {
         const ventMode = enemy.attackMode === 'volley'; // 갑각 떨기(보라, B3-2) — 무기는 분출공이라 낫·뿔 어느 쪽도 물들지 않는다(몸·등갑판만)
         const roarMode = enemy.attackMode === 'roar'; // 포효(빨강, B3-4) — 몸 전체(입·꼬리 포함)만, 낫·뿔은 물들지 않는다
         const bladeEmissive = telegraphing && (hornMode || ventMode || roarMode) ? 0x000000 : emissive;
-        // 광란 돌격 선회(2차 예고, B3-4) — 꼬리·뿔이 예고 내내 빨강(chainCharge.tailTelegraph)
-        const chainTurn = enemy.chainTurn === true && enemy.ai === 'windup';
+        // 광란 돌격 선회(2차 예고, B3-4) — 꼬리·뿔이 예고 내내 빨강(chainCharge.tailTelegraph). 판정(Enemies windup 의 선회 틱)과 같은 문: 돌격 예고에서만
+        const chainTurn = enemy.chainTurn === true && enemy.ai === 'windup' && enemy.attackMode === 'charge';
         const tailRed = chainTurn ? new THREE.Color(def2.chargeAttack?.chainCharge?.tailTelegraph === 'red' ? balance.telegraph.colorUnparryable : balance.telegraph.colorParryable).getHex() : undefined;
         const hornEmissive = tailRed !== undefined ? tailRed : telegraphing && !hornMode ? 0x000000 : emissive;
         // 완벽 전용 타(삼연낫 ③, perfectOnly — 결정 17) — 예고 내내 같은 파랑을 더 밝게
@@ -4712,7 +4712,7 @@ export class Stage {
           legBlend: visual.legBlend ?? 0,
           bladeSide, // 왼낫 교대(B1-3) — 'alt' 면 왼팔이 나간다, 삼연낫 ② 도 왼팔
           bothBlades, // 삼연낫 ③ — 두 낫 함께
-          chainTurn: enemy.chainTurn === true && inWindup, // 광란 돌격 선회 — 꼬리 휘두름
+          chainTurn: enemy.chainTurn === true && inWindup && enemy.attackMode === 'charge', // 광란 돌격 선회 — 꼬리 휘두름(판정과 같은 문: 돌격 예고에서만)
           bladeWindup: bladeMode && inWindup && !chargeCoil ? windupProgress : 0,
           bladeStriking,
           strikeProgress: enemy.strikeProgress ?? 0,

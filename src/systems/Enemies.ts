@@ -1665,7 +1665,7 @@ function chargeCollide(
 }
 
 /** 관절 파열(기획서 §4.1·§5 rupture) — 관절 내구 0: 노출 장부를 닫고(판정은 hp 0 으로 이미 닫혔다), 그 관절의 낫(bladeOfJoint — 패링 표의 역)을
- *  bladeLockTicks 동안 잠근다. 비틀거림 staggerTicks 는 recover 로 — 진행 중인 낫·돌격 예고는 끊긴다. 머리 내림·미끄러짐(포즈 타이머)·혼절 중이면
+ *  bladeLockTicks 동안 잠근다. 비틀거림 staggerTicks 는 recover 로 — 진행 중인 낫·돌격 예고(광란 돌격 선회 포함 — 연쇄 장부를 내린다)는 끊긴다. 머리 내림·미끄러짐(포즈 타이머)·혼절 중이면
  *  이미 굳어 있으니 덧붙이지 않는다(눈 창을 빼앗지 않는다). boss_status{kind 'rupture', id, blade, on: true} — 소리·파편·문구는 main/Stage */
 function ruptureJoint(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>, jointId: string): void {
   const cfg = balance.weakPoint.rupture;
@@ -1684,6 +1684,13 @@ function ruptureJoint(world: World, enemy: EnemyState, def: ReturnType<typeof en
     enemy.recoiled = true; // 튕긴 자세로 굳는다 — 비틀거림의 그림
     enemy.whiffed = false;
     enemy.strikeProgress = 0;
+    // 광란 돌격(B3-4) 선회·질주 중이었으면 연쇄 장부도 내린다 — 비틀거림 뒤 첫 낫 예고에서 선회(yaw 스냅·꼬리 채기 12 패링 불가)가 이어지지 않게
+    // (beginPhaseShift·chargeCollide 와 같은 결, B3-4 검토). 없던 적에겐 장부를 만들지 않는다
+    if (enemy.chainTurn || enemy.chainLeg) {
+      enemy.chainTurn = false;
+      enemy.chainLeg = 0;
+      enemy.chainTailHit = false;
+    }
   }
   if (enemy.attackMode === 'combo') enemy.attackMode = 'melee'; // 삼연낫(B3-4) 도중 관절이 터지면 콤보는 거기서 끊긴다(비틀거림 뒤 이어지지 않는다)
   world.events.emit('boss_status', {
@@ -2459,8 +2466,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     }
 
     case 'windup': {
-      // 광란 돌격 선회(B3-4) — 2차 예고: 플레이어의 새 자리로 몸을 돌리며 꼬리를 휘두른다. 끝나면 아래 chargeRunTicks 분기가 그 자리로 두 번째 질주를 낸다
-      if (enemy.chainTurn && def.chargeAttack?.chainCharge) tickChainTurn(world, enemy, def.chargeAttack.chainCharge, distX, distZ, dist);
+      // 광란 돌격 선회(B3-4) — 2차 예고: 플레이어의 새 자리로 몸을 돌리며 꼬리를 휘두른다. 끝나면 아래 chargeRunTicks 분기가 그 자리로 두 번째 질주를 낸다.
+      // 돌격 예고(attackMode 'charge')에서만 — 선회가 비정상 종료돼 표식이 남아도 낫 예고에서 꼬리 채기·yaw 스냅이 새지 않게(Stage 의 그림도 같은 문, B3-4 검토)
+      if (enemy.chainTurn && enemy.attackMode === 'charge' && def.chargeAttack?.chainCharge) tickChainTurn(world, enemy, def.chargeAttack.chainCharge, distX, distZ, dist);
       // 붙었으면 던지기를 접고 해머로 바꾼다 — 코앞에서 화살을 쏘고 있으면 안 된다
       if (attack.abortRange !== undefined && dist <= attack.abortRange) {
         enemy.ai = 'chase';

@@ -5230,5 +5230,110 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(world.player.iframeTicks).toBe(0);
       expect(world.player.iframeSource).toBeUndefined();
     });
+
+    it('위압 해제는 어느 적의 완벽 패링이든(기획서 §6 "완벽 패링 1회", B3-4 검토) — 위압 중 시험방 고블린의 공격: 일반 패링은 풀지 않고 마나 5(cowed), 완벽 패링이 cowed 0 → Status cowed_ended cured. 위압을 건 것은 거수지만 푸는 경로는 팔 저림 해제와 같은 공용 성공 경로다', () => {
+      Mana.init(world);
+      setPlayerStatus(world.player, 'cowed', cw.ticks);
+      Status.tick(world, DT);
+      const w = watch();
+      // 거수 없이 고블린만 — 고치기 전엔 expose 분기(거수) 안에서만 풀려 여기선 위압이 그대로 남았다
+      const runner = spawnEnemyAt('goblin_runner', 6 + 2.0, 6, 7);
+      runner.ai = 'chase';
+      world.enemies.push(runner);
+      world.mana.value = 0;
+      expect(normalParry(runner)).toBe('normal');
+      expect(w.parries.at(-1)).toMatchObject({ result: 'normal', cowed: true });
+      expect(world.mana.value).toBeCloseTo(cw.normalParryMana * balance.chain.multipliers[0]!, 6);
+      expect(playerStatusTicks(world.player, 'cowed')).toBeGreaterThan(0);
+      Status.tick(world, DT);
+      expect(w.ended).toHaveLength(0);
+      // 다음 공격을 완벽 패링 — 위압이 풀린다. 고블린 쪽 결과(완벽 → 스태거)는 그대로
+      expect(perfectParry(runner)).toBe('perfect');
+      expect(w.parries.at(-1)).toMatchObject({ result: 'perfect', cowed: false });
+      expect(world.player.cowedTicks).toBe(0);
+      expect(runner.ai).toBe('staggered');
+      Status.tick(world, DT);
+      expect(w.ended).toEqual([expect.objectContaining({ kind: 'cowed', reason: 'cured' })]);
+    });
+
+    it('광란 돌격 선회의 비정상 종료(B3-4 검토) — 선회 중 관절 파열 → 비틀거림(recover)이 chainTurn/chainLeg/chainTailHit 을 함께 내려 다음 낫 예고에서 선회(yaw 스냅·꼬리 채기)가 이어지지 않는다; 표식이 남아 있어도 선회 틱은 돌격 예고(attackMode charge)에서만 돈다', () => {
+      world.player.health = 1000;
+      const w = watch();
+      const boss = makeBehemoth(10.0);
+      toP3(boss);
+      quietExcept(boss, 'charge');
+      tickEnemiesUntil(() => boss.ai === 'charging', 120);
+      world.player.z = 6 + 5;
+      world.player.prevZ = world.player.z;
+      tickEnemiesUntil(() => boss.chainTurn === true, 120);
+      expect(boss.attackMode).toBe('charge');
+      expect(boss.chainLeg).toBe(1);
+      // 선회 중 오른 관절 내구 0(외부 경로) → 이 틱에 파열: 비틀거림 60 으로 예고가 끊기고 연쇄 장부가 내려간다
+      boss.weakHp!['joint_r'] = 0;
+      Enemies.tick(world, DT);
+      expect(boss.ruptured).toEqual({ joint_r: true });
+      expect(boss.ai).toBe('recover');
+      expect(boss.timer).toBe(wpc.rupture.staggerTicks - 1); // 파열 틱의 recover 가 한 틱 깎는다
+      expect(boss.chainTurn).toBe(false);
+      expect(boss.chainLeg).toBe(0);
+      expect(boss.chainTailHit).toBe(false);
+      expect(w.chainTurns).toHaveLength(1);
+      // 비틀거림 뒤 첫 낫 예고(오른낫 잠김 → 왼낫) — 꼬리 반경 안에 서 있어도 꼬리 채기·yaw 스냅이 없다
+      boss.chargeCooldown = 9999;
+      tickEnemiesUntil(() => boss.ai === 'windup', 600);
+      expect(boss.attackMode).toBe('alt');
+      world.player.x = boss.x - 2.3;
+      world.player.z = boss.z;
+      world.player.prevX = world.player.x;
+      world.player.prevZ = world.player.z;
+      const yaw0 = boss.yaw;
+      Enemies.tick(world, DT);
+      expect(boss.ai).toBe('windup');
+      expect(boss.yaw).toBe(yaw0);
+      expect(w.hits.filter((h) => h.source === 'tail_whirl')).toHaveLength(0);
+      // 게이트(a) — 표식이 남아 있더라도 낫 예고에선 선회 틱이 돌지 않는다(판정 = 그림: Stage 도 attackMode charge 를 함께 본다)
+      boss.chainTurn = true;
+      boss.chainTailHit = false;
+      Enemies.tick(world, DT);
+      expect(boss.ai).toBe('windup');
+      expect(boss.yaw).toBe(yaw0);
+      expect(w.hits.filter((h) => h.source === 'tail_whirl')).toHaveLength(0);
+      boss.chainTurn = false;
+      expect(w.chainTurns).toHaveLength(1); // 새 선회는 없었다
+    });
+
+    it('삼연낫 ③ 팔 저림 중 완벽 대역 입력(기획서 §7 소표 ③ 주석·§6 numb_arm, B3-4 검토) — 저림은 성립 대역을 두고 결과만 낮추므로 일반 패링이 성립한다(족장 perfectParryOnly 와 같은 결): 관절 노출 없음(③ 에 exposeOnParry 없음)·머리 내림/탈진 없음·③ 피격 없음·콤보 끊김(recover 40 + 튕김 36 뒤 chase, attackMode melee)·저림 해제(numb_arm_ended cured)·마나 11', () => {
+      const boss = makeBehemoth(3.1);
+      toP3(boss);
+      quietExcept(boss, 'combo');
+      Mana.init(world);
+      world.player.health = 1000;
+      const w = watch();
+      const numbEnded: { kind: string; reason: string }[] = [];
+      world.events.on('numb_arm_ended', (p) => numbEnded.push(p as { kind: string; reason: string }));
+      startCombo(boss);
+      untilComboStep(boss, 2);
+      expect(w.hits.map((h) => h.amount)).toEqual([34, 34]); // ①② 는 흘려보냈다
+      setPlayerStatus(world.player, 'numb_arm', balance.status.numbArm.ticks);
+      Status.tick(world, DT);
+      world.mana.value = 0;
+      expect(perfectParry(boss)).toBe('normal'); // 완벽 대역 한복판인데 저림 → 일반으로 낮아진다
+      expect(w.parries.at(-1)).toMatchObject({ result: 'normal', cowed: false });
+      expect(world.mana.value).toBeCloseTo(balance.mana.gain.parryNormal * balance.chain.multipliers[0]!, 6);
+      expect(boss.exposure?.['joint_r'] ?? 0).toBe(0);
+      expect(boss.exposure?.['joint_l'] ?? 0).toBe(0);
+      expect(w.status.filter((s) => s.kind === 'expose')).toHaveLength(0);
+      expect(['head_down', 'exhaust']).not.toContain(boss.pose);
+      expect(boss.ai).toBe('recover');
+      expect(boss.recoiled).toBe(true);
+      expect(boss.timer).toBe(chain[2]!.recoverTicks + balance.reaction.parryRecoilTicks); // 단발 일반 패링과 같은 튕김 후딜
+      expect(world.player.numbArmTicks).toBe(0);
+      Status.tick(world, DT);
+      expect(numbEnded).toEqual([expect.objectContaining({ kind: 'numb_arm', reason: 'cured' })]);
+      tickEnemiesUntil(() => boss.ai === 'chase', 120);
+      expect(boss.attackMode).toBe('melee'); // 콤보는 여기서 끝났다
+      expect(w.hits).toHaveLength(2); // ③ 은 맞지 않았다
+      expect(w.comboSteps).toHaveLength(2); // 더 이어지지 않는다
+    });
   });
 });

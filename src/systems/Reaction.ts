@@ -15,11 +15,12 @@
 //       스태거 중 처형은 즉사가 아니라 executeDamage 타격.
 // parryOutcome 'expose'(거수): 패링은 스태거 대신 약점을 연다 — 일반 = 그 낫의 어깨 관절 36틱(recover),
 //       완벽 = 관절 90틱 + 낫이 바닥에 박혀 머리 내림(pose head_down 90틱, 눈 노출). 혼절은 Enemies 가 눈 누적으로 건다.
-// 팔 저림(numb_arm, B2-4 — 거수 낫을 방패로 막음): 완벽 대역 ×perfectBandMul(0 = 정직하게 일반만), 패링 실패의 마나 소실 면제
+// 팔 저림(numb_arm, B2-4 — 거수 낫을 방패로 막음): 완벽 대역 ×perfectBandMul(0 = 정직하게 일반만 — 완벽 전용 타(족장 perfectParryOnly·삼연낫 ③ perfectOnly)도 성립 대역은
+//       완벽 대역 그대로, 결과만 일반으로 낮아진다: ③ 은 그래서 저림 중 완벽 대역 입력이 콤보를 끊는 일반 패링이 된다 — 기획서 §7 소표), 패링 실패의 마나 소실 면제
 //       (parry_attempt 에 noManaLoss — Mana 가 읽는다), 일반 패링 1회 성립 시 즉시 해제(카운터 0 → Status 가 _ended 를 낸다).
 // 절뚝(hobble, B3-1 — 거수 발구르기 직격): 회피 스태미너 ×dodgeStaminaMul(tryDodge). 회피 거리·무적 틱은 어느 상태도 건드리지 않는다.
 // 위압(cowed, B3-4 — 거수 P3 포효): 일반 패링이 관절을 열지 못하고(balance.status.cowed.normalParryOpensJoint false — 완벽만), 일반 패링 마나가 준다(parry_attempt.cowed → Mana),
-//       완벽 패링 1회 성립 시 즉시 해제. 삼연낫(comboAttack, B3-4): continueOnParry 타는 패링해도 끊기지 않고 recoverTicks 뒤 다음 타로(Enemies recover → startWindup),
+//       완벽 패링 1회 성립 시 즉시 해제 — 어느 적의 완벽 패링이든(팔 저림 해제와 같은 공용 성공 경로, 기획서 §6 — 거수 한정이 아니다). 삼연낫(comboAttack, B3-4): continueOnParry 타는 패링해도 끊기지 않고 recoverTicks 뒤 다음 타로(Enemies recover → startWindup),
 //       ①② 완벽은 관절 perfectTicks(60)·완벽 카운트, ③(perfectOnly + noParryBuffer — 완벽 대역 밖에 누르면 실패 규약)은 완벽 카운트가 타 수와 같으면 탈진(pose exhaust,
 //       headDown.exhaustTicks — 눈 + 분출공 동시 노출) 아니면 단발 완벽과 같은 머리 내림.
 
@@ -154,8 +155,8 @@ export function tick(world: World, _dt: number): void {
     // 무기가 방패에 닿은 순간 = 완벽. 단 parryAlwaysNormal(족장)은 완벽 대역에서만
     // 패링이 성립하므로(perfectParryOnly) 매번 완벽 판정이 나온다 — 그러면 "완벽"이
     // 특별하지 않고, 연쇄·마나까지 매 패링마다 최대로 붙는다. 결과는 일반 패링으로 낮춘다.
-    // 팔 저림 중엔 완벽 대역이 perfectBandMul 배(0 = 대역 없음 → 완벽 불가). perfectParryOnly 의 성립 대역은 그대로 둔다 —
-    // 저림은 "완벽을 일반으로 낮춘다" 이지 패링 자체를 막지 않는다
+    // 팔 저림 중엔 완벽 대역이 perfectBandMul 배(0 = 대역 없음 → 완벽 불가). perfectParryOnly(족장)·attack.perfectOnly(삼연낫 ③) 의 성립 대역은 그대로 둔다 —
+    // 저림은 "완벽을 일반으로 낮춘다" 이지 패링 자체를 막지 않는다. 그래서 ③ 은 저림 중 완벽 대역 입력이 일반 패링(관절 없음·콤보 끊김·저림 해제)이 된다 — 기획서 §7 소표
     const numb = (p.numbArmTicks ?? 0) > 0;
     const perfectBand = (space.perfectBand + world.modifiers.perfectBandBonus) * (numb ? balance.status.numbArm.perfectBandMul : 1);
     const perfect = perfectBand > 0 && parryTarget.gap <= perfectBand && !def.parryAlwaysNormal; // 가죽 투구
@@ -186,8 +187,6 @@ export function tick(world: World, _dt: number): void {
           if (combo) enemy.attackMode = 'melee';
           beginPose(world, enemy, 'head_down', balance.weakPoint.headDown.stuckTicks);
         }
-        // 위압(cowed) 은 완벽 패링 1회로 풀린다("완벽만이 답이다"). 0 만 세우고 _ended 는 Status 가 낸다
-        if (cowed) setPlayerStatus(p, 'cowed', 0);
       } else {
         // 일반 — 그 낫의 관절만 짧게(통제 노선). 위압 중엔 열리지 않는다(balance.status.cowed.normalParryOpensJoint)
         if (ex && !(cowed && !balance.status.cowed.normalParryOpensJoint)) openExposure(world, enemy, ex.joint, ex.normalTicks);
@@ -225,8 +224,10 @@ export function tick(world: World, _dt: number): void {
       enemy.recoiled = true;
     }
     p.parryBufferTicks = 0;
-    // 일반 패링 1회 성립 = 팔 저림 해제("패링하면 풀린다"). 0 만 세우고 _ended 는 Status 가 낸다
+    // 일반 패링 1회 성립 = 팔 저림 해제("패링하면 풀린다"), 완벽 패링 1회 성립 = 위압 해제("완벽만이 답이다"). 둘 다 어느 적이든 — 위압을 건 것은 거수지만
+    // 푸는 완벽 패링은 시험방의 고블린이어도 된다(기획서 §6, B3-4 검토). 0 만 세우고 _ended 는 Status 가 낸다
     if (!perfect && numb) setPlayerStatus(p, 'numb_arm', 0);
+    if (perfect && cowed) setPlayerStatus(p, 'cowed', 0);
     world.events.emit('parry_attempt', {
       result: perfect ? 'perfect' : 'normal',
       chain: 0,
