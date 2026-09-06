@@ -85,6 +85,9 @@ export type SoundName =
   | 'bow_twang'
   | 'headshot'
   | 'weak_point_hit'
+  | 'joint_open'
+  | 'blade_stuck'
+  | 'eye_burst'
   | 'player_hurt'
   | 'block_hit'
   | 'hammer_heavy'
@@ -1155,6 +1158,24 @@ export class GameAudio {
         this.tone(1900, 0.05, 'square', 0.55, 0, 900);
         this.tone(760, 0.11, 'triangle', 0.6, 0.02);
         this.noise(0.07, 0.45, 3200, 0.01);
+        break;
+      case 'joint_open':
+        // 관절 노출(일반 패링) — 갑각 사이가 벌어지는 짧은 금속성 '찡' 두 음. 노출 = 구체 발광 + 맥동 + 이 소리(기획서 §2)
+        this.tone(1320, 0.05, 'triangle', 0.45);
+        this.tone(1980, 0.09, 'triangle', 0.4, 0.04);
+        this.noise(0.05, 0.3, 4200, 0.02);
+        break;
+      case 'blade_stuck':
+        // 낫이 바닥에 박힘(완벽 패링 → 머리 내림) — 돌을 가르는 둔탁한 충격 + 뼈 낫이 떨리는 낮은 울림
+        this.noise(0.1, 0.9, 1400);
+        this.tone(70, 0.28, 'sine', 0.9, 0, 40);
+        this.tone(410, 0.34, 'triangle', 0.35, 0.03, 380);
+        break;
+      case 'eye_burst':
+        // 혼절(눈 누적 66) — 눈이 터지는 젖은 파열 + 위로 치솟는 비명조. 처형 창이 열렸다는 신호
+        this.noise(0.12, 0.8, 2600);
+        this.tone(320, 0.22, 'sawtooth', 0.5, 0.02, 760);
+        this.tone(880, 0.3, 'square', 0.3, 0.06, 1400);
         break;
       case 'bow_twang':
         // 활시위 튕김 + 화살 바람 소리

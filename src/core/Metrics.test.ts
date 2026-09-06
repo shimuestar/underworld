@@ -47,9 +47,13 @@ describe('Metrics', () => {
     events.emit('weak_point_hit', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'eye', damage: 33, x: 0, y: 2.35, z: 0 });
     events.emit('weak_point_hit', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'joint_r', damage: 22, x: 0, y: 2.5, z: 0 });
     events.emit('weak_point_broken', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'joint_r' });
+    events.emit('exposure_closed', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'joint_r', hits: 2 });
+    events.emit('exposure_closed', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'eye', hits: 0 });
+    events.emit('boss_staggered', { enemyId: 1, enemyType: 'scythe_behemoth', cause: 'eye' });
+    events.emit('boss_staggered', { enemyId: 2, enemyType: 'goblin_chieftain', cause: 'parry' }); // 족장 스태거는 혼절이 아니다
 
     const s = metrics.snapshot(makeWorldStub());
-    expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1 });
+    expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1 });
     expect(s.combat.parryAttempts).toBe(4);
     expect(s.derived.perfectParryRatio).toBeCloseTo(0.5);
     expect(s.derived.parrySuccessRatio).toBeCloseTo(0.75);

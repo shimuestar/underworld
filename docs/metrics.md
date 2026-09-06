@@ -47,6 +47,9 @@ melee_kill      { enemyType, execution }
 spell_kill      { enemyType }
 weak_point_hit    { enemyId, enemyType, id, damage, x, y, z }   ← 약점 구체 명중 (거수 눈·관절·심장·분출공), 권총·화살·화염구 직격만
 weak_point_broken { enemyId, enemyType, id }   ← 약점 내구 0 (관절 파열)
+exposure_closed   { enemyId, enemyType, id, hits }   ← 약점 노출 창이 닫힘 (관절 타이머 소진·머리 내림 종료·혼절). hits = 그 창 안의 명중 수 → 노출 활용률
+boss_status       { enemyId, enemyType, kind, on, id?, ticks? }   ← 보스 상태이상 on/off (expose·head_down·daze — 기획서 §5 의 12종이 이 하나로)
+boss_staggered    { enemyId, enemyType, cause }   ← cause 'parry'(족장 연속 패링) / 'eye'(거수 눈 누적 66 혼절)
 shot_fired      { hitEnemy }
 player_damaged  { amount, health }
 player_died     { tick }

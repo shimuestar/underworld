@@ -13,10 +13,12 @@
 //
 // 보스: 완벽/일반 패링 모두 공격을 끊지만, parriesToStagger 연속 성공해야 스태거.
 //       스태거 중 처형은 즉사가 아니라 executeDamage 타격.
+// parryOutcome 'expose'(거수): 패링은 스태거 대신 약점을 연다 — 일반 = 그 낫의 어깨 관절 36틱(recover),
+//       완벽 = 관절 90틱 + 낫이 바닥에 박혀 머리 내림(pose head_down 90틱, 눈 노출). 혼절은 Enemies 가 눈 누적으로 건다.
 
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef } from '../core/Entities';
-import { pushEnemy, applyFrostOnHit, spendStamina } from '../core/World';
+import { beginPose, openExposure, pushEnemy, applyFrostOnHit, spendStamina } from '../core/World';
 import type { EnemyState, ProjectileState, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
@@ -141,14 +143,29 @@ export function tick(world: World, _dt: number): void {
     const perfect = parryTarget.gap <= space.perfectBand + world.modifiers.perfectBandBonus && !def.parryAlwaysNormal; // 가죽 투구
     world.freezeTicks = perfect ? reaction.hitstopPerfectTicks : reaction.hitstopNormalTicks;
 
-    if (def.boss && def.parriesToStagger) {
+    if (def.parryOutcome === 'expose') {
+      // 거수(기획서 §4.1) — 패링은 약점을 연다. 어느 낫이었는지는 공격 정의(exposeOnParry.joint)가 안다:
+      // 오른낫(attack) → joint_r, 왼낫(attackAlt) → joint_l
+      const ex = attack.exposeOnParry;
+      if (perfect) {
+        // 완벽 — 낫이 바닥에 박혀 머리가 내려온다(눈 0.9m 노출, 이동·공격 불가). 관절도 함께 길게 열린다(눈과 양자택일)
+        if (ex) openExposure(world, enemy, ex.joint, ex.perfectTicks);
+        beginPose(world, enemy, 'head_down', balance.weakPoint.headDown.stuckTicks);
+      } else {
+        // 일반 — 그 낫의 관절만 짧게(통제 노선). 적은 크게 튕겨 후딜(기존 일반 패링과 같은 결)
+        if (ex) openExposure(world, enemy, ex.joint, ex.normalTicks);
+        enemy.ai = 'recover';
+        enemy.timer = attack.recoverTicks + reaction.parryRecoilTicks;
+        enemy.recoiled = true;
+      }
+    } else if (def.boss && def.parriesToStagger) {
       // 보스 — 연속 패링 누적, 도달 시에만 스태거
       enemy.parryStreak = (enemy.parryStreak ?? 0) + 1;
       if (enemy.parryStreak >= def.parriesToStagger) {
         enemy.parryStreak = 0;
         enemy.ai = 'staggered';
         enemy.timer = reaction.staggerTicks;
-        world.events.emit('boss_staggered', { enemyId: enemy.id });
+        world.events.emit('boss_staggered', { enemyId: enemy.id, enemyType: enemy.type, cause: 'parry' });
       } else {
         enemy.ai = 'recover';
         enemy.timer = attack.recoverTicks + reaction.parryRecoilTicks;

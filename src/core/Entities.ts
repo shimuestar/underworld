@@ -101,6 +101,9 @@ export interface EnemyAttackDef {
   splash?: ProjectileSplashDef;
   /** 교대 — attackAlt 슬롯에 두면 기본 attack 과 번갈아 나간다(거수 오른낫·왼낫). 없으면 attackAlt 는 선택되지 않는다 */
   alternate?: boolean;
+  /** 패링 → 약점 노출(parryOutcome 'expose' 적, 기획서 §4.1 ①②) — 이 공격을 일반 패링하면 joint 약점이 normalTicks,
+   *  완벽 패링하면 perfectTicks 동안 열린다(완벽은 머리 내림도 함께 — balance.weakPoint.headDown.stuckTicks). 없으면 노출 없음 */
+  exposeOnParry?: { joint: string; normalTicks: number; perfectTicks: number };
 }
 
 /** 세 성분 좌표·치수 — [x, y, z]. x·z 는 def.radius 배, y 는 def.height 배 (Stage 가 곱한다) */
@@ -156,7 +159,8 @@ export interface WeakPointDef {
   facing: LocalVec3;
   /** 원뿔 각(도). 없으면 balance.weakPoint.defaultConeDeg */
   coneDeg?: number;
-  /** 노출 조건(B2-2 부터) — 이 단계에선 무시하고 항상 노출 */
+  /** 노출 자세 — enemy.pose 가 이 목록에 있으면 열린다(눈 = head_down, 심장 = rear). 노출 타이머(enemy.exposure[id])는
+   *  이와 별개로 연다(관절 = 패링). 둘 다 아니면 판정 자체가 없다 → 몸통 배율(기획서 §4.2). 빈 배열 = 타이머로만 */
   exposedStates?: string[];
   /** 열림 중 배율 재정의(분출공, B3-2) */
   openMul?: number;
@@ -321,7 +325,16 @@ export interface EnemyDef {
   /** 방패막기로 공격을 끊을 수 없다 — 칩 피해와 밀림은 그대로 받되 적은 튕기지 않는다 */
   blockCannotStagger?: boolean;
   parriesToStagger?: number;
+  /** 'expose' — 패링이 스태거 대신 약점을 연다(거수, 기획서 §4.1): 일반 = 그 낫의 관절, 완벽 = 관절 + 머리 내림(눈).
+   *  Reaction 은 이 값을 parriesToStagger 보다 먼저 본다. 없으면 옛 경로(완벽 = 스태거 / 보스 = 연속 패링 누적) */
+  parryOutcome?: 'expose';
   executeDamage?: number;
+  /** 머리 내림(pose head_down) 중 해머 타격을 눈 피해로 집계하는 배율(거수 2.2 — 한 타 = 권총 한 발). 없으면 해머는 약점과 무관 */
+  hammerEyeMul?: number;
+  /** 머리 내림 중 해머 마무리 넉백을 0 으로 — 붙어서 눈을 두들기는 동안 밀어내지 않는다(거수) */
+  noKnockbackWhileHeadDown?: boolean;
+  /** 혼절(staggered) 중 해머 3타 전부 적중 시의 체급 무시 5m 날림을 면제 — 처형 반경 밖으로 날아가지 않게(거수, 결정 33) */
+  staggerFlingImmune?: boolean;
   /** 피격 AABB 재정의(거수) — 충돌 반경(radius)과 분리해 시각 몸통에 맞춘 직사각 상자.
    *  로컬 축(정면 = -z) 기준 반폭이라 yaw 로 돌아 있으면 레이를 로컬로 돌려 판정한다(rayHitsEnemy).
    *  없으면 기존 radius 정사각 기둥 */
@@ -577,12 +590,17 @@ export function weakPointWorldPos(
   return { x: enemy.x + r.x, y: (enemy.jumpY ?? 0) + r.y, z: enemy.z + r.z };
 }
 
-/** 이 약점이 지금 판정을 받는가 — 내구가 0(파열)이면 닫힘. 노출 조건(exposedStates)은 B2-2 에서 이 함수에 붙는다.
- *  이 단계(B2-1)에선 그 외 전부 항상 노출 */
-export function weakPointOpen(enemy: { weakHp?: Record<string, number> }, wp: WeakPointDef): boolean {
+/** 이 약점이 지금 판정을 받는가(기획서 §4.2 "노출 아닐 때는 판정 자체가 없다") — 내구가 0(파열)이면 닫힘.
+ *  열림 = 노출 타이머(enemy.exposure[id] > 0 — 패링·완벽 회피가 연다) 또는 자세 노출(enemy.pose ∈ wp.exposedStates — 눈은 head_down).
+ *  혼절(pose stunned) 중 눈이 닫히는 것도 이 규칙에서 나온다(stunned 는 눈의 exposedStates 에 없다). Weapons·Projectiles·Stage 공용 */
+export function weakPointOpen(
+  enemy: { weakHp?: Record<string, number>; exposure?: Record<string, number>; pose?: string },
+  wp: WeakPointDef,
+): boolean {
   const hp = enemy.weakHp?.[wp.id];
   if (hp !== undefined && hp <= 0) return false;
-  return true;
+  if ((enemy.exposure?.[wp.id] ?? 0) > 0) return true;
+  return enemy.pose !== undefined && (wp.exposedStates?.includes(enemy.pose) ?? false);
 }
 
 export interface WeakPointHit {
@@ -603,7 +621,10 @@ export function rayHitsWeakPoint(
   dx: number,
   dy: number,
   dz: number,
-  enemy: { x: number; z: number; yaw: number; jumpY?: number; pose?: string; weakHp?: Record<string, number>; feigning?: boolean },
+  enemy: {
+    x: number; z: number; yaw: number; jumpY?: number; pose?: string;
+    weakHp?: Record<string, number>; exposure?: Record<string, number>; feigning?: boolean;
+  },
   def: { weakPoints?: WeakPointDef[]; poseOffsets?: Record<string, Record<string, LocalVec3>> },
   pad: number,
 ): WeakPointHit | null {

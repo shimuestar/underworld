@@ -901,9 +901,12 @@
     "nearScale": 1.35,
     "farScale": 0.8
   },
-  "_weakPointNote": "약점 구체 판정 공용 규칙(기획서 §4.2) — defaultConeDeg: weakPoints[].coneDeg 가 없을 때의 정면 원뿔 각(도). dot(레이 방향, facing) ≤ −cos(coneDeg/2) 일 때만 구체가 성립한다. 혼절·눈멂·역류 임계 등은 B2-2 부터 이 블록에 쌓인다",
+  "_weakPointNote": "약점 구체 판정 공용 규칙(기획서 §4.2·§14) — defaultConeDeg: weakPoints[].coneDeg 가 없을 때의 정면 원뿔 각(도). dot(레이 방향, facing) ≤ −cos(coneDeg/2) 일 때만 구체가 성립한다. dazeThreshold: 머리 내림(head_down) 한 노출 안 눈 누적 피해가 이 값에 닿으면 혼절(staggered reaction.staggerTicks, 처형 창) — 권총 2발(33×2)/활 1발/해머 2타. dazeCooldownTicks: 혼절이 끝난 뒤 이 동안은 눈이 열려도 피해만 들어가고 누적은 없다(어두운 청록). headDown.stuckTicks: 완벽 패링으로 낫이 바닥에 박혀 머리가 내려와 있는 틱(이동·공격 불가, 눈 0.9m 노출). backflow/topple/exhaust 틱은 B2-5·B3 에서 이 블록에 얹는다",
   "weakPoint": {
-    "defaultConeDeg": 100
+    "defaultConeDeg": 100,
+    "dazeThreshold": 66,
+    "dazeCooldownTicks": 600,
+    "headDown": { "stuckTicks": 90 }
   },
   "_spatialAudioNote": "적 소리의 좌우 패닝 + 거리 감쇠 — 시야 밖 위협을 귀가 먼저 안다. minVol 아래로는 안 줄여 예고음이 게임플레이 단서로 항상 들리게 한다",
   "spatialAudio": {

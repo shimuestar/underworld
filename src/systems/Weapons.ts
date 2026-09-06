@@ -4,7 +4,10 @@
 //    두 자원 경제를 분리하는 유일한 규칙이다 — docs/systems/combat.md §5.
 
 import { balance } from '../core/Balance';
-import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, type WeakPointDef } from '../core/Entities';
+import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
+
+/** 머리 내림 중 해머가 집계되는 약점 id — 기획서 §4 "머리 내림·탈진 중 해머 타격 = 눈 집계(hammerEyeMul)" */
+const HAMMER_EYE_ID = 'eye';
 import { rayVsAabb } from '../core/Ray';
 import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, provokeTrap, hitBarrel, hitWeakPoint, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
 
@@ -330,15 +333,26 @@ function resolveHammerHit(world: World, heavy: boolean): void {
       continue; // 깨지는 그 타격까지는 피해가 들어가지 않는다
     }
 
-    const meleeDealt = applyFrostOnHit(world.events, enemy, damage);
+    // 머리 내림 특칙(거수, hammerEyeMul) — 낫이 박혀 머리가 0.9m 에 내려온 동안 해머는 눈을 두들긴다:
+    // 피해 ×2.2(15 → 33 = 권총 한 발)이고 약점 장부(weak_point_hit·눈 누적)에 오른다. 눈이 열려 있을 때만(혼절 중엔 닫힘)
+    const eyeWp = def.hammerEyeMul !== undefined && enemy.pose === 'head_down' ? def.weakPoints?.find((wp) => wp.id === HAMMER_EYE_ID) : undefined;
+    const eyeHammer = eyeWp !== undefined && weakPointOpen(enemy, eyeWp);
+    const meleeDealt = applyFrostOnHit(world.events, enemy, eyeHammer ? damage * def.hammerEyeMul! : damage);
     enemy.health -= meleeDealt;
+    if (eyeHammer) {
+      const c = weakPointWorldPos(enemy, def, eyeWp!);
+      hitWeakPoint(world, enemy, eyeWp!.id, meleeDealt, c.x, c.y, c.z); // 피해 숫자(melee_hit)보다 먼저 — '약점!' 접미
+    }
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     // 피격음 — 맞은 적 코앞의 동료도 깬다 (권총은 착탄 소음 12m 가 이미 대신한다)
     alertNearbyAt(world, enemy.x, enemy.z, balance.enemyAi.hitNoiseRadius, balance.enemyAi.noticeDelayTicks);
     if (heavy) {
       // 경직한 적에게 3타를 모두 꽂았다 — 체급을 무시하고 크게 날린다.
-      // 경직은 유지된다(밀리는 동안 타이머가 멈춘다) — 쫓아가 처형할 수 있다
-      const flingStaggered = chainFull && enemy.ai === 'staggered';
+      // 경직은 유지된다(밀리는 동안 타이머가 멈춘다) — 쫓아가 처형할 수 있다.
+      // staggerFlingImmune(거수 혼절)은 면제 — 처형 반경(4.6) 밖으로 날아가면 혼절의 보상이 사라진다(결정 33)
+      const flingStaggered = chainFull && enemy.ai === 'staggered' && !def.staggerFlingImmune;
+      // 머리 내림 중 마무리 넉백 0(noKnockbackWhileHeadDown) — 눈을 두들기는 동안 밀어내면 2타째가 닿지 않는다
+      const noKnockback = def.noKnockbackWhileHeadDown === true && enemy.pose === 'head_down';
       // 크게 밀려난 적은 확률적으로 달려들며 반격한다 (방패가 깨진 뒤에도 동일).
       // 경직 중에는 걸지 않는다 — 밀림이 끝나자마자 돌격으로 경직을 털고 나온다.
       // chargeOnKnockback false(거수)는 이 우회 경로를 쓰지 않는다 — 자세·쿨다운을 무시하고 달려들면 안 된다
@@ -355,7 +369,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
           enemyType: enemy.type,
           distance: combo.staggerFullKnockback,
         });
-      } else {
+      } else if (!noKnockback) {
         // 마무리 강타에서만 밀어낸다. 체급이 무거울수록 덜 밀린다
         // (경량 1.0 / 중량 0.5 / 중장 0.25)
         const byWeight = combo.knockbackByWeight as unknown as Record<string, number>;

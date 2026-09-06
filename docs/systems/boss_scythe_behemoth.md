@@ -89,7 +89,7 @@
 - 약점 머티리얼은 `flashMaterials` 에 넣지 않는다(일괄 emissive 대입이 자체 발광을 지운다). 별도 갱신.
 - 예고는 **동작·발광·소리로만.** 파랑 = 패링 가능(낫), 빨강 = 불가(돌격·발구르기·들이받기·포효·꼬리), 보라 = 투사체(갑각 떨기). 약점 노출은 **구체 발광 + 크기 맥동 + 짧은 금속성 소리**. 링·조준선·아웃라인 없음. 발구르기 바닥 표식은 결정 16(기본 없음).
 - 피 색 `BLOOD_COLORS.scythe_behemoth = 0x4a1a6e`(오염 보라). 파편 색은 몸통색.
-- 시각 검증: `debug/behemoth.ts` + `.html`(slime/archer 페이지 형식 복제) 헤드리스 스크린샷 **7장** — 기본 / charge / rear / head_down / roar / P3(등갑판 탈락) / **정면 P2 normal(분출공이 머리에 가리지 않는지)**.
+- 시각 검증: `debug/behemoth.ts` + `.html`(slime/archer 페이지 형식 복제) 헤드리스 스크린샷 — 자세가 생기는 체크박스에서 찍는다(TASKS M11 과 같은 배분): B1-2 기본 정면·측면·낫 예고·낫 타격 측면/정면·돌격 예고+튕김(6장) + 시험방 3장, B1-3 왼낫 예고·들이받기, B2-2 **head_down**(+측면·쿨다운·혼절), B3-1 rear, B3-2 **정면 P2 normal(분출공이 머리에 가리지 않는지)**, B3-3 P3(등갑판 탈락), B3-4 roar.
 
 ---
 
@@ -428,7 +428,7 @@ Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검�
 ### 배치 1 — 뼈대: 기존 파이프만으로 싸울 수 있는 거수 (시험방)
 
 - [ ] **B1-1 정의·스포너·테스트** — `data/entities.json` `scythe_behemoth`(`attack` 오른낫 파랑 + `chargeAttack` 빨강 hitOnContact 72틱 = 기존 슬롯만, **임시** `parriesToStagger 2` + `executeDamage 240`, `hitBox`, `alertRadius 18`, `chargeOnKnockback false`), `Spawner.ts` IMPLEMENTED, `Boss.test.ts` describe(패링 2회 → 스태거 → 처형 240, 돌격 접촉·완벽 회피 시 미접촉) + 헤더의 낡은 '2페이즈 교대' 주석 정리. ▶ 시험방 소환 탭 자동 등록, 인간형 폴백 외형으로 낫·돌격·처형이 돈다.
-- [ ] **B1-2 외형** — `Stage.ts` ENEMY_COLORS/BLOOD_COLORS + `buildEnemyVisual` behemoth 분기(몸통·다리·높은 머리·뿔·낫 2자루 리그(족장 팔 리그 복제, `weaponTipDist`/`strikeProgress`)·등갑판·약점 구체 5개 **비활성 장식**), `debug/behemoth.ts` + `.html` 스크린샷 7장. ▶ 같은 플레이, 외형 확정.
+- [ ] **B1-2 외형** — `Stage.ts` ENEMY_COLORS/BLOOD_COLORS + `buildEnemyVisual` behemoth 분기(몸통·다리·높은 머리·뿔·낫 2자루 리그(족장 팔 리그 복제, `weaponTipDist`/`strikeProgress`)·등갑판·약점 구체 5개 **비활성 장식**), `debug/behemoth.ts` + `.html` 스크린샷 6장(기본 정면·측면·낫 예고·낫 타격 측면/정면·돌격 예고+튕김) + 시험방 3장 — rear/head_down/roar/P2 정면/P3 는 그 자세가 생기는 B2/B3 체크박스에서(§2 시각 검증). ▶ 같은 플레이, 외형 확정.
 - [ ] **B1-3 왼낫 교대·들이받기** — `Entities.currentAttack` + `World.attackMode` 에 `'alt'|'close'`, `attackAlt`/`closeAttack`, Enemies 교대 선택·3.0m 들이받기, Stage 왼팔 연출. ▶ 세 공격 리듬.
 
 ### 배치 2 — P1 완성: 약점·패링 연동·상태 2종·조준 노선·페이즈 골격

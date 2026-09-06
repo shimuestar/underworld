@@ -1017,8 +1017,21 @@ export interface EnemyState {
    *  0 이면 파열(판정 닫힘, Entities.weakPointOpen). 갑각 재생(B2-6)이 되돌린다 */
   weakHp?: Record<string, number>;
   /** 자세 id(거수) — poseOffsets 표의 키(charge·head_down·rear …). 없으면 normal 자리.
-   *  판정(weakPointWorldPos)과 그림(Stage 구체)이 같은 표를 읽는다. 세우는 포즈 타이머는 B2-2 */
+   *  판정(weakPointWorldPos)과 그림(Stage 구체)이 같은 표를 읽는다. Enemies 가 세운다: head_down 은 poseTicks 타이머,
+   *  stunned 는 staggered 를 비추고, charge 는 돌격 예고·질주 동안(기획서 §9.1 포즈 타이머 오버라이드) */
   pose?: string;
+  /** 포즈 타이머(거수) — 0 보다 크면 pose 가 이동·공격을 덮는다(head_down: 낫이 박혀 머리가 내려온 동안). 매 틱 감소, 0 에 닿으면 chase */
+  poseTicks?: number;
+  /** 약점 노출 타이머 id → 남은 틱(거수 관절) — 패링(Reaction)·완벽 회피가 열고 Enemies 가 깎는다. 0 이 되면 exposure_closed */
+  exposure?: Record<string, number>;
+  /** 이번 노출 안에서 그 약점을 맞힌 횟수 id → 수 — exposure_closed{hits} 계측용. 열릴 때 0 */
+  exposureHits?: Record<string, number>;
+  /** 이번 노출 안 누적 약점 피해 id → 합 — 눈은 dazeThreshold(혼절), 심장·분출공은 역류 임계(B3). 열릴 때 0 */
+  weakAccum?: Record<string, number>;
+  /** 혼절 쿨다운 잔여 틱 — 이 동안 눈은 열려도 피해만 들어가고 누적은 없다(어두운 청록) */
+  dazeCooldown?: number;
+  /** 눈 누적으로 혼절 중 — staggered 가 끝나는 순간(시간·처형 어느 경로든) Enemies 가 쿨다운을 건다 */
+  dazed?: boolean;
   /** 밀착 공격(closeAttack) 재사용 대기 */
   closeCooldown?: number;
   /** 연사 남은 발수 / 재사용 대기 (족장 화살 세례) */
@@ -1086,9 +1099,10 @@ export interface EnemyState {
   kbZ?: number;
 }
 
-/** 약점 명중 정산 — weak_point_hit 발행 + 내구(weakHp)가 있으면 그만큼 깎고 0 에 닿는 순간 weak_point_broken 한 번.
- *  권총(Weapons)·화살·화염구(Projectiles)가 같은 문을 지난다. 피해 자체는 호출부가 이미 체력에 넣었다 —
- *  이 함수는 약점 장부만 적는다. (x,y,z) 는 착탄점(연출용) */
+/** 약점 명중 정산 — weak_point_hit 발행 + 이번 노출 장부(횟수·누적 피해) + 내구(weakHp)가 있으면 그만큼 깎고 0 에 닿는 순간
+ *  weak_point_broken 한 번. 권총·해머(Weapons)·화살·화염구(Projectiles)가 같은 문을 지난다. 피해 자체는 호출부가 이미 체력에
+ *  넣었다 — 이 함수는 약점 장부만 적는다. 누적(weakAccum)의 임계 판정(눈 66 → 혼절)과 "쿨다운 중 누적 없음"은 Enemies 가
+ *  매 틱 본다(World 는 데이터를 모른다). (x,y,z) 는 착탄점(연출용) */
 export function hitWeakPoint(
   world: World,
   enemy: EnemyState,
@@ -1099,11 +1113,64 @@ export function hitWeakPoint(
   z: number,
 ): void {
   world.events.emit('weak_point_hit', { enemyId: enemy.id, enemyType: enemy.type, id, damage, x, y, z });
+  enemy.exposureHits ??= {};
+  enemy.exposureHits[id] = (enemy.exposureHits[id] ?? 0) + 1;
+  enemy.weakAccum ??= {};
+  enemy.weakAccum[id] = (enemy.weakAccum[id] ?? 0) + damage;
   const hp = enemy.weakHp?.[id];
   if (hp === undefined || hp <= 0) return;
   const left = Math.max(0, hp - damage);
   enemy.weakHp![id] = left;
   if (left <= 0) world.events.emit('weak_point_broken', { enemyId: enemy.id, enemyType: enemy.type, id, x, y, z });
+}
+
+/** 약점 노출 타이머를 연다(거수 관절 — 패링·완벽 회피). 이미 열려 있으면 더 긴 쪽으로 늘리고 장부는 그대로,
+ *  새로 열리면 이번 노출의 횟수·누적을 0 으로. boss_status{kind 'expose', on} 발행(기획서 §5 — 소리·문구는 main 이 붙인다).
+ *  Reaction 이 열고 Enemies 가 깎아 닫는다(closeExposure) */
+export function openExposure(world: World, enemy: EnemyState, id: string, ticks: number): void {
+  if (ticks <= 0) return;
+  enemy.exposure ??= {};
+  const was = enemy.exposure[id] ?? 0;
+  enemy.exposure[id] = Math.max(was, ticks);
+  if (was > 0) return;
+  enemy.exposureHits ??= {};
+  enemy.exposureHits[id] = 0;
+  enemy.weakAccum ??= {};
+  enemy.weakAccum[id] = 0;
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'expose', id, on: true, ticks });
+}
+
+/** 노출을 닫는다(타이머 소진·자세 종료·혼절) — exposure_closed{id, hits}(노출 활용률 계측, 벌칙 없음) 와 boss_status off.
+ *  timer 가 없던 자세 노출(눈)도 같은 문으로 닫아 장부를 비운다 */
+export function closeExposure(world: World, enemy: EnemyState, id: string): void {
+  const hadTimer = (enemy.exposure?.[id] ?? 0) > 0;
+  if (enemy.exposure) delete enemy.exposure[id];
+  const hits = enemy.exposureHits?.[id] ?? 0;
+  if (enemy.exposureHits) enemy.exposureHits[id] = 0;
+  if (enemy.weakAccum) enemy.weakAccum[id] = 0;
+  world.events.emit('exposure_closed', { enemyId: enemy.id, enemyType: enemy.type, id, hits });
+  if (hadTimer) world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'expose', id, on: false });
+}
+
+/** 자세 타이머를 세운다(거수 head_down — 완벽 패링·전도·역류·탈진). 그 동안 Enemies 의 포즈 오버라이드가 이동·공격을 막는다
+ *  (ai 는 'recover' 로 두어 Reaction 의 처형·조기 입력 판정에 걸리지 않게). 자세로 열리는 약점(눈)의 이번 노출 장부는
+ *  타이머 노출이 아닌 것 전부를 0 으로 비워 "한 노출 안 누적"을 처음부터 센다. boss_status{kind: pose, on: true} 발행 */
+export function beginPose(world: World, enemy: EnemyState, pose: string, ticks: number): void {
+  enemy.pose = pose;
+  enemy.poseTicks = Math.max(1, Math.round(ticks));
+  enemy.ai = 'recover';
+  enemy.timer = enemy.poseTicks;
+  enemy.recoiled = false;
+  enemy.whiffed = false;
+  enemy.strikeProgress = 0;
+  if (enemy.weakAccum) {
+    for (const id in enemy.weakAccum) {
+      if ((enemy.exposure?.[id] ?? 0) > 0) continue;
+      enemy.weakAccum[id] = 0;
+      if (enemy.exposureHits) enemy.exposureHits[id] = 0;
+    }
+  }
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: pose, on: true, ticks: enemy.poseTicks });
 }
 
 /** 피격 밀림 시작 — (dirX,dirZ) 방향으로 distance 만큼 ticks 동안 밀린다.

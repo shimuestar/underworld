@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { equipColor } from '../core/EquipData';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
-import { currentAttack, enemyDef, healthBarState, shieldLowered, weakPointOffset, type EnemyDef } from '../core/Entities';
+import { currentAttack, enemyDef, healthBarState, shieldLowered, weakPointOffset, weakPointOpen, type EnemyDef } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN } from '../level/GridLoader';
 import type {
@@ -474,6 +474,9 @@ interface EnemyVisual {
   bowRig?: BowRig;
   /** 낫뿔 거수 리그 — 4족·낫 팔·약점 구체. 자세는 poseBehemothRig 가 매 프레임 */
   behemoth?: BehemothRig;
+  /** 거수 자세 보간 — 마지막 로직 자세(구체·머리가 향하는 표 자리)와 그 진행 0~1. 자세가 사라지면 0 으로 돌아가며 normal 로 복귀 */
+  bhPose?: string;
+  bhBlend?: number;
   /** 시위 당김 0~1 — 놓는 순간 0으로 스냅해 시위가 튕겨 돌아간다 */
   bowDraw?: number;
   /** 머리 위 이름표 + HP 바 */
@@ -756,6 +759,8 @@ function drawPlate(
   barIndex = 1,
   barCount = 1,
   parry: ParryPips | null = null,
+  /** 이름을 스태거 금색으로 — 패링 칸이 없는 보스의 혼절(처형 창) 표시 */
+  goldName = false,
 ): void {
   const ctx = canvas.getContext('2d')!;
   ctx.clearRect(0, 0, PLATE_W, PLATE_H);
@@ -766,7 +771,7 @@ function drawPlate(
   ctx.font = 'bold 24px monospace';
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillText(label, 129, 19);
-  ctx.fillStyle = '#e8e8ee';
+  ctx.fillStyle = goldName ? PIP_STAGGER : '#e8e8ee';
   ctx.fillText(label, 128, 18);
 
   // HP 바 — 패링 카운터가 붙으면 그만큼 자리를 내준다
@@ -983,6 +988,8 @@ const BEHEMOTH_COLORS = {
   heartOpen: 0xff2e63,
   ventOpen: 0x39ff88,
   jointBroken: 0x7a1f3a,
+  /** 혼절 쿨다운 중 열린 눈 — 어두운 청록, 맥동 없음("피해만 들어간다"의 표시) */
+  eyeDim: 0x1c6e60,
 } as const;
 
 /** 약점 구체의 닫힌 본색·열림 발광색 — id 로 고른다 (모르는 id 는 관절색) */
@@ -1001,6 +1008,7 @@ const BH_WEAK_PULSE_MS = 640;
 const BH_WEAK_FLASH_MS = 170;
 const BH_WEAK_FLASH_INTENSITY = 2.6;
 const BH_WEAK_OPEN_INTENSITY = 0.85;
+const BH_WEAK_DIM_INTENSITY = 0.3;
 
 /** 거수 몸통 자세(rad·m·height 배) — 인간형 기본값(앞으로 24° 숙임·0.5m 전진)은 4족에겐 앞으로
  *  엎어지는 그림이라 따로 둔다. syncEnemies 와 debug/behemoth.ts 가 같은 값을 쓴다 */
@@ -1022,6 +1030,13 @@ export const BEHEMOTH_TORSO = {
   /** 들이받기 — 머리를 내리꽂으며 몸통이 짧게 앞으로 실린다. 헛친 경직도 이 자세로 굳는다 */
   headbuttStrikeLean: -0.08,
   headbuttLunge: -0.35,
+  /** 머리 내림(head_down, 완벽 패링에 낫이 박힘) — 앞으로 기울고 앞다리가 접힌다(height 배 낮춤). 머리는 목 IK 가 표의 눈(0.9m)에 맞춘다.
+   *  기획서 §2 의 +20° 는 신경 피벗 길이(0.97m) 로는 눈 0.9m 를 못 만들어 15° 로 두었다 — 다리는 poseBehemothRig 가 바닥에 붙인다 */
+  headDownLean: -0.26,
+  headDownCrouch: 0.05,
+  /** 혼절(stunned) — 앞으로 살짝 처지며(표의 눈 2.0m 에 목이 닿는 자세) 흔들린다 */
+  stunnedLean: -0.06,
+  stunnedCrouch: 0.04,
 } as const;
 
 /** syncEnemies 가 자세 위에 더하는 기울임 떨림 진폭(rad) — 섬광 구간 떨림·튕김 흔들림·피탄 움찔.
@@ -1048,14 +1063,24 @@ const BH_ARM_CHARGE = 0.25; // 돌격 — 낫을 옆구리로 접어 붙인다
 const BH_BLADE_CHARGE = -2.15;
 const BH_LEG_SWING = 0.32; // 걸음 진폭
 const BH_PAW_SCRAPE = 0.3; // 돌격 예고 앞발 긁기 진폭
-const BH_NECK_DOWN = 1.0; // 돌격 예고 머리 내림(목 회전) — 눈이 정면 1.1m 부근으로
-const BH_HEAD_COUNTER = 0.7; // 목을 내리는 만큼 머리는 되들어 정면을 본다 (비율)
-const BH_NECK_BACK = 0.42; // 들이받기 예고 — 목을 뒤로 홱 젓는 각. 뿔끝(3.49m·z −1.8)이 솟으므로 3.8m 아래를 Boss.test 천장 검사가 잰다
-const BH_NECK_BUTT = 0.85; // 들이받기 — 목을 앞으로 내리꽂는 각
+// 머리 내림(돌격 예고·질주, head_down, stunned …)은 손 각이 아니라 목 IK — 약점 표(poseOffsets)의 눈 자리에 머리 메시의 눈을 맞춘다
+// (poseBehemothRig.solveNeckToEye). 보이는 눈 = 판정 구체. 들이받기만 손 각(BH_NECK_BACK/BUTT)이다
+const BH_ARM_STUCK = -0.12; // head_down — 박힌 낫의 위팔 월드 각(수평 조금 아래). 낫은 곧게 바닥까지
+const BH_ARM_STUCK_YAW = 0.35; // 박힌 낫은 안쪽으로 휩쓴 채 — 플레이어 앞 바닥에 꽂혀 있다
+const BH_STUN_SWAY = 0.12; // 혼절 — 목이 좌우로 휘청이는 각
+const BH_STUN_SWAY_MS = 150;
+const BH_LEG_SCALE_MIN = 0.5; // 다리 길이 보정 범위 — 기울인 몸에서 발이 바닥에 남게 늘이고 접는다
+const BH_LEG_SCALE_MAX = 1.35;
+// 들이받기 예고 — "머리를 홱 뒤로 젓기". 목 마디가 0.9m 라 목을 뒤로 들면 뿔끝이 3.8m 를 넘는다(0.2rad 에 3.83m) —
+// 목은 살짝 숙이고(BH_COIL_NECK) 머리를 위로 젖혀(BH_COIL_PITCH) 뿔이 하늘을 보게 한다. 천장 검사는 Behemoth.test
+const BH_COIL_NECK = -0.05;
+const BH_COIL_PITCH = 0.5;
+const BH_NECK_BUTT = 0.6; // 들이받기 — 목을 앞으로 내리꽂는 각(머리 중심 ≈ 1.8m)
 const BH_BUTT_HEAD_COUNTER = 0.45; // 내리꽂을 때 머리를 되들어 뿔이 앞(플레이어)을 겨눈다 (비율)
 const BH_TAIL_DROOP = 0.3;
 const BH_TAIL_SWAY = 0.18;
 const BH_TIP_MIN_Y = 0.08; // 낫끝이 바닥을 뚫지 않게 (m)
+const BH_POSE_BLEND_K = 0.35; // 자세 표 보간 계수(프레임당) — 머리 내림·혼절이 서고 풀릴 때 구체와 머리가 함께 옮겨 간다
 
 /** 거수 리그 손잡이 — buildBehemothRig 가 만들고 poseBehemothRig 가 움직인다 */
 export interface BehemothRig {
@@ -1117,8 +1142,10 @@ export interface BehemothPose {
   trembling: boolean;
   /** 보간 계수 — 1 이면 즉시(타격·디버그), 0 이면 굳음(빙결) */
   snap: number;
-  /** 로직의 자세 id(enemy.pose) — 약점 구체를 poseOffsets 표의 이 자세 자리에 놓는다. 없으면 normal */
+  /** 로직의 자세 id(enemy.pose) — 약점 구체를 poseOffsets 표의 이 자세 자리에 놓고, 머리 메시는 목 IK 로 표의 눈에 맞춘다. 없으면 normal */
   pose?: string;
+  /** 자세 진행 0~1 — 구체·머리가 normal 자리에서 표 자리로 가는 보간(돌격 예고는 예고 진행도, 그 외는 syncEnemies 가 부드럽게). 없으면 1 */
+  poseBlend?: number;
 }
 
 
@@ -1332,7 +1359,7 @@ export function behemothAnchorPos(rig: BehemothRig, id: string, out: THREE.Vecto
 export function styleBehemothWeakPoints(
   rig: BehemothRig,
   nowMs: number,
-  state: (id: string) => { open: boolean; broken: boolean; flashAgeMs: number },
+  state: (id: string) => { open: boolean; broken: boolean; flashAgeMs: number; dim?: boolean },
 ): void {
   for (const id in rig.weakPoints) {
     const mesh = rig.weakPoints[id]!;
@@ -1345,6 +1372,13 @@ export function styleBehemothWeakPoints(
       mat.emissive.setHex(0x000000);
       mat.emissiveIntensity = 1;
       mesh.scale.setScalar(1);
+    } else if (st.open && st.dim) {
+      // 혼절 쿨다운 중의 눈 — 열려 있되 어두운 청록, 맥동 없음("피해만, 누적 없음")
+      const dimColor = id === 'eye' ? BEHEMOTH_COLORS.eyeDim : colors.open;
+      mat.color.setHex(dimColor);
+      mat.emissive.setHex(dimColor);
+      mat.emissiveIntensity = BH_WEAK_DIM_INTENSITY + (BH_WEAK_FLASH_INTENSITY - BH_WEAK_DIM_INTENSITY) * flash;
+      mesh.scale.setScalar(1 + flash * 0.2);
     } else if (st.open) {
       mat.color.setHex(colors.open);
       mat.emissive.setHex(colors.open);
@@ -1370,35 +1404,62 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
   const k = Math.max(0, Math.min(1, p.snap));
   const mix = (cur: number, target: number): number => cur + (target - cur) * k;
 
-  // 다리 — 대각 쌍(앞오+뒤왼 / 앞왼+뒤오)이 번갈아. 돌격 예고엔 앞발이 땅을 긁는다
+  const blend = Math.max(0, Math.min(1, p.poseBlend ?? 1));
+  const tablePose = p.pose !== undefined && p.pose !== 'normal' && rig.def.poseOffsets?.[p.pose] !== undefined ? p.pose : undefined;
+
+  // 다리 — 대각 쌍(앞오+뒤왼 / 앞왼+뒤오)이 번갈아. 돌격 예고엔 앞발이 땅을 긁는다.
+  // 몸통이 기울거나 낮아져도 발은 바닥에 남는다: 엉덩이의 group 높이만큼 다리를 늘이고 접고, 기울임을 되돌려 세운다
+  // (배치 1 메모 — 돌격 웅크림에서 앞다리가 바닥을 0.46m 뚫었다)
   const swing = Math.sin(p.legPhase) * BH_LEG_SWING * p.legBlend;
   const scrape = p.chargeCoil > 0 ? Math.sin(p.nowMs / 90) * BH_PAW_SCRAPE * p.chargeCoil : 0;
   const legTargets = [swing + scrape, -swing - scrape, -swing, swing];
   for (let i = 0; i < rig.legs.length; i++) {
     const hip = rig.legs[i]!;
-    hip.rotation.x = mix(hip.rotation.x, legTargets[i] ?? 0);
+    hip.rotation.x = mix(hip.rotation.x, (legTargets[i] ?? 0) - lean);
+    const hipY = torso.position.y + hip.position.y * Math.cos(lean) - hip.position.z * Math.sin(lean);
+    const scale = Math.max(BH_LEG_SCALE_MIN, Math.min(BH_LEG_SCALE_MAX, hipY / rig.dims.legH));
+    const leg = hip.children[0];
+    if (leg) {
+      leg.scale.y = mix(leg.scale.y, scale);
+      leg.position.y = (-rig.dims.legH * leg.scale.y) / 2;
+    }
   }
 
   // 꼬리 — 느린 좌우 흔들림, 달릴 때 뒤로 뻗친다
   rig.tail.rotation.y = mix(rig.tail.rotation.y, Math.sin(p.nowMs / 900) * BH_TAIL_SWAY);
   rig.tail.rotation.x = mix(rig.tail.rotation.x, p.charging ? BH_TAIL_DROOP * 0.3 : BH_TAIL_DROOP);
 
-  // 머리 — 돌격 예고·질주에 목을 내리고 머리는 되들어 눈이 정면 낮은 곳을 본다.
-  // 들이받기는 예고에 목을 뒤로 홱 젓고(1 − (1−t)³ — 앞부분에서 확 젖혀 끝에서 버틴다, 뿔이 하늘을 본다)
+  // 머리 — 표 자세(charge·head_down·stunned …)면 목 IK 로 머리 메시의 눈을 약점 표의 눈 자리(구체)에 맞춘다(보이는 눈 = 판정 구체,
+  // 배치 1 메모 (d)). 들이받기는 손 각: 예고에 목을 뒤로 홱 젓고(1 − (1−t)³ — 앞부분에서 확 젖혀 끝에서 버틴다, 뿔이 하늘을 본다)
   // 타격에 앞으로 내리꽂는다(머리는 반쯤 되들어 뿔이 플레이어를 겨눈다)
-  const down = p.charging ? 1 : p.chargeCoil;
-  let neckTarget = -BH_NECK_DOWN * down;
-  let pitchTarget = BH_NECK_DOWN * BH_HEAD_COUNTER * down;
+  let neckTarget = 0;
+  let pitchTarget = 0;
   if (p.headbuttCoil > 0) {
     const c = 1 - Math.pow(1 - Math.min(1, p.headbuttCoil), 3);
-    neckTarget = BH_NECK_BACK * c;
-    pitchTarget = 0;
+    neckTarget = BH_COIL_NECK * c;
+    pitchTarget = BH_COIL_PITCH * c;
   } else if (p.headbutting) {
     neckTarget = -BH_NECK_BUTT;
     pitchTarget = BH_NECK_BUTT * BH_BUTT_HEAD_COUNTER;
+  } else if (tablePose !== undefined && blend > 0) {
+    const eyeWp = rig.def.weakPoints?.find((wp) => wp.id === 'eye');
+    const table = eyeWp ? weakPointOffset(rig.def, eyeWp, tablePose) : undefined;
+    if (table && eyeWp) {
+      const rest = eyeWp.offset;
+      const ik = solveNeckToEye(rig, lean, torso.position.y, lunge, {
+        x: 0,
+        y: rest.y + (table.y - rest.y) * blend,
+        z: rest.z + (table.z - rest.z) * blend,
+      });
+      neckTarget = ik.neck;
+      pitchTarget = ik.pitch;
+    }
   }
   rig.neck.rotation.x = mix(rig.neck.rotation.x, neckTarget);
   rig.headPitch.rotation.x = mix(rig.headPitch.rotation.x, pitchTarget);
+  // 혼절 — 목이 좌우로 휘청인다(자세 표의 낮아진 눈 자리는 그대로)
+  const sway = tablePose === 'stunned' ? Math.sin(p.nowMs / BH_STUN_SWAY_MS) * BH_STUN_SWAY * blend : 0;
+  rig.neck.rotation.z = mix(rig.neck.rotation.z, sway);
   rig.jaw.rotation.x = mix(rig.jaw.rotation.x, 0);
 
   for (const arm of rig.arms) {
@@ -1447,6 +1508,12 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
       yaw = BH_ARM_WINDUP_YAW + (sweepEnd - BH_ARM_WINDUP_YAW) * p.strikeProgress;
       solveBlade(armTarget, p.tipDist);
       direct = true;
+    } else if (acting && tablePose === 'head_down' && blend > 0.01) {
+      // 머리 내림 — 완벽 패링에 낫이 바닥에 박혔다. 위팔은 수평 조금 아래로 앞에, 낫은 곧게 내려 끝이 바닥(BH_TIP_MIN_Y)에 꽂힌다
+      armTarget = BH_ARM_STUCK - lean;
+      yaw = BH_ARM_STUCK_YAW;
+      const elbowY = shoulderY + rig.dims.upperArm * Math.sin(BH_ARM_STUCK);
+      bladeWorld = -Math.asin(Math.max(-1, Math.min(1, (elbowY - BH_TIP_MIN_Y) / rig.dims.blade)));
     } else if (acting && p.recoiled) {
       // 튕김 — 팔이 들리며 바깥으로 벌어지고 낫이 매달린다. 높이는 예고와 같아 천장을 못 뚫는다
       armTarget = BH_ARM_RECOIL;
@@ -1490,14 +1557,52 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
 
   // 약점 구체 — 판정과 같은 poseOffsets 표를 읽어 놓는다(Entities.weakPointOffset, 로직 자세 p.pose). 몸통 기울임·목 내림
   // 보간에 딸려 보내지 않는다 — "보이는 자리 = 판정 자리"(기획서 §2 렌더 규약). 자세가 없으면 normal 자리.
-  // 머리 내림(charge·head_down)에서 머리 메시가 표의 눈 자리와 맞도록 BH_NECK_DOWN·neck 피벗·chargeCrouch 를 재조정하는 것은
-  // B2-2 (로직 pose 가 생기는 곳) — 그때까지 돌격 예고·들이받기의 눈 구체는 머리 메시와 떨어져 보인다
+  // 자세가 바뀌는 몇 프레임은 normal ↔ 표 자리를 poseBlend 로 보간한다(머리 IK 도 같은 비율로 가므로 구체가 메시에서 떨어지지 않는다)
   for (const wp of rig.def.weakPoints ?? []) {
     const sphere = rig.weakPoints[wp.id];
     if (!sphere) continue;
-    const off = weakPointOffset(rig.def, wp, p.pose);
-    sphere.position.set(off.x, off.y, off.z);
+    const rest = wp.offset;
+    const off = tablePose !== undefined ? weakPointOffset(rig.def, wp, tablePose) : rest;
+    sphere.position.set(rest.x + (off.x - rest.x) * blend, rest.y + (off.y - rest.y) * blend, rest.z + (off.z - rest.z) * blend);
   }
+}
+
+/** 목 IK — 머리 메시의 눈 자리(anchors.eye)가 group 좌표 target 에 오도록 목(neck.rotation.x)·머리 되들기(headPitch.rotation.x) 각을 푼다.
+ *  목 피벗 P → 머리 중심(L1) → 눈(L2) 두 마디의 평면(y·z) 2링크 IK. 두 해 중 "목을 들고 머리를 숙이는" 쪽(대기 자세를 그대로 재현하는 가지)을
+ *  고른다 — 낮은 눈은 머리가 목 끝에서 아래로 접혀 바닥을 보는 그림(뿔이 앞을 겨눈다). 닿지 않으면 곧게 뻗어 최대한 가까이.
+ *  target 은 group 좌표 — 몸통 기울임(lean)·낮춤(crouchY)·전진(lunge)을 벗겨 torso 좌표로 바꿔 푼다 */
+export function solveNeckToEye(
+  rig: BehemothRig,
+  lean: number,
+  crouchY: number,
+  lunge: number,
+  target: { x: number; y: number; z: number },
+): { neck: number; pitch: number } {
+  // group → torso 로컬 (위치 빼고 −lean 회전)
+  const gy = target.y - crouchY;
+  const gz = target.z - lunge;
+  const ty = gy * Math.cos(lean) + gz * Math.sin(lean);
+  const tz = -gy * Math.sin(lean) + gz * Math.cos(lean);
+  const P = rig.neck.position;
+  const A = rig.headPitch.position; // 목 → 머리 중심 (대기)
+  const E = rig.anchors['eye']?.position ?? new THREE.Vector3(0, 0, -0.48); // 머리 중심 → 눈 (대기)
+  const L1 = Math.hypot(A.y, A.z);
+  const L2 = Math.hypot(E.y, E.z);
+  const a1 = Math.atan2(A.y, -A.z); // 대기 각(앞 = −z 가 0, 위가 +)
+  const a2 = Math.atan2(E.y, -E.z);
+  const dy = ty - P.y;
+  const dz = tz - P.z;
+  const eps = 1e-7;
+  const d = Math.max(Math.abs(L1 - L2) + eps, Math.min(L1 + L2 - eps, Math.hypot(dy, dz)));
+  const elevD = Math.atan2(dy, -dz);
+  const cosB = Math.max(-1, Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d)));
+  const theta1 = elevD + Math.acos(cosB); // 목 마디를 D 위로 들어 머리가 아래로 접히는 가지
+  const cy = P.y + L1 * Math.sin(theta1);
+  const cz = P.z - L1 * Math.cos(theta1);
+  // 닿지 않는 표적은 곧게 뻗은 방향으로(클램프한 d 대신 실제 표적을 본다)
+  const theta2 = Math.atan2(ty - cy, -(tz - cz));
+  const neck = theta1 - a1;
+  return { neck, pitch: theta2 - a2 - neck };
 }
 
 /** 리그의 보이는 낫끝(group 좌표) — 디버그 검증용. 판정 낫끝(tipDist)과 맞는지 잰다 */
@@ -3834,7 +3939,9 @@ export class Stage {
         const parry = def2.parriesToStagger
           ? { streak: enemy.parryStreak ?? 0, total: def2.parriesToStagger, staggered }
           : null;
-        const key = `${Math.ceil(enemy.health)}|${parry ? `${parry.streak}${staggered ? 'S' : ''}` : ''}`;
+        // 패링 칸이 없는 보스(거수 — 혼절은 눈 누적)는 이름을 금색으로 — "지금 처형" 을 머리 위에서 읽게
+        const goldName = staggered && def2.boss === true && !parry;
+        const key = `${Math.ceil(enemy.health)}|${parry ? `${parry.streak}${staggered ? 'S' : ''}` : goldName ? 'S' : ''}`;
         if (key !== visual.plateKey) {
           visual.plateKey = key;
           const hb = healthBarState(def2, enemy.health);
@@ -3845,6 +3952,7 @@ export class Stage {
             hb.index,
             hb.count,
             parry,
+            goldName,
           );
           visual.plateTexture.needsUpdate = true;
         }
@@ -3945,7 +4053,17 @@ export class Stage {
       if (visual.behemoth) {
         const chargeMode = enemy.attackMode === 'charge';
         const closeMode = enemy.attackMode === 'close';
-        if (chargeCoil) {
+        if (enemy.pose === 'head_down') {
+          // 머리 내림 — 낫이 박혀 앞으로 기울고 앞다리가 접힌다. 머리·구체는 poseBehemothRig 가 표(눈 0.9m)로
+          leanTarget = BEHEMOTH_TORSO.headDownLean;
+          lungeTarget = 0;
+          crouchTarget = -def2.height * BEHEMOTH_TORSO.headDownCrouch;
+        } else if (enemy.pose === 'stunned') {
+          // 혼절 — 앞으로 살짝 처진 채 휘청 (처형 창)
+          leanTarget = BEHEMOTH_TORSO.stunnedLean + Math.sin(now / 170) * 0.02;
+          lungeTarget = 0;
+          crouchTarget = -def2.height * BEHEMOTH_TORSO.stunnedCrouch;
+        } else if (chargeCoil) {
           leanTarget = BEHEMOTH_TORSO.chargeLean * windupProgress;
           lungeTarget = 0;
           crouchTarget = -def2.height * BEHEMOTH_TORSO.chargeCrouch * windupProgress;
@@ -4122,6 +4240,16 @@ export class Stage {
         const bladeMode = isMelee && !chargeMode && !closeMode;
         const bladeStriking = bladeMode && striking;
         const headbutting = closeMode && striking;
+        // 자세 보간 — 로직 자세(enemy.pose)가 서면 표 자리로, 사라지면 normal 로. 돌격 예고는 예고 진행도 그대로(머리가 내려가는 만큼
+        // 구체도 따라 내려간다), 그 외(head_down·stunned)는 몇 프레임에 걸쳐. 마지막 자세를 기억해 되돌아갈 때도 같은 표를 읽는다
+        if (enemy.pose !== undefined) {
+          visual.bhPose = enemy.pose;
+          const cur = visual.bhBlend ?? 0;
+          visual.bhBlend = enemy.pose === 'charge' && chargeCoil ? Math.max(cur * (1 - BH_POSE_BLEND_K), windupProgress) : cur + (1 - cur) * BH_POSE_BLEND_K;
+        } else {
+          const cur = visual.bhBlend ?? 0;
+          visual.bhBlend = cur < 0.01 ? 0 : cur * (1 - BH_POSE_BLEND_K);
+        }
         poseBehemothRig(visual.behemoth, {
           nowMs: now,
           legPhase: visual.legPhase ?? 0,
@@ -4138,11 +4266,15 @@ export class Stage {
           headbutting,
           trembling,
           snap: solidIce ? 0 : bladeStriking ? 1 : headbutting ? 0.6 : 0.25,
-          pose: enemy.pose,
+          pose: visual.bhPose,
+          poseBlend: visual.bhBlend ?? 0,
         });
-        // 약점 구체 — 열림(B2-1: 파열만 아니면 항상)·파열·명중 플래시. 플래시 시각은 Stage.weakFlashAt(적 id:약점 id)
+        // 약점 구체 — 열림(노출 타이머·자세, Entities.weakPointOpen — 판정과 같은 규칙)·파열·명중 플래시·혼절 쿨다운(눈 어두운 청록).
+        // 플래시 시각은 Stage.weakFlashAt(적 id:약점 id)
         const eid = enemy.id;
         const flashMap = this.weakFlashAt;
+        const wps = def2.weakPoints ?? [];
+        const dimEye = (enemy.dazeCooldown ?? 0) > 0;
         styleBehemothWeakPoints(visual.behemoth, now, (id) => {
           const key = `${eid}:${id}`;
           const at = flashMap.get(key);
@@ -4150,7 +4282,9 @@ export class Stage {
           if (at !== undefined && age > 1000) flashMap.delete(key); // 다 꺼진 플래시는 치운다
           const hp = enemy.weakHp?.[id];
           const broken = hp !== undefined && hp <= 0;
-          return { open: !broken, broken, flashAgeMs: age };
+          const wp = wps.find((w) => w.id === id);
+          const open = wp !== undefined && weakPointOpen(enemy, wp);
+          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye };
         });
       }
 

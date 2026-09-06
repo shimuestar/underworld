@@ -4,10 +4,15 @@
 // 닿는지) / strike-front(플레이어 눈높이에서 본 타격) / charge(돌격 예고 — 머리 내림·뿔·몸 빨강) /
 // recoil(패링·막힘 튕김 — 팔이 바깥으로 들리고 낫이 매달림. 꼭대기가 3.8m 선 아래인지) /
 // windup-left(왼낫 예고 — 왼 어깨가 솟는다, B1-3) / headbutt(들이받기 예고 — 머리를 뒤로 홱 젓고 뿔 빨강) / headbutt-strike(들이받기 — 내리꽂음) /
-// weak(약점 5개 열림 발광·맥동 + 눈 명중 플래시, B2-1 — 정면 눈높이). &pose=charge|head_down|… 을 붙이면 약점 구체를 그 자세의 poseOffsets 표 자리에 놓는다
-// (안내문에 구체 자리와 머리 메시의 눈 자리(anchor)를 함께 찍어 표와 메시가 얼마나 어긋나는지 본다 — B2-2 재조정 근거).
+// weak(약점 5개 열림 발광·맥동 + 눈 명중 플래시, B2-1 — 정면 눈높이) /
+// head_down(B2-2 — 완벽 패링에 낫이 바닥에 박혀 머리가 0.9m 로 내려온 자세: 눈 청록 맥동·관절 백황, 플레이어 눈높이 정면) /
+// head_down-side(같은 자세 측면 — 다리가 바닥에 남고 낫끝이 바닥에 꽂히는지) / head_down-cooldown(혼절 쿨다운 — 눈 어두운 청록, 맥동 없음) /
+// stunned(혼절 — 몸 스태거 금색, 머리 처짐·휘청, 눈 닫힘 = 처형 창).
+// &pose=charge|head_down|… 을 붙이면 약점 구체와 머리 메시(목 IK)를 그 자세의 poseOffsets 표 자리에 놓는다
+// (안내문에 구체 자리와 머리 메시의 눈 자리(anchor)를 함께 찍는다 — 어긋남이 0 에 가까워야 한다, B2-2).
 // 참조물: 4.4m 기둥(= attackRange, 흰색) · 플레이어 기둥(r0.4 h1.7, 몸 표면이 4.4m) · 천장 4.0m / 낫 상한 3.8m 선.
-// 안내문의 '꼭대기' 는 리그 정점(precise Box3) 최고 높이 — 어느 뷰든 3.8 아래여야 한다 (Boss.test 의 천장 검사와 같은 잣대).
+// 안내문의 '꼭대기' 는 리그 정점(precise Box3) 최고 높이 — 어느 뷰든 3.8 아래여야 한다, '바닥' 은 최저 높이 — 0 아래로 뚫리면 안 된다
+// (src/render/Behemoth.test.ts 의 천장·바닥 검사와 같은 잣대).
 import * as THREE from 'three';
 import { balance } from '../src/core/Balance';
 import { enemyDef } from '../src/core/Entities';
@@ -62,6 +67,7 @@ group.add(torso);
 scene.add(group);
 const flash: THREE.MeshLambertMaterial[] = [];
 const rig = buildBehemothRig(group, torso, def, flash);
+const STAGGER_COLOR = 0xcc9922; // Stage 의 스태거 표시색(몸 발광) — 약점 구체엔 쓰지 않는다
 
 const pullback = reach * balance.parrySpace.pullbackRatio;
 const base = {
@@ -81,6 +87,7 @@ const base = {
   trembling: false,
   snap: 1,
   pose: logicPose,
+  poseBlend: 1,
 };
 const tint = (mats: THREE.MeshLambertMaterial[], hex: string): void => {
   for (const m of mats) m.emissive.set(new THREE.Color(hex).getHex());
@@ -146,20 +153,45 @@ if (view === 'side') {
   camera.position.set(7.5, 2.8, -5.5);
   camera.lookAt(0, 2.0, -1.0);
 } else if (view === 'charge') {
-  // 대지 돌격 예고 끝 — 머리 내림·−12° 웅크림·낫 접힘. 뿔·몸 빨강, 낫은 물들지 않는다
+  // 대지 돌격 예고 끝 — 머리 내림(목 IK → 표의 눈 1.1m)·−12° 웅크림·낫 접힘. 뿔·몸 빨강, 낫은 물들지 않는다. 로직 자세 'charge'
   torso.rotation.x = BEHEMOTH_TORSO.chargeLean;
   torso.position.y = -def.height * BEHEMOTH_TORSO.chargeCrouch;
-  poseBehemothRig(rig, { ...base, chargeCoil: 1 });
+  poseBehemothRig(rig, { ...base, chargeCoil: 1, pose: logicPose ?? 'charge' });
   tint(flash, balance.telegraph.colorUnparryable);
   tint(rig.hornMats, balance.telegraph.colorUnparryable);
   camera.position.set(2.2, 1.6, -7.5);
   camera.lookAt(0, 1.4, -0.5);
 } else if (view === 'weak') {
-  // 약점 5개 열림(B2-1: 항상 노출) — 발광 + 맥동 봉우리, 눈은 명중 직후 플래시. 플레이어 눈높이 정면에서 본다
+  // 약점 5개 열림(연출 확인용으로 전부 켠다) — 발광 + 맥동 봉우리, 눈은 명중 직후 플래시. 플레이어 눈높이 정면에서 본다
   poseBehemothRig(rig, base);
   styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: true, broken: false, flashAgeMs: id === 'eye' ? 40 : -1 }));
   camera.position.set(0.6, balance.player.eyeHeight, -7.5);
   camera.lookAt(0, 1.7, -0.5);
+} else if (view === 'head_down' || view === 'head_down-side' || view === 'head_down-cooldown') {
+  // 머리 내림(B2-2) — 완벽 패링에 오른낫이 바닥에 박혀 머리가 표의 눈(0.9m)까지 내려온다. 몸통 앞으로 기울고 앞다리 접힘.
+  // 눈 청록 맥동 + 그 낫의 관절(joint_r) 백황 90틱 — 눈(피해)과 관절(통제)의 양자택일. 쿨다운 뷰는 눈이 어두운 청록(맥동 없음)
+  torso.rotation.x = BEHEMOTH_TORSO.headDownLean;
+  torso.position.y = -def.height * BEHEMOTH_TORSO.headDownCrouch;
+  poseBehemothRig(rig, { ...base, pose: 'head_down' });
+  const dim = view === 'head_down-cooldown';
+  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'eye' || id === 'joint_r', broken: false, flashAgeMs: -1, dim: dim && id === 'eye' }));
+  if (view === 'head_down-side') {
+    camera.position.set(8.5, 1.9, -2.2);
+    camera.lookAt(0, 1.2, -1.2);
+  } else {
+    // 플레이어 눈높이 — 패링한 자리(몸 표면 4.4m)에서 내려온 머리를 본다
+    camera.position.set(0.5, balance.player.eyeHeight, -(reach + balance.player.radius));
+    camera.lookAt(0, 1.1, -1.0);
+  }
+} else if (view === 'stunned') {
+  // 혼절(눈 누적 66) — 몸 스태거 금색, 머리가 처져 휘청, 눈은 닫힘(판정 없음) = 처형 창
+  torso.rotation.x = BEHEMOTH_TORSO.stunnedLean;
+  torso.position.y = -def.height * BEHEMOTH_TORSO.stunnedCrouch;
+  poseBehemothRig(rig, { ...base, pose: 'stunned' });
+  tint(flash, '#' + STAGGER_COLOR.toString(16).padStart(6, '0'));
+  styleBehemothWeakPoints(rig, 0, () => ({ open: false, broken: false, flashAgeMs: -1 }));
+  camera.position.set(3.5, 2.0, -7.0);
+  camera.lookAt(0, 1.6, -0.8);
 } else {
   poseBehemothRig(rig, base);
   camera.position.set(0.8, 2.2, -8.5);
@@ -182,7 +214,7 @@ const f2 = (v: THREE.Vector3): string => `${v.x.toFixed(2)}, ${v.y.toFixed(2)}, 
 note =
   `view=${view}${logicPose ? ` pose=${logicPose}` : ''}\n` +
   `blade_${tipSide === 1 ? 'r' : 'l'} tip (x,y,z) = ${f2(tip)}  → 앞 거리 ${(-tip.z).toFixed(2)}m (판정 ${(view.startsWith('strike') ? reach : view.startsWith('windup') ? pullback : NaN).toFixed(2)})\n` +
-  `꼭대기 ${bounds.max.y.toFixed(2)}m (낫 상한 3.8 / 천장 4.0)\n` +
+  `꼭대기 ${bounds.max.y.toFixed(2)}m (낫 상한 3.8 / 천장 4.0)   바닥 ${bounds.min.y.toFixed(2)}m (0 아래 금지)\n` +
   `wp_eye(판정 표) = ${f2(eye)}   머리 메시 눈 자리 = ${f2(eyeMesh)}   어긋남 ${eye.distanceTo(eyeMesh).toFixed(2)}m\n` +
   `wp_joint_r = ${f2(jr)}`;
 document.getElementById('info')!.textContent = note;

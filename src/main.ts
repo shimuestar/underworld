@@ -542,6 +542,8 @@ for (const name of [
   'headshot_kill',
   'weak_point_hit',
   'weak_point_broken',
+  'exposure_closed',
+  'boss_status',
   'enemy_split',
   'grave_dropped',
   'slime_ate',
@@ -2946,9 +2948,26 @@ events.on('barrier_broken', (payload) => {
   showReaction('방어막이 부서졌다!', 1600);
 });
 events.on('shot_blocked', () => showReaction('방패 — 정면은 막힌다 (화염구로 부술 수 있다)'));
-events.on('boss_staggered', () =>
-  showReaction(`보스 스태거 — 지금 처형! (${input.usingPad ? padBtn('melee') : 'Space·우클릭'})`),
-);
+events.on('boss_staggered', (payload) => {
+  // 거수 혼절(눈 누적 66) — 눈이 터지는 소리 + 같은 처형 안내. 족장의 연속 패링 스태거는 예전 문구 그대로
+  const cause = (payload as { cause?: string }).cause;
+  if (cause === 'eye') audio.play('eye_burst');
+  showReaction(`${cause === 'eye' ? '거수 혼절' : '보스 스태거'} — 지금 처형! (${input.usingPad ? padBtn('melee') : 'Space·우클릭'})`);
+});
+// 거수 상태이상(기획서 §5 boss_status 하나로) — 관절 노출(일반 패링): 짧은 금속음 + 안내 / 머리 내림(완벽 패링): 낫이 박히는 소리 + 안내.
+// 표시는 구체 발광·자세가 하고(Stage), 여기서는 소리와 한 줄 문구만
+events.on('boss_status', (payload) => {
+  const st = payload as { enemyId: number; enemyType: string; kind: string; on: boolean; id?: string };
+  const e = world.enemies.find((en) => en.id === st.enemyId);
+  const at = e ? panAt(e.x, e.z) : undefined;
+  if (st.kind === 'expose' && st.on) {
+    audio.play('joint_open', at);
+    showReaction('어깨 관절이 벌어졌다 — 쏴라!', 900);
+  } else if (st.kind === 'head_down' && st.on) {
+    audio.play('blade_stuck', at);
+    showReaction('낫이 바닥에 박혔다 — 눈을 노려라!', 1400);
+  }
+});
 // 이제 exit_opened 는 "보스 없는(또는 이미 딴) 층" 의 로드 직후 신호다 — 조용히 안내만
 events.on('exit_opened', () => {
   showReaction('내려가는 계단 — E 로 내려간다', 2200);

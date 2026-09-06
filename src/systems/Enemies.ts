@@ -6,11 +6,18 @@
 // 패링 불가 공격(적색)은 판정 창 없이 windup → impact.
 // 원거리 캐스터(warden)는 windup 종료 시 투사체를 발사하고 recover로 간다.
 // windup 진입 시 enemy_windup(오디오), 종료 visualLeadTicks 전에 telegraph_flash(섬광).
+//
+// 거수(약점 보스) 상태 장부(tickWeakPointStatus): 노출 타이머(exposure) 감소·닫힘, 자세(pose) 비추기(stunned ↔ staggered,
+// charge ↔ 돌격), 눈 누적(weakAccum.eye) ≥ dazeThreshold → 혼절(staggered + boss_staggered), 혼절 종료 → dazeCooldown.
+// 포즈 타이머(poseTicks, head_down)는 오버라이드 순서 넉백 > brace > attackFreeze > 포즈 > 돌격 캔슬 > notice (기획서 §9.1).
 
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, findWallNormal, noiseField, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, type EnemyState, type World, damagePlayer } from '../core/World';
+import { alertEnemy, alertNearbyAt, closeExposure, findWallNormal, noiseField, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, type EnemyState, type World, damagePlayer } from '../core/World';
+
+/** 혼절 임계를 재는 약점 id — 기획서 §4.1 "혼절은 눈 누적 66 으로만" */
+const DAZE_WEAK_POINT = 'eye';
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -1205,6 +1212,89 @@ function tickGhoulMoan(world: World, enemy: EnemyState): void {
   world.events.emit('ghoul_moan', { enemyId: enemy.id, x: enemy.x, z: enemy.z });
 }
 
+/** 약점 보스(거수) 상태 장부 — 매 틱, 넉백·경직보다 먼저(창은 플레이어 시간이라 적의 사정으로 멈추지 않는다).
+ *  ① 노출 타이머 감소 → 0 이면 closeExposure(exposure_closed{id, hits}).
+ *  ② 혼절 쿨다운 감소. ③ 혼절(dazed)이 끝났으면(시간·처형 어느 경로든 ai 가 staggered 를 벗어남) dazeCooldownTicks 를 건다.
+ *  ④ 자세 비추기: staggered ↔ pose 'stunned' / 돌격(예고·질주·타격·헛돌격 경직) ↔ pose 'charge' — 포즈 타이머(head_down)가 없을 때만.
+ *  ⑤ 눈 누적: head_down 중·쿨다운 아님·혼절 아님일 때만 weakAccum.eye 가 산다(아니면 매 틱 0 — 쿨다운 중 맞힌 것은 안 쌓인다).
+ *     dazeThreshold 에 닿으면 혼절: staggered(reaction.staggerTicks) + pose stunned + boss_staggered{cause 'eye'}, 눈 노출은 닫힌다.
+ *  약점 정의가 없는 적(족장·잡몹)은 아무것도 하지 않는다. 혼절로 넘어간 틱은 true — 그 틱의 나머지 행동은 건너뛴다
+ *  (Reaction 의 패링 스태거와 같이 staggerTicks 가 온전히 남는다) */
+function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): boolean {
+  if (!def.weakPoints) return false;
+  const wpCfg = balance.weakPoint;
+  // ① 노출 타이머
+  if (enemy.exposure) {
+    for (const id in enemy.exposure) {
+      const left = (enemy.exposure[id] ?? 0) - 1;
+      if (left > 0) enemy.exposure[id] = left;
+      else closeExposure(world, enemy, id);
+    }
+  }
+  // ② 혼절 쿨다운
+  if ((enemy.dazeCooldown ?? 0) > 0) enemy.dazeCooldown = (enemy.dazeCooldown ?? 0) - 1;
+  // ③ 혼절 종료 → 쿨다운
+  if (enemy.dazed && enemy.ai !== 'staggered') {
+    enemy.dazed = false;
+    enemy.dazeCooldown = wpCfg.dazeCooldownTicks;
+    world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'daze', on: false });
+  }
+  // ④ 자세 비추기 (포즈 타이머가 있으면 그 자세가 우선)
+  if ((enemy.poseTicks ?? 0) <= 0) {
+    if (enemy.ai === 'staggered') {
+      enemy.pose = 'stunned';
+    } else if (enemy.pose === 'stunned') {
+      enemy.pose = undefined;
+    }
+    if (enemy.pose !== 'stunned') {
+      const charging =
+        enemy.attackMode === 'charge' &&
+        (enemy.ai === 'windup' || enemy.ai === 'charging' || enemy.ai === 'impact' || (enemy.ai === 'recover' && enemy.whiffed === true));
+      if (charging) enemy.pose = 'charge';
+      else if (enemy.pose === 'charge') enemy.pose = undefined;
+    }
+  }
+  // ⑤ 눈 누적 → 혼절. 포즈 타이머를 깎기 전에 본다 — 머리 내림 마지막 틱에 채운 66 도 혼절이 된다
+  const eyeCounts =
+    enemy.pose === 'head_down' && (enemy.poseTicks ?? 0) > 0 && (enemy.dazeCooldown ?? 0) <= 0 && enemy.ai !== 'staggered';
+  const accum = enemy.weakAccum?.[DAZE_WEAK_POINT] ?? 0;
+  if (!eyeCounts) {
+    if (accum > 0 && enemy.weakAccum) enemy.weakAccum[DAZE_WEAK_POINT] = 0;
+  } else if (accum >= wpCfg.dazeThreshold) {
+    // 혼절 — 머리 내림은 여기서 끝나고(눈 판정 닫힘) 처형 창이 열린다
+    world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'head_down', on: false });
+    closeExposure(world, enemy, DAZE_WEAK_POINT);
+    enemy.poseTicks = 0;
+    enemy.pose = 'stunned';
+    enemy.ai = 'staggered';
+    enemy.timer = balance.reaction.staggerTicks;
+    enemy.dazed = true;
+    enemy.whiffed = false;
+    enemy.recoiled = false;
+    world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'daze', on: true, ticks: enemy.timer });
+    world.events.emit('boss_staggered', { enemyId: enemy.id, enemyType: enemy.type, cause: 'eye' });
+    return true;
+  }
+  return false;
+}
+
+/** 포즈 타이머가 다했다(head_down 종료) — 자세로 열려 있던 약점(눈)을 닫고 추격으로 돌아간다. 기상 발구르기(P2+)는 B3-1 */
+function endPose(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  const pose = enemy.pose;
+  enemy.poseTicks = 0;
+  enemy.pose = undefined;
+  if (pose !== undefined) {
+    for (const wp of def.weakPoints ?? []) {
+      if (wp.exposedStates?.includes(pose)) closeExposure(world, enemy, wp.id);
+    }
+    world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: pose, on: false });
+  }
+  enemy.ai = 'chase';
+  enemy.timer = 0;
+  enemy.whiffed = false;
+  enemy.recoiled = false;
+}
+
 function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   const def = enemyDef(enemy.type);
   const p = world.player;
@@ -1212,6 +1302,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   enemy.prevX = enemy.x;
   enemy.prevZ = enemy.z;
   enemy.prevJumpY = enemy.jumpY ?? 0;
+
+  // 약점 보스 장부 — 노출·혼절·자세 비추기. 넉백·경직보다 먼저(노출 창은 플레이어의 시간이다). 혼절로 넘어간 틱은 여기서 끝
+  if (tickWeakPointStatus(world, enemy, def)) return;
 
   // ── 거머리 수직 구간 — 낙하·재상승은 일반 AI 를 덮는다 ──
   const lurk = def.ceilingLurk;
@@ -1376,6 +1469,14 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   // 상태도 타이머도 진행하지 않으므로 공격이 취소되지 않고 "얼어붙는다"
   if ((enemy.attackFreezeTicks ?? 0) > 0) {
     enemy.attackFreezeTicks = (enemy.attackFreezeTicks ?? 0) - 1;
+    return;
+  }
+
+  // 포즈 타이머(거수 head_down — 낫이 바닥에 박혀 머리가 내려온 동안) — 이동·회전·공격 전부 없다.
+  // 눈(0.9m)이 열려 있고 해머도 닿는다. 다하면 추격으로(기획서 §9.1: attackFreeze 다음, 돌격 캔슬·notice 앞)
+  if ((enemy.poseTicks ?? 0) > 0) {
+    enemy.poseTicks = (enemy.poseTicks ?? 0) - 1;
+    if ((enemy.poseTicks ?? 0) <= 0) endPose(world, enemy, def);
     return;
   }
 

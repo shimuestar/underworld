@@ -2,12 +2,14 @@
 // 권총·화살은 몸 AABB 보다 약점 구체를 우선한다("구체 승") — 단 정면 원뿔(facing·coneDeg)을 만족할 때만.
 // 정면에서 눈 ×3.0 / 후면에서 눈은 몸통 0.8× / 우측면에서 joint_r ○·joint_l × / 관절 내구 132 → 파열 → 판정 닫힘 /
 // hitZonesImmune(부위 배율·헤드샷 억제) / 부위 높이 비율의 jumpY 버그 수정. 기존 몸통 사격 테스트는 Weapons.test 그대로.
+// B2-2 부터 약점은 조건부 노출이다 — 노출 타이머(enemy.exposure[id])나 자세(exposedStates)로 열려 있을 때만 판정이 있다.
+// 여기서는 노출 타이머를 직접 세워(expose) 판정 규칙만 본다. 패링 → 노출·자세 흐름은 Boss.test.
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { enemyDef, rayHitsWeakPoint, weakPointOffset, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
+import { enemyDef, rayHitsWeakPoint, weakPointOffset, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
 import { World, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
@@ -63,12 +65,20 @@ beforeEach(() => {
   world = makeWorld();
 });
 
-/** 거수를 (x, z) 에 yaw 로 놓는다. yaw π/2 = 정면(-z 로컬)이 -X → 플레이어(서쪽)를 본다 */
-function behemothAt(x: number, z: number, yaw: number): EnemyState {
+/** 거수를 (x, z) 에 yaw 로 놓는다. yaw π/2 = 정면(-z 로컬)이 -X → 플레이어(서쪽)를 본다.
+ *  약점 다섯을 노출 타이머로 전부 열어 둔다(판정 규칙 검증용 — 실제 노출 조건은 Boss.test) */
+function behemothAt(x: number, z: number, yaw: number, exposeAll = true): EnemyState {
   const boss = spawnEnemyAt(TYPE, x, z, 1);
   boss.yaw = yaw;
+  if (exposeAll) expose(boss, 'eye', 'joint_r', 'joint_l', 'heart', 'vent');
   world.enemies.push(boss);
   return boss;
+}
+
+/** 노출 타이머를 길게 세운다 — Reaction/Enemies 가 여는 것과 같은 필드 */
+function expose(enemy: { exposure?: Record<string, number> }, ...ids: string[]): void {
+  enemy.exposure ??= {};
+  for (const id of ids) enemy.exposure[id] = 10_000;
 }
 
 /** 월드 점을 겨눈다 — yaw 는 정면 (-sin yaw, -cos yaw) 규약, pitch 는 눈높이 기준 */
@@ -154,6 +164,34 @@ describe('데이터 — weakPoints·poseOffsets·hitZonesImmune (기획서 §2·
     expect(boss.weakHp).toEqual({ joint_r: 132, joint_l: 132 });
     expect(spawnEnemyAt('goblin_chieftain', 20, 10, 2).weakHp).toBeUndefined();
   });
+
+  it('weakPointOpen(B2-2) — 갓 태어난 거수는 다섯 약점이 전부 닫혀 있다. 노출 타이머 또는 exposedStates 자세만 연다, 파열은 어느 쪽이든 닫는다', () => {
+    const boss = spawnEnemyAt(TYPE, 20, 10, 1);
+    for (const w of def.weakPoints!) expect(weakPointOpen(boss, w), w.id).toBe(false);
+    // 자세 — 눈은 head_down 에서만, 심장은 rear 에서만, 관절·분출공은 자세로 안 열린다
+    boss.pose = 'head_down';
+    expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+    expect(weakPointOpen(boss, wp('heart'))).toBe(false);
+    expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+    boss.pose = 'rear';
+    expect(weakPointOpen(boss, wp('eye'))).toBe(false);
+    expect(weakPointOpen(boss, wp('heart'))).toBe(true);
+    boss.pose = 'stunned'; // 혼절 — 눈 닫힘
+    expect(weakPointOpen(boss, wp('eye'))).toBe(false);
+    boss.pose = 'charge'; // 돌격 중 6m 안 노출은 B2-5 — 지금은 닫힘
+    expect(weakPointOpen(boss, wp('eye'))).toBe(false);
+    boss.pose = undefined;
+    // 타이머
+    boss.exposure = { joint_l: 1 };
+    expect(weakPointOpen(boss, wp('joint_l'))).toBe(true);
+    expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+    boss.exposure = { joint_l: 0 };
+    expect(weakPointOpen(boss, wp('joint_l'))).toBe(false);
+    // 파열 — 타이머가 있어도 닫힘
+    boss.exposure = { joint_l: 50 };
+    boss.weakHp!['joint_l'] = 0;
+    expect(weakPointOpen(boss, wp('joint_l'))).toBe(false);
+  });
 });
 
 describe('weakPointWorldPos / weakPointOffset / rayHitsWeakPoint (순수 판정)', () => {
@@ -180,7 +218,7 @@ describe('weakPointWorldPos / weakPointOffset / rayHitsWeakPoint (순수 판정)
 
   it('정면 원뿔 — coneDeg 없으면 기본 100°(반각 50°): 45° 비스듬히는 성립, 55° 는 불성립. coneDeg 재정의면 그 각', () => {
     const wpDef: WeakPointDef = { id: 'e', offset: { x: 0, y: 1, z: -1 }, radius: 0.3, damageMul: 3, facing: { x: 0, y: 0, z: -1 } };
-    const enemy = { x: 0, z: 0, yaw: 0 };
+    const enemy = { x: 0, z: 0, yaw: 0, exposure: { e: 100 } };
     const shootAt = (deg: number, d: { weakPoints: WeakPointDef[] }) => {
       const th = (deg * Math.PI) / 180;
       const dx = Math.sin(th);
@@ -202,20 +240,51 @@ describe('weakPointWorldPos / weakPointOffset / rayHitsWeakPoint (순수 판정)
     expect(rayHitsWeakPoint(-5, 1, -1, 1, 0, 0, enemy, { weakPoints: [wpDef] }, 0)).toBeNull();
   });
 
-  it('여러 약점 중 가장 가까운 것, 내구 0(파열) 약점은 판정이 닫힌다, 약점이 없는 적은 null', () => {
+  it('여러 약점 중 가장 가까운 것, 내구 0(파열)·노출 아닌 약점은 판정이 닫힌다, 약점이 없는 적은 null', () => {
     const near: WeakPointDef = { id: 'near', offset: { x: 0, y: 1, z: -2 }, radius: 0.3, damageMul: 2, facing: { x: 0, y: 0, z: -1 } };
     const far: WeakPointDef = { id: 'far', offset: { x: 0, y: 1, z: -1 }, radius: 0.3, damageMul: 3, facing: { x: 0, y: 0, z: -1 } };
     const d = { weakPoints: [far, near] };
-    const enemy = { x: 0, z: 0, yaw: 0 };
+    const enemy = { x: 0, z: 0, yaw: 0, exposure: { near: 100, far: 100 } };
     expect(rayHitsWeakPoint(0, 1, -10, 0, 0, 1, enemy, d, 0)?.wp.id).toBe('near');
     expect(rayHitsWeakPoint(0, 1, -10, 0, 0, 1, { ...enemy, weakHp: { near: 0 } }, d, 0)?.wp.id).toBe('far');
     expect(rayHitsWeakPoint(0, 1, -10, 0, 0, 1, { ...enemy, weakHp: { near: 5 } }, d, 0)?.wp.id).toBe('near');
     expect(rayHitsWeakPoint(0, 1, -10, 0, 0, 1, enemy, {}, 0)).toBeNull();
     expect(rayHitsWeakPoint(0, 1, -10, 0, 0, 1, { ...enemy, feigning: true }, d, 0)).toBeNull();
+    // 노출 아닌 약점은 없는 것과 같다 — near 만 닫으면 far, 둘 다 닫으면 null
+    expect(rayHitsWeakPoint(0, 1, -10, 0, 0, 1, { ...enemy, exposure: { far: 100 } }, d, 0)?.wp.id).toBe('far');
+    expect(rayHitsWeakPoint(0, 1, -10, 0, 0, 1, { x: 0, z: 0, yaw: 0 }, d, 0)).toBeNull();
+    // 자세 노출 — exposedStates 에 든 자세일 때만
+    const eyeLike: WeakPointDef = { ...near, id: 'e', exposedStates: ['head_down'] };
+    expect(rayHitsWeakPoint(0, 1, -10, 0, 0, 1, { x: 0, z: 0, yaw: 0, pose: 'head_down' }, { weakPoints: [eyeLike] }, 0)?.wp.id).toBe('e');
+    expect(rayHitsWeakPoint(0, 1, -10, 0, 0, 1, { x: 0, z: 0, yaw: 0, pose: 'stunned' }, { weakPoints: [eyeLike] }, 0)).toBeNull();
   });
 });
 
 describe('권총 — 약점 우선 판정 (거수, 근거리 감쇠 없음)', () => {
+  it('노출 아닌 눈(B2-2) — 정면에서 눈 자리를 쏴도 판정이 없어 몸통 0.8×, 약점 장부 없음. 머리 내림(head_down)이면 그 자리(0.9m)의 눈이 열린다', () => {
+    const boss = behemothAt(16, 10, Math.PI / 2, false);
+    const eye = weakPointWorldPos(boss, def, wp('eye'));
+    const weakHits = collect('weak_point_hit');
+    const damaged = collect('enemy_damaged');
+    aimAt(eye.x, eye.y, eye.z);
+    firePistol();
+    expect(weakHits).toHaveLength(0);
+    expect(damaged[0]).toMatchObject({ zone: 'body' });
+    expect(boss.health).toBeCloseTo(def.health - pistol.damage * pistol.hitZones.bodyMul, 5);
+    // 머리 내림 — 눈이 표의 head_down 자리로 내려오고 열린다
+    boss.pose = 'head_down';
+    const low = weakPointWorldPos(boss, def, wp('eye'));
+    expect(low.y).toBeCloseTo(0.9, 6);
+    const before = boss.health;
+    aimAt(low.x, low.y, low.z);
+    firePistol();
+    expect(weakHits).toHaveLength(1);
+    expect(weakHits[0]).toMatchObject({ id: 'eye', damage: pistol.damage * 3.0 });
+    expect(boss.health).toBeCloseTo(before - pistol.damage * 3.0, 5);
+    expect(boss.weakAccum).toEqual({ eye: pistol.damage * 3.0 });
+    expect(boss.exposureHits).toEqual({ eye: 1 });
+  });
+
   it('정면에서 눈 → ×3.0 = 33, zone weak, weak_point_hit{eye}, 헤드샷 없음', () => {
     const boss = behemothAt(16, 10, Math.PI / 2); // 플레이어를 본다 — 눈이 (14.12, 2.35, 10)
     const eye = weakPointWorldPos(boss, def, wp('eye'));
