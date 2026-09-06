@@ -147,6 +147,47 @@
 
 ---
 
+### 배치 2 검토 잔여 메모 (전부 저순위 — 배치 3 구현 때 함께 처리, 2026-09-04)
+
+- [ ] (B2-1) 관절 원뿔 기하 — facing (1, 0.4, −0.4)·coneDeg 100 을 그대로 쓰면 정면(패링 자리, 4.4m·눈높이 1.6)에서 joint_r 을 겨눈 레이의 dot(rayDir, facing) ≈ +0.02 로 임계 −0.643 을 크게 벗어나, 보이는 관절을 정면에서는 절대 못 맞힌다(성립하려면 보스 정면축 기준 ≥ 약 43° 우측 전방). data/entities.json·기획서 §4.2 수치 그대로라 구현 결함은 아니지만, 기획서 본문의 '정면·그쪽 옆면에서만' 과 어긋나고 B2-2 에서 패링(정면)→관절 노출 36틱이 붙으면 노출 창 안에 우측으로 크게 돌아야 해 체감이 깨질 수 있다.
+  → B2-2 전에 기획서 소유자가 확인: facing 을 (1, 0.3, −0.7) 처럼 더 앞으로 기울이거나 관절 coneDeg 를 140° 안팎으로 넓혀 정면 4.4m 에서 성립하게 하고, WeakPoint.test 에 '정면 4.4m 에서 joint_r ○' 케이스를 추가. 코드 변경 없이 entities.json 만 고치면 된다(src/core/Entities.ts rayHitsWeakPoint 는 데이터를 그대로 읽는다).
+- [ ] (B2-1) 돌격 예고·질주·들이받기 중 눈 구체가 표(normal 2.35m)에 남아 내려간 머리 메시와 0.38~0.49m 떨어져 보인다(/tmp/pw/behemoth-b21-charge-pose.png 에선 &pose=charge 로 구체가 머리 메시 안에 숨는다). 실제 게임에선 enemy.pose 를 세우는 코드가 아직 없어 돌격 중 눈 구체가 머리 위에 떠 있다. 판정=그림은 지켜지지만 그림≠메시. 구현자가 공개했고 TASKS B2-2 메모(BH_NECK_DOWN·neck 피벗·chargeCrouch 재조정 + enemy.pose 세우기)에 들어 있다.
+  → B2-2 에서 Enemies 가 돌격 예고·질주에 enemy.pose='charge' 를 세우고 Stage 의 목 피벗을 표의 charge 눈 (0,1.1,−1.95)/head_down (0,0.9,−1.9) 에 맞춘다. src/render/Behemoth.test.ts 에 'charge 자세에서 anchor(eye) 와 구체 거리 < 0.1m' 검사를 추가해 잠근다.
+- [ ] (B2-1) docs/metrics.md 의 weak_point_broken 페이로드가 { enemyId, enemyType, id } 로 적혀 있는데 src/core/World.ts hitWeakPoint 는 x, y, z 도 함께 발행한다(main.ts 가 panAt(b.x, b.z) 로 소비).
+  → docs/metrics.md 45~46행을 weak_point_broken { enemyId, enemyType, id, x, y, z } 로 맞춘다.
+- [ ] (B2-2) 판정과 그림의 일시적 어긋남 — /Users/shimu/Dev/GameDev/underworld/src/render/Stage.ts 의 poseBlend(BH_POSE_BLEND_K 0.35/프레임)는 head_down 이 서는 순간 구체·머리를 normal → 표 자리로 약 10 프레임에 걸쳐 보간하지만, 로직(Entities.weakPointWorldPos, enemy.pose)은 같은 틱에 즉시 표 자리(눈 0.9m)로 간다. 완벽 패링 히트스톱 4틱 동안 렌더가 계속 돌아 대부분 가려지지만(4프레임 뒤 82%), 로직 재개 직후 ~5프레임은 보이는 눈 구체가 실제 판정 자리보다 최대 ~0.26m 위에 있다. 혼절 전이(head_down → stunned)에서도 열려 있는 관절 구체가 0.28m 를 몇 프레임 늦게 따라간다.
+  → 규약 '보이는 자리 = 판정 자리' 를 엄격히 지키려면 pose 가 새로 서는 프레임엔 bhBlend 를 1 로 스냅하고(사라질 때만 부드럽게), 또는 로직 쪽에서 head_down 첫 N 틱을 히트스톱에 포함시켜 보간이 끝난 뒤 판정이 열리게 한다. 현재는 히트스톱 4틱이 대부분을 가리므로 배포 차단 사유는 아니다.
+- [ ] (B2-2) 기획서 드리프트 — /Users/shimu/Dev/GameDev/underworld/docs/systems/boss_scythe_behemoth.md §14 의 exposeOnParry{normalTicks, perfectTicks} 에 코드가 추가한 joint 필드가 없고, §2 자세 표의 head_down '몸통 +20° 앞 기울임' 은 구현(BEHEMOTH_TORSO.headDownLean −0.26 ≈ 15°)과 다르다. 또 visual.neck 피벗이 (0,1.95,−1.0) → (0,2.35,−0.5) 로 바뀐 것도 §2 표에 반영되지 않았다. 커밋 본문에 이유는 있으나 문서가 정본이라 다음 사람이 혼동할 수 있다.
+  → §14 EnemyAttackDef 행에 exposeOnParry{joint, normalTicks 36, perfectTicks 90} 로 고치고, §2 head_down 을 '몸통 +15° 앞 기울임(목 IK 가 눈 0.9m 를 만들 수 있는 각)' 으로, 목 피벗 좌표를 갱신한다(B2-3 문서 손질 때 함께).
+- [ ] (B2-2) 처형 연출 정지(executeFocusTicks 32) 동안 /Users/shimu/Dev/GameDev/underworld/src/systems/Enemies.ts tick 이 첫머리에서 return 하므로 tickWeakPointStatus 도 돌지 않는다 — 노출 타이머(관절 90)와 dazeCooldown 이 32틱 늦게 흐르고, dazed → 쿨다운 전이도 32틱 뒤에 걸린다(Boss.test (c) 는 executeFocusTicks = 0 으로 건너뛰어 이를 재지 않는다). 기존 '모든 적이 멈춘다' 규약과 일치하고 플레이어도 그 동안 입력이 막히므로 실제 이득은 없지만, '노출 창은 플레이어의 시간' 이라는 주석과는 어긋난다.
+  → 의도된 것이면 tickWeakPointStatus 주석에 '처형 연출 중엔 멈춘다' 를 한 줄 적고, 아니면 executeFocus 분기 앞에서 약점 보스의 노출 타이머만 깎는 소형 루프를 둔다. 기능 차단 사유는 아니다.
+- [ ] (B2-2) 해머 1·2타의 attackFreezeTicks(chainFlinchTicks 14)가 §9.1 순서(attackFreeze > 포즈)대로 head_down 포즈 시계를 멈춰, 해머로 눈을 두들기면 머리 내림이 사실상 90 + 14×타수 틀이 된다(권총은 90 그대로). 기획서에 규정이 없고 커밋 본문에 기록돼 있어 규칙 위반은 아니나, 해머 노선이 권총 노선보다 눈 창이 길어지는 비대칭이 생긴다.
+  → 밸런스 검증 뒤 원치 않으면 Weapons.resolveHammerHit 의 eyeHammer 분기에서 attackFreezeTicks 부여를 건너뛰거나(머리 내림 중엔 이미 굳어 있다), 기획서 §5 head_down 행에 '해머 경직은 포즈 시계를 멈춘다' 를 명시해 의도로 고정한다.
+- [ ] (B2-3) 완벽 회피 판정이 `p.iframeTicks > 0` 전체에 걸린다(src/systems/Enemies.ts impact 분기). 회피 무적(Reaction.ts:349, dodgeIFrameTicks 8) 외에 그림자 이동(블링크) 무적(src/systems/Projectiles.ts:662, PlayerMove.ts:363-366)과 그래플 탈출 무적(src/systems/Enemies.ts:456, escapeIframeTicks 24)으로 접촉해도 charge_dodged + skid 90 + 양 관절 40 이 나간다. 기획서 §7/§9.3 문구 '무적 8틱 안 접촉' 은 글자 그대로는 만족하지만 '회피 보상' 의도라면 넓다. 시험방(구울 그립 뒤 돌격)에서만 실질 발생.
+  → 설계 결정 사항. 회피만 보상하려면 조건을 `p.iframeTicks > 0 && p.dodgeTicks > 0`(또는 회피 출처 플래그) 로 좁히고 기획서 §9.3 문구를 '회피 무적' 으로 명시; 블링크도 보상하려면 현재 그대로 두고 문서에 '무적 종류 무관' 을 한 줄 적는다.
+- [ ] (B2-3) TASKS.md B2-3 줄의 '관절 메시–구체 ≤ 0.2m(움찔 ≤ 0.25)' 가 실제와 어긋난다 — src/render/Behemoth.test.ts 의 움찔(skid+flinch) 허용치는 jointR.radius = 0.30 이고 구현자 측정 최악값은 0.253 이라 '≤ 0.25' 는 참이 아니다(Stage 주석은 '움찔 최악 0.25(반지름 0.30 안)' 으로 반올림 표기).
+  → TASKS.md B2-3 의 '(움찔 ≤ 0.25)' 를 '(움찔 ≤ 0.30 = 구체 반지름, 측정 0.25)' 로 고쳐 테스트 허용치와 맞춘다.
+- [ ] (B2-3) 체크박스가 요구한 '시험방 헤드리스로 관절 사격 → 파열 로그 확인' 과 스크린샷 'rupture·limp + 시험방(파열·절뚝·미끄러짐)' 이 c4112e4/c10e23b/dcceb53 커밋 본문과 구현자 보고(스크린샷 skid·front 2장만)에 없다. 검토에서 직접 돌려 통과를 확인했다(권총 6발 → weak_point_broken → exposure_closed{hits 6} → boss_status rupture{joint_r, r} → bladeLock.r 600; 양 잠김 → limp on·2.00→2.52m 후퇴; 무적 접촉 → charge_dodged + skid 90 + joint_l 만 노출). 코드 문제는 아니고 보고 누락.
+  → 다음 배치부터 체크박스의 시험방 검증·스크린샷 항목을 커밋 본문 '검증' 절에 경로와 함께 남긴다(B2-2 커밋 형식). 이번 건은 /tmp/review_room_{rupture,limp,skid}.png, /tmp/review_bh_{rupture,limp,skid}.png 로 대체 확인됨.
+- [ ] (B2-3) 관절 파열 순간 소리가 두 번 겹친다 — weak_point_broken(명중 틱, src/main.ts) 의 heavy_hit 와 다음 틱 boss_status rupture 의 joint_crack. 기획서 §5 표시 열은 '관절 어둡게 + 파편 + joint_crack' 만이다. heavy_hit 는 B2-1 잔존.
+  → 선택 사항: main 의 weak_point_broken 핸들러에서 audio.play('heavy_hit') 를 빼고 파편만 남겨 joint_crack 하나로 통일하거나, 의도된 '착탄 + 파열' 이중음이면 §5 표시 열에 heavy_hit 를 적는다.
+- [ ] (B2-4) /Users/shimu/Dev/GameDev/underworld/TASKS.md B2-4 줄이 'Status.test 18건' 이라 적혀 있지만 3c5fe70 이후 src/systems/Status.test.ts 의 it 블록은 21건이다(검토 반영으로 +3). 문서 수치 드리프트일 뿐 동작·게이트에는 영향 없음.
+  → TASKS.md B2-4 줄의 'Status.test 18건' 을 '21건' 으로 고친다.
+- [ ] (B2-4) src/systems/Status.ts tick() 3단계가 매 틱 aimShakeAmp 를 0.02 로 다시 세우므로, 진탕 중 박쥐 비명(shakeAmp 0.012·55틱)이 오면 남은 진탕 틱이 55 이상일 땐 비명 흔들림이 진탕 진폭에 묻히고, 비명이 진탕보다 오래 남으면(aimShakeTicks > concussion) 반대로 진탕의 남은 구간이 박쥐 진폭 0.012 로 약해진다. 기획서 '박쥐 채널 재사용' 의 자연스러운 결과이고 판정·회피에는 무관하지만, 의도한 트레이드오프임을 주석이나 기획서 §6 에 한 줄 남겨 두면 뒤에 '진탕이 갑자기 약해진다' 는 오탐을 막는다.
+  → Status.ts 3단계 주석(또는 기획서 §6 진탕 행)에 '진탕과 박쥐 비명이 겹치면 더 긴 흔들림의 진폭이 이긴다' 를 명시. 코드 변경은 불필요.
+- [ ] (B2-5) 기획서 §9.3 표가 이번 커밋으로 자기모순이 됐다. /Users/shimu/Dev/GameDev/underworld/docs/systems/boss_scythe_behemoth.md 328행 '잔해(붕괴 기둥) | 헛돌격 60 — 진로는 막지만 박히지 않음' 과, 330행에 새로 쓴 '벽이 아닌 소품·아군·잔해에 막혀 선 것은 충돌이 아니다(질주 계속 → 시간이 다하면 헛돌격 90)' 가 같은 표 안에서 충돌한다. 현재 구현(Level.blockedAhead 는 props 를 null 로 돌리고, rayBlockers 는 문설주만 push 된다)은 330행 쪽이다 — 잔해는 '총알·시야 통과' 라 rayBlockers 에 들지 않을 테니 B3-5 가 이 표를 그대로 따르면 어느 행을 구현할지 갈린다. 이번 체크박스(B2-5) 동작엔 영향 없음.
+  → 둘 중 하나로 문서를 맞춘다. (a) 328행을 '질주 계속 → 시간이 다하면 헛돌격 90(B2-5 규칙, 잔해는 props)' 로 고치거나, (b) 330행 끝에 '잔해는 B3-5 에서 Level.blockedAhead 가 잔해 rect 를 별도 목록으로 인식해 헛돌격 60 을 낸다(TODO)' 를 덧붙여 B3-5 작업 항목으로 남긴다. 어느 쪽이든 TASKS.md B3-5 항목에 한 줄 반영.
+- [ ] (B2-5) 체크박스의 헤드리스 요구 '돌격을 P 에 박게 유도한 로그' 가 파일로 남아 있지 않다. /tmp/pw 에는 behemoth-b25-pillar.png(기둥 스크린샷 — 확인: 밝은 돌 상자 + 정 자국 띠 3줄, 시험방), behemoth-b25-topple.png(HUD 문구 '거수가 기둥에 박혔다 — 눈을 노려라!' 가 찍힘 — pillar_hit·topple 경로가 실제로 돌았다는 증거로는 충분), pillarshot.mjs·debug.mjs 만 있고 전도 유도 스크립트·콘솔 로그는 804bbfd 커밋 본문의 한 줄 서술로만 남았다. 6642c4e(재검토 반영)는 렌더·데이터를 안 건드려 스크린샷을 새로 찍지 않았다는 이유는 타당하다.
+  → 선택 사항 — 다음 헤드리스 작업 때 전도 유도 스크립트를 /tmp/pw/behemoth-b25-topple.mjs 로 남기고 콘솔 로그(pillar_hit·boss_status topple/head_down cause topple·kbTicks)를 /tmp/pw/behemoth-b25-topple.log 로 저장해 두면 검토가 재현할 수 있다. 지금 상태로도 체크박스 완료 판정은 유지.
+- [ ] (B2-6) roar 자세에서 어깨 관절 메시와 판정 구체(poseOffsets.roar joint_r/l = (±1.15, 2.70, −0.50))가 0.31m 어긋난다(debug/behemoth?view=roar 안내문 '어긋남 r 0.31m / l 0.31m'). skid 에 못박은 기준(≤ 0.20m)보다 크고 Behemoth.test 의 roar 검사는 눈(2.9m·어긋남 0.00)·턱·팔·천장만 본다. 지금은 molting 동안 약점이 전부 닫혀 게임플레이 영향은 없고, 구체 자체는 표 자리에 그려져 '판정 = 그림' 규약은 지켜진다.
+  → B3-4 포효 예고(roar 자세 재사용) 또는 다음 리그 손질 때 roar 팔 들기(BH_ARM_ROAR/BH_ARM_ROAR_YAW)로 어깨 메시가 표 (2.70, −0.50) 근처에 오게 조정하고, Behemoth.test 191 의 관절 메시–구체 검사 목록에 roar 를 추가.
+- [ ] (B2-6) 일반 패링으로 연 관절 노출(36틱, 보스는 recover 반동 중)은 막는 창이 아니라서 그 순간 칸이 비면 전환이 즉시 일어나 방금 얻은 노출이 exposure_closed 로 닫힌다. 기획서 §8 이 보호 창을 staggered·head_down·skid·blind·처형 넉백으로 한정했으므로 구현은 문서 그대로지만, 플레이어가 패링 보상을 빼앗기는 느낌이 날 수 있다.
+  → 기획 판단 사안 — 원하면 phaseShiftBlocked 에 '타이머 노출(enemy.exposure 에 양수)이 있는 동안'을 추가하고 §8 큐잉 표를 갱신. 코드 수정 없이 넘겨도 무방.
+- [ ] (B2-6) beginPhaseShift 의 endBlind(world, enemy) 호출은 도달 불가(blind 는 phaseShiftBlocked 가 막아 여기 오지 않음) — 주석에도 그렇게 적혀 있다. 무해한 안전망이지만 기획서 '눈멂은 유지' 와 겉으로 어긋나 보인다.
+  → 그대로 두어도 되나, 남길 거면 주석을 '안전망(도달 불가)' 로 명시하거나 호출을 제거.
+- [ ] (B2-6) 구현자도 보고한 대로 roar 자세(faceUp 가지)의 눈 구체는 플레이어 눈높이 1.6m 에서 머리 상자에 가려 잘 보이지 않는다(room-p2 스크린샷에서도 눈이 안 보임). 전환 중엔 눈이 닫혀 문제 없으나 B3-4 포효 예고(눈 노출 C, 66 → 역류)에서는 표적이 보여야 한다.
+  → B3-4 착수 시 roar 표의 눈 z(−1.3) 를 앞으로 빼거나 머리 상자 크기/IK 가지를 손봐 1.6m 정면에서 눈 구체가 보이는지 헤드리스로 확인.
+
 ## 의존성 주의
 
 - M3 이전에 M4를 건드리지 않는다. 패링 감각이 확정되기 전 마나 수치를 잡으면 전부 다시 한다
