@@ -2749,6 +2749,7 @@ function respawnAtAltar(): void {
   p.stunTicks = 0;
   p.dodgeTicks = 0;
   p.iframeTicks = 0;
+  p.iframeSource = undefined;
   p.reactionBufferTicks = 0;
   world.weapon.mag = balance.weapons.pistol.magSize;
   world.weapon.reserve = balance.weapons.pistol.ammoMax;
@@ -3428,6 +3429,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   p.stunTicks = 0;
   p.dodgeTicks = 0;
   p.iframeTicks = 0;
+  p.iframeSource = undefined;
   Status.clearAll(world); // 플레이어 상태(팔 저림·진탕)는 층을 넘지 않는다 — 시험방 진입도 여기를 지난다
   Projectiles.endChannel(world);
   // 출구에서 누른 그 E 가 새 층에서 한 번 더 먹히지 않게 한다

@@ -483,6 +483,7 @@ function releaseGrapple(world: World, enemy: EnemyState, shoved: boolean): void 
     enemy.timer = enemyDef(enemy.type).chargeAttack?.recoverTicks ?? 45;
     enemy.whiffed = true; // 밀쳐낸 직후는 무방비 — 반격 창
     world.player.iframeTicks = Math.max(world.player.iframeTicks, grip.escapeIframeTicks);
+    world.player.iframeSource = 'escape'; // 탈출 무적의 출처 — 거수 돌격의 완벽 회피(미끄러짐)는 회피 무적('dodge')만 치니 지난 회피의 출처를 여기서 덮어쓴다(World.ts 규약: 무적을 세우는 쪽이 적는다, B3-4 검토)
     world.events.emit('grapple_escape', { enemyId: enemy.id, enemyType: enemy.type });
   } else {
     enemy.ai = 'chase';

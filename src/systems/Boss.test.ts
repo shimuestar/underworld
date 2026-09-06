@@ -5170,5 +5170,65 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(world.player.health).toBe(hpBeforeBlink);
       world.player.iframeTicks = 0;
     });
+
+    it('그래플 탈출 무적 접촉은 미끄러지지 않는다(헛돌격, B3-4 검토) — 구울 그립을 밀쳐낸 escapeIframeTicks 24 는 iframeSource \'escape\' 를 세워 앞선 회피의 \'dodge\' 를 덮어쓰고, 그 무적 안에 거수 돌격이 닿으면 피해 0·charge_dodged 없음·관절 안 열림·whiff 90. 무적이 다한 틱에 Reaction 이 출처를 지운다', () => {
+      const cd = Enemies.contactDist(def);
+      const grip = balance.ghoulGrapple;
+      expect(grip.escapeIframeTicks).toBe(24);
+      // 무적이 다한 틱에 출처가 지워진다 — 지난 회피의 'dodge' 가 남지 않는다
+      world.player.iframeTicks = 2;
+      world.player.iframeSource = 'dodge';
+      Reaction.tick(world, DT);
+      expect(world.player.iframeTicks).toBe(1);
+      expect(world.player.iframeSource).toBe('dodge');
+      Reaction.tick(world, DT);
+      expect(world.player.iframeTicks).toBe(0);
+      expect(world.player.iframeSource).toBeUndefined();
+      // 그래도 옛 'dodge' 가 남아 있었다고 치고(검토가 지목한 경우) — 탈출이 덮어써야 한다
+      world.player.iframeSource = 'dodge';
+      const boss = makeBehemoth(10.0);
+      boss.closeCooldown = 9999; // P1 — 돌격만, 광란 돌격 없음
+      const w = watch();
+      tickEnemiesUntil(() => boss.ai === 'charging', 120);
+      tickEnemiesUntil(() => Math.hypot(boss.x - world.player.x, boss.z - world.player.z) <= cd + 1.0, 300);
+      // 몸이 닿기 직전 구울 그립의 마지막 몸부림 — 실제 releaseGrapple(shoved) 경로가 무적 24 + 출처 'escape' 를 세운다(구울을 거수보다 먼저 처리)
+      const ghoul = spawnEnemyAt('ghoul', world.player.x + 1, world.player.z, 900);
+      ghoul.ai = 'latched';
+      ghoul.timer = 999; // 이 틱엔 물지 않는다
+      ghoul.latchDirX = 1;
+      ghoul.latchDirZ = 0;
+      world.enemies.unshift(ghoul);
+      world.grappleEnemyId = ghoul.id;
+      world.grappleMash = grip.mashToEscape - 1;
+      const escapes: unknown[] = [];
+      world.events.on('grapple_escape', (p) => escapes.push(p));
+      const hp = world.player.health;
+      world.input = { ...Input.emptySnapshot(), meleePressed: true };
+      Enemies.tick(world, DT);
+      world.input = Input.emptySnapshot();
+      expect(escapes).toHaveLength(1);
+      expect(world.grappleEnemyId).toBeNull();
+      expect(world.player.iframeTicks).toBe(grip.escapeIframeTicks);
+      expect(world.player.iframeSource).toBe('escape');
+      world.enemies.splice(world.enemies.indexOf(ghoul), 1);
+      // 남은 질주가 탈출 무적 안에 닿는다 — 회피 보상이 아니다: 헛돌격(옛 경로)
+      for (let i = 0; i < 300 && boss.ai !== 'recover'; i++) {
+        Enemies.tick(world, DT);
+        Reaction.tick(world, DT);
+      }
+      expect(boss.ai).toBe('recover');
+      expect(boss.whiffed).toBe(true);
+      expect(boss.timer).toBe(def.chargeAttack!.whiffRecoverTicks);
+      expect(boss.pose).not.toBe('skid');
+      expect(w.dodged).toHaveLength(0);
+      expect(w.hits).toHaveLength(0);
+      expect(world.player.health).toBe(hp);
+      expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+      expect(weakPointOpen(boss, wp('joint_l'))).toBe(false);
+      expect(world.player.iframeSource).toBe('escape'); // 아직 무적 안
+      for (let i = 0; i < grip.escapeIframeTicks; i++) Reaction.tick(world, DT);
+      expect(world.player.iframeTicks).toBe(0);
+      expect(world.player.iframeSource).toBeUndefined();
+    });
   });
 });

@@ -1609,11 +1609,15 @@ export function behemothAnchorPos(rig: BehemothRig, id: string, out: THREE.Vecto
 /** 약점 구체 표시 — 열림: 발광 + 크기 맥동 ±12% / 닫힘: 어두운 본색 / 파열: 어둡게 / 명중 직후(flashAgeMs ≥ 0): 밝게 번쩍.
  *  텔레그래프 3색·스태거 금색은 쓰지 않는다(기획서 §2). syncEnemies 와 debug/behemoth.ts 가 같은 함수를 쓴다 */
 /** 눈 구체를 '어두운 청록(피해만, 누적 없음)' 으로 그릴지 — 혼절 쿨다운(dazeCooldown) 중 머리 내림의 눈, 그리고 역류(poseCause 'backflow')로 내려온 머리의 눈
- *  (기획서 §4.1 heart "머리 내림 60 — 눈 ×3.0 피해만, 혼절 누적 없음", B3-1). 돌격 질주 중 6m 눈(Enemies ⑩)은 쿨다운과 무관하게 눈멂 누적이 유효하므로
- *  밝은 청록 그대로(판정 = 그림, B2-5 검토) */
-export function behemothEyeDimmed(enemy: Pick<EnemyState, 'dazeCooldown' | 'ai' | 'attackMode' | 'pose' | 'poseCause'>): boolean {
+ *  (기획서 §4.1 heart "머리 내림 60 — 눈 ×3.0 피해만, 혼절 누적 없음", B3-1). 쿨다운과 무관하게 누적이 유효한 노출은 밝은 청록 그대로(판정 = 그림):
+ *  돌격 질주 중 6m 눈(Enemies chargeEye — 눈멂 66, B2-5 검토)과 포효 예고의 치켜든 눈(Enemies roarEye 와 같은 조건 — pose roar + attackMode roar + windup, 전환 molting 아님:
+ *  66 → 역류, B3-4 검토). 기획서 §4.1 eye B·C */
+export function behemothEyeDimmed(enemy: Pick<EnemyState, 'dazeCooldown' | 'ai' | 'attackMode' | 'pose' | 'poseCause' | 'molting'>): boolean {
   if (enemy.pose === 'head_down' && enemy.poseCause === 'backflow') return true;
-  return (enemy.dazeCooldown ?? 0) > 0 && !(enemy.ai === 'charging' && enemy.attackMode === 'charge');
+  if ((enemy.dazeCooldown ?? 0) <= 0) return false;
+  if (enemy.ai === 'charging' && enemy.attackMode === 'charge') return false;
+  if (enemy.pose === 'roar' && enemy.attackMode === 'roar' && enemy.ai === 'windup' && !enemy.molting) return false;
+  return true;
 }
 
 /** 약점 구체의 크기 배율 — 분출공(vent)은 갑각판이 부서진 만큼(ventScale — 로직 enemy.ventScale, 판정 Entities.weakPointRadius 와 같은 값, B3-3) 늘 크고,

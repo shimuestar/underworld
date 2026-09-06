@@ -101,8 +101,9 @@ export interface PlayerState {
   /** 위압(cowed, 거수 P3 포효 12m 안, B3-4) 잔여 틱 — 일반 패링이 관절을 열지 못하고(완벽만) 일반 패링 마나가 준다(balance.status.cowed). 완벽 패링 1회 성립 시 즉시 0.
    *  회피 거리·무적은 그대로. 감소·이벤트는 Status.ts 만 */
   cowedTicks?: number;
-  /** 지금 무적(iframeTicks)의 출처 — 'dodge' 회피(Reaction.startDodge) / 'blink' 그림자 질주 / 'escape' 그래플 탈출. 거수 돌격의 완벽 회피(미끄러짐 보상)는 회피 무적만 친다(B2-3 검토) —
-   *  블링크·탈출 무적으로 스친 돌격은 옛 경로(헛돌격)다. 무적을 세우는 쪽이 함께 적는다 */
+  /** 지금 무적(iframeTicks)의 출처 — 'dodge' 회피(Reaction.startDodge) / 'blink' 그림자 질주(Projectiles·PlayerMove) / 'escape' 그래플 탈출(Enemies.releaseGrapple). 거수 돌격의 완벽 회피(미끄러짐 보상)는
+   *  회피 무적만 친다(B2-3 검토) — 블링크·탈출 무적으로 스친 돌격은 옛 경로(헛돌격)다. 무적을 세우는 쪽이 함께 적고, 무적이 다한 틱(iframeTicks 0)에 Reaction 이 undefined 로 지운다 —
+   *  지난 회피의 'dodge' 가 다음 무적에 묻어가지 않게(B3-4 검토) */
   iframeSource?: 'dodge' | 'blink' | 'escape';
   /** 걸린 순서(오래된 것부터) — Status.ts 가 상한(balance.status.maxConcurrent)을 넘기면 맨 앞을 해제한다. Status 만 쓴다 */
   statusOrder?: PlayerStatusKind[];

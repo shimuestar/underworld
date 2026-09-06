@@ -322,7 +322,7 @@ describe('약점 구체 = 판정 구체', () => {
     expect(rig.weakPoints['eye']!.scale.x).toBe(1);
   });
 
-  it('쿨다운 dim 판정(B2-5 검토) — 혼절 쿨다운 중 머리 내림·회복의 눈은 어둡게, 돌격 질주(charging + charge) 중 6m 눈은 쿨다운이어도 밝게(눈멂 누적이 유효 — 판정과 같은 그림), 쿨다운 0 이면 어디서도 어둡지 않다', () => {
+  it('쿨다운 dim 판정(B2-5 검토) — 혼절 쿨다운 중 머리 내림·회복의 눈은 어둡게, 돌격 질주(charging + charge) 중 6m 눈은 쿨다운이어도 밝게(눈멂 누적이 유효 — 판정과 같은 그림), 포효 예고(pose roar + windup, B3-4 검토)의 치켜든 눈도 쿨다운이어도 밝게(66 → 역류가 유효 — 전환 molting·발동 뒤는 어둡게), 쿨다운 0 이면 어디서도 어둡지 않다', () => {
     expect(behemothEyeDimmed({ dazeCooldown: 600, ai: 'recover', attackMode: 'charge' })).toBe(true);
     expect(behemothEyeDimmed({ dazeCooldown: 1, ai: 'chase' })).toBe(true);
     expect(behemothEyeDimmed({ dazeCooldown: 600, ai: 'charging', attackMode: 'charge' })).toBe(false);
@@ -333,6 +333,13 @@ describe('약점 구체 = 판정 구체', () => {
     expect(behemothEyeDimmed({ dazeCooldown: 0, ai: 'recover', pose: 'head_down', poseCause: 'backflow' })).toBe(true);
     expect(behemothEyeDimmed({ dazeCooldown: 0, ai: 'recover', pose: 'head_down' })).toBe(false);
     expect(behemothEyeDimmed({ dazeCooldown: 0, ai: 'recover', pose: 'head_down', poseCause: 'topple' })).toBe(false);
+    // 포효 예고(B3-4 검토) — 치켜든 눈의 66 → 역류는 혼절 쿨다운과 무관(Enemies roarEye)이라 쿨다운이어도 밝게(판정 = 그림). 전환(molting)의 roar 자세와 포효가 끝난 뒤(recover)는 어둡게
+    expect(behemothEyeDimmed({ dazeCooldown: 600, ai: 'windup', attackMode: 'roar', pose: 'roar' })).toBe(false);
+    expect(behemothEyeDimmed({ dazeCooldown: 1, ai: 'windup', attackMode: 'roar', pose: 'roar', molting: false })).toBe(false);
+    expect(behemothEyeDimmed({ dazeCooldown: 600, ai: 'windup', attackMode: 'roar', pose: 'roar', molting: true })).toBe(true);
+    expect(behemothEyeDimmed({ dazeCooldown: 600, ai: 'recover', attackMode: 'melee', pose: 'roar', molting: true })).toBe(true);
+    expect(behemothEyeDimmed({ dazeCooldown: 600, ai: 'recover', attackMode: 'roar' })).toBe(true);
+    expect(behemothEyeDimmed({ dazeCooldown: 0, ai: 'windup', attackMode: 'roar', pose: 'roar' })).toBe(false);
   });
 });
 

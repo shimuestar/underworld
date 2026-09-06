@@ -33,7 +33,7 @@ export function tick(world: World, _dt: number): void {
   const reaction = balance.reaction;
 
   // 진행 중인 상태 카운트다운
-  if (p.iframeTicks > 0) p.iframeTicks--;
+  if (p.iframeTicks > 0 && --p.iframeTicks === 0) p.iframeSource = undefined; // 무적이 다한 틱에 출처도 지운다 — 지난 회피의 'dodge' 가 다음 무적(그래플 탈출·블링크)에 묻어가지 않게(B3-4 검토)
   if (p.reactionBufferTicks > 0) p.reactionBufferTicks--;
 
   // 방어 (Shift 홀드) — 누른 첫 틱부터 즉시 성립한다. 경직/대시 중 불가.
