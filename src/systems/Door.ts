@@ -15,6 +15,8 @@
 // 다시 벽이 된다 — 적 추격·소음이 막힌다(쫓기다 문을 닫아 끊는 수). 문 칸에 몸이 있으면 시작을
 // 거부하고, 닫히는 중에 들어오면 그 자리에서 멈춰 기다린다(벽 속에 몸이 갇히지 않게).
 // 한 번 자물쇠가 풀린 문은 채널 없이 E 한 번에 다시 밀려 열린다 — 자물쇠는 이미 부서졌다.
+// 봉쇄(B3-5, 거수 아레나): Arena 가 door.sealed 를 세운 문은 손이 안 먹는다 — 반경 안에서 E 를 누르면 door_sealed 만 낸다(왜 안 열리는지 알린다).
+// 닫히는 중이면 위 닫기 규약 그대로 닫히고, Arena 가 sealed 를 내리면 부서진 자물쇠라 E 한 번에 다시 열린다.
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
@@ -78,6 +80,7 @@ export function tick(world: World, _dt: number): void {
   // 열린 문(닫기) 둘 다 대상이다. 밀리는 중·닫히는 중은 손댈 수 없다
   let target: DoorState | null = null;
   let best = Infinity;
+  let sealedNear: DoorState | null = null;
   for (const door of world.doors) {
     if (door.closing) continue;
     if (!door.opened && door.progress >= cfg.openTicks) continue;
@@ -88,10 +91,18 @@ export function tick(world: World, _dt: number): void {
     // 열린 문의 문틈에 서 있으면 어디를 보든 대상이다 — 그래야 E 가 "네가 문틈에 있다"고 알려 줄 수 있다
     const inDoorway = door.opened && bodyInDoorway(world, door) === 'player';
     if (!inDoorway && dist > 0.001 && (toX * fx + toZ * fz) / dist < arcCos) continue;
+    // 봉쇄된 문(거수 아레나, B3-5) — 손댈 대상이 아니다. E 를 누르면 왜 안 열리는지만 알린다
+    if (door.sealed) {
+      sealedNear = door;
+      continue;
+    }
     target = door;
     best = dist;
   }
   world.doorInView = target;
+  if (sealedNear && target === null && world.input.interactPressed) {
+    world.events.emit('door_sealed', { row: sealedNear.row, col: sealedNear.col, x: sealedNear.x, z: sealedNear.z });
+  }
 
   for (const door of world.doors) {
     if (door.closing) {

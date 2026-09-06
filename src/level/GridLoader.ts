@@ -26,6 +26,14 @@ export interface TriggerDef {
   note?: string;
 }
 
+/** 보스 아레나 정의(거수 「무저갱 우리」 z01_f4, 기획서 §10 — systems/Arena 가 읽는다). bounds = [r0, c0, r1, c1] 셀 범위(끝 포함, 아레나 안쪽 바닥) —
+ *  보스의 이동·돌격 목표가 이 사각 안으로 클램프된다(벽감·관문 밖으로 목표를 잡지 않는다). home = 밖에서 깨웠을 때 돌아가 기다리는 칸(B).
+ *  플레이어 '안' 판정은 home 에서 문 D 를 넘지 않고 닿는 칸 전부(안쪽·균열벽 뒤 상자 벽감·출구 벽감·문 칸 — Arena.floodInside) */
+export interface ArenaDef {
+  bounds: number[];
+  home: number[];
+}
+
 export interface LevelDef {
   id: string;
   name: string;
@@ -35,6 +43,10 @@ export interface LevelDef {
   lighting: { ambient: number; torches: number[][] };
   glyphs?: GlyphDef[];
   triggers?: TriggerDef[];
+  /** 보스 결투 층(거수 아레나) — Zone.test 가 난이도 곡선·밀도 비교에서 뺀다(기획서 §10.3 (a)). 없으면 일반 층 */
+  bossArena?: boolean;
+  /** 보스 아레나 경계·홈(위 ArenaDef) — 없으면 아레나 없음(Arena 시스템이 돌지 않는다) */
+  arena?: ArenaDef;
   /** 입구 계단(스폰이 등진 벽감)을 그리는가 — 기본 true. 시험방처럼 "내려온 자리"가 없는 층은 false (2026-09-04) */
   entranceStairs?: boolean;
   /** 바닥 표식 — 'center' 는 방 가운데를 알리는 고리+십자 (몬스터 시험방) */
@@ -106,6 +118,10 @@ export class Level {
   readonly levers: TriggerDef[];
   readonly rows: number;
   readonly cols: number;
+  /** 보스 결투 층인가 (LevelDef.bossArena) */
+  readonly bossArena: boolean;
+  /** 보스 아레나 경계·홈 (LevelDef.arena) — 없으면 null */
+  readonly arena: ArenaDef | null;
 
   constructor(def: LevelDef) {
     this.id = def.id;
@@ -166,6 +182,8 @@ export class Level {
     this.glyphs = def.glyphs ?? [];
     this.entranceStairs = def.entranceStairs ?? true;
     this.floorMarks = def.floorMarks ?? [];
+    this.bossArena = def.bossArena ?? false;
+    this.arena = def.arena ?? null;
     this.levers = (def.triggers ?? []).filter(
       (trigger) => trigger.type === 'lever' && (trigger.opens || trigger.resets),
     );
@@ -227,6 +245,20 @@ export class Level {
 
   pathBlockedAt(col: number, row: number): boolean {
     return this.pathBlocked.has(row * 4096 + col);
+  }
+
+  /** 레이(ox,oz)→(dx,dz) 가 처음 막히는 격자 칸 — 시야선을 가린 것이 어느 칸(기둥 P 인가)인지 읽는다(거수 반캠핑, Arena).
+   *  wallRayHit 의 t 바로 너머 칸을 돌려주므로 문설주(레이 차단 상자)에 막혔으면 그 상자가 든 열린 칸('.')이 나온다 — 호출자가 문자를 본다 */
+  blockingCellOnRay(ox: number, oz: number, dx: number, dz: number): { col: number; row: number; ch: string; t: number } {
+    const len = Math.hypot(dx, dz);
+    const ux = len > 0 ? dx / len : 0;
+    const uz = len > 0 ? dz / len : -1;
+    const { t } = this.wallRayHit(ox, oz, ux, uz);
+    const px = ox + ux * (t + SKIN * 10);
+    const pz = oz + uz * (t + SKIN * 10);
+    const col = Math.floor(px / this.cellSize);
+    const row = Math.floor(pz / this.cellSize);
+    return { col, row, ch: this.charAt(col, row), t };
   }
 
   /** 셀을 바닥으로 연다 (문 개방 등). 이후 solidAt이 통과를 허용한다 */
@@ -460,13 +492,13 @@ const CEILING_BUMP = 0.25;
 const COLOR_WALL = 0x60564a;
 const COLOR_DOOR = 0x6b4a2f;
 /** 중세 판문 — 문틀 안에 실제로 뚫린 구멍 크기와 문짝 두께 */
-const DOOR_OPEN_WIDTH = 2.1;
-const DOOR_OPEN_HEIGHT = 2.9;
+export const DOOR_OPEN_WIDTH = 2.1; // Stage 의 봉쇄 쇠창살(setDoorSealed)도 같은 개구부 폭을 쓴다
+export const DOOR_OPEN_HEIGHT = 2.9;
 const DOOR_THICK = 0.22;
 const DOOR_WOOD = 0x5a3d24;
 const DOOR_IRON = 0x2e2c2a;
 const COLOR_CRACK = 0x4a5a68;
-/** 기둥(P) — 벽보다 밝은 돌(기획서 §10.1 0x8a8378) + 정 자국 띠(어두운 띠). 균열선(내구 단계)은 B3-5 */
+/** 기둥(P) — 벽보다 밝은 돌(기획서 §10.1 0x8a8378) + 정 자국 띠(어두운 띠). 내구 단계의 붉은 균열선·붕괴 잔해는 Stage(setPillarDamage·collapsePillar, B3-5) */
 export const COLOR_PILLAR = 0x8a8378; // 기둥 P — 지도(Minimap)도 같은 색을 쓴다
 const COLOR_PILLAR_BAND = 0x5e574e;
 const PILLAR_BAND_H = 0.14;
@@ -505,7 +537,7 @@ const ALCOVE_CORR_D = 1.28;
 /** 아래 단 한 개의 깊이 — 단 수 × 이 값이 입구에서 평지까지의 길이다 */
 const ALCOVE_STEP_RUN = 0.44;
 const STAIR_RISE = 0.34;
-const STAIR_STONE = 0x4a443b;
+export const STAIR_STONE = 0x4a443b; // 잔해(낙석·붕괴 기둥)도 같은 돌빛
 /** 봉인된 출구 — 꺼진 돌바닥. 열린 초록과 한눈에 구분돼야 한다 */
 // 2026-09-01 의미 교정 — 잠김 = 붉은 쇠창살, 열림 = 녹색 (사용자: 녹색은 '내려갈 수 있다')
 export const COLOR_EXIT_LOCKED = 0xc03030;
@@ -953,7 +985,8 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       if (!SOLID_CHARS.has(ch)) continue;
       if (ch === 'P') {
         // 기둥(거수 아레나·시험방) — 벽과 같은 한 칸 상자지만 밝은 돌에 정 자국 띠를 둘러 벽과 구분한다("돌격을 여기에 박히게" 가 읽혀야 한다).
-        // 개별 메시(pillar-r-c) — 내구 균열선·붕괴(B3-5)가 이 이름으로 찾아 바꾼다
+        // 개별 메시(pillar-r-c) — Stage.setPillarDamage 가 내구 단계마다 붉은 균열선을 덧대고, collapsePillar 가 통째로 걷어 잔해(rubble-r-c)로 바꾼다(B3-5).
+        // 층을 다시 그릴 때(FloorState 복원) 붕괴한 기둥 칸은 이미 '.' 이라 여기 안 들고, 잔해는 main 이 Arena 상태에서 되살린다
         const pillar = new THREE.Group();
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(cs, level.ceiling, cs),

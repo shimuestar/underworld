@@ -439,6 +439,50 @@ export function unlockDoor(door: DoorState, openTicks: number): boolean {
   return true;
 }
 
+/** 보스 아레나 잔해(붕괴한 기둥 P 자리, B3-5) — 몸을 막되 총알·시야·소음은 통과(props 규약 = 낙석 잔해와 같다). 돌격이 박혀도 충돌이 아니라
+ *  헛돌격(Level.blockedAhead 가 props 를 벽으로 읽지 않는다). balance.arena.rubbleBreakable 이면 폭발(수류탄·화염구·폭발통)로 치운다 → broken */
+export interface RubbleState {
+  row: number;
+  col: number;
+  x: number;
+  z: number;
+  blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
+  broken: boolean;
+}
+
+/** 월드 사각(m) — 아레나 경계 */
+export interface Rect {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/** 보스 아레나 상태(거수 「무저갱 우리」, systems/Arena — 기획서 §9.4·§10, B3-5). 층(Level)에 매인다 — main 의 FloorState 가 함께 얼리고 되살린다.
+ *  bounds: 보스 이동·돌격 목표 클램프(Enemies 가 읽는다) / insideCells: 플레이어 '안' 판정 칸 집합(홈에서 문 D 를 넘지 않고 닿는 칸 — 안쪽·균열벽 뒤 상자 벽감·출구 벽감·
+ *  문 칸까지; 문 밖 복도는 밖) / home: 밖에서 깨웠을 때 돌아가 기다리는 자리 / sealed: 봉쇄 중(문 D 잠김) / pillarHp: 기둥 "row-col" → 남은 내구 / rubble: 붕괴 잔해 /
+ *  noLosTicks·farTicks: 반캠핑 카운터 */
+export interface ArenaState {
+  /** 이 상태가 속한 층 — world.level 과 다르면 Arena 가 새로 짓는다 */
+  level: Level;
+  bounds: Rect;
+  /** 아레나 '안' 칸 집합 — key = row * 4096 + col (noiseField 규약) */
+  insideCells: Set<number>;
+  homeX: number;
+  homeZ: number;
+  homeRow: number;
+  homeCol: number;
+  /** 아레나 주인(boss 배치·def.boss) — 죽거나 없으면 Arena 가 다시 찾는다 */
+  bossId: number | null;
+  sealed: boolean;
+  /** 봉쇄 대상 문 D(경계에 붙은 문) 격자 좌표 — 없으면 봉쇄는 상태만 */
+  door: { row: number; col: number } | null;
+  pillarHp: Record<string, number>;
+  rubble: RubbleState[];
+  noLosTicks: number;
+  farTicks: number;
+}
+
 /** 잠긴 문 하나. 격자 정보(위치·미닫이 방향)는 Level.doors 에서 그대로 옮겨 온다 */
 export interface DoorState {
   row: number;
@@ -467,6 +511,8 @@ export interface DoorState {
   frameBlockers?: { minX: number; maxX: number; minZ: number; maxZ: number }[];
   /** 닫히는 중 몸에 걸려 멈춰 있는 연속 틱 — 주기적 알림(door_blocked) 박자 */
   blockedTicks?: number;
+  /** 봉쇄(거수 아레나, B3-5) — Arena 가 세운다. 참이면 E 가 먹지 않고(door_sealed) 닫힌 채 잠긴다. 보스 사망·플레이어 사망·이탈에 Arena 가 내린다 */
+  sealed?: boolean;
 }
 
 /** 기믹(파괴물) 하나 — 항아리·궤짝·뼈 무더기·석관·광차. 부수면 결과(전리품/매복/폭발
@@ -1164,6 +1210,14 @@ export interface EnemyState {
   blind?: boolean;
   /** 질주(charging) 중 이동이 막힌 연속 틱 — 기대 이동의 unstick.minProgress 에 못 미친 틱 수. chargeStuckTicks 에 닿으면 지형 충돌 판정 */
   chargeStuck?: number;
+  /** 아레나 홈 대기(B3-5, 기획서 §10.1 holdUntilEntered) — 밖에서 깨어난 보스는 chase 대신 홈 칸으로 돌아가 문을 노려본다. Arena 가 세우고 플레이어가 경계를 넘는 틱에 내린다 */
+  holdHome?: boolean;
+  /** 반캠핑 자발 돌격 요청(B3-5, 기획서 §9.4) — Arena 가 시야를 가린 기둥의 칸·중심을 적고, Enemies 가 다음 추격 틱에 그쪽으로 돌격을 낸다(예고는 그대로) */
+  anticampTarget?: { x: number; z: number; row: number; col: number };
+  /** 지금 돌격이 반캠핑 자발 돌격 — 기둥에 박히면 전도(head_down) 대신 pillarStunTicks 실신(recover)만, 눈 노출 없음. 광란 돌격 2차도 없다 */
+  anticampCharge?: boolean;
+  /** 반캠핑 접근 가속(B3-5) — farM 밖에 farTicks 머문 플레이어에게 farNearM 안까지 이속 × farSpeedMul. Arena 가 세우고 내린다 */
+  anticampBoost?: boolean;
   /** 현재 페이즈 = 체력 칸 index(거수 3 → 2 → 1, Entities.healthBarState 와 같은 수) — def.phases 가 있는 적만 Spawner 가 세운다.
    *  칸이 비어 표시 index 가 낮아져도 전환(phase_shift)이 실제로 일어나기 전까진 이 값이 그대로다(게임플레이 페이즈). Enemies 가 매 틱 비교한다 */
   phase?: number;
@@ -1586,6 +1640,8 @@ export class World {
   gooPuddles?: GooPuddle[];
   /** 진액 웅덩이(거수 P2+, B3-2) — systems/Hazards 가 만들고 말린다. 층 이동·부활 시 Hazards.clearAll */
   pools: PoolState[] = [];
+  /** 보스 아레나(거수 「무저갱 우리」, B3-5) — systems/Arena 가 level.arena 에서 짓고 굴린다. 아레나 없는 층은 null. 층에 매여 FloorState 와 함께 얼린다 */
+  arena: ArenaState | null = null;
 
   /** 통통 튀는 구울 머리들 — 층 이동·부활 시 비운다 */
   ghoulHeads?: GhoulHeadState[];

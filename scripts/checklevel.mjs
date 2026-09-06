@@ -10,12 +10,15 @@
 //  4. 적·폭발통·상자·횃불·글리프가 벽 안에 박혀 있지 않은가
 //  5. 레버가 여는 대상(opens)이 실제로 문·관문인가
 //
+//  6. 보스 아레나(arena·bossArena — 거수 「무저갱 우리」, B3-5): bounds 가 격자 안 바닥이고, 기둥 P 가 전부 그 안에,
+//     홈(B)이 안에, 문 D 가 경계에 붙어 있고, 경계 밖 적이 홈에서 alertRadius(18m) 밖인가
+//
 // 그리드 문자는 data/levels/*.json 의 legend 와 src/level/GridLoader.ts 의
-// SOLID_CHARS(#·D·G·C)를 따른다.
+// SOLID_CHARS(#·D·G·C·P)를 따른다.
 
 import { readFileSync } from 'node:fs';
 
-const SOLID = new Set(['#', 'D', 'G', 'C']);
+const SOLID = new Set(['#', 'D', 'G', 'C', 'P']); // P = 기둥(거수 아레나, B2-5) — 벽처럼 막힌다
 /** 열 수 있는 벽 — 열렸다고 치면 지나갈 수 있다 */
 const OPENABLE = new Set(['D', 'G', 'C']);
 
@@ -173,6 +176,41 @@ function check(path) {
     if (t.type !== 'crack_wall') continue;
     const [r, c] = t.cell ?? [];
     if (at(grid, c, r) !== 'C') errors.push(`균열 벽 트리거 [${r},${c}] 가 C 가 아니다 (문자 '${at(grid, c, r)}')`);
+  }
+
+  // ⑥ 보스 아레나(B3-5) — bounds·기둥·홈·문·곁방 거리
+  if (level.arena || level.bossArena) {
+    const a = level.arena;
+    if (!a || !Array.isArray(a.bounds) || a.bounds.length !== 4 || !Array.isArray(a.home)) {
+      errors.push('bossArena 층인데 arena{bounds:[r0,c0,r1,c1], home:[r,c]} 가 없다');
+    } else {
+      const [r0, c0, r1, c1] = a.bounds;
+      const cs = level.cellSize ?? 4;
+      const inB = (r, c) => r >= r0 && r <= r1 && c >= c0 && c <= c1;
+      if (r0 < 0 || c0 < 0 || r1 >= rows || c1 >= cols || r0 > r1 || c0 > c1) errors.push(`arena.bounds ${a.bounds} 가 격자 밖이거나 뒤집혔다`);
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+        const ch = at(grid, c, r);
+        if (ch !== '.' && ch !== 'P') errors.push(`arena.bounds 안 [${r},${c}] 이 바닥이 아니다 (문자 '${ch}')`);
+      }
+      for (const [r, c] of findAll(grid, rows, cols, 'P')) if (!inB(r, c)) errors.push(`기둥 P [${r},${c}] 이 arena.bounds 밖`);
+      const [hr, hc] = a.home;
+      if (!inB(hr, hc) || at(grid, hc, hr) !== '.') errors.push(`arena.home [${hr},${hc}] 이 경계 안 바닥이 아니다`);
+      const doors = findAll(grid, rows, cols, 'D').filter(([r, c]) =>
+        ((r === r0 - 1 || r === r1 + 1) && c >= c0 && c <= c1) || ((c === c0 - 1 || c === c1 + 1) && r >= r0 && r <= r1));
+      if (doors.length !== 1) errors.push(`아레나 경계에 붙은 문 D 가 ${doors.length}개 — 정확히 하나여야 한다(봉쇄 대상)`);
+      const boss = (level.entities ?? []).filter((e) => e.boss === true);
+      if (boss.length !== 1) errors.push(`boss:true 배치가 ${boss.length}개 — 아레나 주인은 하나여야 한다`);
+      else if (!inB(boss[0].cell[0], boss[0].cell[1])) errors.push('아레나 주인이 경계 밖에 있다');
+      // 곁방 적은 홈에서 18m(거수 alertRadius) 밖 — 포효 기상에 끼지 않는다. 경계 안에는 주인 말고 적이 없다
+      for (const e of level.entities ?? []) {
+        if (e.boss || e.type === 'barrel' || e.type === 'chest' || e.type.startsWith('prop_') || e.type.startsWith('trap_')) continue;
+        const [r, c] = e.cell;
+        if (inB(r, c)) errors.push(`${e.type} [${r},${c}] 이 아레나 경계 안 — 결투는 1:1 이다`);
+        const d = Math.hypot((c - hc) * cs, (r - hr) * cs);
+        if (d < 18) errors.push(`${e.type} [${r},${c}] 이 보스 홈에서 ${d.toFixed(1)}m — 18m 안(포효 기상 반경)`);
+      }
+      notes.push(`보스 아레나 ${c1 - c0 + 1}×${r1 - r0 + 1}칸, 기둥 ${findAll(grid, rows, cols, 'P').length}, 홈 [${hr},${hc}]`);
+    }
   }
 
   // ④ 레버가 여는 대상

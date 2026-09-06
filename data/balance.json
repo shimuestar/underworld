@@ -766,6 +766,8 @@
   "_gooNote": "슬라임 점액 장판 — 기어간 자리에 남아 밟으면 느려진다. 마르면(수명) 사라진다",
   "_trapsNote": "함정 — 플레이어·적 공용 (2026-09-02). 판정은 몸 중심↔함정 중심 반경. 종별 블록 = traps.types[type]. charges -1 = 무한. 예고(telegraphTicks)는 소리·동작으로만 — UI 표시 금지",
   "traps": {
+    "_bossDamageMulNote": "보스(def.boss·floorBoss)가 받는 환경 피해 배율 — 아레나 기둥 붕괴 낙석(Arena, B3-5: rockfallEnemyDamage 60 × 0.6 = 36) 등 공용 규칙. 함정 종별 블록(types.trap_rockfall.bossDamageMul)이 있으면 그쪽이 그 함정에 우선한다",
+    "bossDamageMul": 0.6,
     "_autoSoundNote": "자동 순환 함정(자동 가시판·자동 다트·진자) 소리 감쇠 — reach(m) 밖은 무음, 안에서는 (1 - d/reach)^curve 배. 항시 도는 장치가 층 전체에 울리면 소음이다",
     "autoSound": { "reach": 10, "curve": 2 },
     "_dotRefreshNote": "독·화염 상태가 이미 걸린 채 다시 닿았을 때 — 남은 시간이 이 틱 이상 줄어든 뒤였다면 *_refreshed 알림(재시작 소리·아이콘 깜빡임). 구름·불길 안에 서 있는 동안은 매 틱 갱신돼도 알리지 않는다",
@@ -951,6 +953,23 @@
       "skid": { "radius": 1.6, "ticks": 480 }
     },
     "poolMax": 12
+  },
+  "_arenaNote": "보스 아레나(거수 「무저갱 우리」 z01_f4, B3-5, 기획서 §9.3·§9.4·§10 — src/systems/Arena.ts). 기둥 P 내구 pillarHp: 돌격 전도(pillar_hit)마다 −1, 0 이면 붕괴 — 낙석 규약 복제: 반경 rockfallRadius 안 플레이어 rockfallDamage(막기 불가·회피 무적 면제) + rockfallEnemyDamage(보스는 × traps.bossDamageMul = 36, heavy 타격 → 갑각판 풀) + 밀림, 잔해(rubbleHalf 반폭 사각 — 몸만 막고 총알·시야·소음은 통과, 적 경로도 막힘)는 rubbleBreakable 이면 폭발(수류탄·화염구·폭발통)로 치운다. 잔해에 박히는 돌격은 충돌이 아니라 헛돌격(B2-5 props 규칙). 반캠핑(§9.4): 봉쇄 중 플레이어를 시야선 없이 noLosTicks 못 보면 시야를 가린 그 기둥으로 자발 돌격(anticamp_charge — 박히면 내구 −1 + pillarStunTicks 실신만, 전도·눈 노출 없음), 시야는 있는데 farM 밖에 farTicks 있으면 farNearM 안에 들 때까지 접근 이속 × farSpeedMul + 돌격 쿨 리셋(+ P3 포효 간격 리셋). 봉쇄·경계는 레벨 JSON arena{bounds, home}",
+  "arena": {
+    "pillarHp": 3,
+    "noLosTicks": 300,
+    "farTicks": 480,
+    "farM": 12,
+    "farNearM": 8,
+    "farSpeedMul": 1.5,
+    "pillarStunTicks": 30,
+    "rubbleHalf": 1.7,
+    "rubbleBreakable": true,
+    "rockfallDamage": 40,
+    "rockfallEnemyDamage": 60,
+    "rockfallRadius": 5.0,
+    "rockfallPlayerKnockback": 2.5,
+    "rockfallKnockbackTicks": 12
   },
   "_spatialAudioNote": "적 소리의 좌우 패닝 + 거리 감쇠 — 시야 밖 위협을 귀가 먼저 안다. minVol 아래로는 안 줄여 예고음이 게임플레이 단서로 항상 들리게 한다",
   "spatialAudio": {

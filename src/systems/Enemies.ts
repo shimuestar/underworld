@@ -27,6 +27,8 @@
 // 즉시 연계 despairSlam), 삼연낫(tryCombo — 낫 사거리 안 단발보다 먼저, attackMode 'combo' + comboStep, 한 타가 끝나면 recover → 다음 타 startWindup, 패링 연계·탈진은 Reaction),
 // 광란 돌격(chainCharge — 첫 질주 impact 뒤 beginChainTurn 선회 turnTicks(꼬리 채기 tickChainTurn) → windup 끝에 새 자리로 두 번째 질주; 완벽 회피·눈멂이면 없음).
 // 완벽 회피는 회피 무적(iframeSource 'dodge')만 — 블링크·탈출 무적은 옛 경로(B2-3 검토).
+// 아레나(B3-5, systems/Arena·World.arena): 아레나 주인의 이동·돌격 목표는 arena.bounds 안으로 클램프(arenaGoal·clampArena — 벽감·관문 밖을 겨누지 않는다), 밖에서 깨어난 주인은
+// holdHome(홈 칸 복귀·대기 — holdAtHome), 반캠핑 자발 돌격(anticampTarget → 기둥 칸 중심으로 돌격 예고, 박히면 전도 대신 pillarStunTicks 실신 — chargeCollide), 접근 가속(anticampBoost → moveSpeed).
 
 import { balance } from '../core/Balance';
 import { VENT_WEAK_POINT, attackInPhase, attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, comboChain, comboStepAttack, currentAttack, enemyDef, headDownPose, healthBarState, jointOfBlade, poolsOn, resolvePhase, slotUnlocked, type BladeSide, type EnemyAttackDef } from '../core/Entities';
@@ -48,6 +50,8 @@ const CHARGE_EYE_REFRESH = 2;
 const CHARGE_PROBE_EPS = 0.01;
 /** 갑각 떨기(volley) 예고·시전 중 분출공(vent) 노출 타이머를 매 틱 되살리는 값(B3-2) — 돌격 중 눈(CHARGE_EYE_REFRESH)과 같은 문. 시전이 끝나면 그 틱에 닫힌다 (튜닝값 아님) */
 const VENT_OPEN_REFRESH = 2;
+/** 아레나 홈 대기·경계 클램프 목표에 '닿았다' 로 치는 여유(m) — 한 걸음(3.2 m/s ÷ 60 ≈ 0.05m)보다 넉넉히, 제자리 떨림 방지 (튜닝값 아님) */
+const ARENA_ARRIVE_M = 0.3;
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -1639,9 +1643,28 @@ function chargeCollide(
   const { col, row, ch } = hit;
   endBlind(world, enemy);
   endChargeEye(world, enemy);
-  enemy.chainLeg = 0; // 광란 돌격(B3-4) — 지형에 박힌 질주 뒤엔 두 번째가 없다
-  enemy.chainTurn = false;
+  if (def.chargeAttack?.chainCharge) {
+    enemy.chainLeg = 0; // 광란 돌격(B3-4) — 지형에 박힌 질주 뒤엔 두 번째가 없다(장부는 광란 돌격이 있는 적에게만 — B3-4 검토 메모)
+    enemy.chainTurn = false;
+  }
   if (!def.flying) enemy.jumpY = 0;
+  const anticamp = enemy.anticampCharge === true;
+  if (anticamp) {
+    enemy.anticampCharge = false;
+    enemy.anticampTarget = undefined;
+  }
+  if (ch === 'P' && anticamp) {
+    // 반캠핑 자발 박치기(B3-5, 기획서 §9.4) — 기둥 내구 −1(pillar_hit 을 Arena 가 받는다)만 얻고 전도 없이 짧게 실신(recover pillarStunTicks). 눈은 열리지 않는다
+    const cx = (col + 0.5) * cs;
+    const cz = (row + 0.5) * cs;
+    world.events.emit('pillar_hit', { enemyId: enemy.id, enemyType: enemy.type, row, col, x: cx, z: cz, anticamp: true });
+    enemy.ai = 'recover';
+    enemy.whiffed = true;
+    enemy.recoiled = false;
+    enemy.timer = balance.arena.pillarStunTicks;
+    world.events.emit('anticamp_stun', { enemyId: enemy.id, enemyType: enemy.type, ticks: enemy.timer, row, col, x: enemy.x, z: enemy.z });
+    return true;
+  }
   if (ch === 'P' || ch === 'C') {
     const cx = (col + 0.5) * cs;
     const cz = (row + 0.5) * cs;
@@ -2258,6 +2281,33 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     case 'chase': {
       enemy.yaw = Math.atan2(-distX, -distZ);
 
+      // 아레나 홈 대기(B3-5, 기획서 §10.1) — 밖에서 깨어난 아레나 주인은 공격·추격 대신 홈 칸으로 돌아가 문 쪽을 노려본다(Arena 가 세우고 플레이어가 경계를 넘는 틱에 내린다)
+      if (enemy.holdHome) {
+        holdAtHome(world, enemy, def, dt);
+        break;
+      }
+      // 반캠핑 자발 돌격(B3-5, 기획서 §9.4) — Arena 가 시야를 가린 기둥을 겨눠 두었다: 그 칸 중심으로 돌격 예고(쿨다운·거리 무관 — 숨을 곳을 소모시키는 벌칙).
+      // 겨냥은 windup 이 끝나는 틱에 anticampTarget 으로 고정되고, 박히면 chargeCollide 가 전도 대신 pillarStunTicks 실신만 준다
+      const anticamp = enemy.anticampTarget;
+      const antiCh = anticamp && def.chargeAttack ? attackInPhase(def, enemy, 'charge', def.chargeAttack) : undefined;
+      if (anticamp && antiCh?.chargeRunTicks) {
+        enemy.attackMode = 'charge';
+        enemy.anticampCharge = true;
+        enemy.chargeCooldown = antiCh.cooldownTicks ?? 0;
+        enemy.chargeHealthRef = enemy.health;
+        if (antiCh.chainCharge) {
+          enemy.chainLeg = 0;
+          enemy.chainTurn = false;
+        }
+        const adx = anticamp.x - enemy.x;
+        const adz = anticamp.z - enemy.z;
+        enemy.yaw = Math.atan2(-adx, -adz);
+        startWindup(world, enemy, antiCh);
+        world.events.emit('anticamp_charge', { enemyId: enemy.id, enemyType: enemy.type, row: anticamp.row, col: anticamp.col, x: anticamp.x, z: anticamp.z, dist: Math.hypot(adx, adz) });
+        world.events.emit('enemy_charge', { enemyId: enemy.id, enemyType: enemy.type, dist: Math.hypot(adx, adz), anticamp: true });
+        break;
+      }
+
       // 포효(거수 P3, B3-4) — P3 복귀 직후 첫 선택(firstPick) + intervalTicks 마다, 다른 공격보다 우선·거리 조건 없음(기획서 §9.2 1번)
       if (tryRoar(world, enemy, def)) break;
 
@@ -2372,8 +2422,10 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         enemy.attackMode = 'charge';
         enemy.chargeCooldown = ch.cooldownTicks ?? 0;
         enemy.chargeHealthRef = enemy.health; // 캔슬 기준 — 개시 순간의 체력
-        enemy.chainLeg = 0; // 광란 돌격(B3-4) — 새 돌격의 첫 질주
-        enemy.chainTurn = false;
+        if (ch.chainCharge) {
+          enemy.chainLeg = 0; // 광란 돌격(B3-4) — 새 돌격의 첫 질주(장부는 광란 돌격이 있는 적에게만 — B3-4 검토 메모)
+          enemy.chainTurn = false;
+        }
         startWindup(world, enemy, ch);
         world.events.emit('enemy_charge', { enemyId: enemy.id, enemyType: enemy.type, dist });
         break;
@@ -2411,6 +2463,16 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
       // 절뚝(양 낫 잠김) — 돌격이 안 나갔으면 유지 거리(retreatWhenDisarmed.max) 안에서는 더 다가가지 않는다
       if (holdDisarmedRange(world, enemy, def, distX, distZ, dist, dt)) break;
+      // 아레나 주인(B3-5, 기획서 §9.2·§9.4 벽감 규칙) — 벽감·관문 밖의 플레이어를 향한 이동 목표는 경계 안 가장 가까운 점. 거기 닿았으면 더 파고들지 않고 마주 선다
+      // (벽감 깊이 1칸이라 안쪽 끝은 안전 — 들이받기 3.0m 만 닿는다). 추격 흐름장은 벽감으로 들어가는 길을 그리므로 여기선 직진만 쓴다
+      const goal = arenaGoal(world, enemy, def, p.x, p.z);
+      if (goal.x !== p.x || goal.z !== p.z) {
+        const gdx = goal.x - enemy.x;
+        const gdz = goal.z - enemy.z;
+        const gd = Math.hypot(gdx, gdz);
+        if (gd > ARENA_ARRIVE_M) moveAvoiding(world, enemy, def, gdx / gd, gdz / gd, Math.min(gd, moveSpeed(enemy, def) * dt));
+        break;
+      }
       if (dist > 0) {
         // 살금살금 — stalk 이 있으면 달려들기 사정거리 밖에서는 천천히 걸어온다 (구울)
         const stalkMul = def.stalk && dist > def.stalk.untilRange ? def.stalk.speedMul : 1;
@@ -2519,8 +2581,10 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         // 달리면서 추적하면 옆으로 비켜도 따라와 회피가 성립하지 않는다
         enemy.ai = 'charging';
         enemy.timer = attack.chargeRunTicks;
-        enemy.chargeTargetX = p.x;
-        enemy.chargeTargetZ = p.z;
+        // 겨냥 — 반캠핑 자발 돌격(B3-5)이면 시야를 가린 기둥의 칸 중심, 아니면 플레이어 자리(아레나 주인은 경계 안으로 클램프 — 벽감·관문 밖을 겨누지 않는다)
+        const aim = enemy.anticampCharge && enemy.anticampTarget ? enemy.anticampTarget : arenaGoal(world, enemy, def, p.x, p.z);
+        enemy.chargeTargetX = aim.x;
+        enemy.chargeTargetZ = aim.z;
         if (enemy.chargeStuck) enemy.chargeStuck = 0; // 지난 질주의 막힘 장부(거수)를 비운다 — 없던 적에겐 생기지 않는다
         if (enemy.chainTurn) enemy.chainTurn = false; // 광란 돌격(B3-4) — 선회가 끝나 새 자리로 두 번째 질주
       } else if (attack.parryable) {
@@ -2846,8 +2910,14 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       // 눈먼 질주(wasBlind)·지형 충돌(chargeCollide)·두 번째 질주(chainLeg 1) 뒤엔 없다
       const chain = def.chargeAttack?.chainCharge;
       const leg = enemy.chainLeg ?? 0;
-      enemy.chainLeg = 0;
-      if (chain && enemy.attackMode === 'charge' && attack.chargeRunTicks !== undefined && leg === 0 && !wasBlind && !world.dead && slotUnlocked(def, enemy, 'chainCharge')) {
+      if (chain) enemy.chainLeg = 0; // 장부는 광란 돌격이 있는 적에게만(B3-4 검토 메모 — 구울·족장에 chainLeg 가 생기지 않는다)
+      // 반캠핑 자발 돌격(B3-5)이 기둥에 안 박히고 끝났다(플레이어를 치거나 시간이 다함) — 표식을 내린다. 2차 질주도 없다
+      const wasAnticamp = enemy.anticampCharge === true;
+      if (wasAnticamp) {
+        enemy.anticampCharge = false;
+        enemy.anticampTarget = undefined;
+      }
+      if (chain && enemy.attackMode === 'charge' && attack.chargeRunTicks !== undefined && leg === 0 && !wasBlind && !wasAnticamp && !world.dead && slotUnlocked(def, enemy, 'chainCharge')) {
         beginChainTurn(world, enemy, def, chain);
         break;
       }
@@ -3167,9 +3237,46 @@ function slowFactor(enemy: EnemyState): number {
   return (enemy.slowTicks ?? 0) > 0 ? (enemy.slowMul ?? 1) : 1;
 }
 
-/** 이동 속도 — 둔화 배율을 곱한다 (공격 리듬은 그대로다). 절뚝(거수 양 낫 잠김)이면 limp.speedMul, 페이즈 표의 speedMul(P3 ×1.2 — 걷기만, 돌격 속도는 그대로) */
+/** 이동 속도 — 둔화 배율을 곱한다 (공격 리듬은 그대로다). 절뚝(거수 양 낫 잠김)이면 limp.speedMul, 페이즈 표의 speedMul(P3 ×1.2 — 걷기만, 돌격 속도는 그대로),
+ *  반캠핑 접근 가속(anticampBoost — 아레나 farM 밖에 오래 머문 플레이어에게 farNearM 안까지 × farSpeedMul, B3-5) */
 function moveSpeed(enemy: EnemyState, def: ReturnType<typeof enemyDef>): number {
-  return def.speed * slowFactor(enemy) * frenzyMul(enemy, def) * limpMul(enemy) * (resolvePhase(def, enemy.phase)?.speedMul ?? 1);
+  return def.speed * slowFactor(enemy) * frenzyMul(enemy, def) * limpMul(enemy) * (resolvePhase(def, enemy.phase)?.speedMul ?? 1) * (enemy.anticampBoost ? balance.arena.farSpeedMul : 1);
+}
+
+/** 아레나 주인인가 — World.arena 가 있고 그 bossId 가 이 적 (Arena 가 매 틱 맞춘다) */
+function isArenaBoss(world: World, enemy: EnemyState): boolean {
+  return world.arena !== null && world.arena.bossId === enemy.id;
+}
+
+/** 아레나 주인의 이동·돌격 목표(B3-5, 기획서 §9.2) — (x,z) 를 경계(bounds) 안(몸 반경만큼 안쪽)으로 자른 자리. 아레나 주인이 아니면 그대로 */
+function arenaGoal(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>, x: number, z: number): { x: number; z: number } {
+  if (!isArenaBoss(world, enemy)) return { x, z };
+  const b = world.arena!.bounds;
+  return {
+    x: Math.min(Math.max(x, b.minX + def.radius), b.maxX - def.radius),
+    z: Math.min(Math.max(z, b.minZ + def.radius), b.maxZ - def.radius),
+  };
+}
+
+/** 아레나 경계 클램프(B3-5) — 아레나 주인의 몸 중심은 경계 안(몸 반경만큼 안쪽)에 머문다. 열린 균열벽(4m) 뒤 벽감으로도 들어가지 않는다 */
+function clampArena(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  if (!isArenaBoss(world, enemy)) return;
+  const b = world.arena!.bounds;
+  enemy.x = Math.min(Math.max(enemy.x, b.minX + def.radius), b.maxX - def.radius);
+  enemy.z = Math.min(Math.max(enemy.z, b.minZ + def.radius), b.maxZ - def.radius);
+}
+
+/** 아레나 홈 대기(B3-5, 기획서 §10.1 holdUntilEntered) — 홈 칸 중심으로 걸어가 서고, 서서는 플레이어 쪽을 노려본다. 홈에 닿았으면(ARENA_ARRIVE_M) 제자리 */
+function holdAtHome(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>, dt: number): void {
+  const ar = world.arena;
+  const hx = ar?.homeX ?? enemy.homeX ?? enemy.x;
+  const hz = ar?.homeZ ?? enemy.homeZ ?? enemy.z;
+  const dx = hx - enemy.x;
+  const dz = hz - enemy.z;
+  const d = Math.hypot(dx, dz);
+  if (d <= ARENA_ARRIVE_M) return; // 서서 노려본다 — yaw 는 chase 첫머리가 플레이어 쪽으로 돌렸다
+  enemy.yaw = Math.atan2(-dx, -dz); // 걷는 쪽을 본다
+  moveAvoiding(world, enemy, def, dx / d, dz / d, Math.min(d, moveSpeed(enemy, def) * dt));
 }
 
 /** 절뚝 이속 배율 — 양 낫 잠김이면 balance.weakPoint.limp.speedMul, 아니면 1 */
@@ -3236,6 +3343,7 @@ function moveAvoiding(
   if (d > 0 && d < minDist) {
     world.level.slideMove(enemy, def.radius, (dx / d) * (minDist - d), (dz / d) * (minDist - d));
   }
+  clampArena(world, enemy, def); // 아레나 주인은 경계 밖으로 나가지 않는다(B3-5)
 }
 
 /** 발사선을 가로막는 아군 — 실제 투사체와 같은 기하로 예측한다 (Projectiles와 동일 규칙) */

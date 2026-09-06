@@ -41,6 +41,7 @@ import * as Barrels from './systems/Barrels';
 import * as Props from './systems/Props';
 import * as Traps from './systems/Traps';
 import * as Hazards from './systems/Hazards';
+import * as Arena from './systems/Arena';
 import * as Chest from './systems/Chest';
 import * as Exit from './systems/Exit';
 import * as Door from './systems/Door';
@@ -57,6 +58,7 @@ import { allSigilIds, isImplemented, sigilColor, sigilDef } from './core/SigilDa
 import z01f1 from '../data/levels/z01_f1.json';
 import z01f2 from '../data/levels/z01_f2.json';
 import z01f3 from '../data/levels/z01_f3.json';
+import z01f4 from '../data/levels/z01_f4.json';
 import testTraps from '../data/levels/test_traps.json';
 import testMonsters from '../data/levels/test_monsters.json';
 import * as Summon from './systems/Summon';
@@ -66,7 +68,7 @@ import { SummonPanel } from './render/SummonPanel';
 
 // 1구역 층 순서 — 출구에서 E 를 누르면 다음 층으로 내려간다. 마지막 층을 나가면 구역 클리어.
 // 층마다 스폰(S)이 곧 그 층의 입구이고, 출구(X)가 다음 층의 입구로 이어진다
-const ZONE = [z01f1, z01f2, z01f3];
+const ZONE = [z01f1, z01f2, z01f3, z01f4]; // 4층 = 거수 결투 층 「무저갱 우리」(B3-5)
 /** 트랩 시험방 — 층 번호 대역 밖의 특수 층. 일시정지 메뉴(또는 ?traproom)로 들어간다.
  *  출구는 영구 봉인, 위층 계단 없음 — 나가는 길은 '처음부터 시작' */
 const TRAP_ROOM = 99;
@@ -93,6 +95,8 @@ interface FloorState {
   groundItems: World['groundItems'];
   lifeMotes: World['lifeMotes'];
   pulledLevers: World['pulledLevers'];
+  /** 보스 아레나 상태(거수 4층, B3-5) — 봉쇄·기둥 내구·잔해. 아레나 없는 층은 null */
+  arena: World['arena'];
 }
 const floorStates = new Map<number, FloorState>();
 
@@ -282,6 +286,7 @@ const world = new World(events, {
 // 시작 층(지하 1층)은 loadFloor 를 거치지 않는다 — 봉인 여부를 여기서 한 번 세운다.
 // 이게 없으면 기본값 false 로 남아 첫 틱에 출구가 열려 버린다 (슬라임 보스 생존 중인데도)
 world.exitNeedsKey = world.enemies.some((e) => e.floorBoss || enemyDef(e.type).boss);
+world.arena = Arena.fromLevel(level); // 시작 층에 아레나가 있으면(테스트 ?f4 는 loadFloor 를 탄다) 여기서 짓는다 — 보통 null
 
 const stage = new Stage(app);
 const awareness = new Awareness(); // 위협·소리 기억 — 미니맵·나침반 공유
@@ -551,6 +556,16 @@ for (const name of [
   'plate_broken',
   'charge_dodged',
   'pillar_hit',
+  'pillar_damaged',
+  'pillar_collapsed',
+  'arena_sealed',
+  'arena_unsealed',
+  'arena_hold',
+  'arena_rubble_broken',
+  'anticamp_charge',
+  'anticamp_stun',
+  'anticamp_far',
+  'door_sealed',
   'numb_arm_applied',
   'numb_arm_ended',
   'concussion_applied',
@@ -1089,6 +1104,73 @@ events.on('trap_rubble_broken', (payload) => {
     padRumble('crumble');
   }
   showReaction('잔해가 부서졌다 — 길이 열렸다', 2000);
+});
+// ---- 보스 아레나(거수 「무저갱 우리」 4층, B3-5 — systems/Arena) ----
+// 봉쇄: 문 D 에 붉은 쇠창살(출구 창살과 같은 문법) + 쇠사슬 소리. 해제: 주인이 죽으면 문이 다시 열린다는 안내, 밖으로 빠져나갔으면 거수가 물러선다
+events.on('arena_sealed', (payload) => {
+  const a = payload as { row?: number; col?: number; x?: number; z?: number };
+  if (a.row !== undefined && a.col !== undefined) stage.setDoorSealed(a.row, a.col, true);
+  audio.play('chain_locked', a.x !== undefined && a.z !== undefined ? panAt(a.x, a.z) : undefined);
+  padRumble('heavy');
+  stage.triggerCameraKick(0.25, 300);
+  showReaction('우리가 닫혔다 — 거수를 쓰러뜨려야 문이 열린다', 3000);
+});
+events.on('arena_unsealed', (payload) => {
+  const a = payload as { reason: string; row?: number; col?: number; x?: number; z?: number };
+  if (a.row !== undefined && a.col !== undefined) stage.setDoorSealed(a.row, a.col, false);
+  if (a.reason === 'boss_dead') {
+    audio.play('door_slide', a.x !== undefined && a.z !== undefined ? panAt(a.x, a.z) : undefined);
+    showReaction('봉쇄가 풀렸다 — 남쪽 문이 다시 열린다', 2600);
+  } else if (a.reason === 'left') {
+    showReaction('우리 밖으로 나왔다 — 거수가 제자리로 물러선다', 2000);
+  }
+});
+events.on('arena_hold', () => showReaction('거수가 우리 안에서 기다린다 — 들어서면 문이 닫힌다', 2400));
+// 기둥 내구 — 금이 갈 때마다 붉은 균열선 + 낮은 우르릉. 붕괴는 낙석과 같은 결(돌·먼지·진동), 잔해는 지도에서 바닥이 된다(총알·시야 통과)
+events.on('pillar_damaged', (payload) => {
+  const d = payload as { row: number; col: number; hp: number; max: number; x: number; z: number };
+  if (d.hp <= 0) return; // 붕괴는 pillar_collapsed 가 낸다
+  stage.setPillarDamage(d.row, d.col, d.hp, d.max);
+  audio.play('trap_rumble', panAt(d.x, d.z));
+  showReaction(`기둥에 금이 갔다 (${d.max - d.hp}/${d.max})`, 1400);
+});
+events.on('pillar_collapsed', (payload) => {
+  const c = payload as { row: number; col: number; x: number; z: number };
+  stage.collapsePillar(c.row, c.col, c.x, c.z, balance.arena.rubbleHalf);
+  audio.play('wall_crumble', panAt(c.x, c.z));
+  const d = Math.hypot(world.player.x - c.x, world.player.z - c.z);
+  if (d < 14) {
+    stage.triggerCameraKick(0.7 * (1 - d / 14), 320);
+    padRumble('crumble');
+  }
+  minimap.rebuildBase();
+  showReaction('기둥이 무너졌다 — 잔해가 길을 막는다 (돌격은 헛돈다 · 폭발로 부술 수 있다)', 2800);
+});
+events.on('arena_rubble_broken', (payload) => {
+  const r = payload as { row: number; col: number; x: number; z: number };
+  stage.breakRubble(r.row, r.col, r.x, r.z, balance.arena.rubbleHalf);
+  audio.play('wall_crumble', panAt(r.x, r.z));
+  showReaction('잔해가 부서졌다 — 길이 열렸다', 2000);
+});
+// 반캠핑 — 자발 돌격은 예고음(enemy_windup telegraph_red)이 따로 나므로 안내만, 박치기는 둔탁한 충돌음, 접근 가속은 안내
+events.on('anticamp_charge', () => {
+  padRumble('tremble');
+  showReaction('거수가 숨은 기둥을 노린다 — 비켜라!', 1600);
+});
+events.on('anticamp_stun', (payload) => {
+  audio.play('thud', panOf(payload));
+  showReaction('거수가 기둥에 머리를 박고 잠깐 멈췄다', 1000);
+});
+events.on('anticamp_far', (payload) => {
+  if ((payload as { on: boolean }).on) showReaction('거수가 거리를 좁힌다 — 빨라진다!', 1600);
+});
+let doorSealedUntil = 0;
+events.on('door_sealed', (payload) => {
+  const d = payload as { x: number; z: number };
+  audio.play('chain_locked', panAt(d.x, d.z));
+  if (performance.now() < doorSealedUntil) return; // E 를 두들기면 매 틱 뜬다
+  doorSealedUntil = performance.now() + 1500;
+  showReaction('봉쇄된 문 — 우리의 주인이 살아 있는 동안 열리지 않는다', 1800);
 });
 // 지속 피해 상태(독·화염) — 걸리는 순간 알리고(초기 피해는 player_damaged 가 이미 붉게 알린다), 풀리면 알린다.
 // 도트 틱은 붉은 화면·진동 없이 '윽' 신음만 — 깎일 때마다 귀로 세게 (2026-09-03)
@@ -2772,9 +2854,16 @@ function respawnAtAltar(): void {
   for (const e of world.enemies) {
     if (!e.alive) slainSpawnKeys.add(`${floorIndex}:${e.type}@${e.homeX},${e.homeZ}`);
   }
+  // 아레나 주인(거수 4층, B3-5) — 되살아난 새 몸에 지속 상태(체력·페이즈·약점 내구·낫 잠김·갑각판…)를 옮긴다. 기획서가 부활 시 보스 체력을 규정하지 않아 유지한다.
+  // 자리는 배치 자리(홈)·잠든 채 — 봉쇄는 사망 순간 Arena 가 풀었고, 다시 들어서 깨우면 다시 닫힌다
+  const prevBoss = world.arena ? world.enemies.find((e) => e.alive && e.id === world.arena!.bossId) : undefined;
   world.enemies = spawnEnemies(levelJson.entities, level).filter(
     (e) => !slainSpawnKeys.has(`${floorIndex}:${e.type}@${e.homeX},${e.homeZ}`),
   );
+  if (prevBoss) {
+    const reborn = world.enemies.find((e) => e.type === prevBoss.type && e.homeX === prevBoss.homeX && e.homeZ === prevBoss.homeZ);
+    if (reborn) Arena.carryOver(prevBoss, reborn);
+  }
   // 주인을 이미 잡은 층이면 쇠창살은 잠기지 않는다 (죽은 주인은 안 살아난다)
   world.exitNeedsKey =
     world.enemies.some((e) => e.floorBoss || enemyDef(e.type).boss) &&
@@ -3311,6 +3400,21 @@ events.on('door_reopened', () => {
   audio.play('door_slide');
   padRumble('interact');
 });
+/** 아레나 시각 상태(거수 4층, B3-5) — 층을 (다시) 그린 뒤 기둥 균열선·붕괴 잔해·문 봉쇄 창살을 World.arena 에서 되살린다(FloorState 복원).
+ *  붕괴한 기둥 칸은 격자에서 이미 '.' 이라 기둥 메시가 안 서고, 잔해만 여기서 놓는다 */
+function syncArenaVisuals(): void {
+  const arena = world.arena;
+  if (!arena) return;
+  const max = balance.arena.pillarHp;
+  for (const [key, hp] of Object.entries(arena.pillarHp)) {
+    const [row, col] = key.split('-').map(Number);
+    if (row === undefined || col === undefined) continue;
+    if (hp > 0 && hp < max) stage.setPillarDamage(row, col, hp, max);
+  }
+  for (const r of arena.rubble) stage.addRubble(r.row, r.col, r.x, r.z, balance.arena.rubbleHalf, r.broken);
+  if (arena.door) stage.setDoorSealed(arena.door.row, arena.door.col, arena.sealed);
+}
+
 /** 층을 갈아 끼운다 — 처음 밟는 층은 새로 짓고, 와 본 층은 얼려 둔 그대로 되살린다.
  *  들고 있던 것(체력·마나·탄약·스킬·가방·골드·오염·열쇠)은 전부 따라간다 */
 function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): void {
@@ -3326,6 +3430,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     groundItems: world.groundItems,
     lifeMotes: world.lifeMotes,
     pulledLevers: world.pulledLevers,
+    arena: world.arena,
   });
 
   floorIndex = index;
@@ -3358,6 +3463,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     world.groundItems = saved.groundItems;
     world.lifeMotes = saved.lifeMotes;
     world.pulledLevers = saved.pulledLevers;
+    world.arena = saved.arena; // 봉쇄·기둥 내구·잔해도 그대로(기둥 칸은 Level 격자에, 잔해 차단은 Level.props 에 이미 살아 있다)
   } else {
     // 처음 밟는 층 — 새로 짓는다. 앞 층의 차단 블록은 그 층 Level 과 함께 얼었다
     level = new Level(levelJson);
@@ -3375,6 +3481,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     world.groundItems = [];
     world.lifeMotes = [];
     world.pulledLevers = new Set();
+    world.arena = Arena.fromLevel(level); // 아레나(거수 4층, B3-5) — arena 정의가 없는 층은 null
   }
   world.projectiles.length = 0;
   world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
@@ -3453,6 +3560,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     const [row, col] = pulled.split('-').map(Number);
     if (row !== undefined && col !== undefined) stage.pullLever(row, col);
   }
+  syncArenaVisuals(); // 아레나 — 기둥 균열선·붕괴 잔해·봉쇄 창살(B3-5)
   minimap.setLevel(level);
   // 해독은 오염 단계에 딸린 상태다 — 새 층 벽에도 그대로 적용해 준다.
   // (setGlyphsReadable 은 씬을 훑으므로 층을 갈아 끼운 뒤 한 번 더 불러야 한다)
@@ -3539,9 +3647,11 @@ GhoulHeads.init(world); // 구울 머리 소품 — 목이 날아가면 통통 �
 Props.init(world); // 기믹 — 부서지는 순간의 결과 롤(전리품·매복·폭발 심지)을 구독한다
 Traps.init(world); // 함정 — 기름 점화 소음 구독
 Hazards.init(world); // 진액 웅덩이(거수 P2+) — spawn_pool·불(폭발)·질식 구독
+Arena.init(world); // 보스 아레나(거수 4층) — 기둥 충돌(내구)·폭발(잔해)·사망(봉쇄 해제) 구독
 const systems = [
   PlayerMove.tick,
   Enemies.tick,
+  Arena.tick, // 아레나 봉쇄·기둥·반캠핑 — 같은 틱의 각성(Enemies)에 바로 봉쇄하고, 문 닫기(Door)보다 앞서 closing 을 세운다
   GhoulHeads.tick,
   Reaction.tick,
   Status.tick, // 플레이어 상태(팔 저림·진탕) — 같은 틱의 impact 부여·일반 패링 해제를 바로 이벤트로 낸다
@@ -4732,12 +4842,23 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__equipment = Equipment; // 장비 검증용
   (window as unknown as Record<string, unknown>).__compass = compass;
   (window as unknown as Record<string, unknown>).__menuUI = menuUI;
+  (window as unknown as Record<string, unknown>).__loadFloor = loadFloor; // 층 이동 검증용(헤드리스)
 }
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)
 if (new URLSearchParams(location.search).has('skills')) {
   const n = grantAllSkills();
   showReaction(`(테스트 ?skills) 구현된 스킬 ${n}종 지급 + 마나 무한`, 3000);
+}
+// ?f4 — 시작부터 지하 4층 「무저갱 우리」(거수 결투 층 검증, B3-5). 시험방처럼 스킬·탄을 채워 준다 — 앞 층 상태는 없다(처음부터 시작으로 나간다)
+if (new URLSearchParams(location.search).has('f4')) {
+  loadFloor(ZONE.length - 1);
+  grantAllSkills();
+  world.weapon.grenades = balance.weapons.grenade.ammoMax;
+  world.weapon.arrows = balance.weapons.bow.ammoMax;
+  world.weapon.reserve = balance.weapons.pistol.ammoMax;
+  world.player.health = balance.player.healthMax;
+  showReaction('(테스트 ?f4) 지하 4층 무저갱 우리 — 스킬·탄 전부 지급', 3000);
 }
 // ?traproom — 시작부터 트랩 시험방 (일시정지 메뉴와 같은 곳)
 if (new URLSearchParams(location.search).has('traproom')) enterTrapRoom();

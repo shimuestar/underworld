@@ -67,7 +67,18 @@ corrosive_applied / corrosive_ended   { kind, ticks } / { kind, reason }   ← �
 corrosive_tick    { amount, health }   ← 오염 진액 도트(dotIntervalTicks 마다 dotPerTick) — player_damaged 를 안 내는 도트 규약(damageTakenTotal 합산, 함정 사망은 아님)
 corrosive_pending { amount, total, cap, enemyId }   ← 오염 진액이 오염 대기에 +1(pendingPerTicks 마다, 전투당 상한 pendingCap — 보스 EnemyState.fightPendingIn)
 corruption_cleansed { amount, source, enemyId, enemyType, total }   ← 분출공 명중 정화(source 'vent' — 오염 대기 −ventHitCleanse, 부착 중 ×2, 전투당 상한 ventCleanseCap). Corruption.ts 가 구독해 pending 만 깎는다(applied 불변)
-pillar_hit        { enemyId, enemyType, row, col, x, z }   ← 거수 돌격이 기둥 P 에 박힘 (전도와 함께 — 내구 −1·붕괴는 B3-5 Arena)
+pillar_hit        { enemyId, enemyType, row, col, x, z, anticamp? }   ← 거수 돌격이 기둥 P 에 박힘 (전도와 함께 — Arena 가 받아 내구 −1. anticamp = 반캠핑 자발 박치기: 전도 대신 실신)
+pillar_damaged    { row, col, hp, max, x, z }   ← 기둥 내구가 깎임(hp 남은 내구, 0 = 붕괴 직전 표기 — 붕괴는 pillar_collapsed). Stage 붉은 균열선 1→2→3 (B3-5)
+pillar_collapsed  { row, col, x, z, playerHit, enemyHits }   ← 기둥 붕괴 — 칸 개방 + 잔해(몸만 막음) + 낙석(플레이어 40 / 보스 36 = 60 × traps.bossDamageMul)
+arena_rockfall_hit { enemyId, enemyType, amount, boss }   ← 붕괴 낙석이 적에게 준 피해(damage_pop 과 함께)
+arena_rubble_broken { row, col, x, z }   ← 붕괴 잔해가 폭발(수류탄·화염구·폭발통)에 부서져 길이 열림
+arena_sealed      { enemyId, enemyType, row, col, x, z }   ← 아레나 봉쇄 — 주인 각성 && 플레이어 안. 문 D 가 닫히고 잠긴다(door.sealed)
+arena_unsealed    { reason, row, col, x, z }   ← 봉쇄 해제 — reason 'boss_dead'(주인 사망) / 'death'(플레이어 사망) / 'left'(문이 닫히기 전 밖으로 나감) / 'asleep'(안전망)
+arena_hold        { enemyId, enemyType, x, z }   ← 밖에서 깨어난 주인이 홈으로 돌아가 기다리기 시작(holdHome)
+door_sealed       { row, col, x, z }   ← 봉쇄된 문에 E — 열리지 않는다(안내만)
+anticamp_charge   { enemyId, enemyType, row, col, x, z, dist }   ← 반캠핑: 시야선 없이 noLosTicks → 시야를 가린 기둥으로 자발 돌격 예고 시작
+anticamp_stun     { enemyId, enemyType, ticks, row, col, x, z }   ← 자발 돌격이 기둥에 박혀 실신(pillarStunTicks, 전도·눈 노출 없음)
+anticamp_far      { enemyId, enemyType, on, dist }   ← 반캠핑: farM 밖 farTicks → 접근 가속 켜짐(on true, 돌격 쿨 리셋) / farNearM 안에 들어 꺼짐
 enemy_whiffed     { enemyId, enemyType, ticks, wall? }   ← 헛침 경직. wall = 돌격이 일반 벽·문에 막힘(거수 wallWhiffRecoverTicks — 박히지 않음)
 boss_staggered    { enemyId, enemyType, cause }   ← cause 'parry'(족장 연속 패링) / 'eye'(거수 눈 누적 66 혼절)
 boss_phase        { enemyId, enemyType, phase, from, skipped, fromTicks, tick, name?, shiftText?, death? }   ← 페이즈 전환(거수 B2-6 — phase = 새 체력 칸 index 3→2→1, from 에 머문 틱 fromTicks, skipped = 한 창에서 두 경계를 넘어 P2 건너뜀). phase 0 = 사망(마지막 페이즈 마감 — 전환으로 세지 않는다)
@@ -111,6 +122,18 @@ zone_cleared    { tick }
 | `weakPoints.backflows` (기존) | `boss_status` (`kind 'backflow'`, on) | 심장(cause 'heart')·분출공(cause 'vent')·눈(cause 'eye' — 포효 취소, B3-4) 역류 합 |
 
 순 오염 변화(기획서 §11.1 장부) = `pendingIn − ventCleanse`(처형·사망 정화는 B3-6). 시스템(`Hazards.ts`·`Status.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).
+
+## 보스 아레나 (arena) — 2026-09-06 (거수 B3-5)
+
+| 카운터 | 이벤트 | 뜻 |
+|---|---|---|
+| `arena.seals` | `arena_sealed` | 봉쇄 수 — 입장·재입장(밖으로 빠져나가 풀린 뒤 다시 들어옴)마다 1 |
+| `arena.pillarCollapses` | `pillar_collapsed` | 기둥 붕괴 수(기획서 §12 "기둥 붕괴 수") — 전도 유도(조준 노선)의 누적 지표. 내구 단계(pillar_damaged)는 세지 않는다 |
+| `arena.anticampCharges` | `anticamp_charge` | 반캠핑 자발 돌격 수 — 기둥 뒤 숨기 플레이 신호 |
+| `arena.anticampFar` | `anticamp_far` (`on`) | 반캠핑 접근 가속이 켜진 수 — 원거리 캠핑 신호 |
+| `arena.rubbleBroken` | `arena_rubble_broken` | 폭발로 치운 잔해 수 — 수류탄의 지형 정리 사용 |
+
+돌격이 기둥에 박힌 수(`weakPoints.pillarHits`)와 전도 수(`topples`)는 기존 카운터 그대로(자발 박치기도 pillar_hit 로 센다). 시스템(`Arena.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).
 
 ## P3 기술 (boss) — 2026-09-06 (거수 B3-4)
 

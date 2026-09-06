@@ -7,7 +7,7 @@ import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
 import { bladeLocked, bladeOfJoint, currentAttack, enemyDef, headDownPose, healthBarState, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, type EnemyDef, type ResolvedPhase } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
-import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN } from '../level/GridLoader';
+import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, COLOR_PILLAR, DOOR_OPEN_HEIGHT, DOOR_OPEN_WIDTH, STAIR_STONE } from '../level/GridLoader';
 import type {
   BarrelState,
   ChestState,
@@ -1192,6 +1192,8 @@ const BH_LEG_SKID_REAR = -0.26;
 const BH_LIMP_FRONT_MUL = 0.45;
 const BH_LIMP_REAR_MUL = 1.15;
 const BH_POSE_BLEND_K = 0.35; // 자세 표 보간 계수(프레임당) — 머리 내림·혼절이 서고 풀릴 때 구체와 머리가 함께 옮겨 간다
+/** 기둥 내구 균열선 색(B3-5) — 어두운 핏빛. 텔레그래프 빨강(#FF3B3B)·약점 발광과 겹치지 않는다 */
+const PILLAR_CRACK = 0x7a1a1a;
 const BH_ROLL_BLEND_K = 0.25; // 몸통 굴림(각·축 높이) 보간 계수(프레임당) — 미끄러짐·절뚝이 서고 풀릴 때
 // 발구르기(B3-1) — 앞발 들기(rear)는 앞다리를 크게 들어 접고(발이 공중, 바닥 보정 없음), 기상 발구르기·앞발 들기 밖 예고는 낮게(slamCoil). 두 낫은 앞아래로 낮게 뻗는다 —
 // 어깨가 2.9m 로 솟은 rear 에서 대기 각(0.45)이면 위팔 끝이 4.3m 로 천장을 뚫는다(월드 각 고정 BH_ARM_REAR). 역류(head_down cause backflow)는 박힌 낫이 아니라
@@ -2718,6 +2720,127 @@ export class Stage {
     this.setDoorSwing(row, col, dir);
   }
 
+
+  /** 기둥 내구(거수 아레나, B3-5) — 내구가 깎일 때마다 네 면에 붉은 균열선을 한 줄씩 더 그린다(남은 내구 hp, 단계 = max − hp: 1 → 2 → 3).
+   *  예고 빨강(#FF3B3B)이 아닌 어두운 핏빛 — 색이 곧 문법이라 텔레그래프 색은 쓰지 않는다. hp 0(붕괴)은 collapsePillar 가 통째로 걷는다 */
+  setPillarDamage(row: number, col: number, hp: number, max: number): void {
+    const pillar = this.scene.getObjectByName(`pillar-${row}-${col}`);
+    if (!pillar) return;
+    const old = pillar.getObjectByName('cracks');
+    if (old) this.disposeGroup(old);
+    const stages = Math.max(0, max - hp);
+    if (stages === 0) return;
+    const body = pillar.children.find((c) => c instanceof THREE.Mesh) as THREE.Mesh | undefined;
+    const geo = body?.geometry as THREE.BoxGeometry | undefined;
+    const size = geo?.parameters.width ?? 4;
+    const height = geo?.parameters.height ?? 4;
+    const cracks = new THREE.Group();
+    cracks.name = 'cracks';
+    const mat = new THREE.MeshLambertMaterial({ color: PILLAR_CRACK, emissive: PILLAR_CRACK, emissiveIntensity: 0.6 });
+    // 한 면의 균열 하나 = 지그재그 세 마디. 단계마다 자리(x)와 시작 높이를 달리해 금이 늘어나 보인다
+    for (let s = 0; s < stages; s++) {
+      const x0 = (s - 1) * size * 0.22;
+      const yTop = height * (0.82 - s * 0.14);
+      for (let face = 0; face < 4; face++) {
+        const g = new THREE.Group();
+        let y = yTop;
+        let x = x0;
+        for (let k = 0; k < 3; k++) {
+          const len = 0.55 + (k % 2) * 0.25;
+          const tilt = (k % 2 === 0 ? 1 : -1) * 0.38;
+          const seg = new THREE.Mesh(new THREE.BoxGeometry(0.06, len, 0.05), mat);
+          seg.position.set(x, y - (len / 2) * Math.cos(tilt), size / 2 + 0.03);
+          seg.rotation.z = tilt;
+          g.add(seg);
+          x -= Math.sin(tilt) * len;
+          y -= Math.cos(tilt) * len;
+        }
+        g.rotation.y = (face * Math.PI) / 2;
+        cracks.add(g);
+      }
+    }
+    pillar.add(cracks);
+  }
+
+  /** 기둥 붕괴(B3-5) — 기둥 메시를 걷고 돌 파편·먼지(spawnWallCrumble)와 함께 그 자리에 잔해 더미(rubble-r-c)를 놓는다.
+   *  half = 잔해 차단 반폭(balance.arena.rubbleHalf — 판정 = 그림) */
+  collapsePillar(row: number, col: number, x: number, z: number, half: number): void {
+    this.removeNamedCell(`pillar-${row}-${col}`);
+    this.spawnWallCrumble(x, z);
+    this.addRubble(row, col, x, z, half, false);
+  }
+
+  /** 잔해 더미(B3-5) — broken 이면 폭발로 부서져 낮게 흩어진 자갈(몸이 지나갈 수 있어 보여야 한다 — 낙석 잔해와 같은 문법). 층 복원(FloorState)에도 쓴다 */
+  addRubble(row: number, col: number, x: number, z: number, half: number, broken: boolean): void {
+    this.removeNamedCell(`rubble-${row}-${col}`);
+    const g = new THREE.Group();
+    g.name = `rubble-${row}-${col}`;
+    g.position.set(x, 0, z);
+    const stone = new THREE.MeshLambertMaterial({ color: STAIR_STONE });
+    const pale = new THREE.MeshLambertMaterial({ color: COLOR_PILLAR });
+    if (!broken) {
+      // 큰 덩이 — 기둥 조각(밝은 돌)과 바닥 돌이 섞여 반폭 안에 쌓인다. 가운데가 높다
+      for (let i = 0; i < 11; i++) {
+        const ang = i * 2.39996; // 황금각 — 고르게 흩어진다
+        const r = half * 0.8 * Math.sqrt((i + 0.5) / 11);
+        const size = 0.55 + (i % 3) * 0.28;
+        const rock = new THREE.Mesh(new THREE.BoxGeometry(size, size * 0.75, size * 0.9), i % 2 === 0 ? pale : stone);
+        rock.position.set(Math.cos(ang) * r, size * 0.35 + (1 - r / half) * 0.55, Math.sin(ang) * r);
+        rock.rotation.set(i * 0.5, i * 0.9, i * 0.3);
+        g.add(rock);
+      }
+    } else {
+      for (let i = 0; i < 14; i++) {
+        const ang = i * 2.39996;
+        const r = half * 1.05 * Math.sqrt((i + 0.5) / 14);
+        const size = 0.22 + (i % 4) * 0.09;
+        const chip = new THREE.Mesh(new THREE.BoxGeometry(size, size * 0.45, size * 0.8), i % 2 === 0 ? pale : stone);
+        chip.position.set(Math.cos(ang) * r, size * 0.22, Math.sin(ang) * r);
+        chip.rotation.y = i * 1.1;
+        g.add(chip);
+      }
+    }
+    (this.levelGroup ?? this.scene).add(g);
+  }
+
+  /** 잔해가 폭발에 부서졌다(B3-5) — 낮은 자갈로 바꾸고 파편을 튀긴다 */
+  breakRubble(row: number, col: number, x: number, z: number, half: number): void {
+    this.spawnWallCrumble(x, z);
+    this.addRubble(row, col, x, z, half, true);
+  }
+
+  /** 문 봉쇄 표시(거수 아레나, B3-5) — 문틀 개구부에 붉게 달아오른 쇠창살(출구 창살과 같은 문법: 잠김 = 붉은 쇠). 문짝은 그대로 여닫히고 창살은 문틀(정지)에 붙는다.
+   *  sealed=false 면 걷는다 */
+  setDoorSealed(row: number, col: number, sealed: boolean): void {
+    const frame = this.scene.getObjectByName(`doorframe-${row}-${col}`);
+    if (!frame) return;
+    const old = frame.getObjectByName('doorbars');
+    if (old) this.disposeGroup(old);
+    if (!sealed) return;
+    const bars = new THREE.Group();
+    bars.name = 'doorbars';
+    const iron = new THREE.MeshLambertMaterial({ color: 0x4a3034, emissive: 0xb03030, emissiveIntensity: 0.45 });
+    const w = DOOR_OPEN_WIDTH;
+    const h = DOOR_OPEN_HEIGHT;
+    // 문 로컬 좌표(폭 = X, 두께 = Z) — 문틀이 셀 중심에서 돌아 있으니 자식은 로컬로 짓는다. 앞뒤 양면에 한 벌씩 — 어느 쪽에서 봐도 창살이다
+    for (const side of [-1, 1]) {
+      const zOff = side * 0.5;
+      for (let i = 0; i < 5; i++) {
+        const rod = new THREE.Mesh(new THREE.BoxGeometry(0.07, h, 0.07), iron);
+        rod.position.set(-w / 2 + (w * (i + 0.5)) / 5, h / 2, zOff);
+        bars.add(rod);
+      }
+      for (const y of [h * 0.22, h * 0.78]) {
+        const cross = new THREE.Mesh(new THREE.BoxGeometry(w + 0.16, 0.09, 0.09), iron);
+        cross.position.set(0, y, zOff);
+        bars.add(cross);
+      }
+    }
+    const glow = new THREE.PointLight(0xb03030, 0.9, 6, 0);
+    glow.position.set(0, h * 0.6, 0);
+    bars.add(glow);
+    frame.add(bars);
+  }
 
   /** 균열 벽 파괴 */
   breakCrack(row: number, col: number): void {

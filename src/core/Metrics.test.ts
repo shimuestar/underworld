@@ -91,8 +91,19 @@ describe('Metrics', () => {
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'exhaust', on: true, ticks: 150 });
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'exhaust', on: false });
     events.emit('enemy_chain_turn', { enemyId: 1, enemyType: 'scythe_behemoth', ticks: 24 });
+    // 보스 아레나(B3-5) — 봉쇄 둘(입장·재입장), 기둥 붕괴 하나(pillar_damaged 는 세지 않는다), 자발 돌격 하나, 접근 가속 켜짐/꺼짐(켜짐만 센다), 잔해 하나
+    events.emit('arena_sealed', { enemyId: 1, enemyType: 'scythe_behemoth', row: 11, col: 22, x: 90, z: 46 });
+    events.emit('arena_unsealed', { reason: 'left', row: 11, col: 22 });
+    events.emit('arena_sealed', { enemyId: 1, enemyType: 'scythe_behemoth', row: 11, col: 22, x: 90, z: 46 });
+    events.emit('pillar_damaged', { row: 4, col: 19, hp: 1, max: 3, x: 78, z: 18 });
+    events.emit('pillar_collapsed', { row: 4, col: 19, x: 78, z: 18, playerHit: true, enemyHits: 1 });
+    events.emit('anticamp_charge', { enemyId: 1, enemyType: 'scythe_behemoth', row: 4, col: 25, x: 102, z: 18, dist: 12 });
+    events.emit('anticamp_far', { enemyId: 1, enemyType: 'scythe_behemoth', on: true, dist: 14 });
+    events.emit('anticamp_far', { enemyId: 1, enemyType: 'scythe_behemoth', on: false, dist: 7 });
+    events.emit('arena_rubble_broken', { row: 4, col: 19, x: 78, z: 18 });
 
     const s = metrics.snapshot(makeWorldStub());
+    expect(s.arena).toEqual({ seals: 2, pillarCollapses: 1, anticampCharges: 1, anticampFar: 1, rubbleBroken: 1 });
     expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1, chargeDodges: 1, limps: 1, blinds: 1, topples: 1, pillarHits: 1, backflows: 2 });
     expect(s.boss).toEqual({ phaseShifts: 2, phaseSkips: 0, phaseSeconds: { '3': 90, '2': 120, '1': 90 }, platesBroken: 2, plateGold: 17, roars: 2, roarHits: 1, combos: 1, exhausts: 1, chainTurns: 1 });
     expect(s.hazards).toEqual({ pools: 2, evaporated: 1, corrosiveApplied: 1, corrosiveDamage: 2, pendingIn: 1, ventCleanse: 2, chokes: 1 });

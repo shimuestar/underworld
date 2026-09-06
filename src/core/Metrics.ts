@@ -40,6 +40,8 @@ export interface MetricsSnapshot {
   /** 진액 웅덩이·오염 진액·분출공(거수 P2+, B3-2) — 생긴 웅덩이 수 / 자연 소멸이 아닌 증발 수(불·질식·상한) / 오염 진액이 붙은 횟수 / 오염 진액 도트 피해 합 /
    *  오염 진액이 오염 대기에 더한 양 / 분출공 명중이 오염 대기에서 깎은 양(정화) / 질식 수. 순 오염 변화 = pendingIn − ventCleanse (기획서 §11.1 장부) */
   hazards: { pools: number; evaporated: number; corrosiveApplied: number; corrosiveDamage: number; pendingIn: number; ventCleanse: number; chokes: number };
+  /** 보스 아레나(거수 4층, B3-5) — 봉쇄 수(입장·재입장) / 기둥 붕괴 수(기획서 §12 "기둥 붕괴 수") / 반캠핑 자발 돌격 수(숨기 플레이 신호) / 반캠핑 접근 가속 수(원거리 캠핑 신호) / 폭발로 치운 잔해 수 */
+  arena: { seals: number; pillarCollapses: number; anticampCharges: number; anticampFar: number; rubbleBroken: number };
   pickups: { potions: number; healed: number; gold: number; xp: number };
   shieldsBroken: number;
   ammo: { shotsFired: number; shotsHit: number; altarEntries: number; altarBypasses: number };
@@ -93,6 +95,11 @@ export class Metrics {
   private topples = 0;
   private pillarHits = 0;
   private backflows = 0;
+  private arenaSeals = 0;
+  private pillarCollapses = 0;
+  private anticampCharges = 0;
+  private anticampFar = 0;
+  private rubbleBroken = 0;
   private bossPhaseShifts = 0;
   private bossPhaseSkips = 0;
   private bossPhaseTicks: Record<string, number> = {};
@@ -196,6 +203,14 @@ export class Metrics {
     events.on('enemy_combo_start', () => this.combos++);
     events.on('enemy_chain_turn', () => this.chainTurns++);
     events.on('pillar_hit', () => this.pillarHits++);
+    // 보스 아레나(B3-5) — Arena 시스템 안에는 카운터가 없다
+    events.on('arena_sealed', () => this.arenaSeals++);
+    events.on('pillar_collapsed', () => this.pillarCollapses++);
+    events.on('anticamp_charge', () => this.anticampCharges++);
+    events.on('anticamp_far', (payload) => {
+      if ((payload as { on: boolean }).on) this.anticampFar++;
+    });
+    events.on('arena_rubble_broken', () => this.rubbleBroken++);
     // 진액 웅덩이·오염 진액·분출공 정화(B3-2) — Hazards/Status/hitWeakPoint 는 카운터를 갖지 않는다
     events.on('pool_spawned', () => this.poolsSpawned++);
     events.on('pool_evaporated', (payload) => {
@@ -367,6 +382,13 @@ export class Metrics {
         combos: this.combos,
         exhausts: this.exhausts,
         chainTurns: this.chainTurns,
+      },
+      arena: {
+        seals: this.arenaSeals,
+        pillarCollapses: this.pillarCollapses,
+        anticampCharges: this.anticampCharges,
+        anticampFar: this.anticampFar,
+        rubbleBroken: this.rubbleBroken,
       },
       hazards: {
         pools: this.poolsSpawned, evaporated: this.poolsEvaporated, corrosiveApplied: this.corrosiveApplied, corrosiveDamage: round2(this.corrosiveDamage) ?? 0,

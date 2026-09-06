@@ -1,11 +1,13 @@
-// 1구역 세 층이 실제로 걸어 다닐 수 있는 맵인지 검증한다.
+// 1구역 네 층이 실제로 걸어 다닐 수 있는 맵인지 검증한다.
 // scripts/checklevel.mjs 와 같은 검사지만, 이쪽은 CI 가 돌린다 —
 // 레벨 JSON 을 손대다 길을 막아 버리면 여기서 걸린다.
+// 4층 「무저갱 우리」(B3-5)는 보스 결투 층(bossArena) — 난이도 곡선·밀도 비교에서 빼고(기획서 §10.3 (a)) 아레나 규칙(격자 §10.1)을 따로 본다.
 
 import { describe, expect, it } from 'vitest';
 import z01f1 from '../../data/levels/z01_f1.json';
 import z01f2 from '../../data/levels/z01_f2.json';
 import z01f3 from '../../data/levels/z01_f3.json';
+import z01f4 from '../../data/levels/z01_f4.json';
 import { Level } from './GridLoader';
 import { isSpawnable, spawnBarrels, spawnChests, spawnEnemies, spawnTraps } from './Spawner';
 import { balance } from '../core/Balance';
@@ -19,7 +21,10 @@ function wallCheck(grid: Grid, cell: number[], what: string): string[] {
   return SOLID.has(at(grid, c, r)) ? [`${what}[${r},${c}]='${at(grid, c, r)}'`] : [];
 }
 
-const ZONE = [z01f1, z01f2, z01f3];
+const ZONE = [z01f1, z01f2, z01f3, z01f4];
+/** 보스 결투 층(bossArena) — 잡몹 곡선·밀도 비교에서 뺀다(기획서 §10.3 (a), 결정 12). 층 자체 검사(길·배치·계단)는 그대로 받는다 */
+const isBossArena = (json: unknown): boolean => (json as { bossArena?: boolean }).bossArena === true;
+const CURVE = ZONE.filter((l) => !isBossArena(l));
 const SOLID = new Set(['#', 'D', 'G', 'C', 'P']); // P = 기둥(거수 아레나·시험방, B2-5) — 벽처럼 막힌다
 /** 열 수 있는 벽 — 열렸다고 치면 지나간다 */
 const OPENABLE = new Set(['D', 'G', 'C']);
@@ -55,8 +60,9 @@ function find(grid: Grid, ch: string): [number, number][] {
 }
 
 describe('1구역 층 구성', () => {
-  it('세 층이 순서대로 이어진다 — 1층 시작, 3층이 마지막', () => {
-    expect(ZONE.map((l) => l.id)).toEqual(['z01_f1', 'z01_f2', 'z01_f3']);
+  it('네 층이 순서대로 이어진다 — 1층 시작, 3층 족장, 4층 거수 결투 층이 마지막', () => {
+    expect(ZONE.map((l) => l.id)).toEqual(['z01_f1', 'z01_f2', 'z01_f3', 'z01_f4']);
+    expect(ZONE.map(isBossArena)).toEqual([false, false, false, true]);
     // 층마다 입구(S)와 출구(X)가 하나씩 — 이 둘이 층을 잇는다
     for (const json of ZONE) {
       expect(find(json.grid, 'S')).toHaveLength(1);
@@ -64,10 +70,10 @@ describe('1구역 층 구성', () => {
     }
   });
 
-  it('난이도가 층마다 올라간다 — 쉬움 / 보통 / 어려움', () => {
+  it('난이도가 층마다 올라간다 — 쉬움 / 보통 / 어려움 (보스 결투 층은 곡선 밖)', () => {
     // 정예 = 패링·관통탄·기동을 요구하는 적. 잡몹 수가 아니라 이 비율이 체감 난이도를 만든다
     const ELITE = new Set(['goblin_spear', 'warden', 'spider_large', 'goblin_chieftain', 'ghoul']);
-    const stat = ZONE.map((json) => {
+    const stat = CURVE.map((json) => {
       // 층 보스는 곡선에서 뺀다 — 보스 체력은 잡몹 로스터의 난이도 곡선과 별개 축이다
       const ents = json.entities.filter(
         (e) =>
@@ -92,21 +98,26 @@ describe('1구역 층 구성', () => {
     expect(stat[0]!.eliteRatio).toBeLessThan(0.35);
   });
 
-  it('한 층이 유독 빽빽하지 않다 — 밀도가 층마다 두 배 넘게 뛰지 않는다', () => {
-    const density = ZONE.map((json) => {
+  it('한 층이 유독 빽빽하지 않다 — 밀도가 층마다 두 배 넘게 뛰지 않는다 (보스 결투 층은 비교 밖, 상한만)', () => {
+    const densityOf = (json: (typeof ZONE)[number]): number => {
       const ents = json.entities.filter(
         (e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !e.type.startsWith('trap_') && !('group' in e),
       );
       const floors = json.grid.join('').split('').filter((ch) => !SOLID.has(ch)).length;
       return ents.length / floors;
-    });
-    for (const d of density) expect(d).toBeLessThan(0.15); // 100칸당 15마리를 넘으면 계속 몰린다
+    };
+    for (const json of ZONE) expect(densityOf(json)).toBeLessThan(0.15); // 100칸당 15마리를 넘으면 계속 몰린다
+    const density = CURVE.map(densityOf);
     expect(Math.max(...density) / Math.min(...density)).toBeLessThan(2.5);
   });
 
-  it('구역 보스(족장)는 마지막 층에만 있다 — 출구를 잠그는 것이 보스다', () => {
-    const bossFloors = ZONE.filter((l) => l.entities.some((e) => e.type === 'goblin_chieftain'));
-    expect(bossFloors.map((l) => l.id)).toEqual(['z01_f3']);
+  it('구역 보스 — 족장은 3층에만, 거수(scythe_behemoth)는 4층 결투 층에만 있다 — 출구를 잠그는 것이 보스다', () => {
+    const chiefFloors = ZONE.filter((l) => l.entities.some((e) => e.type === 'goblin_chieftain'));
+    expect(chiefFloors.map((l) => l.id)).toEqual(['z01_f3']);
+    const behemothFloors = ZONE.filter((l) => l.entities.some((e) => e.type === 'scythe_behemoth'));
+    expect(behemothFloors.map((l) => l.id)).toEqual(['z01_f4']);
+    // 결투 층의 주인은 boss 배치 플래그로 출구 봉인을 쥔다(Spawner floorBoss) — def.boss 와 이중이지만 배치 의도가 읽히게
+    expect(z01f4.entities.filter((e) => e.type === 'scythe_behemoth').every((e) => (e as { boss?: boolean }).boss === true)).toBe(true);
   });
 
   for (const json of ZONE) {
@@ -291,6 +302,106 @@ describe('1구역 층 구성', () => {
       });
     });
   }
+});
+
+describe('4층 「무저갱 우리」 — 거수 아레나 (B3-5, 기획서 §10.1·§10.3)', () => {
+  const json = z01f4;
+  const grid: Grid = json.grid;
+  const cs = json.cellSize;
+  const level = new Level(json);
+  const arena = json.arena;
+  const [r0, c0, r1, c1] = arena.bounds as [number, number, number, number];
+  const [hr, hc] = arena.home as [number, number];
+  const inBounds = (r: number, c: number): boolean => r >= r0 && r <= r1 && c >= c0 && c <= c1;
+  const cellsOf = (type: string): [number, number][] => json.entities.filter((e) => e.type === type).map((e) => e.cell as [number, number]);
+
+  it('bossArena·arena{bounds, home} — Level 이 읽고, 경계는 11×9 바닥(기둥 포함), 홈은 경계 안 바닥', () => {
+    expect(json.bossArena).toBe(true);
+    expect(level.bossArena).toBe(true);
+    expect(level.arena).toEqual(arena);
+    expect(c1 - c0 + 1).toBe(11);
+    expect(r1 - r0 + 1).toBe(9);
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) expect(['.', 'P']).toContain(at(grid, c, r));
+    expect(inBounds(hr, hc)).toBe(true);
+    expect(at(grid, hc, hr)).toBe('.');
+    // 경계 둘레는 벽(#·C·X·D) — 아레나는 우리다
+    for (let c = c0 - 1; c <= c1 + 1; c++) {
+      expect(SOLID.has(at(grid, c, r0 - 1)) || at(grid, c, r0 - 1) === 'X').toBe(true);
+      expect(SOLID.has(at(grid, c, r1 + 1))).toBe(true);
+    }
+    for (let r = r0 - 1; r <= r1 + 1; r++) {
+      expect(SOLID.has(at(grid, c0 - 1, r))).toBe(true);
+      expect(SOLID.has(at(grid, c1 + 1, r))).toBe(true);
+    }
+  });
+
+  it('기둥 P 넷 — 기획서 격자 (3,3)(9,3)(3,7)(9,7) 자리(경계 기준), 사이 24m / 16m 돌격 레인, 4×4m 단일 셀', () => {
+    const pillars = find(grid, 'P').map(([r, c]) => [r - r0 + 1, c - c0 + 1]);
+    expect(pillars.sort()).toEqual([[3, 3], [3, 9], [7, 3], [7, 9]].sort());
+    expect((9 - 3) * cs).toBe(24);
+    expect((7 - 3) * cs).toBe(16);
+    for (const [r, c] of find(grid, 'P')) expect(level.solidAt(c, r)).toBe(true);
+  });
+
+  it('보스 스폰 B — scythe_behemoth 하나, boss 플래그, 홈 칸에 잠들어 있다(alertRadius 18)', () => {
+    const boss = json.entities.filter((e) => e.type === 'scythe_behemoth');
+    expect(boss).toHaveLength(1);
+    expect(boss[0]!.cell).toEqual([hr, hc]);
+    expect((boss[0] as { boss?: boolean }).boss).toBe(true);
+    expect(enemyDef('scythe_behemoth').alertRadius).toBe(18);
+    expect(spawnEnemies(json.entities, level).find((e) => e.type === 'scythe_behemoth')?.floorBoss).toBe(true);
+  });
+
+  it('출구 X 는 북쪽 벽감(보스 뒤, 경계 위 벽줄 가운데) — 뒤가 진짜 벽. 남쪽 문 D 하나가 경계에 붙어 있다(봉쇄 대상)', () => {
+    const [xr, xc] = find(grid, 'X')[0]!;
+    expect(xr).toBe(r0 - 1);
+    expect(xc).toBe(hc);
+    expect(at(grid, xc, xr - 1)).toBe('#');
+    const doors = find(grid, 'D').filter(([r, c]) => (r === r0 - 1 || r === r1 + 1) && c >= c0 && c <= c1);
+    expect(doors).toEqual([[r1 + 1, hc]]);
+    expect(level.doors.find((d) => d.row === r1 + 1 && d.col === hc)?.byLever).toBe(false); // 손으로 여는 문 — 레버 불필요
+  });
+
+  it('기름 함정 O 둘·균열벽 C 둘(뒤 1칸 벽감에 상자, 벽감은 경계 밖)', () => {
+    const oil = cellsOf('trap_oil');
+    expect(oil).toHaveLength(2);
+    for (const [r, c] of oil) expect(inBounds(r, c)).toBe(true);
+    const cracks = find(grid, 'C');
+    expect(cracks).toHaveLength(2);
+    const chests = cellsOf('chest');
+    expect(chests).toHaveLength(2);
+    for (const [r, c] of cracks) {
+      expect(r >= r0 && r <= r1 && (c === c0 - 1 || c === c1 + 1)).toBe(true); // 경계 옆 벽에 박힌 균열벽
+      const nicheC = c === c0 - 1 ? c - 1 : c + 1;
+      expect(at(grid, nicheC, r)).toBe('.');
+      expect(chests.some(([cr, cc]) => cr === r && cc === nicheC)).toBe(true);
+      expect(inBounds(r, nicheC)).toBe(false); // 벽감은 경계 밖 — 보스가 목표를 잡지 않는다
+      // 벽감은 막혀 있다 — 균열벽 말고는 드나들 곳이 없다
+      expect(at(grid, nicheC, r - 1)).toBe('#');
+      expect(at(grid, nicheC, r + 1)).toBe('#');
+      expect(at(grid, c === c0 - 1 ? nicheC - 1 : nicheC + 1, r)).toBe('#');
+    }
+    for (const t of json.triggers) expect(t.type === 'crack_wall' ? at(grid, t.cell[1]!, t.cell[0]!) : 'C').toBe('C');
+  });
+
+  it('최소 로스터 9(창병 3·궁수 2·구울 2·거미 2) — 전부 경계 밖, 보스 홈에서 18m 밖(포효 기상 반경), 결투는 1:1', () => {
+    const roster = json.entities.filter(
+      (e) => e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') && !e.type.startsWith('trap_') && e.type !== 'scythe_behemoth',
+    );
+    expect(roster).toHaveLength(9);
+    const count = (type: string): number => roster.filter((e) => e.type === type).length;
+    expect([count('goblin_spear'), count('goblin_archer'), count('ghoul'), count('spider_small')]).toEqual([3, 2, 2, 2]);
+    for (const e of roster) {
+      const [r, c] = e.cell as [number, number];
+      expect(inBounds(r, c), `${e.type}[${r},${c}]`).toBe(false);
+      expect(Math.hypot((c - hc) * cs, (r - hr) * cs), `${e.type}[${r},${c}]`).toBeGreaterThanOrEqual(enemyDef('scythe_behemoth').alertRadius!);
+    }
+  });
+
+  it('제단은 아레나 앞 로비에(경계 밖) — 상점이 이 보스의 준비다', () => {
+    const [ar, ac] = find(grid, 'A')[0]!;
+    expect(inBounds(ar, ac)).toBe(false);
+  });
 });
 
 describe('몬스터 시험방 — 기둥 P (B2-5)', () => {
