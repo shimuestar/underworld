@@ -58,8 +58,9 @@ export interface DoorCell {
   byLever: boolean;
 }
 
-/** 이동을 막는 셀. 잠긴 문(D)과 균열 벽(C)은 열리기 전까지 벽 취급. */
-const SOLID_CHARS = new Set(['#', 'D', 'G', 'C']);
+/** 이동을 막는 셀. 잠긴 문(D)과 균열 벽(C)은 열리기 전까지 벽 취급. 기둥(P, 거수 아레나 — 기획서 §10.1)은 4×4m 단일 셀 벽으로,
+ *  거수 돌격이 박히면 전도(Enemies.chargeCollide 가 문자를 읽는다). 내구·붕괴는 B3-5 Arena */
+const SOLID_CHARS = new Set(['#', 'D', 'G', 'C', 'P']);
 /** 제단 기둥 발자국(가로세로 m). 충돌과 시각 메시가 반드시 같은 값을 쓴다 —
  *  하나만 고치면 "보이는 것과 부딪히는 것"이 어긋난다 */
 const ALTAR_FOOTPRINT = 1.1;
@@ -420,6 +421,12 @@ const DOOR_THICK = 0.22;
 const DOOR_WOOD = 0x5a3d24;
 const DOOR_IRON = 0x2e2c2a;
 const COLOR_CRACK = 0x4a5a68;
+/** 기둥(P) — 벽보다 밝은 돌(기획서 §10.1 0x8a8378) + 정 자국 띠(어두운 띠). 균열선(내구 단계)은 B3-5 */
+const COLOR_PILLAR = 0x8a8378;
+const COLOR_PILLAR_BAND = 0x5e574e;
+const PILLAR_BAND_H = 0.14;
+const PILLAR_BAND_OUT = 0.05;
+const PILLAR_BAND_YS = [0.28, 0.52, 0.76]; // 천장 높이 비율
 /** 레버로만 열리는 관문 — 손으로 여는 문(갈색)과 확실히 다른 청록 금속색 */
 export const COLOR_GATE = 0x2f6f74;
 // 바닥은 벽보다 한참 어둡다 — 때가 앉고 랜턴 빔이 정면으로 안 닿는 자리다.
@@ -899,6 +906,32 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
     for (let col = 0; col < level.cols; col++) {
       const ch = level.charAt(col, row);
       if (!SOLID_CHARS.has(ch)) continue;
+      if (ch === 'P') {
+        // 기둥(거수 아레나·시험방) — 벽과 같은 한 칸 상자지만 밝은 돌에 정 자국 띠를 둘러 벽과 구분한다("돌격을 여기에 박히게" 가 읽혀야 한다).
+        // 개별 메시(pillar-r-c) — 내구 균열선·붕괴(B3-5)가 이 이름으로 찾아 바꾼다
+        const pillar = new THREE.Group();
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(cs, level.ceiling, cs),
+          new THREE.MeshLambertMaterial({
+            color: COLOR_PILLAR,
+            map: dungeonWallTexture(),
+            bumpMap: dungeonWallTexture(),
+            bumpScale: WALL_BUMP,
+          }),
+        );
+        body.position.y = level.ceiling / 2;
+        pillar.add(body);
+        const bandMat = new THREE.MeshLambertMaterial({ color: COLOR_PILLAR_BAND });
+        for (const fy of PILLAR_BAND_YS) {
+          const band = new THREE.Mesh(new THREE.BoxGeometry(cs + PILLAR_BAND_OUT * 2, PILLAR_BAND_H, cs + PILLAR_BAND_OUT * 2), bandMat);
+          band.position.y = level.ceiling * fy;
+          pillar.add(band);
+        }
+        pillar.position.set((col + 0.5) * cs, 0, (row + 0.5) * cs);
+        pillar.name = `pillar-${row}-${col}`;
+        group.add(pillar);
+        continue;
+      }
       if (ch === 'D' || ch === 'G' || ch === 'C') {
         // 문·관문·균열 벽은 열리거나 파괴될 수 있으므로 개별 메시.
         // 관문(G)은 색을 달리한다 — 손으로 열리는 문과 눈으로 구분돼야 헛되이

@@ -120,6 +120,8 @@ describe('약점 구체 = 판정 구체', () => {
       { name: 'charging', ...CHARGE, pose: { pose: 'charge', charging: true } },
       { name: 'head_down', ...HEAD_DOWN, pose: { pose: 'head_down' } },
       { name: 'stunned', ...STUNNED, pose: { pose: 'stunned' } },
+      // 눈멂(B2-5) — 표의 눈 1.2m. 머리 휘저음은 sin(nowMs) 라 nowMs 0 에선 정지 — 휘저음의 어긋남 상한은 아래 별도 검사
+      { name: 'blind', ...CHARGE, pose: { pose: 'blind', charging: true } },
       // 진행 중간에도 구체와 머리가 함께 간다
       { name: 'head_down 0.5', ...HEAD_DOWN, pose: { pose: 'head_down', poseBlend: 0.5 } },
       { name: 'charge coil 0.4', lean: T.chargeLean * 0.4, crouch: -def.height * T.chargeCrouch * 0.4, pose: { pose: 'charge', chargeCoil: 0.4, poseBlend: 0.4 } },
@@ -155,6 +157,28 @@ describe('약점 구체 = 판정 구체', () => {
     const ik = solveNeckToEye(rest.rig, 0, 0, 0, { x: 0, y: 2.35, z: -1.88 });
     expect(Math.abs(ik.neck)).toBeLessThan(0.01);
     expect(Math.abs(ik.pitch)).toBeLessThan(0.01);
+  });
+
+  it('눈멂(B2-5, pose blind) — 눈먼 채 달리며 머리를 좌우로 휘젓는다: 목 yaw 가 시간에 따라 부호를 바꾸고, 휘저음 봉우리에서도 머리 메시의 눈은 표 구체(1.2m)에서 구체 반지름 남짓(≤ 0.32m) 안, 눈 판정은 닫혀 있으니 표 자리에 구체가 남는다', () => {
+    const still = measureRig(CHARGE.lean, 0, CHARGE.crouch, { pose: 'blind', charging: true, nowMs: 0 });
+    expect(Math.abs(still.rig.neck.rotation.y)).toBeLessThan(1e-6);
+    expect(still.rig.weakPoints['eye']!.position.y).toBeCloseTo(def.poseOffsets!['blind']!['eye']!.y, 6);
+    const yaws: number[] = [];
+    for (const nowMs of [70 * Math.PI * 0.5, 70 * Math.PI * 1.5, 100, 1234]) {
+      const { rig } = measureRig(CHARGE.lean, 0, CHARGE.crouch, { pose: 'blind', charging: true, nowMs });
+      yaws.push(rig.neck.rotation.y);
+      const anchor = behemothAnchorPos(rig, 'eye', new THREE.Vector3());
+      const sphere = rig.weakPoints['eye']!.position;
+      expect(anchor.distanceTo(sphere), `blind@${nowMs.toFixed(0)} 어긋남 ${anchor.distanceTo(sphere).toFixed(3)}`).toBeLessThanOrEqual(0.32);
+      expect(sphere.y).toBeCloseTo(1.2, 6);
+    }
+    expect(Math.max(...yaws)).toBeGreaterThan(0.1);
+    expect(Math.min(...yaws)).toBeLessThan(-0.1);
+    // 다른 표 자세(charge·head_down·stunned)에선 목 yaw 0 — 휘저음은 눈멂만
+    for (const c of [{ ...CHARGE, pose: { pose: 'charge', charging: true, nowMs: 100 } }, { ...HEAD_DOWN, pose: { pose: 'head_down', nowMs: 100 } }, { ...STUNNED, pose: { pose: 'stunned', nowMs: 100 } }]) {
+      const { rig } = measureRig(c.lean, 0, c.crouch, c.pose);
+      expect(Math.abs(rig.neck.rotation.y)).toBeLessThan(1e-6);
+    }
   });
 
   it('미끄러짐(B2-3) — 어깨 축 굴림·전진·젖힘·낮춤을 넣어도 눈은 표 자리(≤ 0.06m), 완벽 회피 보상 표적인 양 어깨 관절 메시–구체 어긋남 ≤ 0.20m(움찔 최악은 구체 반지름 0.30 안), 진행 중간도', () => {
@@ -299,6 +323,9 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
       pose: { pose: 'charge', chargeCoil: 1, trembling: true, nowMs },
     })),
     { name: 'charging', ...CHARGE, pose: { pose: 'charge', charging: true } },
+    // B2-5 눈멂 질주 — 내린 머리를 좌우로 휘젓는 봉우리(sin(nowMs/70)) + 움찔
+    ...peaks.map((nowMs) => ({ name: `blind@${nowMs.toFixed(0)}`, lean: T.chargeLean + T.flinchLean, lunge: 0, crouch: CHARGE.crouch, pose: { pose: 'blind', charging: true, nowMs } })),
+    { name: 'blind thrash peak', lean: T.chargeLean, lunge: 0, crouch: CHARGE.crouch, pose: { pose: 'blind', charging: true, nowMs: 70 * Math.PI * 0.5 } },
     // B1-3 들이받기 — 예고에 목을 뒤로 젓으면 뿔끝이 솟는다. 중간 진행·떨림·움찔까지 / 타격(내리꽂음)
     ...[0.25, 0.5, 0.75, 1].map((c) => ({
       name: `headbutt coil ${c}+flinch`,

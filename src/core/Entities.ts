@@ -60,6 +60,8 @@ export interface EnemyAttackDef {
   muzzleHeightMul?: number;
   /** 헛쳤을 때의 경직 틱 (없으면 recoverTicks). 그동안 마지막 동작으로 굳는다 */
   whiffRecoverTicks?: number;
+  /** 돌격(chargeRunTicks)이 일반 벽·문에 막혀 끝났을 때의 경직 틱(거수, 기획서 §9.3 — 박히지 않음·눈 안 열림). 없으면 whiffRecoverTicks */
+  wallWhiffRecoverTicks?: number;
   impactRangeMul: number;
   parryable: boolean;
   telegraph?: string;

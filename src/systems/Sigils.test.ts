@@ -8,7 +8,7 @@ import { sigilColor, sigilDef } from '../core/SigilData';
 import { Input } from '../core/Input';
 import { addItem, initInventory, spillInventoryToGrave } from '../core/Inventory';
 import { enemyDef as enemyDef2 } from '../core/Entities';
-import { alertNearbyAt, breakHeadsInRadius, World, type BarrelState, type EnemyState } from '../core/World';
+import { alertNearbyAt, breakCrackWalls, breakHeadsInRadius, World, type BarrelState, type EnemyState } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
@@ -554,7 +554,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     const broken: { row: number; col: number }[] = [];
     world.events.on('crack_wall_broken', (p) => broken.push(p as never));
     const fx = sigilDef('sig_fireball').effects;
-    Projectiles.breakCrackWalls(world, (7 + 0.5) * 4 - 1, 6, fx['explodeRadius']!);
+    breakCrackWalls(world, (7 + 0.5) * 4 - 1, 6, fx['explodeRadius']!); // core/World 헬퍼(B2-5 이동 — 거수 전도도 같은 문을 쓴다)
     expect(broken).toEqual([expect.objectContaining({ row: 1, col: 7 })]);
     expect(world.level.solidAt(7, 1)).toBe(false); // 이제 지나갈 수 있다
   });

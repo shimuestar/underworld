@@ -19,13 +19,14 @@ import * as Weapons from './Weapons';
 
 const DT = 1 / 60;
 
-function makeWorld(): World {
+/** 기본 경기장 10×5칸(안쪽 x 4~36 · z 4~16). grid 를 넘기면 그 격자로(B2-5 기둥·균열벽·긴 레인) */
+function makeWorld(grid: string[] = ['##########', '#S.......#', '#........#', '#.......X#', '##########']): World {
   const level = new Level({
     id: 'arena',
     name: 'arena',
     cellSize: 4,
     ceiling: 4,
-    grid: ['##########', '#S.......#', '#........#', '#.......X#', '##########'],
+    grid,
     lighting: { ambient: 0.04, torches: [] },
   });
   return new World(new Events(), {
@@ -1722,7 +1723,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect(Math.hypot(chief.kbX!, chief.kbZ!) * chief.kbTicks!).toBeCloseTo(kb.combo.staggerFullKnockback, 3);
   });
 
-  it('(g) 자세 비추기 — 돌격 예고·질주·헛돌격 경직 동안 pose charge(구체 표 1.1m), 끝나면 사라진다. 눈은 돌격 중 닫혀 있다(6m 안 노출은 B2-5)', () => {
+  it('(g) 자세 비추기 — 돌격 예고·질주·헛돌격 경직 동안 pose charge(구체 표 1.1m), 끝나면 사라진다. 예고 중 눈은 닫혀 있다(질주 중 6m 안 노출은 B2-5 — 아래 describe)', () => {
     const boss = makeBehemoth(10);
     tickEnemiesUntil(() => boss.ai === 'windup', 300);
     expect(boss.attackMode).toBe('charge');
@@ -1822,9 +1823,10 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect(boss.exposure).toEqual({ joint_r: 40, joint_l: 40 });
     expect(weakPointOpen(boss, wp('joint_r'))).toBe(true);
     expect(weakPointOpen(boss, wp('joint_l'))).toBe(true);
-    expect(weakPointOpen(boss, wp('eye'))).toBe(false); // 눈은 skid 자세에서 닫혀 있다
+    expect(weakPointOpen(boss, wp('eye'))).toBe(false); // 눈은 skid 자세에서 닫혀 있다 — 돌격 중 6m 안 노출(B2-5)은 질주가 끝나는 impact 에서 닫힌다
     expect(weakPointWorldPos(boss, def, wp('joint_r')).y).toBeCloseTo(2.4, 6); // 표의 skid 자리
-    expect(status.map((s) => `${s.kind}${s.id ? ':' + s.id : ''}:${s.on}`)).toEqual(['expose:joint_r:true', 'expose:joint_l:true', 'skid:true']);
+    // 다가오며 6m 안에 든 동안 눈이 열렸다가(B2-5) 접촉 순간 닫히고, 그 다음 관절·미끄러짐
+    expect(status.map((s) => `${s.kind}${s.id ? ':' + s.id : ''}:${s.on}`)).toEqual(['expose:eye:true', 'expose:eye:false', 'expose:joint_r:true', 'expose:joint_l:true', 'skid:true']);
 
     // 미끄러지는 90틱 동안 제자리 — 코앞이라도 들이받기·낫·돌격 어느 것도 나가지 않는다
     const x0 = boss.x;
@@ -1832,7 +1834,8 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     const windups: unknown[] = [];
     world.events.on('enemy_windup', (p) => windups.push(p));
     for (let i = 0; i < 40; i++) Enemies.tick(world, DT);
-    expect(closed.map((c) => c.id).sort()).toEqual(['joint_l', 'joint_r']); // 관절은 40틱에 닫힌다
+    expect(closed.map((c) => c.id).sort()).toEqual(['eye', 'joint_l', 'joint_r']); // 관절은 40틱에 닫힌다 (눈은 접촉 순간 hits 0 으로)
+    expect(closed.find((c) => c.id === 'eye')!.hits).toBe(0);
     expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
     expect(boss.pose).toBe('skid');
     for (let i = 0; i < 49; i++) Enemies.tick(world, DT);
@@ -2432,5 +2435,318 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     tickEnemiesUntil(() => boss.ai !== 'idle', 60);
     expect(near.ai).not.toBe('idle');
     expect(far.ai).toBe('idle');
+  });
+
+  describe('B2-5 돌격 눈멂·지형 충돌·기둥 P (기획서 §4.1 B·§5 blind/topple·§9.3)', () => {
+    const wpc = balance.weakPoint;
+    /** 레인 격자 16×6칸(안쪽 x 4~60 · z 4~20) — (row 3, col 5) = x 20~24 · z 12~16 에 문자 ch(기둥 P / 균열벽 C / 벽 #) */
+    const laneGrid = (ch: string): string[] => ['################', '#S.............#', '#..............#', `#....${ch}.........#`, '#..............#', '################'];
+    /** 긴 레인 24×6칸(안쪽 x 4~92) — 눈멂 오버런이 벽에 닿지 않고 끝나게 */
+    const longGrid = (): string[] => ['#'.repeat(24), '#S' + '.'.repeat(21) + '#', '#' + '.'.repeat(22) + '#', '#' + '.'.repeat(22) + '#', '#' + '.'.repeat(22) + '#', '#'.repeat(24)];
+    type Status = { kind: string; on: boolean; id?: string; ticks?: number; cause?: string; cell?: string; row?: number; col?: number };
+    function placePlayer(x: number, z: number): void {
+      const p = world.player;
+      p.x = x;
+      p.z = z;
+      p.prevX = x;
+      p.prevZ = z;
+    }
+    function placeBoss(x: number, z: number): EnemyState {
+      const boss = spawnEnemyAt(TYPE, x, z, 1);
+      boss.ai = 'chase';
+      world.enemies.push(boss);
+      return boss;
+    }
+    function watch() {
+      const status: Status[] = [];
+      world.events.on('boss_status', (p) => status.push(p as Status));
+      const closed: { id: string; hits: number }[] = [];
+      world.events.on('exposure_closed', (p) => closed.push(p as { id: string; hits: number }));
+      const whiffs: { ticks: number; wall?: boolean }[] = [];
+      world.events.on('enemy_whiffed', (p) => whiffs.push(p as { ticks: number; wall?: boolean }));
+      const pillars: unknown[] = [];
+      world.events.on('pillar_hit', (p) => pillars.push(p));
+      const cracks: unknown[] = [];
+      world.events.on('crack_wall_broken', (p) => cracks.push(p));
+      const hits: { amount: number }[] = [];
+      world.events.on('player_damaged', (p) => hits.push(p as { amount: number }));
+      const tag = (st: Status): string => `${st.kind}${st.id ? ':' + st.id : ''}:${st.on}`;
+      return { status, closed, whiffs, pillars, cracks, hits, tag };
+    }
+    const distTo = (boss: EnemyState): number => Math.hypot(boss.x - world.player.x, boss.z - world.player.z);
+    /** 정면(경로 위)에서 권총 2발 — 눈 33×2 = 66 */
+    function blindShots(boss: EnemyState): void {
+      shootEye(boss);
+      shootEye(boss);
+    }
+    /** 보스가 (bossX, 14) 에서 질주에 들어가게 — 예고 시작은 visibleX 에서(시야선), 예고가 끝나기 전에 플레이어를 targetX 로 옮겨 그 자리를 겨누게 한다
+     *  (돌격 목표는 예고 종료 좌표에 고정 — 기존 규칙). 겨눈 선이 (row 3, col 5) 칸을 지나게 하는 데 쓴다 */
+    function chargeToward(boss: EnemyState, visibleX: number, targetX: number): void {
+      placePlayer(visibleX, 14);
+      tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'charge', 300);
+      placePlayer(targetX, 14);
+      tickEnemiesUntil(() => boss.ai === 'charging', 300);
+      expect(boss.chargeTargetX).toBe(targetX);
+      expect(boss.chargeTargetZ).toBe(14);
+    }
+
+    it('데이터 — blindRangeM 6·blindThreshold 66(권총 33×2)·blindOverrunTicks 40·chargeStuckTicks 2·headDown.toppleTicks 90, 돌격 wallWhiffRecoverTicks 60 < 헛돌격 90, 전도 튕김은 내려온 눈 구체가 벽면에서 사람 하나(0.8m) 이상 떨어지게. 족장·잡몹엔 없다(옛 경로)', () => {
+      expect(wpc.blindRangeM).toBe(6);
+      expect(wpc.blindThreshold).toBe(66);
+      expect(balance.weapons.pistol.damage * wp('eye').damageMul * 2).toBeGreaterThanOrEqual(wpc.blindThreshold);
+      expect(wpc.blindOverrunTicks).toBe(40);
+      expect(wpc.chargeStuckTicks).toBe(2);
+      expect(wpc.headDown.toppleTicks).toBe(90);
+      const ch = def.chargeAttack!;
+      expect(ch.wallWhiffRecoverTicks).toBe(60);
+      expect(ch.wallWhiffRecoverTicks!).toBeLessThan(ch.whiffRecoverTicks!);
+      // 튕김 — head_down 표의 눈 앞끝(−z + r)이 몸 반경(1.6) 보다 앞에 있는 만큼 + 플레이어 폭. 그대로면 눈 구체가 기둥 안에 묻힌다
+      const eyeHd = def.poseOffsets!['head_down']!['eye']!;
+      const protrude = -eyeHd.z + wp('eye').radius - def.radius;
+      expect(protrude).toBeGreaterThan(0);
+      expect(wpc.headDown.toppleReboundM).toBeGreaterThanOrEqual(protrude + balance.player.radius * 2);
+      expect(wpc.headDown.toppleReboundTicks).toBeGreaterThan(0);
+      expect(def.poseOffsets!['blind']!['eye']).toEqual({ x: 0, y: 1.2, z: -1.95 });
+      // 족장 돌격엔 벽 헛돌격 필드가 없고 약점도 없다 — 지형 충돌·눈 노출 코드가 돌지 않는다
+      expect(enemyDef('goblin_chieftain').chargeAttack!.wallWhiffRecoverTicks).toBeUndefined();
+      expect(enemyDef('goblin_chieftain').weakPoints).toBeUndefined();
+    });
+
+    it('질주 중 6m 밖에서는 눈이 닫혀 있고 6m 안에 들면 열린다(expose eye, 표의 charge 자리 1.1m, 매 틱 되살아남) — 눈 66 → 눈멂: boss_status blind{ticks = 남은 질주 + 40}·pose blind(1.2m)·눈 닫힘(exposure_closed eye hits 2). 눈먼 거수는 겨눈 자리를 지나 yaw 그대로 직진, 일반 벽 # 에 박히면 헛돌격 60(wall)·전도 없음·눈 안 열림', () => {
+      const boss = makeBehemoth(10); // (16,6) → 플레이어(6,6) 를 겨눈다
+      const w = watch();
+      tickEnemiesUntil(() => boss.ai === 'charging', 300);
+      expect(boss.chargeTargetX).toBe(6);
+      Enemies.tick(world, DT); // 9.75m — 밖
+      expect(weakPointOpen(boss, wp('eye'))).toBe(false);
+      expect(boss.exposure?.['eye']).toBeUndefined();
+      tickEnemiesUntil(() => weakPointOpen(boss, wp('eye')), 60);
+      expect(distTo(boss)).toBeLessThanOrEqual(wpc.blindRangeM + 1e-6);
+      expect(distTo(boss)).toBeGreaterThan(wpc.blindRangeM - 0.3); // 들어온 그 틱
+      expect(boss.pose).toBe('charge');
+      expect(weakPointWorldPos(boss, def, wp('eye')).y).toBeCloseTo(1.1, 6);
+      expect(w.status.map(w.tag)).toEqual(['expose:eye:true']);
+      // 열린 채 다가온다 — 타이머는 매 틱 되살아나 닫히지 않는다
+      for (let i = 0; i < 3; i++) Enemies.tick(world, DT);
+      expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+      expect(w.closed).toHaveLength(0);
+      expect(boss.blind ?? false).toBe(false);
+      // 정면에서 권총 2발(33×2 = 66) → 다음 틱 눈멂
+      blindShots(boss);
+      expect(boss.weakAccum!['eye']).toBe(66);
+      const timerBefore = boss.timer;
+      const yaw0 = boss.yaw;
+      Enemies.tick(world, DT);
+      expect(boss.blind).toBe(true);
+      expect(boss.ai).toBe('charging');
+      expect(boss.pose).toBe('blind');
+      expect(weakPointWorldPos(boss, def, wp('eye')).y).toBeCloseTo(1.2, 6); // 표의 blind 자리(머리 휘저음은 Stage)
+      expect(boss.timer).toBe(timerBefore - 1 + wpc.blindOverrunTicks);
+      expect(weakPointOpen(boss, wp('eye'))).toBe(false); // 눈먼 눈은 표적이 아니다
+      expect(w.closed).toEqual([{ enemyId: boss.id, enemyType: TYPE, id: 'eye', hits: 2 }]);
+      expect(w.status.map(w.tag)).toEqual(['expose:eye:true', 'expose:eye:false', 'blind:true']);
+      expect(w.status[2]!.ticks).toBe(boss.timer + 1);
+      // 비켜 선다(경로 z 6 에서 4m — 접촉 2.15m 밖, 6m 안이지만 눈먼 뒤라 눈은 안 열린다). 거수는 겨눈 자리(6,6)를 지나 서쪽 벽까지 직진
+      placePlayer(6, 10);
+      tickEnemiesUntil(() => boss.ai !== 'charging', 200);
+      expect(boss.yaw).toBe(yaw0); // 조향 없음
+      expect(boss.x).toBeLessThan(6); // 겨눈 자리(몸 반경 1.6 안이면 멈췄을 x 7.6)를 지났다
+      expect(boss.x).toBeCloseTo(4 + def.radius, 1); // 벽(x 4) 앞 몸 반경
+      expect(boss.z).toBeCloseTo(6, 6);
+      // 일반 벽 — 헛돌격 60(wallWhiffRecoverTicks), 박히지 않는다(전도 없음), 눈 안 열림
+      expect(boss.ai).toBe('recover');
+      expect(boss.whiffed).toBe(true);
+      expect(boss.timer).toBe(def.chargeAttack!.wallWhiffRecoverTicks);
+      expect(boss.pose).toBe('charge');
+      expect(boss.poseTicks ?? 0).toBe(0);
+      expect(boss.blind).toBe(false);
+      expect(weakPointOpen(boss, wp('eye'))).toBe(false);
+      expect(w.whiffs).toEqual([{ enemyId: boss.id, enemyType: TYPE, ticks: 60, wall: true }]);
+      expect(w.status.map(w.tag)).toEqual(['expose:eye:true', 'expose:eye:false', 'blind:true', 'blind:false']);
+      expect(w.pillars).toHaveLength(0);
+      expect(w.hits).toHaveLength(0);
+      expect(w.closed).toHaveLength(1); // 눈먼 뒤 4m 옆을 지나도 다시 열리지 않았다
+      tickEnemiesUntil(() => boss.ai === 'chase', 120);
+      Enemies.tick(world, DT);
+      expect(boss.pose).toBeUndefined();
+    });
+
+    it('눈먼 돌격이 기둥 P 에 박히면 전도 — pillar_hit{row, col} + boss_status topple{cell P} + head_down 90(cause topple, 눈 0.9m 노출) + 뒤로 튕김(넉백 동안 포즈 시계 정지), 기둥은 남는다. 전도 중 눈 66 → 혼절(처형 창)', () => {
+      world = makeWorld(laneGrid('P'));
+      placePlayer(26, 14); // 기둥(x 20~24) 동쪽 2m 앞에 서서 거수를 부른다
+      const boss = placeBoss(40, 14);
+      const w = watch();
+      tickEnemiesUntil(() => boss.ai === 'charging', 300);
+      expect(boss.chargeTargetX).toBe(26);
+      tickEnemiesUntil(() => weakPointOpen(boss, wp('eye')), 100);
+      blindShots(boss);
+      Enemies.tick(world, DT);
+      expect(boss.blind).toBe(true);
+      placePlayer(26, 9.5); // 마지막 순간 비켜 선다 — 거수는 서 있던 자리 뒤의 기둥으로 직진
+      tickEnemiesUntil(() => boss.pose === 'head_down', 200);
+      expect(boss.blind).toBe(false);
+      expect(boss.ai).toBe('recover');
+      expect(boss.whiffed).toBe(false);
+      expect(boss.poseTicks).toBe(wpc.headDown.toppleTicks);
+      expect(w.pillars).toEqual([{ enemyId: boss.id, enemyType: TYPE, row: 3, col: 5, x: 22, z: 14 }]);
+      expect(w.status.find((st) => st.kind === 'topple')).toMatchObject({ on: true, ticks: 90, cell: 'P', row: 3, col: 5 });
+      expect(w.status.find((st) => st.kind === 'head_down')).toMatchObject({ on: true, ticks: 90, cause: 'topple' });
+      expect(w.status.map(w.tag)).toEqual(['expose:eye:true', 'expose:eye:false', 'blind:true', 'blind:false', 'topple:true', 'head_down:true']);
+      expect(w.whiffs).toHaveLength(0);
+      expect(w.cracks).toHaveLength(0);
+      expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+      expect(weakPointWorldPos(boss, def, wp('eye')).y).toBeCloseTo(0.9, 6);
+      expect(world.level.charAt(5, 3)).toBe('P'); // 내구 −1 은 B3 — 지금은 pillar_hit 만
+      // 튕김 — 박힌 자리(기둥 면 x 24 + 몸 반경)에서 뒤로 toppleReboundM. 넉백 동안 포즈 시계는 멈춘다
+      const hitX = boss.x;
+      expect(hitX).toBeCloseTo(24 + def.radius, 1);
+      expect(boss.kbTicks).toBe(wpc.headDown.toppleReboundTicks);
+      for (let i = 0; i < wpc.headDown.toppleReboundTicks; i++) Enemies.tick(world, DT);
+      expect(boss.x).toBeCloseTo(hitX + wpc.headDown.toppleReboundM, 1);
+      expect(boss.z).toBeCloseTo(14, 6);
+      expect(boss.poseTicks).toBe(wpc.headDown.toppleTicks);
+      expect(boss.pose).toBe('head_down');
+      // 눈 구체가 기둥 면(x 24) 밖 — 기둥 앞에 서서 정면으로 쏜다. 전도 중 눈 66 → 혼절(낫 박힘의 머리 내림과 같은 누적)
+      const eye = weakPointWorldPos(boss, def, wp('eye'));
+      expect(eye.x - wp('eye').radius).toBeGreaterThan(24 + balance.player.radius * 2);
+      placePlayer(24 + balance.player.radius + 0.1, 14);
+      blindShots(boss);
+      Enemies.tick(world, DT);
+      expect(boss.ai).toBe('staggered');
+      expect(boss.dazed).toBe(true);
+      expect(w.status.map(w.tag).slice(6)).toEqual(['head_down:false', 'daze:true']);
+    });
+
+    it('눈멂 없이도 돌격이 기둥에 박히면 전도(눈은 열리지 않았다) — 균열벽 C 에 박히면 전도 + 그 칸 개방(World.breakCrackWalls → crack_wall_broken, pillar_hit 없음)', () => {
+      for (const cell of ['P', 'C'] as const) {
+        world = makeWorld(laneGrid(cell));
+        const boss = placeBoss(40, 14);
+        const w = watch();
+        chargeToward(boss, 26, 18); // 겨눈 선(z 14)이 (row 3, col 5) 를 지난다 — 플레이어는 기둥 뒤라 6m 안에 안 든다
+        tickEnemiesUntil(() => boss.ai !== 'charging', 200);
+        expect(boss.pose, cell).toBe('head_down');
+        expect(boss.poseTicks, cell).toBe(wpc.headDown.toppleTicks);
+        expect(boss.blind ?? false, cell).toBe(false);
+        expect(w.status.map(w.tag), cell).toEqual(['topple:true', 'head_down:true']); // 눈은 한 번도 안 열렸다
+        expect(w.status[0], cell).toMatchObject({ cell, row: 3, col: 5 });
+        expect(w.whiffs, cell).toHaveLength(0);
+        if (cell === 'P') {
+          expect(w.pillars, cell).toHaveLength(1);
+          expect(w.cracks, cell).toHaveLength(0);
+          expect(world.level.charAt(5, 3)).toBe('P');
+        } else {
+          expect(w.pillars, cell).toHaveLength(0);
+          expect(w.cracks, cell).toEqual([{ row: 3, col: 5, x: 22, z: 14 }]);
+          expect(world.level.charAt(5, 3)).toBe('.'); // 열렸다 — 보물 벽감 루트(수류탄 대체)
+          expect(world.level.solidAt(5, 3)).toBe(false);
+        }
+      }
+    });
+
+    it('일반 벽 # 에 박히면(눈멂 없이) 헛돌격 60(enemy_whiffed{wall}) — 박히지 않고 눈도 안 열린다. 잡몹·족장 돌격은 지형 충돌 코드가 돌지 않는다', () => {
+      world = makeWorld(laneGrid('#'));
+      const boss = placeBoss(40, 14);
+      const w = watch();
+      chargeToward(boss, 26, 18);
+      tickEnemiesUntil(() => boss.ai !== 'charging', 200);
+      expect(boss.ai).toBe('recover');
+      expect(boss.whiffed).toBe(true);
+      expect(boss.timer).toBe(60);
+      expect(boss.pose).toBe('charge');
+      expect(boss.poseTicks ?? 0).toBe(0);
+      expect(weakPointOpen(boss, wp('eye'))).toBe(false);
+      expect(boss.x).toBeCloseTo(24 + def.radius, 1);
+      expect(w.whiffs).toEqual([{ enemyId: boss.id, enemyType: TYPE, ticks: 60, wall: true }]);
+      expect(w.status).toHaveLength(0);
+      expect(w.pillars).toHaveLength(0);
+      // 족장 — 같은 레인에서 같은 벽으로 달려도 옛 경로: 질주 시간이 다한 뒤 impact(헛돌격 whiffRecoverTicks), wall 표식 없음, chargeStuck 장부 없음
+      world = makeWorld(laneGrid('#'));
+      const chief = spawnEnemyAt('goblin_chieftain', 40, 14, 2);
+      chief.ai = 'chase';
+      world.enemies.push(chief);
+      const w2 = watch();
+      const chDef = enemyDef('goblin_chieftain');
+      placePlayer(40 - (chDef.chargeAttack!.maxRange! - 1), 14);
+      tickEnemiesUntil(() => chief.ai === 'windup' && chief.attackMode === 'charge', 400);
+      placePlayer(18, 14);
+      tickEnemiesUntil(() => chief.ai === 'charging', 300);
+      tickEnemiesUntil(() => chief.ai !== 'charging', 400);
+      expect(chief.chargeStuck).toBeUndefined();
+      expect(w2.whiffs.every((wf) => wf.wall === undefined)).toBe(true);
+      expect(w2.status).toHaveLength(0);
+    });
+
+    it('눈먼 돌격도 접촉하면 그대로 — 45 + 7m 밀림 + 진탕, 그 자리에서 눈멂 해제(blind off). 회피 무적 접촉이면 완벽 회피(미끄러짐)가 눈멂보다 우선', () => {
+      // 접촉
+      let boss = makeBehemoth(10);
+      let w = watch();
+      tickEnemiesUntil(() => boss.ai === 'charging', 300);
+      tickEnemiesUntil(() => weakPointOpen(boss, wp('eye')), 60);
+      blindShots(boss);
+      Enemies.tick(world, DT);
+      expect(boss.blind).toBe(true);
+      tickEnemiesUntil(() => boss.ai === 'recover', 200); // 경로 위에 그대로 서 있다
+      expect(w.hits).toHaveLength(1);
+      expect(w.hits[0]!.amount).toBe(def.chargeAttack!.damage);
+      expect(world.player.concussionTicks).toBe(balance.status.concussion.ticks);
+      expect(world.player.kbTicks).toBe(def.chargeAttack!.playerKnockbackTicks);
+      expect(boss.whiffed).toBe(false);
+      expect(boss.blind).toBe(false);
+      expect(boss.pose).toBe('charge');
+      expect(w.status.map(w.tag)).toEqual(['expose:eye:true', 'expose:eye:false', 'blind:true', 'blind:false']);
+      // 완벽 회피 우선 — 눈먼 채 달려와도 무적 8틱 안 접촉이면 미끄러짐 + 양 관절
+      world = makeWorld();
+      boss = makeBehemoth(10);
+      w = watch();
+      tickEnemiesUntil(() => boss.ai === 'charging', 300);
+      tickEnemiesUntil(() => weakPointOpen(boss, wp('eye')), 60);
+      blindShots(boss);
+      Enemies.tick(world, DT);
+      expect(boss.blind).toBe(true);
+      const cd = Enemies.contactDist(def);
+      tickEnemiesUntil(() => distTo(boss) <= cd + 1.0, 300);
+      world.player.iframeTicks = balance.reaction.dodgeIFrameTicks;
+      for (let i = 0; i < 300 && boss.ai !== 'recover'; i++) {
+        Enemies.tick(world, DT);
+        Reaction.tick(world, DT);
+      }
+      expect(w.hits).toHaveLength(0);
+      expect(boss.pose).toBe('skid');
+      expect(boss.blind).toBe(false);
+      expect(boss.exposure).toEqual({ joint_r: 40, joint_l: 40 });
+      expect(w.status.map(w.tag)).toEqual(['expose:eye:true', 'expose:eye:false', 'blind:true', 'blind:false', 'expose:joint_r:true', 'expose:joint_l:true', 'skid:true']);
+    });
+
+    it('눈멂인데 아무것도 안 부딛히면 — 남은 질주 + 40틱 오버런을 겨눈 자리 너머로 달린 뒤 헛돌격 90(wall 아님), 관절·눈 안 열림', () => {
+      world = makeWorld(longGrid());
+      placePlayer(56, 14);
+      const boss = placeBoss(70, 14);
+      const w = watch();
+      tickEnemiesUntil(() => boss.ai === 'charging', 300);
+      expect(boss.chargeTargetX).toBe(56);
+      tickEnemiesUntil(() => weakPointOpen(boss, wp('eye')), 100);
+      blindShots(boss);
+      Enemies.tick(world, DT);
+      expect(boss.blind).toBe(true);
+      const left = boss.timer; // 남은 질주(오버런 포함)
+      const x0 = boss.x;
+      placePlayer(56, 9.5); // 비켜 선다
+      tickEnemiesUntil(() => boss.ai === 'recover', 300); // 시간이 다하면 impact → 헛돌격
+      expect(boss.ai).toBe('recover');
+      expect(boss.whiffed).toBe(true);
+      expect(boss.timer).toBe(def.chargeAttack!.whiffRecoverTicks); // 벽이 아니라 시간이 다한 헛돌격
+      expect(w.whiffs).toEqual([{ enemyId: boss.id, enemyType: TYPE, ticks: 90 }]);
+      const speed = def.chargeAttack!.chargeSpeed! * DT;
+      // 오버런 끝까지 달렸다 — 눈을 맞힌 피탄 움찔(pistol.flinchTicks, 눈멂 틱에 이미 1 소진)만큼은 발이 묶여 그만큼 덜 간다(기존 규칙 — 타이머는 그대로 흐른다)
+      const flinchLeft = balance.weapons.pistol.flinchTicks - 1;
+      expect(x0 - boss.x).toBeCloseTo((left - flinchLeft) * speed, 1);
+      expect(boss.x).toBeLessThan(56 - def.radius); // 겨눈 자리를 지나쳤다(눈이 보였으면 거기서 멈췄을 것)
+      expect(boss.pose).toBe('charge');
+      expect(boss.poseTicks ?? 0).toBe(0);
+      expect(boss.exposure ?? {}).toEqual({});
+      expect(w.status.map(w.tag)).toEqual(['expose:eye:true', 'expose:eye:false', 'blind:true', 'blind:false']);
+      expect(w.pillars).toHaveLength(0);
+      expect(w.hits).toHaveLength(0);
+    });
   });
 });

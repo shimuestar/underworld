@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { barrierUp, enemyDef, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, type WeakPointDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, hitWeakPoint, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius, damagePlayer } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakCrackWalls, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, hitWeakPoint, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius, damagePlayer } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -113,26 +113,6 @@ function tryCast(world: World, slotIndex: number): void {
       break;
   }
   world.events.emit('cast_spell', { sigil: sigilId, cost, cast: def.cast });
-}
-
-/** 폭발이 닿은 균열 벽(C)을 부순다 — 반경 안의 C 셀을 열고 붕괴 이벤트를 낸다.
- *  수류탄·화염구가 같이 쓴다. 폭발 1방이면 충분하다 (누적 없음) */
-export function breakCrackWalls(world: World, x: number, z: number, radius: number): void {
-  const level = world.level;
-  const cs = level.cellSize;
-  const cellRadius = Math.ceil(radius / cs);
-  const centerCol = Math.floor(x / cs);
-  const centerRow = Math.floor(z / cs);
-  for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
-    for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
-      if (level.charAt(col, row) !== 'C') continue;
-      const cx = (col + 0.5) * cs;
-      const cz = (row + 0.5) * cs;
-      if (Math.hypot(cx - x, cz - z) > radius + cs * 0.5) continue;
-      level.openCell(col, row);
-      world.events.emit('crack_wall_broken', { row, col, x: cx, z: cz });
-    }
-  }
 }
 
 /** 화염구 — 직선 투사체. 맞으면 터지고 화상을 남긴다 (explodeFireball) */

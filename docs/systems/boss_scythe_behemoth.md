@@ -200,7 +200,7 @@
 | **혼절** `daze` | 눈 누적 66(`dazeThreshold`) | 90(`reaction.staggerTicks`) → 이후 600 쿨다운(`dazeCooldownTicks`) | `staggered` — 처형 가능, **눈 판정 닫힘**, 이름표 금색. 해머 3타 날림(5m) 면제(`staggerFlingImmune`, 결정 33) | STAGGER_COLOR + "지금 처형" + `eye_burst` |
 | **역류** `backflow` | 심장 66(발구르기 예고) / 분출공 66(갑각 떨기 예고) / 눈 66(포효 예고) | 60 (`headDown.backflowTicks`) | 시전 **취소**(AoE·구슬·위압 없음) + 자해 45(`backflow.selfDamage`, 심장 원인만) + 머리 내림 60(눈 ×3.0 피해만). 심장 원인은 쿨 600 | 몸 들썩·고꾸라짐 + `vent_gag` |
 | **눈멂** `blind` | 돌격 중(≤ 6m) 눈 66(`blindThreshold`) | 남은 질주 + 40 오버런(`blindOverrunTicks`) | 목표 좌표 무시, 직진, 조향 없음. 접촉 피해는 그대로 | `pose blind`(머리 휘저음) + 비명 |
-| **전도** `topple` | 돌격(눈멂 포함)이 기둥 `P`·균열벽 `C` 에 박힘 | 90 (`headDown.toppleTicks`) | 머리 내림(눈 노출, 혼절 누적 가능) + 기둥 내구 −1 / 균열벽 개방 | 몸 처박힘 + `heavy_hit` + 카메라 킥 |
+| **전도** `topple` | 돌격(눈멂 포함)이 기둥 `P`·균열벽 `C` 에 박힘 | 90 (`headDown.toppleTicks`) | 머리 내림(눈 노출, 혼절 누적 가능, `head_down{cause 'topple'}`) + 박힌 몸이 `headDown.toppleReboundM` 2.5m 튕겨 물러남(내려온 눈 z −1.9 가 몸 반경 1.6 보다 앞이라 그대로면 눈 구체가 기둥 안에 묻힌다 — 기둥 앞에 서서 쏜다) + 기둥 내구 −1(`pillar_hit`) / 균열벽 개방 | 몸 처박힘 + `heavy_hit` + 카메라 킥 |
 | **미끄러짐** `skid` | 완벽 회피(무적 8틱 안 접촉) | 90 (`skid.ticks`) | 이동·공격 불가, 양 관절 40 노출, (P2+) 궤적에 웅덩이 | `pose skid` + `charge_dodged` |
 | **질식** `choke` | 분출공 hp 0 | 1800 (`choke.sealTicks`) | 갑각 떨기 봉인, 봉인 중 예고 +10틱(`choke.windupPenalty`), 웅덩이 전부 증발. 갑각 재생으로 안 풀림. 종료 시 분출공 hp 회복 | 분출공 꺼짐 + 거친 숨 |
 | **탈진** `exhaust` (P3) | 삼연낫 3연속 완벽 패링 | 150 (`headDown.exhaustTicks`) | 머리 내림 + 분출공 ×3.0 동시 노출 — **처형(마나) vs 정화(오염·봉인) 선택** | 양낫 박힘 + 헐떡임 |
@@ -322,8 +322,8 @@
 |---|---|
 | 플레이어(무적 아님) | 45 + 진탕 + 7m 밀림 → recover. 눈멂 중이어도 동일 |
 | 플레이어(무적 8틱 안 접촉) | **완벽 회피** → 미끄러짐 90 + 양 관절 40 + `charge_dodged` (눈멂보다 우선) |
-| 일반 벽 `#` · 문 | 헛돌격 `whiffRecover` 60 — 박히지 않음, 눈 안 열림 |
-| **기둥 `P`** | **전도** 90(눈 노출) + 기둥 내구 −1 (3회 → 붕괴: `trap_rockfall` 규약 낙석 40/보스 36 + 잔해) |
+| 일반 벽 `#` · 문 · 문설주 | 헛돌격 60(`chargeAttack.wallWhiffRecoverTicks` — 플레이어를 놓친 헛돌격 `whiffRecoverTicks` 90 과 구분, `enemy_whiffed{wall}`) — 박히지 않음, 눈 안 열림 |
+| **기둥 `P`** | **전도** 90(눈 노출) + `toppleReboundM` 튕김 + 기둥 내구 −1 (3회 → 붕괴: `trap_rockfall` 규약 낙석 40/보스 36 + 잔해 — B3-5. B2-5 는 `pillar_hit{row, col}` 만 낸다) |
 | **균열벽 `C`** | **전도** 90 + 균열벽 개방(`World.breakCrackWalls` 헬퍼 — 보물 벽 개방, 수류탄 대체 루트) |
 | 잔해(붕괴 기둥) | 헛돌격 60 — 진로는 막지만 박히지 않음('연한 기둥'), 총알·시야 통과 |
 | 눈멂인데 아무것도 안 부딛힘 | 오버런 40틱 뒤 헛돌격 90(긴 후딜, 관절 안 열림) |
@@ -458,12 +458,12 @@ Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검�
 | 위치 | 필드 |
 |---|---|
 | `EnemyDef` | `parryOutcome`, `hitBox{halfX, halfZ}`, `alertRadius`, `hitZonesImmune`, `hammerEyeMul`, `noKnockbackWhileHeadDown`, `staggerFlingImmune`, `chargeOnKnockback`, `weakPoints[]{id, offset, radius, damageMul, hp?, facing, coneDeg?, exposedStates?, openMul?}`, `poseOffsets{pose → {wpId → {x,y,z}}}`, `attackAlt`, `closeAttack{maxRange 3.0, cooldownTicks 240}`, `slamAttack`, `roarAttack`, `comboAttack`, `wakeSlam{windupTicks 30}`, `phases[]{bar, unlock[], speedMul?, attackOverrides?, poolsOn?, shellPlatesOn?, shedPlates?, firstPick?}`, `equipDrops[]`, `shellPlates{count, hpEach, goldMin, goldMax, ventScalePerPlate}`, `retreatWhenDisarmed{min, max}` |
-| `EnemyAttackDef` | `alternate`, `perfectOnly`, `noParryBuffer`, `comboNext`, `continueOnParry`, `chainCharge{turnTicks 24, tailRadius 2.5, tailDamage 12, tailTelegraph 'red'}`, `rearPose{from, to}`, `statusOnHit`, `statusOnBlock`, `poolKind`, `exposeOnParry{joint, normalTicks 36, perfectTicks 90}`, `perfectDodgeExposes{ticks 40, joints ['joint_r', 'joint_l']}`(열 관절을 데이터로 명시 — B2-3), `pull 4`, `followUp`, `eyeExposedDuring`, `intervalTicks 1200`, `despairHealthFrac 0.2`, `deflectSelfDamage 33` |
+| `EnemyAttackDef` | `alternate`, `perfectOnly`, `noParryBuffer`, `comboNext`, `continueOnParry`, `chainCharge{turnTicks 24, tailRadius 2.5, tailDamage 12, tailTelegraph 'red'}`, `rearPose{from, to}`, `statusOnHit`, `statusOnBlock`, `poolKind`, `exposeOnParry{joint, normalTicks 36, perfectTicks 90}`, `perfectDodgeExposes{ticks 40, joints ['joint_r', 'joint_l']}`(열 관절을 데이터로 명시 — B2-3), `wallWhiffRecoverTicks 60`(돌격이 벽·문에 막힌 헛돌격 — B2-5), `pull 4`, `followUp`, `eyeExposedDuring`, `intervalTicks 1200`, `despairHealthFrac 0.2`, `deflectSelfDamage 33` |
 | `World.attackMode` | 기존 `'summon'|'bash'|'charge'|'volley'|'ranged'` + `'alt'|'close'|'slam'|'roar'|'combo'` |
 | `World.EnemyState` | `weakHp{id → hp}`, `exposure{id → ticks}`, `exposureHits`, `weakAccum`, `dazeCooldown`, `dazed`, `pose`/`poseTicks`, `bladeLock{r?, l?}`, `ruptured{id → true}`(파열 처리 표식 — Enemies 는 지우지 않고 **갑각 재생이 `weakHp` 회복과 함께 지운다**), `limping` |
 | `balance.status` | `maxConcurrent 2`, `numbArm{ticks 240, perfectBandMul 0, blockSpeedMul 0.25, noManaLossOnFail true}`, `hobble{ticks 300, dodgeStaminaMul 2, noSprint true}`, `concussion{ticks 360, aimShakeAmp 0.02, tiltDeg 3, duckDb −6, potionCures true}`, `corrosive{moveSpeedMul 0.6, dotPerTick 2, dotIntervalTicks 30, lingerTicks 30, pendingPerTicks 60, pendingCap 8}`, `cowed{ticks 360, normalParryOpensJoint false, normalParryMana 5}` |
 | `balance.items.kinds.*` | `cures?: PlayerStatusKind[]` — 마시면 지워지는 상태. `potion`·`potion_large` 에 `['concussion']`(B2-4). `Inventory.curableStatuses` 가 `cures` × `status.<kind>.potionCures` × 지금 걸림 으로 판정하고 `isUseful`·`Items.drink` 가 같은 판정을 쓴다 — `heal` 로 판정하지 않는다(말린 고기 heal 5 는 물약 노릇을 못 한다) |
-| `balance.weakPoint` | `dazeThreshold 66, dazeCooldownTicks 600, blindThreshold 66, blindRangeM 6, blindOverrunTicks 40, heartTrigger 66, heartCooldownTicks 600, roarCancelThreshold 66, ventGagThreshold 66, ventOpenMul 3.0, ventCleanseCap 6, headDown{stuckTicks 90, backflowTicks 60, toppleTicks 90, exhaustTicks 150}, backflow{selfDamage 45}, rupture{staggerTicks 60, bladeLockTicks 600}, limp{speedMul 0.65, chargeSpeedMul 0.7}, skid{ticks 90}, choke{sealTicks 1800, windupPenalty 10}, phaseShiftTicks 90, chargeStuckTicks 2` |
+| `balance.weakPoint` | `dazeThreshold 66, dazeCooldownTicks 600, blindThreshold 66, blindRangeM 6, blindOverrunTicks 40, heartTrigger 66, heartCooldownTicks 600, roarCancelThreshold 66, ventGagThreshold 66, ventOpenMul 3.0, ventCleanseCap 6, headDown{stuckTicks 90, backflowTicks 60, toppleTicks 90, toppleReboundM 2.5, toppleReboundTicks 10, exhaustTicks 150}, backflow{selfDamage 45}, rupture{staggerTicks 60, bladeLockTicks 600}, limp{speedMul 0.65, chargeSpeedMul 0.7}, skid{ticks 90}, choke{sealTicks 1800, windupPenalty 10}, phaseShiftTicks 90, chargeStuckTicks 2` |
 | `balance.hazards` | `pools{blade{radius 1.6, ticks 480}, stomp{2.0, 480}, orb{1.2, 480}, skid{1.6, 480}}, poolMax 12` |
 | `balance.arena` | `pillarHp 3, pillarStunTicks 30, anticampNoLosTicks 300, anticampFarTicks 480, anticampFarM 12, anticampSpeedMul 1.5, rubbleHalf 1.7` |
 | `balance.traps` | `bossDamageMul 0.6`(현재 키 없음 → 신설) |

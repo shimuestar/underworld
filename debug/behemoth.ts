@@ -11,7 +11,9 @@
 // skid(B2-3 — 돌격 완벽 회피에 미끄러짐: 어깨 높이를 축으로 옆 8° 굴림(발이 미끄러짐)·앞으로 미끄러지며 살짝 뒤로 젖혀 버팀, 두 낫 매달림, 다리 벌려 버팀,
 //   양 관절 백황 40틱. 눈은 목 IK 로 표 자리(≈0.05m), 관절 메시는 굴림이 어깨를 위아래로 갈라 표 구체에서 ≤ 0.2m — 안내문의 어긋남 수치) /
 // rupture(B2-3 — 오른 관절 파열: 구체 어둡게(0x7a1f3a), 오른낫이 축 늘어져 끝이 바닥을 긁는다, 왼낫은 대기 — 오른 옆에서) /
-// limp(B2-3 — 양 낫 잠김 절뚝: 두 낫이 다 끌리고 앞다리 걸음이 짧다, 측면 걸음).
+// limp(B2-3 — 양 낫 잠김 절뚝: 두 낫이 다 끌리고 앞다리 걸음이 짧다, 측면 걸음) /
+// blind(B2-5 — 눈멂 질주: 웅크린 돌격 자세로 내린 머리(표의 눈 1.2m)를 좌우로 휘젓는다, 뿔·몸 빨강, 눈 닫힘 — 정면 살짝 옆) /
+// topple(B2-5 — 돌격이 기둥에 박혀 전도: head_down 자세 + 눈만 열림(관절은 안 열린다), 기둥 참조 상자 앞 — 측면).
 // &pose=charge|head_down|… 을 붙이면 약점 구체와 머리 메시(목 IK)를 그 자세의 poseOffsets 표 자리에 놓는다
 // (안내문에 구체 자리와 머리 메시의 눈 자리(anchor)를 함께 찍는다 — 어긋남이 0 에 가까워야 한다, B2-2).
 // 참조물: 4.4m 기둥(= attackRange, 흰색) · 플레이어 기둥(r0.4 h1.7, 몸 표면이 4.4m) · 천장 4.0m / 낫 상한 3.8m 선.
@@ -213,6 +215,27 @@ if (view === 'side') {
   styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: id === 'joint_r' || id === 'joint_l', flashAgeMs: -1 }));
   camera.position.set(9.0, 2.4, -1.5);
   camera.lookAt(0, 1.4, -0.6);
+} else if (view === 'blind') {
+  // 눈멂(B2-5) — 질주 자세(웅크림·낫 접힘·뿔 빨강) 그대로 로직 자세 'blind': 목 IK 가 눈을 표 1.2m 에 두고, 목 yaw 가 sin(nowMs/70) 으로 휘젓는다(봉우리 프레임). 눈은 닫힘
+  torso.rotation.x = BEHEMOTH_TORSO.chargeLean;
+  torso.position.y = -def.height * BEHEMOTH_TORSO.chargeCrouch;
+  poseBehemothRig(rig, { ...base, charging: true, pose: 'blind', nowMs: 70 * Math.PI * 0.5 });
+  tint(flash, balance.telegraph.colorUnparryable);
+  tint(rig.hornMats, balance.telegraph.colorUnparryable);
+  styleBehemothWeakPoints(rig, 0, () => ({ open: false, broken: false, flashAgeMs: -1 }));
+  camera.position.set(2.6, 1.7, -7.2);
+  camera.lookAt(0, 1.3, -0.6);
+} else if (view === 'topple') {
+  // 전도(B2-5) — 기둥(4×4m 상자, 밝은 돌)에 박힌 뒤 튕겨 물러난 자리에서 머리 내림: 눈 청록 맥동만 열림(관절은 닫힘 — 낫 박힘과 다르다). 측면
+  const pillar = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), new THREE.MeshLambertMaterial({ color: 0x8a8378 }));
+  pillar.position.set(0, 2, -(def.radius + balance.weakPoint.headDown.toppleReboundM + 2));
+  scene.add(pillar);
+  torso.rotation.x = BEHEMOTH_TORSO.headDownLean;
+  torso.position.y = -def.height * BEHEMOTH_TORSO.headDownCrouch;
+  poseBehemothRig(rig, { ...base, pose: 'head_down', bladeSide: 1 });
+  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'eye', broken: false, flashAgeMs: -1 }));
+  camera.position.set(8.5, 2.0, -3.0);
+  camera.lookAt(0, 1.2, -2.0);
 } else if (view === 'stunned') {
   // 혼절(눈 누적 66) — 몸 스태거 금색, 머리가 처져 휘청, 눈은 닫힘(판정 없음) = 처형 창
   torso.rotation.x = BEHEMOTH_TORSO.stunnedLean;

@@ -656,6 +656,26 @@ export function igniteOilInRadius(world: World, x: number, z: number, radius: nu
   }
 }
 
+/** 균열 벽(C)을 부순다 — (x,z) 반경 안의 C 셀을 열고 crack_wall_broken{row, col, x, z} 를 낸다. 폭발(수류탄·화염구, Projectiles)과
+ *  거수 돌격 전도(Enemies — 부딛힌 칸 중심에 radius 0)가 같이 쓴다. 1방이면 충분하다(누적 없음). 렌더 제거·소리는 main 의 핸들러 */
+export function breakCrackWalls(world: World, x: number, z: number, radius: number): void {
+  const level = world.level;
+  const cs = level.cellSize;
+  const cellRadius = Math.ceil(radius / cs);
+  const centerCol = Math.floor(x / cs);
+  const centerRow = Math.floor(z / cs);
+  for (let row = centerRow - cellRadius; row <= centerRow + cellRadius; row++) {
+    for (let col = centerCol - cellRadius; col <= centerCol + cellRadius; col++) {
+      if (level.charAt(col, row) !== 'C') continue;
+      const cx = (col + 0.5) * cs;
+      const cz = (row + 0.5) * cs;
+      if (Math.hypot(cx - x, cz - z) > radius + cs * 0.5) continue;
+      level.openCell(col, row);
+      world.events.emit('crack_wall_broken', { row, col, x: cx, z: cz });
+    }
+  }
+}
+
 export function breakPropsInRadius(world: World, x: number, z: number, radius: number): void {
   for (const prop of world.props) {
     if (!prop.alive) continue;
@@ -1067,6 +1087,11 @@ export interface EnemyState {
   limping?: boolean;
   /** 눈 누적으로 혼절 중 — staggered 가 끝나는 순간(시간·처형 어느 경로든) Enemies 가 쿨다운을 건다 */
   dazed?: boolean;
+  /** 눈멂(거수 돌격, B2-5) — 질주 중 6m 안 눈 누적이 blindThreshold 에 닿았다. 목표 좌표(chargeTargetX/Z)를 잊고 yaw 방향으로 조향 없이
+   *  직진, 질주 timer 에 blindOverrunTicks 가 더해진다. 접촉 피해는 그대로. 질주가 끝나면(impact·지형 충돌) Enemies 가 지운다(boss_status blind off) */
+  blind?: boolean;
+  /** 질주(charging) 중 이동이 막힌 연속 틱 — 기대 이동의 unstick.minProgress 에 못 미친 틱 수. chargeStuckTicks 에 닿으면 지형 충돌 판정 */
+  chargeStuck?: number;
   /** 밀착 공격(closeAttack) 재사용 대기 */
   closeCooldown?: number;
   /** 연사 남은 발수 / 재사용 대기 (족장 화살 세례) */
@@ -1193,8 +1218,9 @@ export function closeExposure(world: World, enemy: EnemyState, id: string): void
 
 /** 자세 타이머를 세운다(거수 head_down — 완벽 패링·전도·역류·탈진). 그 동안 Enemies 의 포즈 오버라이드가 이동·공격을 막는다
  *  (ai 는 'recover' 로 두어 Reaction 의 처형·조기 입력 판정에 걸리지 않게). 자세로 열리는 약점(눈)의 이번 노출 장부는
- *  타이머 노출이 아닌 것 전부를 0 으로 비워 "한 노출 안 누적"을 처음부터 센다. boss_status{kind: pose, on: true} 발행 */
-export function beginPose(world: World, enemy: EnemyState, pose: string, ticks: number): void {
+ *  타이머 노출이 아닌 것 전부를 0 으로 비워 "한 노출 안 누적"을 처음부터 센다. boss_status{kind: pose, on: true, cause?} 발행 —
+ *  cause 는 같은 자세의 원인을 가른다(head_down: 없으면 낫 박힘, 'topple' 은 돌격이 기둥·균열벽에 박힘 — main 이 소리·문구를 나눈다) */
+export function beginPose(world: World, enemy: EnemyState, pose: string, ticks: number, cause?: string): void {
   enemy.pose = pose;
   enemy.poseTicks = Math.max(1, Math.round(ticks));
   enemy.ai = 'recover';
@@ -1209,7 +1235,7 @@ export function beginPose(world: World, enemy: EnemyState, pose: string, ticks: 
       if (enemy.exposureHits) enemy.exposureHits[id] = 0;
     }
   }
-  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: pose, on: true, ticks: enemy.poseTicks });
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: pose, on: true, ticks: enemy.poseTicks, cause });
 }
 
 /** 피격 밀림 시작 — (dirX,dirZ) 방향으로 distance 만큼 ticks 동안 밀린다.

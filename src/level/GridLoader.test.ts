@@ -83,3 +83,29 @@ describe('slideMove', () => {
     expect(body.z).toBeCloseTo(9, 5);
   });
 });
+
+describe('기둥 P (B2-5, 거수 아레나·시험방)', () => {
+  const withPillar = new Level({
+    id: 't3',
+    name: 't3',
+    cellSize: 4,
+    ceiling: 4,
+    grid: ['######', '#S...#', '#..P.#', '#....#', '######'],
+    lighting: { ambient: 0.04, torches: [] },
+  });
+
+  it('벽 취급 — 이동을 막고 시야·레이를 가린다', () => {
+    expect(withPillar.solidAt(3, 2)).toBe(true);
+    expect(withPillar.solidAt(2, 2)).toBe(false);
+    // (6,10) → +X 로 걸으면 기둥(x 12..16) 앞 반지름만큼에서 멈춘다
+    const body = { x: 6, z: 10 };
+    withPillar.slideMove(body, 0.4, 20, 0);
+    expect(body.x).toBeCloseTo(12 - 0.4, 2);
+    expect(body.z).toBe(10);
+    // 기둥 너머는 안 보인다, 옆으로는 보인다
+    expect(withPillar.hasLineOfSight(6, 10, 18, 10)).toBe(false);
+    expect(withPillar.hasLineOfSight(6, 6, 18, 6)).toBe(true);
+    expect(withPillar.wallRayT(6, 10, 1, 0)).toBeCloseTo(6, 6);
+    expect(withPillar.charAt(3, 2)).toBe('P');
+  });
+});

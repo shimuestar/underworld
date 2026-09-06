@@ -11,15 +11,23 @@
 // charge ↔ 돌격), 눈 누적(weakAccum.eye) ≥ dazeThreshold → 혼절(staggered + boss_staggered), 혼절 종료 → dazeCooldown,
 // 관절 내구 0 → 파열(비틀거림 + 그 낫 잠김 bladeLock, 양 낫 잠김 = 절뚝 limp — 이속·돌격 속도 배율, 낫 없이 들이받기·돌격만·물러서기).
 // 돌격 완벽 회피(impact 의 reaches && iframeTicks > 0) → charge_dodged + 미끄러짐(pose skid) + 양 관절 노출.
+// 돌격 질주 중 플레이어 ≤ blindRangeM 이면 눈 노출(노출 타이머) → 누적 blindThreshold → 눈멂(blind: 목표 무시·직진 + 오버런), 질주가 지형에 막히면
+// (chargeStuckTicks) 부딛힌 셀 문자로 전도(P·C → head_down toppleTicks, pillar_hit / 균열벽 개방) 또는 헛돌격(벽·문 → wallWhiffRecoverTicks) — B2-5.
 // 포즈 타이머(poseTicks, head_down·skid)는 오버라이드 순서 넉백 > brace > attackFreeze > 포즈 > 돌격 캔슬 > notice (기획서 §9.1).
 
 import { balance } from '../core/Balance';
 import { attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, currentAttack, enemyDef, jointOfBlade, type BladeSide, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, beginPose, closeExposure, findWallNormal, noiseField, openExposure, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, setPlayerStatus, PLAYER_STATUS_CFG, type EnemyState, type World, damagePlayer } from '../core/World';
+import { alertEnemy, alertNearbyAt, beginPose, breakCrackWalls, closeExposure, findWallNormal, noiseField, openExposure, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, setPlayerStatus, PLAYER_STATUS_CFG, type EnemyState, type World, damagePlayer } from '../core/World';
 
-/** 혼절 임계를 재는 약점 id — 기획서 §4.1 "혼절은 눈 누적 66 으로만" */
+/** 혼절 임계를 재는 약점 id — 기획서 §4.1 "혼절은 눈 누적 66 으로만". 돌격 중 6m 안 노출·눈멂(B2-5)도 같은 눈이다 */
 const DAZE_WEAK_POINT = 'eye';
+/** 돌격 중 눈 노출 타이머를 매 틱 되살리는 값 — 장부 ① 이 1 로 깎아도 이 틱 내내 열려 있고, 범위를 벗어나면 그 틱에 닫힌다 (튜닝값 아님) */
+const CHARGE_EYE_REFRESH = 2;
+/** 돌격 지형 충돌 탐침 — 진행 방향으로 몸 가운데와 양옆(반지름 × 이 비율) 세 줄의 레이. 기둥 모서리를 스친 몸도 잡는다 (기하 상수, 튜닝값 아님) */
+const CHARGE_PROBE_SIDE = 0.7;
+/** 부딛힌 면을 살짝 넘어 그 칸의 문자를 읽는 여유(m, 수치 오차 방지 — 튜닝값 아님) */
+const CHARGE_PROBE_EPS = 0.01;
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -1218,8 +1226,11 @@ function tickGhoulMoan(world: World, enemy: EnemyState): void {
  *  ① 노출 타이머 감소 → 0 이면 closeExposure(exposure_closed{id, hits}).
  *  ② 혼절 쿨다운 감소. ③ 혼절(dazed)이 끝났으면(시간·처형 어느 경로든 ai 가 staggered 를 벗어남) dazeCooldownTicks 를 건다.
  *  ④ 자세 비추기: staggered ↔ pose 'stunned' / 돌격(예고·질주·타격·헛돌격 경직) ↔ pose 'charge' — 포즈 타이머(head_down)가 없을 때만.
- *  ⑤ 눈 누적: head_down 중·쿨다운 아님·혼절 아님일 때만 weakAccum.eye 가 산다(아니면 매 틱 0 — 쿨다운 중 맞힌 것은 안 쌓인다).
+ *  ⑤ 눈 누적: head_down 중·쿨다운 아님·혼절 아님일 때만 weakAccum.eye 가 혼절로 산다(아니면 매 틱 0 — 쿨다운 중 맞힌 것은 안 쌓인다).
  *     dazeThreshold 에 닿으면 혼절: staggered(reaction.staggerTicks) + pose stunned + boss_staggered{cause 'eye'}, 눈 노출은 닫힌다.
+ *     돌격 질주 중 6m 안(⑩)이면 같은 누적이 blindThreshold 로 눈멂(beginBlind)이 된다 — 혼절 누적엔 안 들어간다(B2-5).
+ *  ⑨ 눈멂 안전망: 질주(charging)가 어떤 경로로든 끝났는데 blind 가 남아 있으면 지운다. ⑩ 돌격 중 눈 노출: 질주 중 플레이어 ≤ blindRangeM 이면
+ *     눈 노출 타이머를 매 틱 되살리고(처음 여는 틱만 openExposure — 장부 0), 멀어지면 닫는다. 눈멂 뒤에는 열지 않는다.
  *  ⑥ 낫 잠김(bladeLock) 감소 → 0 이면 해제(boss_status rupture off). ⑦ 관절(낫 짝이 있는 약점) 내구 0 이 새로 생겼으면 파열(ruptureJoint).
  *  ⑧ 절뚝(limping) = 양 낫 잠김 — 바뀌는 틱에 boss_status limp on/off.
  *  약점 정의가 없는 적(족장·잡몹)은 아무것도 하지 않는다. 혼절로 넘어간 틱은 true — 그 틱의 나머지 행동은 건너뛴다
@@ -1282,32 +1293,133 @@ function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<ty
       const charging =
         enemy.attackMode === 'charge' &&
         (enemy.ai === 'windup' || enemy.ai === 'charging' || enemy.ai === 'impact' || (enemy.ai === 'recover' && enemy.whiffed === true));
-      if (charging) enemy.pose = 'charge';
-      else if (enemy.pose === 'charge') enemy.pose = undefined;
+      // 눈먼 질주는 pose blind(머리 휘저음, 표의 눈 1.2m) — 질주가 끝나면 charge(헛돌격 경직의 웅크림)로 돌아온다
+      if (charging) enemy.pose = enemy.blind && enemy.ai === 'charging' ? 'blind' : 'charge';
+      else if (enemy.pose === 'charge' || enemy.pose === 'blind') enemy.pose = undefined;
     }
   }
-  // ⑤ 눈 누적 → 혼절. 포즈 타이머를 깎기 전에 본다 — 머리 내림 마지막 틱에 채운 66 도 혼절이 된다
+  // ⑨ 눈멂 안전망 — impact·지형 충돌은 그 자리에서 endBlind 를 부르지만, 다른 경로(넉백·빙결 뒤 상태 바뀜)로 질주가 끊겨도 남지 않게
+  if (enemy.blind && enemy.ai !== 'charging') endBlind(world, enemy);
+  // ⑩ 돌격 중 눈 노출(B2-5, 기획서 §4.1 B) — 질주 중 플레이어 ≤ blindRangeM 이면 눈(pose charge 표 1.1m)이 열린다. 패링·완벽 회피가
+  //    관절을 여는 것과 같은 노출 타이머라 판정(weakPointOpen)·그림(Stage)·장부(hits)가 한 문을 지난다. 눈멂 뒤에는 열지 않는다 —
+  //    눈먼 거수의 눈은 표적이 아니다(보상은 전도의 머리 내림). 질주 종료는 impact·chargeCollide 가 endChargeEye 로 닫는다
+  const chargeEye = enemy.ai === 'charging' && enemy.attackMode === 'charge' && !enemy.blind && chargeEyeInRange(world, enemy, def);
+  if (chargeEye) {
+    if ((enemy.exposure?.[DAZE_WEAK_POINT] ?? 0) > 0) enemy.exposure![DAZE_WEAK_POINT] = CHARGE_EYE_REFRESH;
+    else openExposure(world, enemy, DAZE_WEAK_POINT, CHARGE_EYE_REFRESH);
+  } else {
+    endChargeEye(world, enemy);
+  }
+  // ⑤ 눈 누적 → 혼절(머리 내림) / 눈멂(돌격 중 6m 안). 포즈 타이머를 깎기 전에 본다 — 머리 내림 마지막 틱에 채운 66 도 혼절이 된다
   const eyeCounts =
     enemy.pose === 'head_down' && (enemy.poseTicks ?? 0) > 0 && (enemy.dazeCooldown ?? 0) <= 0 && enemy.ai !== 'staggered';
   const accum = enemy.weakAccum?.[DAZE_WEAK_POINT] ?? 0;
-  if (!eyeCounts) {
-    if (accum > 0 && enemy.weakAccum) enemy.weakAccum[DAZE_WEAK_POINT] = 0;
-  } else if (accum >= wpCfg.dazeThreshold) {
-    // 혼절 — 머리 내림은 여기서 끝나고(눈 판정 닫힘) 처형 창이 열린다
-    world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'head_down', on: false });
-    closeExposure(world, enemy, DAZE_WEAK_POINT);
-    enemy.poseTicks = 0;
-    enemy.pose = 'stunned';
-    enemy.ai = 'staggered';
-    enemy.timer = balance.reaction.staggerTicks;
-    enemy.dazed = true;
-    enemy.whiffed = false;
-    enemy.recoiled = false;
-    world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'daze', on: true, ticks: enemy.timer });
-    world.events.emit('boss_staggered', { enemyId: enemy.id, enemyType: enemy.type, cause: 'eye' });
-    return true;
+  if (eyeCounts) {
+    if (accum >= wpCfg.dazeThreshold) {
+      // 혼절 — 머리 내림은 여기서 끝나고(눈 판정 닫힘) 처형 창이 열린다
+      world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'head_down', on: false });
+      closeExposure(world, enemy, DAZE_WEAK_POINT);
+      enemy.poseTicks = 0;
+      enemy.pose = 'stunned';
+      enemy.ai = 'staggered';
+      enemy.timer = balance.reaction.staggerTicks;
+      enemy.dazed = true;
+      enemy.whiffed = false;
+      enemy.recoiled = false;
+      world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'daze', on: true, ticks: enemy.timer });
+      world.events.emit('boss_staggered', { enemyId: enemy.id, enemyType: enemy.type, cause: 'eye' });
+      return true;
+    }
+  } else if (chargeEye) {
+    // 눈멂 — 이 노출 안 누적이 임계에 닿았다(권총 2발). 혼절 쿨다운과 무관(혼절 누적이 아니다)
+    if (accum >= wpCfg.blindThreshold) beginBlind(world, enemy);
+  } else if (accum > 0 && enemy.weakAccum) {
+    enemy.weakAccum[DAZE_WEAK_POINT] = 0;
   }
   return false;
+}
+
+/** 돌격 중 눈 노출 조건(B2-5) — 눈 약점이 있고 플레이어와 거리 ≤ balance.weakPoint.blindRangeM */
+function chargeEyeInRange(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): boolean {
+  if (!def.weakPoints?.some((wp) => wp.id === DAZE_WEAK_POINT)) return false;
+  const p = world.player;
+  return Math.hypot(p.x - enemy.x, p.z - enemy.z) <= balance.weakPoint.blindRangeM;
+}
+
+/** 돌격 중 열린 눈 노출 타이머를 닫는다(질주 종료·범위 이탈·눈멂) — exposure_closed{eye, hits}. 눈 타이머는 돌격만 세우므로 다른 노출을 건드리지 않는다 */
+function endChargeEye(world: World, enemy: EnemyState): void {
+  if ((enemy.exposure?.[DAZE_WEAK_POINT] ?? 0) > 0) closeExposure(world, enemy, DAZE_WEAK_POINT);
+}
+
+/** 눈멂(기획서 §5 blind) — 질주 중 눈 누적 blindThreshold. 목표 좌표를 잊고(charging 이 yaw 방향 직진) 남은 질주에 blindOverrunTicks 를 더한다.
+ *  눈은 닫힌다(표적이 아니다), 접촉 피해는 그대로. boss_status{kind 'blind', on: true, ticks} — 비명·머리 휘저음은 main/Stage */
+function beginBlind(world: World, enemy: EnemyState): void {
+  enemy.blind = true;
+  enemy.chargeStuck = 0;
+  endChargeEye(world, enemy);
+  enemy.timer += balance.weakPoint.blindOverrunTicks;
+  enemy.pose = 'blind';
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'blind', on: true, ticks: enemy.timer, x: enemy.x, z: enemy.z });
+}
+
+/** 눈멂 해제 — 질주가 끝났다(impact·지형 충돌·안전망). 자세는 charge 로(다음 틱 ④ 가 상태에 맞춘다) */
+function endBlind(world: World, enemy: EnemyState): void {
+  if (!enemy.blind) return;
+  enemy.blind = false;
+  if (enemy.pose === 'blind') enemy.pose = 'charge';
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'blind', on: false });
+}
+
+/** 돌격 지형 충돌(B2-5, 기획서 §9.3) — 진행 방향으로 몸 폭 안 세 줄(가운데·양옆 CHARGE_PROBE_SIDE)의 레이를 쏘아 가장 가까운 벽 셀을 읽는다.
+ *  기둥 P·균열벽 C → 전도: head_down toppleTicks(눈 0.9m 노출·혼절 누적 가능, cause 'topple') + toppleReboundM 튕김 + pillar_hit{row, col}(내구 −1 은 B3 Arena) /
+ *  균열벽은 World.breakCrackWalls 로 그 칸만 개방(crack_wall_broken). 그 외(일반 벽 #·문·문설주) → wallWhiffRecoverTicks 헛돌격 — 박히지 않고
+ *  눈도 안 열린다(enemy_whiffed{wall: true}). 몸 반경 + 반 칸 안에 벽이 없으면(아군에 밀려 선 것) 충돌이 아니다 → false, 질주는 계속 */
+function chargeCollide(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  attack: EnemyAttackDef,
+  dirX: number,
+  dirZ: number,
+): boolean {
+  const level = world.level;
+  const cs = level.cellSize;
+  const reach = def.radius + cs * 0.5;
+  let best: { t: number; ox: number; oz: number } | null = null;
+  for (const k of [0, CHARGE_PROBE_SIDE, -CHARGE_PROBE_SIDE]) {
+    const ox = enemy.x - dirZ * def.radius * k;
+    const oz = enemy.z + dirX * def.radius * k;
+    const t = level.wallRayT(ox, oz, dirX, dirZ);
+    if (t <= reach && (best === null || t < best.t)) best = { t, ox, oz };
+  }
+  enemy.chargeStuck = 0;
+  if (!best) return false;
+  const col = Math.floor((best.ox + dirX * (best.t + CHARGE_PROBE_EPS)) / cs);
+  const row = Math.floor((best.oz + dirZ * (best.t + CHARGE_PROBE_EPS)) / cs);
+  const ch = level.charAt(col, row);
+  endBlind(world, enemy);
+  endChargeEye(world, enemy);
+  if (!def.flying) enemy.jumpY = 0;
+  if (ch === 'P' || ch === 'C') {
+    const cx = (col + 0.5) * cs;
+    const cz = (row + 0.5) * cs;
+    if (ch === 'P') world.events.emit('pillar_hit', { enemyId: enemy.id, enemyType: enemy.type, row, col, x: cx, z: cz });
+    else breakCrackWalls(world, cx, cz, 0);
+    const hd = balance.weakPoint.headDown;
+    world.events.emit('boss_status', {
+      enemyId: enemy.id, enemyType: enemy.type, kind: 'topple', on: true, ticks: hd.toppleTicks, cell: ch, row, col, x: enemy.x, z: enemy.z,
+    });
+    beginPose(world, enemy, 'head_down', hd.toppleTicks, 'topple');
+    // 박힌 몸이 튕겨 물러난다(넉백 — 포즈 시계는 그 동안 멈춘다) — 내려온 머리(눈)가 벽 안에 묻히지 않고 기둥 앞에 서서 쏠 수 있게
+    pushEnemy(enemy, -dirX, -dirZ, hd.toppleReboundM, hd.toppleReboundTicks);
+  } else {
+    enemy.ai = 'recover';
+    enemy.whiffed = true;
+    enemy.recoiled = false;
+    enemy.timer = attack.wallWhiffRecoverTicks ?? attack.whiffRecoverTicks ?? attack.recoverTicks;
+    world.events.emit('enemy_whiffed', { enemyId: enemy.id, enemyType: enemy.type, ticks: enemy.timer, wall: true });
+  }
+  return true;
 }
 
 /** 관절 파열(기획서 §4.1·§5 rupture) — 관절 내구 0: 노출 장부를 닫고(판정은 hp 0 으로 이미 닫혔다), 그 관절의 낫(bladeOfJoint — 패링 표의 역)을
@@ -1887,6 +1999,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         enemy.timer = attack.chargeRunTicks;
         enemy.chargeTargetX = p.x;
         enemy.chargeTargetZ = p.z;
+        if (enemy.chargeStuck) enemy.chargeStuck = 0; // 지난 질주의 막힘 장부(거수)를 비운다 — 없던 적에겐 생기지 않는다
       } else if (attack.parryable) {
         enemy.ai = 'active_perfect';
         enemy.timer = balance.reaction.windowPerfectTicks;
@@ -1937,20 +2050,39 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         const t = Math.min(1, Math.max(0, 1 - enemy.timer / total));
         enemy.jumpY = attack.leapHeight * 4 * t * (1 - t);
       }
-      // 고정된 목표 지점으로만 달린다 (플레이어를 다시 보지 않는다)
-      const tx = enemy.chargeTargetX ?? p.x;
-      const tz = enemy.chargeTargetZ ?? p.z;
-      const tdx = tx - enemy.x;
-      const tdz = tz - enemy.z;
-      const tdist = Math.hypot(tdx, tdz);
-      if (tdist > 0.01) {
-        enemy.yaw = Math.atan2(-tdx, -tdz);
-        moveAvoiding(world, enemy, def, tdx / tdist, tdz / tdist, attack.chargeSpeed! * slowFactor(enemy) * limpChargeMul(enemy) * dt);
+      // 고정된 목표 지점으로만 달린다 (플레이어를 다시 보지 않는다). 눈멂(B2-5)이면 목표도 잊는다 — yaw 그대로 조향 없이 직진
+      let dirX = 0;
+      let dirZ = 0;
+      let tdist = Infinity;
+      if (enemy.blind) {
+        dirX = -Math.sin(enemy.yaw);
+        dirZ = -Math.cos(enemy.yaw);
+      } else {
+        const tx = enemy.chargeTargetX ?? p.x;
+        const tz = enemy.chargeTargetZ ?? p.z;
+        const tdx = tx - enemy.x;
+        const tdz = tz - enemy.z;
+        tdist = Math.hypot(tdx, tdz);
+        if (tdist > 0.01) {
+          enemy.yaw = Math.atan2(-tdx, -tdz);
+          dirX = tdx / tdist;
+          dirZ = tdz / tdist;
+        }
       }
-      // 겨눈 자리에 닿았거나(몸 반경), 플레이어가 그대로 서 있어 이미 사거리거나, 시간이 다하면 친다.
-      // hitOnContact(구울 물어뜯기)는 사거리가 아니라 몸이 부딛친 순간이다 — 옆을 스쳐 지나가면 물지 않는다
+      const step = attack.chargeSpeed! * slowFactor(enemy) * limpChargeMul(enemy) * dt;
+      const running = dirX !== 0 || dirZ !== 0;
+      if (running) moveAvoiding(world, enemy, def, dirX, dirZ, step);
+      // 지형 충돌(거수, 기획서 §9.3) — 이 틱 이동이 기대(step)의 unstick.minProgress 에도 못 미친 틱이 chargeStuckTicks 연속이면 부딛혔다.
+      // 피탄 움찔(flinchTicks)로 선 틱은 세지 않는다 — 벽이 아니다. 부딛힌 셀 문자로 결과가 갈린다(chargeCollide — 벽이 없으면 계속 달린다)
+      if (def.weakPoints && running && (enemy.flinchTicks ?? 0) <= 0) {
+        const moved = Math.hypot(enemy.x - enemy.prevX, enemy.z - enemy.prevZ);
+        enemy.chargeStuck = moved < step * balance.enemyAi.unstick.minProgress ? (enemy.chargeStuck ?? 0) + 1 : 0;
+        if ((enemy.chargeStuck ?? 0) >= balance.weakPoint.chargeStuckTicks && chargeCollide(world, enemy, def, attack, dirX, dirZ)) break;
+      }
+      // 겨눈 자리에 닿았거나(몸 반경 — 눈멂이면 겨눈 자리가 없다: 시간이 다하거나 부딛칠 때까지), 플레이어가 그대로 서 있어 이미 사거리거나,
+      // 시간이 다하면 친다. hitOnContact(구울 물어뜯기)는 사거리가 아니라 몸이 부딛친 순간이다 — 옆을 스쳐 지나가면 물지 않는다
       const nearEnough = attack.hitOnContact ? dist <= contactDist(def) : dist <= def.attackRange;
-      if (tdist <= def.radius || nearEnough || enemy.timer <= 0) {
+      if ((!enemy.blind && tdist <= def.radius) || nearEnough || enemy.timer <= 0) {
         // 착지 — 몸통 박치기는 땅에 닿는 순간 들어간다. 비행체(박쥐)는 공중에서 치므로 유지
         if (!def.flying) enemy.jumpY = 0;
         if (attack.parryable) {
@@ -2058,6 +2190,11 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     }
 
     case 'impact': {
+      // 돌격 질주가 끝났다(닿았든 헛쳤든, B2-5) — 눈멂과 돌격 중 눈 노출은 여기서 닫힌다. 완벽 회피(아래 미끄러짐)보다 먼저 — skid 자세에서 눈은 닫혀 있다
+      if (attack.chargeRunTicks !== undefined) {
+        endBlind(world, enemy);
+        endChargeEye(world, enemy);
+      }
       // 돌격의 hitOnContact 는 몸 접촉이 곧 명중 — 달리기가 끝난 자리에서 사거리(2m 남짓)로 물던 것을 없앤다.
       // 휘두르기의 hitOnContact 는 무기 끝 모델 그대로(끝까지 뻗은 자리 = 사거리)
       const reaches =

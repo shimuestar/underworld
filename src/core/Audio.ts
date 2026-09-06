@@ -90,6 +90,7 @@ export type SoundName =
   | 'eye_burst'
   | 'joint_crack'
   | 'charge_dodged'
+  | 'behemoth_scream'
   | 'player_hurt'
   | 'block_hit'
   | 'hammer_heavy'
@@ -1239,6 +1240,13 @@ export class GameAudio {
         this.tone(1480, 0.07, 'triangle', 0.35, 0, 2200);
         this.noise(0.42, 0.55, 1300, 0.03);
         this.tone(220, 0.4, 'sawtooth', 0.3, 0.03, 70);
+        break;
+      case 'behemoth_scream':
+        // 눈멂 비명(B2-5) — 눈을 맞은 거수가 달리며 내지르는 거친 비명: 두 톱니가 어긋나 갈라지며 아래로 꺾이고, 굵은 숨소리가 깔린다
+        this.tone(920, 0.55, 'sawtooth', 0.55, 0, 260);
+        this.tone(1180, 0.5, 'sawtooth', 0.4, 0.03, 330);
+        this.tone(150, 0.6, 'square', 0.3, 0.05, 70);
+        this.noise(0.5, 0.45, 1900, 0.04);
         break;
       case 'bow_twang':
         // 활시위 튕김 + 화살 바람 소리

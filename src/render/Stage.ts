@@ -1085,6 +1085,11 @@ const BH_ARM_STUCK = -0.12; // head_down — 박힌 낫의 위팔 월드 각(수
 const BH_ARM_STUCK_YAW = 0.35; // 박힌 낫은 안쪽으로 휩쓴 채 — 플레이어 앞 바닥에 꽂혀 있다
 const BH_STUN_SWAY = 0.12; // 혼절 — 목이 좌우로 휘청이는 각
 const BH_STUN_SWAY_MS = 150;
+// 눈멂(blind, B2-5) — 눈먼 채 달리며 머리를 좌우로 휘젓는다(목 yaw). 눈 판정은 닫혀 있어 표 구체와 메시가 어긋나도 판정엔 상관없지만
+// 진폭은 눈 자리가 구체 반지름 남짓(≈0.3m) 안에 머물게 둔다 — 머리가 구체를 두고 따로 도는 그림을 피한다
+const BH_BLIND_SWAY = 0.28;
+const BH_BLIND_SWAY_MS = 70;
+const BH_BLIND_ROLL = 0.08; // 휘저을 때 따라 기우는 목 굴림
 const BH_LEG_SCALE_MIN = 0.5; // 다리 길이 보정 범위 — 기울인 몸에서 발이 바닥에 남게 늘이고 접는다
 const BH_LEG_SCALE_MAX = 1.35;
 // 들이받기 예고 — "머리를 홱 뒤로 젓기". 목 마디가 0.9m 라 목을 뒤로 들면 뿔끝이 3.8m 를 넘는다(0.2rad 에 3.83m) —
@@ -1524,9 +1529,12 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
   }
   rig.neck.rotation.x = mix(rig.neck.rotation.x, neckTarget);
   rig.headPitch.rotation.x = mix(rig.headPitch.rotation.x, pitchTarget);
-  // 혼절 — 목이 좌우로 휘청인다(자세 표의 낮아진 눈 자리는 그대로)
-  const sway = tablePose === 'stunned' ? Math.sin(p.nowMs / BH_STUN_SWAY_MS) * BH_STUN_SWAY * blend : 0;
+  // 혼절 — 목이 좌우로 휘청인다(자세 표의 낮아진 눈 자리는 그대로). 눈멂 — 내린 머리를 빠르게 좌우로 휘젓는다(목 yaw + 살짝 굴림)
+  const blindK = tablePose === 'blind' ? blend : 0;
+  const thrash = blindK > 0 ? Math.sin(p.nowMs / BH_BLIND_SWAY_MS) * blindK : 0;
+  const sway = tablePose === 'stunned' ? Math.sin(p.nowMs / BH_STUN_SWAY_MS) * BH_STUN_SWAY * blend : thrash * BH_BLIND_ROLL;
   rig.neck.rotation.z = mix(rig.neck.rotation.z, sway);
+  rig.neck.rotation.y = mix(rig.neck.rotation.y, thrash * BH_BLIND_SWAY);
   rig.jaw.rotation.x = mix(rig.jaw.rotation.x, 0);
 
   for (const arm of rig.arms) {

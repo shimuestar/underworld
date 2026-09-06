@@ -20,7 +20,7 @@ function wallCheck(grid: Grid, cell: number[], what: string): string[] {
 }
 
 const ZONE = [z01f1, z01f2, z01f3];
-const SOLID = new Set(['#', 'D', 'G', 'C']);
+const SOLID = new Set(['#', 'D', 'G', 'C', 'P']); // P = 기둥(거수 아레나·시험방, B2-5) — 벽처럼 막힌다
 /** 열 수 있는 벽 — 열렸다고 치면 지나간다 */
 const OPENABLE = new Set(['D', 'G', 'C']);
 const NEIGHBOURS = [[0, -1], [0, 1], [-1, 0], [1, 0]] as const;
@@ -291,4 +291,34 @@ describe('1구역 층 구성', () => {
       });
     });
   }
+});
+
+describe('몬스터 시험방 — 기둥 P (B2-5)', () => {
+  it('P 넷이 가운데 표식(S)에서 동서남북 4칸에 서고, 소환 부채꼴(시선 앞 ±arcDeg/2 · maxDist)을 막지 않는다', async () => {
+    const json = (await import('../../data/levels/test_monsters.json')).default as { grid: string[]; cellSize: number; legend: Record<string, string> };
+    const grid = json.grid;
+    expect(json.legend['P']).toBe('pillar');
+    const pillars = find(grid, 'P');
+    const [sr, sc] = find(grid, 'S')[0]!;
+    expect(pillars).toHaveLength(4);
+    expect(pillars.map(([r, c]) => `${r - sr},${c - sc}`).sort()).toEqual(['-4,0', '0,-4', '0,4', '4,0']);
+    // 격자로도 벽이다 — Level 이 P 를 막힌 칸으로 본다
+    const level = new Level(json as never);
+    for (const [r, c] of pillars) expect(level.solidAt(c, r)).toBe(true);
+    // 소환 부채꼴 — 스폰이 등진 벽이 없으니 북쪽을 등지고 남(+z)을 본다. 앞 maxDist 안·±arcDeg/2 안의 칸에 P 가 없다
+    const cs = json.cellSize;
+    const fan = balance.monsterRoom.summon;
+    const fx = -Math.sin(level.spawnYaw);
+    const fz = -Math.cos(level.spawnYaw);
+    for (const [r, c] of pillars) {
+      const dx = (c + 0.5) * cs - level.spawn.x;
+      const dz = (r + 0.5) * cs - level.spawn.z;
+      const d = Math.hypot(dx, dz);
+      const ang = (Math.acos((dx * fx + dz * fz) / d) * 180) / Math.PI;
+      const inFan = d - cs * 0.5 <= fan.maxDist && ang <= fan.arcDeg / 2;
+      expect(inFan, `P[${r},${c}] d=${d.toFixed(1)} ang=${ang.toFixed(0)}`).toBe(false);
+    }
+    // 시험방은 진행 층이 아니다 — ZONE 에 없다
+    expect(ZONE.some((l) => l.id === 'test_monsters')).toBe(false);
+  });
 });

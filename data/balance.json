@@ -902,13 +902,17 @@
     "nearScale": 1.35,
     "farScale": 0.8
   },
-  "_weakPointNote": "약점 구체 판정 공용 규칙(기획서 §4.2·§14) — defaultConeDeg: weakPoints[].coneDeg 가 없을 때의 정면 원뿔 각(도). dot(레이 방향, facing) ≤ −cos(coneDeg/2) 일 때만 구체가 성립한다. dazeThreshold: 머리 내림(head_down) 한 노출 안 눈 누적 피해가 이 값에 닿으면 혼절(staggered reaction.staggerTicks, 처형 창) — 권총 2발(33×2)/활 1발/해머 2타. dazeCooldownTicks: 혼절이 끝난 뒤 이 동안은 눈이 열려도 피해만 들어가고 누적은 없다(어두운 청록). headDown.stuckTicks: 완벽 패링으로 낫이 바닥에 박혀 머리가 내려와 있는 틱(이동·공격 불가, 눈 0.9m 노출). backflow/topple/exhaust 틱은 B2-5·B3 에서 이 블록에 얹는다",
+  "_weakPointNote": "약점 구체 판정 공용 규칙(기획서 §4.2·§14) — defaultConeDeg: weakPoints[].coneDeg 가 없을 때의 정면 원뿔 각(도). dot(레이 방향, facing) ≤ −cos(coneDeg/2) 일 때만 구체가 성립한다. dazeThreshold: 머리 내림(head_down) 한 노출 안 눈 누적 피해가 이 값에 닿으면 혼절(staggered reaction.staggerTicks, 처형 창) — 권총 2발(33×2)/활 1발/해머 2타. dazeCooldownTicks: 혼절이 끝난 뒤 이 동안은 눈이 열려도 피해만 들어가고 누적은 없다(어두운 청록). headDown.stuckTicks: 완벽 패링으로 낫이 바닥에 박혀 머리가 내려와 있는 틱(이동·공격 불가, 눈 0.9m 노출). headDown.toppleTicks(B2-5): 돌격(눈멂 포함)이 기둥 P·균열벽 C 에 박혀 전도(topple)된 머리 내림 틱 — 눈 노출·혼절 누적 가능. toppleReboundM/Ticks: 박힌 순간 몸이 튕겨 물러나는 거리·틱(넉백) — 내려온 머리(눈 z −1.9 + r 0.26)가 몸 반경(1.6) 보다 앞에 있어 그대로면 눈 구체가 기둥 안에 묻혀 어디서도 못 쏜다. 눈 구체가 벽면에서 사람 하나(0.8m) 이상 떨어지게 ≥ 1.4 로 둔다(Boss.test 가 확인). blindRangeM/blindThreshold/blindOverrunTicks(B2-5, 기획서 §4.1 B·§5 blind): 돌격 질주 중 플레이어와 거리 ≤ blindRangeM 이면 눈(pose charge 1.1m)이 열리고, 그 노출 안 누적이 blindThreshold 에 닿으면 눈멂 — 목표 좌표를 잊고 조향 없이 직진, 남은 질주 + blindOverrunTicks. 혼절 누적엔 안 들어가고 접촉 피해는 그대로. chargeStuckTicks(기획서 §9.3): 질주 중 이동량이 기대의 enemyAi.unstick.minProgress 비율에도 못 미치는 틱이 이만큼 연속되면 지형 충돌 — 부딛힌 셀 문자로 결과 분기(P/C 전도 + pillar_hit/균열벽 개방, 그 외 벽·문은 chargeAttack.wallWhiffRecoverTicks 헛돌격·눈 안 열림). backflow/exhaust 틱은 B3 에서 이 블록에 얹는다",
   "_ruptureNote": "관절 파열(B2-3, 기획서 §4.1·§5) — 관절 내구(weakPoints[].hp 132)가 0 에 닿으면 staggerTicks 동안 비틀거리고(recover — 머리 내림·미끄러짐·혼절 중이면 이미 굳어 있어 덧붙이지 않는다) 그 관절의 낫이 bladeLockTicks 동안 잠긴다(enemy.bladeLock, 그 낫 공격이 선택지에서 빠지고 교대는 남은 낫만). 관절 hp 는 갑각 재생(B2-6)에서만 되돌아온다. limp: 양 낫이 동시에 잠기면 절뚝 — 이속 ×speedMul, 돌격 속도 ×chargeSpeedMul, 낫 없이 들이받기·돌격만(물러나 거리를 유지하는 범위는 entities retreatWhenDisarmed). skid.ticks: 돌격을 무적 8틱 안에 완벽 회피하면 거수가 미끄러져 굳는 틱(pose skid, 이동·공격 불가) — 양 관절 노출은 chargeAttack.perfectDodgeExposes",
   "weakPoint": {
     "defaultConeDeg": 100,
     "dazeThreshold": 66,
     "dazeCooldownTicks": 600,
-    "headDown": { "stuckTicks": 90 },
+    "blindRangeM": 6,
+    "blindThreshold": 66,
+    "blindOverrunTicks": 40,
+    "chargeStuckTicks": 2,
+    "headDown": { "stuckTicks": 90, "toppleTicks": 90, "toppleReboundM": 2.5, "toppleReboundTicks": 10 },
     "rupture": { "staggerTicks": 60, "bladeLockTicks": 600 },
     "limp": { "speedMul": 0.65, "chargeSpeedMul": 0.7 },
     "skid": { "ticks": 90 }

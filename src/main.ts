@@ -546,6 +546,7 @@ for (const name of [
   'exposure_closed',
   'boss_status',
   'charge_dodged',
+  'pillar_hit',
   'numb_arm_applied',
   'numb_arm_ended',
   'concussion_applied',
@@ -2538,6 +2539,12 @@ events.on('enemy_charge', (payload) => {
   showReaction(`${enemyDef(info.enemyType).name ?? '적'}이 달려든다!`, 1200);
 });
 events.on('enemy_whiffed', (payload) => {
+  // 돌격이 벽·문에 막힌 헛돌격(거수 B2-5, wall) — 박히진 않았다. 둔탁한 충돌음 + 안내
+  if ((payload as { wall?: boolean }).wall) {
+    audio.play('thud', panOf(payload));
+    showReaction('돌격이 벽에 막혔다 — 반격 기회!', 900);
+    return;
+  }
   audio.play('enemy_whiff', panOf(payload));
   showReaction('빗나감 — 반격 기회!', 900);
 });
@@ -2965,15 +2972,31 @@ events.on('boss_staggered', (payload) => {
 // 관절 파열(내구 0): 갑각 갈라지는 소리 + 그 낫이 잠겼다는 안내 / 절뚝(양 낫 잠김): 안내. 미끄러짐(skid)은 charge_dodged 가 소리·문구를 낸다.
 // 표시는 구체 발광·자세가 하고(Stage), 여기서는 소리와 한 줄 문구만
 events.on('boss_status', (payload) => {
-  const st = payload as { enemyId: number; enemyType: string; kind: string; on: boolean; id?: string; blade?: string };
+  const st = payload as { enemyId: number; enemyType: string; kind: string; on: boolean; id?: string; blade?: string; cause?: string; cell?: string };
   const e = world.enemies.find((en) => en.id === st.enemyId);
   const at = e ? panAt(e.x, e.z) : undefined;
   if (st.kind === 'expose' && st.on) {
     audio.play('joint_open', at);
-    showReaction('어깨 관절이 벌어졌다 — 쏴라!', 900);
+    // 돌격 중 6m 안 눈(B2-5)도 같은 노출 타이머다 — 문구만 다르다
+    showReaction(st.id === 'eye' ? '눈이 다가온다 — 쏴서 눈멀게 하라!' : '어깨 관절이 벌어졌다 — 쏴라!', 900);
   } else if (st.kind === 'head_down' && st.on) {
-    audio.play('blade_stuck', at);
-    showReaction('낫이 바닥에 박혔다 — 눈을 노려라!', 1400);
+    // 전도(topple)로 내려온 머리는 topple 이 소리·문구를 냈다 — 낫 박힘만 여기서
+    if (st.cause !== 'topple') {
+      audio.play('blade_stuck', at);
+      showReaction('낫이 바닥에 박혔다 — 눈을 노려라!', 1400);
+    }
+  } else if (st.kind === 'blind' && st.on) {
+    // 눈멂(B2-5) — 비명. 거수는 겨눈 자리를 잊고 직진한다: 비켜서 기둥·균열벽에 박히게
+    audio.play('behemoth_scream', at);
+    padRumble('weakPoint');
+    showReaction('거수가 눈멀었다 — 직진한다, 비켜서 기둥에 박히게 하라!', 1600);
+  } else if (st.kind === 'topple' && st.on) {
+    // 전도(B2-5) — 돌격이 기둥·균열벽에 박혔다: 무거운 충격음 + 카메라 킥(가까울수록 크게) + 안내. 머리 내림(눈)은 head_down 이 이어 세운다
+    audio.play('heavy_hit', at);
+    const d = e ? Math.hypot(e.x - world.player.x, e.z - world.player.z) : 20;
+    stage.triggerCameraKick(0.6 + 1.2 * Math.max(0, 1 - d / 14), 420);
+    padRumble('crumble');
+    showReaction(st.cell === 'C' ? '거수가 균열벽에 박혔다 — 벽이 뚫렸다, 눈을 노려라!' : '거수가 기둥에 박혔다 — 눈을 노려라!', 1600);
   } else if (st.kind === 'rupture' && st.on) {
     audio.play('joint_crack', at);
     // 잠김 시간은 데이터(bladeLockTicks)에서 초로 — 낫 짝(blade)이 있는 관절만 낫 문구

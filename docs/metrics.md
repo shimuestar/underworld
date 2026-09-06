@@ -48,8 +48,10 @@ spell_kill      { enemyType }
 weak_point_hit    { enemyId, enemyType, id, damage, x, y, z }   ← 약점 구체 명중 (거수 눈·관절·심장·분출공), 권총·화살·화염구 직격만
 weak_point_broken { enemyId, enemyType, id, x, y, z }   ← 약점 내구 0 (관절 파열 — 착탄점)
 exposure_closed   { enemyId, enemyType, id, hits }   ← 약점 노출 창이 닫힘 (관절 타이머 소진·머리 내림 종료·혼절·파열). hits = 그 창 안의 명중 수 → 노출 활용률
-boss_status       { enemyId, enemyType, kind, on, id?, blade?, ticks? }   ← 보스 상태이상 on/off (expose·head_down·daze·rupture{id, blade}·limp·skid — 기획서 §5 의 12종이 이 하나로)
+boss_status       { enemyId, enemyType, kind, on, id?, blade?, ticks?, cause?, cell? }   ← 보스 상태이상 on/off (expose{id — 관절 또는 돌격 중 눈}·head_down{cause? 'topple'}·daze·rupture{id, blade}·limp·skid·blind·topple{cell 'P'|'C', row, col} — 기획서 §5 의 12종이 이 하나로)
 charge_dodged     { enemyId, enemyType, x, z }   ← 돌격을 무적 8틱 안에 완벽 회피 (거수 미끄러짐 + 양 관절 노출)
+pillar_hit        { enemyId, enemyType, row, col, x, z }   ← 거수 돌격이 기둥 P 에 박힘 (전도와 함께 — 내구 −1·붕괴는 B3-5 Arena)
+enemy_whiffed     { enemyId, enemyType, ticks, wall? }   ← 헛침 경직. wall = 돌격이 일반 벽·문에 막힘(거수 wallWhiffRecoverTicks — 박히지 않음)
 boss_staggered    { enemyId, enemyType, cause }   ← cause 'parry'(족장 연속 패링) / 'eye'(거수 눈 누적 66 혼절)
 shot_fired      { hitEnemy }
 player_damaged  { amount, health }
