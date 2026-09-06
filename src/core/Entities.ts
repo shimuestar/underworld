@@ -1,6 +1,7 @@
 // data/entities.json 로더. 적 스탯은 전부 여기서 읽는다 — 코드에 하드코딩 금지.
 
 import entitiesJson from '../../data/entities.json';
+import { rayVsAabb } from './Ray';
 
 /** 착탄 시 광역 효과. 수호주술사 마법탄의 '내파' — 화염구(밀어냄)와 정반대로 끌어당긴다 */
 export interface ProjectileSplashDef {
@@ -255,6 +256,15 @@ export interface EnemyDef {
   blockCannotStagger?: boolean;
   parriesToStagger?: number;
   executeDamage?: number;
+  /** 피격 AABB 재정의(거수) — 충돌 반경(radius)과 분리해 시각 몸통에 맞춘 직사각 상자.
+   *  로컬 축(정면 = -z) 기준 반폭이라 yaw 로 돌아 있으면 레이를 로컬로 돌려 판정한다(rayHitsEnemy).
+   *  없으면 기존 radius 정사각 기둥 */
+  hitBox?: { halfX: number; halfZ: number };
+  /** 보스 포효 기상 반경 재정의(m) — 없으면 balance.enemyAi.bossAlertRadius */
+  alertRadius?: number;
+  /** false 면 해머 강타 뒤 wantsCharge(밀려난 뒤 확률 돌격) 우회 경로를 쓰지 않는다 —
+   *  자세·쿨다운을 무시하고 달려드는 것을 막는다(거수). 없으면 기존대로 */
+  chargeOnKnockback?: boolean;
 }
 
 /** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격 */
@@ -418,4 +428,41 @@ export function enemyHitBox(
     maxY: yBase + def.height + pad,
     maxZ: enemy.z + def.radius + pad,
   };
+}
+
+/** 총알·화살·마법 레이가 적 몸에 닿는 t(≥0) — 적 몸 판정의 단일 입구(Weapons·Projectiles 공용). 만나지 않으면 null.
+ *  hitBox{halfX, halfZ}(거수) 가 있으면 충돌 반경 대신 시각 몸통에 맞춘 직사각 상자를 쓴다 — 몸이 yaw 로
+ *  돌아 있으니 레이를 적의 로컬 좌표(정면 = -z, Stage 규약)로 역회전해 넣고 축 정렬 상자에 맞힌다.
+ *  회전은 거리를 보존하므로 t 는 월드 그대로다. 없으면(또는 죽은 척이면) 기존 enemyHitBox 기둥 */
+export function rayHitsEnemy(
+  ox: number,
+  oy: number,
+  oz: number,
+  dx: number,
+  dy: number,
+  dz: number,
+  enemy: { x: number; z: number; yaw: number; feigning?: boolean; jumpY?: number },
+  def: { radius: number; height: number; hitBox?: { halfX: number; halfZ: number } },
+  pad: number,
+): number | null {
+  const box = def.hitBox;
+  if (!box || enemy.feigning) return rayVsAabb(ox, oy, oz, dx, dy, dz, enemyHitBox(enemy, def, pad));
+  // 월드 → 로컬 (yaw 역회전): 정면 벡터 (-sin yaw, -cos yaw) 가 (0, -1) 로 간다
+  const c = Math.cos(enemy.yaw);
+  const s = Math.sin(enemy.yaw);
+  const wx = ox - enemy.x;
+  const wz = oz - enemy.z;
+  const lx = wx * c - wz * s;
+  const lz = wx * s + wz * c;
+  const ldx = dx * c - dz * s;
+  const ldz = dx * s + dz * c;
+  const yBase = enemy.jumpY ?? 0;
+  return rayVsAabb(lx, oy, lz, ldx, dy, ldz, {
+    minX: -box.halfX - pad,
+    minY: yBase - pad,
+    minZ: -box.halfZ - pad,
+    maxX: box.halfX + pad,
+    maxY: yBase + def.height + pad,
+    maxZ: box.halfZ + pad,
+  });
 }

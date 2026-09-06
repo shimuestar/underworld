@@ -4,7 +4,7 @@
 //    두 자원 경제를 분리하는 유일한 규칙이다 — docs/systems/combat.md §5.
 
 import { balance } from '../core/Balance';
-import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, enemyHitBox } from '../core/Entities';
+import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, provokeTrap, hitBarrel, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
 
@@ -292,8 +292,8 @@ function resolveHammerHit(world: World, heavy: boolean): void {
         // 마무리 타는 방패째 크게 밀어낸다 — 안 밀리면 제자리에서 무한 연타가 된다.
         // 밀리는 동안은 버티기 자세도 풀린다 (가드를 잃고 떠밀린다)
         enemy.braceTicks = 0;
-        // 밀려난 뒤 확률적으로 달려들며 반격한다 (멀리서 걸어오면 위협이 없다)
-        enemy.wantsCharge = Math.random() < balance.enemyAi.chargeChanceAfterKnockback;
+        // 밀려난 뒤 확률적으로 달려들며 반격한다 (멀리서 걸어오면 위협이 없다). chargeOnKnockback false(거수)는 끈다
+        if (def.chargeOnKnockback !== false) enemy.wantsCharge = Math.random() < balance.enemyAi.chargeChanceAfterKnockback;
         const kbTicks = sb.finisherKnockbackTicks;
         enemy.kbTicks = kbTicks;
         enemy.kbX = (toX / dist) * (sb.finisherKnockback / kbTicks);
@@ -340,8 +340,9 @@ function resolveHammerHit(world: World, heavy: boolean): void {
       // 경직은 유지된다(밀리는 동안 타이머가 멈춘다) — 쫓아가 처형할 수 있다
       const flingStaggered = chainFull && enemy.ai === 'staggered';
       // 크게 밀려난 적은 확률적으로 달려들며 반격한다 (방패가 깨진 뒤에도 동일).
-      // 경직 중에는 걸지 않는다 — 밀림이 끝나자마자 돌격으로 경직을 털고 나온다
-      if (def.chargeAttack && enemy.ai !== 'staggered') {
+      // 경직 중에는 걸지 않는다 — 밀림이 끝나자마자 돌격으로 경직을 털고 나온다.
+      // chargeOnKnockback false(거수)는 이 우회 경로를 쓰지 않는다 — 자세·쿨다운을 무시하고 달려들면 안 된다
+      if (def.chargeAttack && enemy.ai !== 'staggered' && def.chargeOnKnockback !== false) {
         enemy.wantsCharge = Math.random() < balance.enemyAi.chargeChanceAfterKnockback;
       }
       if (flingStaggered) {
@@ -760,8 +761,8 @@ function fire(world: World): void {
     if (!enemy.alive) continue;
     const def = enemyDef(enemy.type);
     // 공중의 적(천장 거머리·도약 중) — 몸이 뜬 만큼(jumpY) 피격 박스도 떠 있어야 맞는다
-    // 공중은 jumpY 만큼 뜬 기둥, 죽은 척은 정면으로 누운 낮은 상자 — Entities.enemyHitBox
-    const t = rayVsAabb(p.x, oy, p.z, dx, dy, dz, enemyHitBox(enemy, def, 0));
+    // 공중은 jumpY 만큼 뜬 기둥, 죽은 척은 정면으로 누운 낮은 상자, 거수는 시각 몸통 직사각(hitBox) — Entities.rayHitsEnemy
+    const t = rayHitsEnemy(p.x, oy, p.z, dx, dy, dz, enemy, def, 0);
     if (t !== null && t < wallT && (!hit || t < hit.t)) hit = { enemy, t };
   }
 

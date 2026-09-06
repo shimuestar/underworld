@@ -1,14 +1,14 @@
-// M7 검증 — warden(방어막·시전·반사), 보스 2페이즈 교대, 출구 잠금/클리어.
+// M7 검증 — warden(방어막·시전·반사), 보스(족장: 완벽 패링 3연속 → 스태거 → 처형 / 낫뿔 거수 배치 1 뼈대), 출구 잠금/클리어.
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
-import { attackReaches, enemyDef, healthBarState } from '../core/Entities';
+import { attackReaches, enemyDef, healthBarState, implementedEnemyTypes, rayHitsEnemy } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
 import { sigilDef } from '../core/SigilData';
 import { Level } from '../level/GridLoader';
-import { spawnEnemyAt } from '../level/Spawner';
+import { isSpawnable, spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
 import * as Exit from './Exit';
 import * as Mana from './Mana';
@@ -1285,5 +1285,189 @@ describe('캐스터 재배치 — 아군이 사선을 막을 때', () => {
     world.enemies.push(archer);
     Enemies.tick(world, DT);
     expect(archer.ai).toBe('windup');
+  });
+});
+
+describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만으로 낫·돌격·처형', () => {
+  const TYPE = 'scythe_behemoth';
+  const def = enemyDef(TYPE);
+
+  /** (6 + dist, 6) 에 놓고 추격 상태로 — 플레이어(6,6)는 +X 를 본다 */
+  function makeBehemoth(dist: number): ReturnType<typeof spawnEnemyAt> {
+    const boss = spawnEnemyAt(TYPE, 6 + dist, 6, 1);
+    boss.ai = 'chase';
+    world.enemies.push(boss);
+    return boss;
+  }
+
+  /** 낫이 열리면 낫끝을 완벽 대역 한복판에 놓고 누른다 — 결과('perfect'/'normal'/'없음') */
+  function perfectParry(boss: ReturnType<typeof spawnEnemyAt>): string {
+    tickEnemiesUntil(() => boss.ai === 'active_perfect');
+    boss.weaponTipDist =
+      Math.hypot(boss.x - world.player.x, boss.z - world.player.z) -
+      balance.player.radius -
+      balance.parrySpace.perfectBand * 0.5;
+    const results: string[] = [];
+    const off = (p: unknown): void => {
+      results.push((p as { result: string }).result);
+    };
+    world.events.on('parry_attempt', off);
+    pressReaction();
+    world.events.off('parry_attempt', off);
+    return results[0] ?? '없음';
+  }
+
+  it('정의 — 보스 3칸·임시 패링 2회·처형 240·피격 상자·기상 반경·강타 뒤 돌격 끔, 스포너·소환 탭 등록', () => {
+    expect(def.boss).toBe(true);
+    expect(def.healthBars).toBe(3);
+    expect(healthBarState(def, def.health)).toEqual({ count: 3, index: 3, frac: 1 });
+    expect(def.parriesToStagger).toBe(2); // 임시 — B2 에서 눈 약점 기반 혼절로 대체
+    expect(def.executeDamage).toBe(240);
+    expect(def.hitBox).toEqual({ halfX: 1.25, halfZ: 1.85 });
+    expect(def.alertRadius).toBe(18);
+    expect(def.chargeOnKnockback).toBe(false);
+    expect(def.blockCannotStagger).toBe(true);
+    expect(def.attack.parryable).toBe(true);
+    expect(def.attack.telegraph).toBe('blue');
+    expect(def.chargeAttack!.parryable).toBe(false);
+    expect(def.chargeAttack!.telegraph).toBe('red');
+    expect(def.chargeAttack!.hitOnContact).toBe(true);
+    // 닿는데 패링 반경 밖인 틈 금지 — attackRange × impactRangeMul ≤ reaction.radius (기획서 §3.1 데이터 노트)
+    expect(def.attackRange * def.attack.impactRangeMul).toBeLessThanOrEqual(balance.reaction.radius);
+    // 돌격 18m 고정 질주 — minRange~maxRange 안이면 미달이 없다
+    expect((def.chargeAttack!.chargeSpeed! * def.chargeAttack!.chargeRunTicks!) / 60).toBeGreaterThanOrEqual(def.chargeAttack!.maxRange!);
+    // 레벨 배치·시험방 소환 탭 양쪽에 올라온다
+    expect(isSpawnable(TYPE)).toBe(true);
+    expect(implementedEnemyTypes()).toContain(TYPE);
+    expect(spawnEnemyAt(TYPE, 0, 0, 1).parryStreak).toBe(0); // 보스는 연속 패링 카운터를 갖고 태어난다
+  });
+
+  it('(a) 낫 베기를 두 번 완벽 패링하면 스태거 → 처형 피해 240', () => {
+    const boss = makeBehemoth(4.0); // attackRange 4.4 안, 돌격 minRange 4.5 밖
+    const staggers: unknown[] = [];
+    world.events.on('boss_staggered', (p) => staggers.push(p));
+
+    // 첫 패링 — 크게 튕기되 스태거는 아니다
+    expect(perfectParry(boss)).toBe('perfect'); // 족장과 달리 완벽 판정이 그대로 성립한다
+    expect(boss.ai).toBe('recover');
+    expect(boss.parryStreak).toBe(1);
+    expect(boss.timer).toBe(def.attack.recoverTicks + balance.reaction.parryRecoilTicks);
+    expect(staggers).toHaveLength(0);
+
+    // 둘째 패링 — 스태거
+    expect(perfectParry(boss)).toBe('perfect');
+    expect(boss.ai).toBe('staggered');
+    expect(boss.parryStreak).toBe(0);
+    expect(staggers).toHaveLength(1);
+
+    // 처형 — 즉사가 아니라 240 (16%). 첫 칸(3칸째)은 아직 남는다
+    const hits: { damage: number }[] = [];
+    world.events.on('boss_execute', (p) => hits.push(p as { damage: number }));
+    pressReaction();
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.damage).toBe(240);
+    expect(boss.health).toBe(def.health - 240);
+    expect(boss.alive).toBe(true);
+    expect(boss.ai).toBe('recover'); // 스태거는 처형 한 번으로 끝난다
+    expect(healthBarState(def, boss.health).index).toBe(3);
+  });
+
+  it('(b) 돌격 접촉 — 45 피해 + 7m/20틱 밀림, 진탕은 아직 없다 (B2-4)', () => {
+    const ch = def.chargeAttack!;
+    const boss = makeBehemoth(10); // minRange 4.5 ~ maxRange 15 안
+    const hits: { amount: number; blocked: boolean }[] = [];
+    world.events.on('player_damaged', (p) => hits.push(p as { amount: number; blocked: boolean }));
+
+    tickEnemiesUntil(() => boss.ai === 'charging', 300);
+    expect(boss.attackMode).toBe('charge');
+    tickEnemiesUntil(() => boss.ai === 'recover', 300);
+
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.amount).toBe(45);
+    expect(hits[0]!.amount).toBe(ch.damage);
+    expect(hits[0]!.blocked).toBe(false);
+    expect(world.player.health).toBe(100 - 45);
+    // 밀림 — 공격별 재정의 7m 를 20틱에 걸쳐
+    expect(world.player.kbTicks).toBe(ch.playerKnockbackTicks);
+    const flung = Math.hypot(world.player.kbX!, world.player.kbZ!) * world.player.kbTicks!;
+    expect(flung).toBeCloseTo(ch.playerKnockback!, 3);
+    // 진탕(concussion)은 B2-4 의 Status.ts 몫 — 아직 어떤 상태도 붙지 않는다
+    expect('concussionTicks' in world.player).toBe(false);
+    expect(boss.whiffed).toBe(false);
+    // 몸 접촉이 곧 명중 — 달리기가 멈춘 자리는 접촉 거리 안이다
+    expect(Math.hypot(boss.x - world.player.x, boss.z - world.player.z)).toBeLessThanOrEqual(Enemies.contactDist(def));
+  });
+
+  it('(c) 접촉 순간이 회피 무적 8틱 안이면 미접촉 — 피해 0, 헛돌격 경직', () => {
+    const ch = def.chargeAttack!;
+    const boss = makeBehemoth(10);
+    const hits: unknown[] = [];
+    world.events.on('player_damaged', (p) => hits.push(p));
+
+    tickEnemiesUntil(() => boss.ai === 'charging', 300);
+    // 몸이 닿기 직전(≈ 4틱 전, 15 m/s = 0.25m/틱)에 회피 무적을 건다 — 무적은 Reaction 이 매 틱 깎는다
+    const cd = Enemies.contactDist(def);
+    tickEnemiesUntil(() => Math.hypot(boss.x - world.player.x, boss.z - world.player.z) <= cd + 1.0, 300);
+    world.player.iframeTicks = balance.reaction.dodgeIFrameTicks;
+    for (let i = 0; i < 300 && boss.ai !== 'recover'; i++) {
+      Enemies.tick(world, DT);
+      Reaction.tick(world, DT);
+    }
+
+    expect(boss.ai).toBe('recover');
+    expect(hits).toHaveLength(0);
+    expect(world.player.health).toBe(100);
+    expect(world.player.kbTicks ?? 0).toBe(0);
+    expect(boss.whiffed).toBe(true); // 헛돌격 — 긴 경직(반격 창)
+    expect(boss.timer).toBe(ch.whiffRecoverTicks);
+  });
+
+  it('무적이 아니면 같은 자리에서 그대로 맞는다 — (c)의 대조군', () => {
+    const boss = makeBehemoth(10);
+    const hits: unknown[] = [];
+    world.events.on('player_damaged', (p) => hits.push(p));
+    tickEnemiesUntil(() => boss.ai === 'charging', 300);
+    const cd = Enemies.contactDist(def);
+    tickEnemiesUntil(() => Math.hypot(boss.x - world.player.x, boss.z - world.player.z) <= cd + 1.0, 300);
+    for (let i = 0; i < 300 && boss.ai !== 'recover'; i++) {
+      Enemies.tick(world, DT);
+      Reaction.tick(world, DT);
+    }
+    expect(hits).toHaveLength(1);
+  });
+
+  it('hitBox — 피격 상자는 시각 몸통 직사각(1.25 × 1.85)이고 yaw 를 따라 돈다', () => {
+    const boss = spawnEnemyAt(TYPE, 20, 20, 1);
+    const y = 1.5;
+    // 정면 -z (yaw 0): 옆(+x)에서 쏘면 반폭 1.25, 앞(-z)에서 쏘면 반길이 1.85
+    boss.yaw = 0;
+    expect(rayHitsEnemy(23, y, 20, -1, 0, 0, boss, def, 0)).toBeCloseTo(3 - 1.25, 6);
+    expect(rayHitsEnemy(20, y, 15, 0, 0, 1, boss, def, 0)).toBeCloseTo(5 - 1.85, 6);
+    // 옆 허공 — 반폭 1.25 밖(1.5)이면 빗나간다. 옛 radius 1.6 정사각이면 맞았을 자리
+    expect(rayHitsEnemy(21.5, y, 15, 0, 0, 1, boss, def, 0)).toBeNull();
+    // 정면 -x (yaw π/2): 같은 +x 에서 쏘면 이제 앞이라 1.85
+    boss.yaw = Math.PI / 2;
+    expect(rayHitsEnemy(23, y, 20, -1, 0, 0, boss, def, 0)).toBeCloseTo(3 - 1.85, 6);
+    expect(rayHitsEnemy(20, y, 15, 0, 0, 1, boss, def, 0)).toBeCloseTo(5 - 1.25, 6);
+    // 머리 위(3.0m)를 넘으면 빗나간다
+    expect(rayHitsEnemy(23, 3.2, 20, -1, 0, 0, boss, def, 0)).toBeNull();
+    // hitBox 가 없는 적은 옛 radius 정사각 그대로
+    const chief = spawnEnemyAt('goblin_chieftain', 20, 20, 2);
+    expect(rayHitsEnemy(23, y, 20, -1, 0, 0, chief, enemyDef('goblin_chieftain'), 0)).toBeCloseTo(3 - 0.8, 6);
+  });
+
+  it('보스 포효 기상 반경 — alertRadius(18) 밖의 잠든 적은 함께 깨지 않는다', () => {
+    const boss = spawnEnemyAt(TYPE, 6 + 8, 6, 1);
+    boss.yaw = Math.atan2(-(6 - boss.x), -(6 - boss.z)); // 플레이어를 본다
+    world.enemies.push(boss);
+    const near = spawnEnemyAt('goblin_runner', 6 + 8 + 12, 6, 2); // 보스에서 12m — 안
+    const far = spawnEnemyAt('goblin_runner', 6 + 8 + 20, 6, 3); // 보스에서 20m — 밖 (기본 45 라면 깼을 자리)
+    near.yaw = -Math.PI / 2; // 등(+x)을 돌려 스스로는 못 알아챈다 (아군 거리도 aggroRange 밖)
+    far.yaw = -Math.PI / 2;
+    world.enemies.push(near, far);
+
+    tickEnemiesUntil(() => boss.ai !== 'idle', 60);
+    expect(near.ai).not.toBe('idle');
+    expect(far.ai).toBe('idle');
   });
 });

@@ -125,6 +125,28 @@
 
 ---
 
+## M11 — 낫뿔 거수 (2026-09-04 기획 확정 — `docs/systems/boss_scythe_behemoth.md` §13, 3 배치 · 15 체크박스)
+
+- [x] **B1-1** 정의·스포너·테스트 — `scythe_behemoth`(attack 오른낫 파랑 + chargeAttack 빨강 hitOnContact 72틱, 임시 parriesToStagger 2 + executeDamage 240, hitBox·alertRadius·chargeOnKnockback), Spawner IMPLEMENTED, Boss.test describe
+- [ ] **B1-2** 외형 — Stage behemoth 분기(몸통·다리·높은 머리·뿔·낫 2자루 리그·등갑판·약점 구체 5개 장식), `debug/behemoth` 스크린샷 7장
+- [ ] **B1-3** 왼낫 교대·들이받기 — `attackAlt`/`closeAttack`, attackMode 'alt'|'close'
+- [ ] **B2-1** 약점 판정 코어 — `rayVsSphere`, `weakPoints[]`/`poseOffsets`/`rayHitsWeakPoint`, hitZonesImmune, 권총·화살 약점 우선
+- [ ] **B2-2** 패링 → 노출·머리 내림·눈 혼절 — `parryOutcome expose`, 눈 66 → staggered, 임시 parriesToStagger 제거
+- [ ] **B2-3** 관절 파열·낫 잠김·절뚝·완벽 회피
+- [ ] **B2-4** 플레이어 상태 2종(팔 저림·진탕) + `Status.ts`
+- [ ] **B2-5** 돌격 눈멂·지형 충돌·기둥 문자 `P`
+- [ ] **B2-6** 페이즈 골격 — `boss_phase`, `phaseTarget` 큐잉, `phases[]`
+- [ ] **B3-1** P2 발구르기·심장·절뚝
+- [ ] **B3-2** 웅덩이·오염 진액·갑각 떨기·분출공 — `Hazards.ts`
+- [ ] **B3-3** 갑각판 hp 풀·골드
+- [ ] **B3-4** P3 기술 — 포효·삼연낫·광란 돌격·위압
+- [ ] **B3-5** 아레나 f4 + `Arena.ts`
+- [ ] **B3-6** 보상·마무리 — 유일 반지·오염 정화·문서
+
+**완료 조건** — 4층 「무저갱 우리」에서 완벽/일반 패링·회피·약점 사격 노선이 전부 열리고, 평균 플레이어 4~6분 · 숙련자 하한 ≈ 2분
+
+---
+
 ## 의존성 주의
 
 - M3 이전에 M4를 건드리지 않는다. 패링 감각이 확정되기 전 마나 수치를 잡으면 전부 다시 한다

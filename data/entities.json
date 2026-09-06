@@ -267,6 +267,33 @@
       "drops": ["sig_darkvision"], "dropsOnDeath": true
     },
 
+    "scythe_behemoth": {
+      "name": "낫뿔 거수",
+      "zone": 1, "slice": true, "boss": true, "healthBars": 3,
+      "_bossNote": "울트라리스크형 4족 갑각 괴수 — docs/systems/boss_scythe_behemoth.md. 배치 1(B1-1): 기존 슬롯(attack 오른낫·chargeAttack 대지 돌격)만으로 싸운다. 패링은 임시로 parriesToStagger 2 → 스태거 → 처형 240 — B2 에서 눈 약점 기반 혼절(parryOutcome expose)로 대체 예정",
+      "weight": "heavy", "xp": 400, "health": 1500, "speed": 3.2, "damage": 30,
+      "_healthNote": "1500 을 3칸(500×3)으로 — 칸 = 페이즈. 처형 3회(720) + 눈·관절·몸통 ~780 예산",
+      "radius": 1.6, "height": 3.0,
+      "_hitBoxNote": "피격 AABB 를 시각 몸통(2.3 × 2.6m)에 맞춘 재정의 — 충돌 반경(1.6)과 분리. 옆에서 허공을 맞히는 폭을 줄이고 높은 머리를 상자 안에 넣는다. 없으면 기존 radius 정사각 (Entities.rayHitsEnemy)",
+      "hitBox": { "halfX": 1.25, "halfZ": 1.85 },
+      "_rangeNote": "attackRange 4.4 = 낫 1.8 + 어깨 피벗. attackRange × impactRangeMul ≤ reaction.radius(4.6) — 닿는데 패링 반경 밖인 틈 금지. 돌격 minRange 4.5 라 4.4~4.5 사각은 0.1m",
+      "aggroRange": 14, "attackRange": 4.4,
+      "_alertNote": "포효 기상 반경 재정의(기본 enemyAi.bossAlertRadius 45) — 곁방 적을 18m 밖에 두면 결투에 끼지 않는다",
+      "alertRadius": 18,
+      "blockCannotStagger": true,
+      "_chargeOnKnockbackNote": "해머 강타 뒤 wantsCharge 우회 돌격 경로를 끈다 — 포즈·절뚝·쿨다운을 무시하고 달려드는 것을 막는다",
+      "chargeOnKnockback": false,
+      "_parryNote": "임시(B1) — 완벽·일반 패링 모두 성립, 2연속이면 스태거 → 처형 240(16%). B2 에서 parryOutcome expose(패링 = 약점 노출, 혼절 = 눈 누적 66)로 바뀌며 parriesToStagger 는 사라진다",
+      "parriesToStagger": 2, "executeDamage": 240,
+      "_bladeNote": "오른낫 베기(blade_r) — 오른 어깨 관절이 솟고 낫이 뒤로 당겨진 뒤 32틱 예고, 호 110°, 사거리 4.4. 순수 타이밍 창(hitOnContact 아님). 밀림은 smash 급 2.0m",
+      "attack": { "type": "contact", "arcDeg": 110, "windupTicks": 32, "recoverTicks": 40, "whiffRecoverTicks": 60, "impactRangeMul": 1.0, "damage": 30, "playerKnockback": 2.0, "parryable": true, "telegraph": "blue" },
+      "_chargeNote": "대지 돌격 — 50틱 예고(머리 낮추고 웅크림, 빨강) 뒤 15 m/s × 72틱 = 18m 를 예고 종료 순간의 좌표로 질주. 몸 접촉(contactDist 2.15m)이 곧 명중(hitOnContact) — 옆 대시 1.75m 로는 못 벗어나 무적 8틱 타이밍 시험. 막아도 60%·7m 그대로. minRange 4.5 / maxRange 15 → 미달 없음",
+      "chargeAttack": { "hitOnContact": true, "type": "contact", "chargeSpeed": 15, "chargeRunTicks": 72, "minRange": 4.5, "maxRange": 15, "windupTicks": 50, "recoverTicks": 50, "whiffRecoverTicks": 90, "impactRangeMul": 1.0, "damage": 45, "playerKnockback": 7, "playerKnockbackTicks": 20, "blockedKnockbackMul": 1.0, "blockedDamageRatio": 0.6, "parryable": false, "telegraph": "red", "cooldownTicks": 420 },
+      "_countersNote": "시험방 안내용. rifle 은 미구현이라 넣지 않는다",
+      "counters": { "pistol": "best", "bow": "best", "grenade": "poor", "melee": "good", "magic": "good", "deflect": "best" },
+      "drops": ["sig_moment"], "dropsOnDeath": true
+    },
+
     "orc_warrior":    { "zone": 2, "slice": false, "weight": "medium", "xp": 50, "health": 140, "counters": { "melee": "best" } },
     "orc_berserker":  { "zone": 2, "slice": false, "weight": "medium", "xp": 45, "health": 120, "counters": { "rifle": "best", "melee": "poor" } },
     "orc_sentinel":   { "zone": 2, "slice": false, "weight": "heavy", "xp": 55, "health": 160, "counters": { "pistol": "best" } },

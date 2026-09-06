@@ -1294,7 +1294,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
 
   // 밀려난 뒤 돌격 — chase 진입을 기다리지 않는다 (공격 도중 밀려나면 그 상태로 남아
   // 영영 돌격하지 못했다). 밀리는 중에는 판단하지 않는다 — 아직 가까워서 취소돼 버린다
-  if (enemy.wantsCharge && def.chargeAttack && (enemy.kbTicks ?? 0) <= 0) {
+  // chargeOnKnockback false(거수)는 이 우회 경로를 타지 않는다 — 돌격은 chase 의 거리·쿨다운 규칙으로만
+  if (enemy.wantsCharge && def.chargeAttack && def.chargeOnKnockback !== false && (enemy.kbTicks ?? 0) <= 0) {
     const cdx = p.x - enemy.x;
     const cdz = p.z - enemy.z;
     const cdist = Math.hypot(cdx, cdz);
@@ -1483,8 +1484,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       ) {
         alertEnemy(enemy, balance.enemyAi.noticeDelayTicks);
         world.events.emit('enemy_alerted', { enemyId: enemy.id, enemyType: enemy.type, lantern: lit });
-        // 보스가 깨면 포효로 방 전체가 함께 깬다 — 벽 너머라도 소리는 들린다
-        if (def.boss) wakeAround(world, enemy, balance.enemyAi.bossAlertRadius);
+        // 보스가 깨면 포효로 방 전체가 함께 깬다 — 벽 너머라도 소리는 들린다. 반경은 def.alertRadius 로 재정의 가능(거수 18)
+        if (def.boss) wakeAround(world, enemy, def.alertRadius ?? balance.enemyAi.bossAlertRadius);
       }
       break;
     }
