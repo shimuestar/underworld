@@ -653,6 +653,10 @@
     "visualStages": 8,
     "utilitySpellCost": 2,
     "altarRefillCost": 1,
+    "_ventCleanseNote": "분출공 정화(거수 B3-2, 기획서 §4.1 vent·§11) — 분출공(vent)을 맞힐 때마다(반사 자가 피격·열림 중 직격 모두) 오염 대기(pending)에서 ventHitCleanse 를 깎는다. 오염 진액(corrosive) 부착 중이면 ×corrosiveCleanseMul. 전투당 상한 ventCleanseCap(보스 EnemyState.fightCleansed 에 누적 — 새 거수·부활이면 0 부터). corruption_cleansed{amount, source} 를 Corruption.ts 가 구독해 pending 만 깎는다 — applied 는 불변(임계 불가역). pending 은 음수가 될 수 있다(제단 정산은 0 이하를 건너뛰고, 다음 각인 부착이 그 여유를 쓴다 — 기획서 §11.1 '각인 하나를 공짜로 새길 여유')",
+    "ventHitCleanse": 1,
+    "ventCleanseCap": 6,
+    "corrosiveCleanseMul": 2,
     "slotCost": {
       "eye": 8,
       "spine": 10,
@@ -920,14 +924,29 @@
     "limp": { "speedMul": 0.65, "chargeSpeedMul": 0.7 },
     "skid": { "ticks": 90 },
     "phaseShiftTicks": 90,
-    "phaseShiftCooldownMul": 0.5
+    "phaseShiftCooldownMul": 0.5,
+    "_ventNote": "분출공(B3-2, 기획서 §4.1 vent·§5 backflow/choke) — ventGagThreshold: 갑각 떨기 예고(windup) 중 열린 분출공의 한 노출 안 직격 누적이 이 값에 닿으면 역류(시전 취소 + 머리 내림 headDown.backflowTicks — 자해·봉인 없음, 심장 원인과 다르다). choke.sealTicks: 분출공 내구(weakPoints vent.hp 132 = 반사 자가 피격 33 × 4)가 0 에 닿으면 질식 — 이 동안 갑각 떨기 봉인 + 아레나 웅덩이 전부 증발 + 모든 공격 예고 +windupPenalty 틱(헐떡임). 갑각 재생(phase_shift)으로 풀리지 않고, 시간이 다하면 분출공 hp 가 돌아온다",
+    "ventGagThreshold": 66,
+    "choke": { "sealTicks": 1800, "windupPenalty": 10 }
   },
-  "_statusNote": "플레이어 상태이상(B2-4, 기획서 §6) — 카운터는 PlayerState 옵셔널(numbArmTicks·concussionTicks), 감소·상한·${kind}_applied/_ended 이벤트는 Status.ts 한 곳. 다른 시스템은 값을 세우기만 한다. maxConcurrent: 동시에 걸리는 상태 상한 — 세 번째가 걸리면 가장 오래된 것이 해제된다. 어느 상태도 회피 거리·무적 틱을 건드리지 않는다. numbArm(팔 저림): 낫 공격을 방패로 막으면(statusOnBlock) ticks 동안 — perfectBandMul 0 = 완벽 대역 0(정직하게 일반만), 방어 이속 block.speedMul 0.35 대신 blockSpeedMul, noManaLossOnFail = 저림 중 패링 실패의 마나 절반 소실 면제. 일반 패링 1회 성립 시 즉시 해제. concussion(진탕): 돌격 직격(statusOnHit, 막으면 안 걸림) ticks 동안 — 조준 흔들림 aimShakeAmp(박쥐 aimShake 채널 재사용), 화면 기울기 tiltDeg(Stage 카메라 롤), 예고음 버스 외 오디오 덕킹 duckDb, potionCures = 체력 물약이 지운다. hobble(절뚝, B3-1): 발구르기 직격(statusOnHit, 막으면 안 걸림) ticks 동안 — 회피 스태미너 ×dodgeStaminaMul(회피 거리·무적은 그대로), noSprint = 질주 불가(걷기 속도). 물약이 지우지 않고 시간으로만 풀린다",
+  "_statusNote": "플레이어 상태이상(B2-4, 기획서 §6) — 카운터는 PlayerState 옵셔널(numbArmTicks·concussionTicks·hobbleTicks·corrosiveTicks), 감소·상한·${kind}_applied/_ended 이벤트는 Status.ts 한 곳. 다른 시스템은 값을 세우기만 한다. maxConcurrent: 동시에 걸리는 상태 상한 — 세 번째가 걸리면 가장 오래된 것이 해제된다. 어느 상태도 회피 거리·무적 틱을 건드리지 않는다. numbArm(팔 저림): 낫 공격을 방패로 막으면(statusOnBlock) ticks 동안 — perfectBandMul 0 = 완벽 대역 0(정직하게 일반만), 방어 이속 block.speedMul 0.35 대신 blockSpeedMul, noManaLossOnFail = 저림 중 패링 실패의 마나 절반 소실 면제. 일반 패링 1회 성립 시 즉시 해제. concussion(진탕): 돌격 직격(statusOnHit, 막으면 안 걸림) ticks 동안 — 조준 흔들림 aimShakeAmp(박쥐 aimShake 채널 재사용), 화면 기울기 tiltDeg(Stage 카메라 롤), 예고음 버스 외 오디오 덕킹 duckDb, potionCures = 체력 물약이 지운다. hobble(절뚝, B3-1): 발구르기 직격(statusOnHit, 막으면 안 걸림) ticks 동안 — 회피 스태미너 ×dodgeStaminaMul(회피 거리·무적은 그대로), noSprint = 질주 불가(걷기 속도). 물약이 지우지 않고 시간으로만 풀린다",
   "status": {
     "maxConcurrent": 2,
     "numbArm": { "ticks": 240, "perfectBandMul": 0, "blockSpeedMul": 0.25, "noManaLossOnFail": true },
     "hobble": { "ticks": 300, "dodgeStaminaMul": 2, "noSprint": true },
-    "concussion": { "ticks": 360, "aimShakeAmp": 0.02, "tiltDeg": 3, "duckDb": -6, "potionCures": true }
+    "concussion": { "ticks": 360, "aimShakeAmp": 0.02, "tiltDeg": 3, "duckDb": -6, "potionCures": true },
+    "_corrosiveNote": "오염 진액(corrosive, 거수 P2+, B3-2, 기획서 §6) — 진액 웅덩이(balance.hazards.pools) 위에 서 있거나 진액 구슬에 맞으면(막아도 붙는다 — statusOnHit·statusOnBlock 둘 다) 걸린다. 지속은 lingerTicks: 웅덩이 위에선 Hazards 가 매 틱 이 값으로 되살리고, 벗어나면 그만큼 더 남는다(다른 상태의 ticks 자리 — World.statusDurationOf). moveSpeedMul: 이속 배율(PlayerMove — 점액·기름 미끄러움과 곱). dotPerTick/dotIntervalTicks: dotIntervalTicks 마다 dotPerTick 피해(corrosive_tick — player_damaged 를 내지 않는 도트 규약, Status.ts 가 깎는다). pendingPerTicks: 부착 중 이 틱마다 오염 대기 +1, 전투당 상한 pendingCap(살아 있는 보스 EnemyState.fightPendingIn 에 누적 — 보스가 없으면 오르지 않는다). 부착 중 분출공 정화는 corruption.corrosiveCleanseMul 배. 물약이 지우지 않는다 — 웅덩이에서 나오면 lingerTicks 뒤 풀린다",
+    "corrosive": { "moveSpeedMul": 0.6, "dotPerTick": 2, "dotIntervalTicks": 30, "lingerTicks": 30, "pendingPerTicks": 60, "pendingCap": 8 }
+  },
+  "_hazardsNote": "진액 웅덩이(거수 P2+, B3-2, 기획서 §10.2 — src/systems/Hazards.ts) — pools.<kind>{radius, ticks}: 원인별 반경(m)·지속(틱). blade = 낫 착지점(낫끝, attack/attackAlt poolKind), stomp = 발구르기 착지 중심(slamAttack poolKind), orb = 진액 구슬 착탄(volleyAttack poolKind — 분출공으로 되돌아간 반사 구슬은 남기지 않는다), skid = 완벽 회피 미끄러짐 자리(chargeAttack.perfectDodgeExposes.poolKind). poolMax: 동시 상한 — 넘치면 오래된 것부터 증발. 웅덩이 위(중심 거리 ≤ radius, 회피 무적·그림자 이동 중 제외)면 플레이어 corrosive 를 lingerTicks 로 세운다. 불(화염구·수류탄·폭발통 폭발, 불붙은 기름 함정)이 닿으면 즉시 증발, 질식(choke) 때 전부 증발, 아니면 ticks 뒤 자연 소멸. 페이즈 표 poolsOn 인 페이즈(P2+)에만 생긴다",
+  "hazards": {
+    "pools": {
+      "blade": { "radius": 1.6, "ticks": 480 },
+      "stomp": { "radius": 2.0, "ticks": 480 },
+      "orb": { "radius": 1.2, "ticks": 480 },
+      "skid": { "radius": 1.6, "ticks": 480 }
+    },
+    "poolMax": 12
   },
   "_spatialAudioNote": "적 소리의 좌우 패닝 + 거리 감쇠 — 시야 밖 위협을 귀가 먼저 안다. minVol 아래로는 안 줄여 예고음이 게임플레이 단서로 항상 들리게 한다",
   "spatialAudio": {

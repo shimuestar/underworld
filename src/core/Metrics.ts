@@ -35,6 +35,9 @@ export interface MetricsSnapshot {
   weakPoints: { hits: number; damage: number; broken: number; exposuresClosed: number; exposureHits: number; dazes: number; chargeDodges: number; limps: number; blinds: number; topples: number; pillarHits: number; backflows: number };
   /** 페이즈 보스(거수, B2-6) — 전환 수 / 두 경계를 한 번에 넘은(P2 건너뜀) 수 / 페이즈별 소요 초(체력 칸 index 키 '3'·'2'·'1' — 사망까지 포함, 목표 P1 90s / P2 120s / P3 90s) */
   boss: { phaseShifts: number; phaseSkips: number; phaseSeconds: Record<string, number> };
+  /** 진액 웅덩이·오염 진액·분출공(거수 P2+, B3-2) — 생긴 웅덩이 수 / 자연 소멸이 아닌 증발 수(불·질식·상한) / 오염 진액이 붙은 횟수 / 오염 진액 도트 피해 합 /
+   *  오염 진액이 오염 대기에 더한 양 / 분출공 명중이 오염 대기에서 깎은 양(정화) / 질식 수. 순 오염 변화 = pendingIn − ventCleanse (기획서 §11.1 장부) */
+  hazards: { pools: number; evaporated: number; corrosiveApplied: number; corrosiveDamage: number; pendingIn: number; ventCleanse: number; chokes: number };
   pickups: { potions: number; healed: number; gold: number; xp: number };
   shieldsBroken: number;
   ammo: { shotsFired: number; shotsHit: number; altarEntries: number; altarBypasses: number };
@@ -91,6 +94,13 @@ export class Metrics {
   private bossPhaseShifts = 0;
   private bossPhaseSkips = 0;
   private bossPhaseTicks: Record<string, number> = {};
+  private poolsSpawned = 0;
+  private poolsEvaporated = 0;
+  private corrosiveApplied = 0;
+  private corrosiveDamage = 0;
+  private corrosivePendingIn = 0;
+  private ventCleanse = 0;
+  private chokes = 0;
   private potionsPicked = 0;
   private healedTotal = 0;
   private goldCollected = 0;
@@ -167,9 +177,25 @@ export class Metrics {
       if (st.kind === 'limp') this.limps++;
       else if (st.kind === 'blind') this.blinds++;
       else if (st.kind === 'topple') this.topples++;
-      else if (st.kind === 'backflow') this.backflows++; // 역류(B3-1) — 심장 66 으로 발구르기를 취소시킨 수(탐욕 노선 성공률)
+      else if (st.kind === 'backflow') this.backflows++; // 역류(B3-1·B3-2) — 심장 66 으로 발구르기를, 분출공 66 으로 갑각 떨기를 취소시킨 수(cause 'heart'|'vent')
+      else if (st.kind === 'choke') this.chokes++; // 질식(B3-2) — 분출공 내구 0(반사 4회): 갑각 떨기 봉인 + 웅덩이 증발
     });
     events.on('pillar_hit', () => this.pillarHits++);
+    // 진액 웅덩이·오염 진액·분출공 정화(B3-2) — Hazards/Status/hitWeakPoint 는 카운터를 갖지 않는다
+    events.on('pool_spawned', () => this.poolsSpawned++);
+    events.on('pool_evaporated', (payload) => {
+      if ((payload as { reason: string }).reason !== 'expired') this.poolsEvaporated++;
+    });
+    events.on('corrosive_applied', () => this.corrosiveApplied++);
+    events.on('corrosive_tick', (payload) => {
+      // 오염 진액 도트 — player_damaged 를 안 쓰므로 받은 피해에 합산(독·화염과 같은 도트 규약). 함정은 아니다
+      const amount = (payload as { amount: number }).amount;
+      this.corrosiveDamage += amount;
+      this.damageTakenTotal += amount;
+      this.lastDamageWasTrap = false;
+    });
+    events.on('corrosive_pending', (payload) => { this.corrosivePendingIn += (payload as { amount: number }).amount; });
+    events.on('corruption_cleansed', (payload) => { this.ventCleanse += (payload as { amount: number }).amount; });
     // 페이즈 전환(거수) — from 페이즈에 머문 틱을 쌓는다. phase 0 은 사망(마지막 페이즈 마감)이라 전환으로 세지 않는다
     events.on('boss_phase', (payload) => {
       const ph = payload as { phase: number; from: number; fromTicks: number; skipped?: boolean };
@@ -314,6 +340,10 @@ export class Metrics {
         phaseShifts: this.bossPhaseShifts,
         phaseSkips: this.bossPhaseSkips,
         phaseSeconds: Object.fromEntries(Object.entries(this.bossPhaseTicks).map(([k, t]) => [k, Math.round(t / balance.loop.tickRate)])),
+      },
+      hazards: {
+        pools: this.poolsSpawned, evaporated: this.poolsEvaporated, corrosiveApplied: this.corrosiveApplied, corrosiveDamage: round2(this.corrosiveDamage) ?? 0,
+        pendingIn: this.corrosivePendingIn, ventCleanse: this.ventCleanse, chokes: this.chokes,
       },
       pickups: {
         potions: this.potionsPicked,

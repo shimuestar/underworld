@@ -469,6 +469,8 @@ export function tick(world: World, dt: number): void {
   if (gooOn || oilOn) {
     speed *= Math.min(gooOn ? balance.goo.playerSlowMul : 1, oilOn ? oil.playerSlowMul : 1);
   }
+  // 오염 진액(corrosive, 거수 진액 웅덩이·구슬, B3-2) — 미끄러움이 아니라 몸에 붙은 상태라 따로 곱한다(웅덩이에서 나와도 lingerTicks 동안 느리다)
+  if ((p.corrosiveTicks ?? 0) > 0) speed *= balance.status.corrosive.moveSpeedMul;
   // 밀리는 동안은 발이 안 붙는다 — 밀림과 이동이 더해지는 구조라 배율로 눌러 준다
   if (shoved) speed *= balance.playerKnockback.moveSpeedMul;
   // 방어 중 감속 페널티 — 팔 저림(numb_arm) 중엔 더 무겁다(balance.status.numbArm.blockSpeedMul)

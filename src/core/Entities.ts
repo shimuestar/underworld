@@ -108,8 +108,14 @@ export interface EnemyAttackDef {
    *  완벽 패링하면 perfectTicks 동안 열린다(완벽은 머리 내림도 함께 — balance.weakPoint.headDown.stuckTicks). 없으면 노출 없음 */
   exposeOnParry?: { joint: string; normalTicks: number; perfectTicks: number };
   /** 완벽 회피 보상(거수 돌격, 기획서 §9.3) — 접촉 순간 플레이어가 회피 무적(iframeTicks > 0)이면 피해 대신 charge_dodged +
-   *  미끄러짐(pose skid, balance.weakPoint.skid.ticks) + joints 의 관절이 ticks 동안 열린다. 없으면 무적 접촉은 헛돌격(옛 경로) */
-  perfectDodgeExposes?: { ticks: number; joints: string[] };
+   *  미끄러짐(pose skid, balance.weakPoint.skid.ticks) + joints 의 관절이 ticks 동안 열린다. 없으면 무적 접촉은 헛돌격(옛 경로).
+   *  poolKind(B3-2): 미끄러진 자리에 남기는 진액 웅덩이 종류(balance.hazards.pools 키 'skid') — 페이즈 poolsOn(P2+)일 때만 */
+  perfectDodgeExposes?: { ticks: number; joints: string[]; poolKind?: string };
+  /** 이 공격이 닿는 자리에 남기는 진액 웅덩이 종류(거수 P2+, B3-2 — balance.hazards.pools 키): 낫은 'blade'(착지한 낫끝), 발구르기는 'stomp'(착지 중심),
+   *  진액 구슬은 'orb'(착탄점 — 투사체가 들고 간다). 패링된 낫은 착지하지 않으니 웅덩이도 없다. 페이즈 표 poolsOn 인 페이즈에서만 생긴다. 없으면 웅덩이 없음 */
+  poolKind?: string;
+  /** 반사된 이 공격의 투사체가 시전자 몸에 되돌아가면 시전자의 분출공(vent)에 넣는 고정 피해(거수 진액 구슬 33 — 배율·열림 무관, 기획서 §4.1 vent). 없으면 반사 마법의 옛 경로 */
+  deflectSelfDamage?: number;
   /** 막지 않은 직격이 플레이어에게 남기는 상태(거수 돌격 → 진탕 'concussion', 기획서 §6). 지속은 balance.status.*.ticks.
    *  값을 세우는 건 Enemies impact, 감소·해제는 Status.ts. 없으면 상태 없음(옛 경로) */
   statusOnHit?: PlayerStatusKind;
@@ -176,9 +182,13 @@ export interface WeakPointDef {
   /** 노출 자세 — enemy.pose 가 이 목록에 있으면 열린다(눈 = head_down, 심장 = rear). 노출 타이머(enemy.exposure[id])는
    *  이와 별개로 연다(관절 = 패링). 둘 다 아니면 판정 자체가 없다 → 몸통 배율(기획서 §4.2). 빈 배열 = 타이머로만 */
   exposedStates?: string[];
-  /** 열림 중 배율 재정의(분출공, B3-2) */
+  /** 노출 타이머(enemy.exposure)로 열렸을 때의 배율 재정의(분출공 B3-2 — 갑각 떨기 예고·시전 중 ×1.5). 자세 노출(exposedStates — 탈진 B3-4)은 damageMul 그대로.
+   *  없으면 언제나 damageMul(눈은 돌격 중 6m 노출도 ×3.0). Entities.weakPointDamageMul */
   openMul?: number;
 }
+
+/** 분출공 약점 id(거수) — Enemies(열림·역류·질식)·Weapons·Projectiles(정화·반사 자가 피격)가 같은 이름을 쓴다(DAZE_WEAK_POINT 'eye' 와 같은 규약) */
+export const VENT_WEAK_POINT = 'vent';
 
 /** 페이즈별 공격 슬롯 덮어쓰기(거수, 기획서 §8) — 슬롯 키(attack·attackAlt·close·charge·slam·volley·roar·combo …)마다 이 셋만 바뀐다.
  *  전역 damageMul 은 두지 않는다(슬롯별 명시) */
@@ -791,6 +801,30 @@ export function weakPointOpen(
   if ((enemy.weakCooldown?.[wp.id] ?? 0) > 0) return false; // 봉인 — 자세로 열리는 자리에 있어도 판정이 없다(어둡게 그린다)
   if ((enemy.exposure?.[wp.id] ?? 0) > 0) return true;
   return enemy.pose !== undefined && (wp.exposedStates?.includes(enemy.pose) ?? false);
+}
+
+/** 지금 이 약점에 적용할 피해 배율 — 노출 타이머로 열린 동안(enemy.exposure[id] > 0) openMul 이 있으면 그것(분출공: 갑각 떨기 예고·시전 ×1.5),
+ *  자세 노출(pose ∈ exposedStates — 탈진 ×3.0)이거나 openMul 이 없으면 damageMul. 판정(rayHitsWeakPoint)이 연 약점에만 부른다 — Weapons·Projectiles 공용 */
+export function weakPointDamageMul(enemy: { exposure?: Record<string, number>; pose?: string }, wp: WeakPointDef): number {
+  if (wp.openMul === undefined) return wp.damageMul;
+  const byPose = enemy.pose !== undefined && (wp.exposedStates?.includes(enemy.pose) ?? false);
+  if (byPose) return wp.damageMul;
+  return (enemy.exposure?.[wp.id] ?? 0) > 0 ? wp.openMul : wp.damageMul;
+}
+
+/** 분출공 명중 정화량(거수 B3-2, 기획서 §4.1 vent·§11) — 분출공(VENT_WEAK_POINT)을 맞힐 때마다 오염 대기에서 깎을 양: balance.corruption.ventHitCleanse,
+ *  플레이어에게 오염 진액이 붙어 있으면 ×corrosiveCleanseMul, 전투당 상한 ventCleanseCap(enemy.fightCleansed 누적 — hitWeakPoint 가 올린다).
+ *  분출공이 아니거나 상한에 닿았으면 0. 호출부(Weapons·Projectiles)가 hitWeakPoint 의 cleanse 로 넘긴다 */
+export function ventCleanseAmount(enemy: { fightCleansed?: number }, wpId: string, corrosiveActive: boolean): number {
+  if (wpId !== VENT_WEAK_POINT) return 0;
+  const cfg = balance.corruption;
+  const base = cfg.ventHitCleanse * (corrosiveActive ? cfg.corrosiveCleanseMul : 1);
+  return Math.max(0, Math.min(base, cfg.ventCleanseCap - (enemy.fightCleansed ?? 0)));
+}
+
+/** 이 페이즈에 진액 웅덩이가 생기는가(거수 P2+, 기획서 §7 P2 — phases[].poolsOn 누적). 페이즈 표가 없는 적은 false */
+export function poolsOn(def: EnemyDef, enemy: { phase?: number }): boolean {
+  return resolvePhase(def, enemy.phase)?.poolsOn ?? false;
 }
 
 export interface WeakPointHit {

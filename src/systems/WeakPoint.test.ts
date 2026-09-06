@@ -159,9 +159,9 @@ describe('데이터 — weakPoints·poseOffsets·hitZonesImmune (기획서 §2·
     }
   });
 
-  it('Spawner — 내구가 있는 약점(관절 둘)만 weakHp 장부에 오른다. 족장은 장부가 없다', () => {
+  it('Spawner — 내구가 있는 약점(관절 둘 + 분출공)만 weakHp 장부에 오른다. 족장은 장부가 없다', () => {
     const boss = spawnEnemyAt(TYPE, 20, 10, 1);
-    expect(boss.weakHp).toEqual({ joint_r: 132, joint_l: 132 });
+    expect(boss.weakHp).toEqual({ joint_r: 132, joint_l: 132, vent: 132 }); // 분출공 132 = 반사 자가 피격 33 × 4(B3-2 질식)
     expect(spawnEnemyAt('goblin_chieftain', 20, 10, 2).weakHp).toBeUndefined();
   });
 
@@ -303,7 +303,7 @@ describe('권총 — 약점 우선 판정 (거수, 근거리 감쇠 없음)', ()
     expect(headshots).toHaveLength(0);
     expect(damaged[0]).toMatchObject({ zone: 'weak', damage: pistol.damage * 3.0 });
     // 눈은 내구가 없다 — 장부 그대로
-    expect(boss.weakHp).toEqual({ joint_r: 132, joint_l: 132 });
+    expect(boss.weakHp).toEqual({ joint_r: 132, joint_l: 132, vent: 132 });
   });
 
   it('후면에서 눈을 겨눠도 원뿔에 막혀 몸통 0.8× — 몸을 뚫고 눈을 맞힐 수 없다', () => {
@@ -408,12 +408,12 @@ describe('권총 — 약점 우선 판정 (거수, 근거리 감쇠 없음)', ()
     expect(weakHits[0]).toMatchObject({ id: 'heart', damage: pistol.damage * 3.0 });
     expect(damaged[0]).toMatchObject({ zone: 'weak' });
     expect(boss.health).toBeCloseTo(def.health - pistol.damage * 3.0, 5);
-    // 분출공도 같은 규칙(가슴 앞, 상자 앞면 뒤 0.3m)
+    // 분출공도 같은 규칙(가슴 앞, 상자 앞면 뒤 0.3m) — 노출 타이머로 열린 분출공은 openMul(1.5, 갑각 떨기 예고·시전)이다(B3-2 — 자세 노출 ×3.0 은 탈진 B3-4)
     const vent = weakPointWorldPos(boss, def, wp('vent'));
     aimAt(vent.x, vent.y, vent.z);
     firePistol();
     expect(weakHits).toHaveLength(2);
-    expect(weakHits[1]).toMatchObject({ id: 'vent', damage: pistol.damage * 3.0 });
+    expect(weakHits[1]).toMatchObject({ id: 'vent', damage: pistol.damage * wp('vent').openMul! });
   });
 });
 

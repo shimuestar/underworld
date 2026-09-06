@@ -14,6 +14,7 @@ import type {
   EnemyState,
   GroundItemState,
   LifeMoteState,
+  PoolState,
   ProjectileState,
 } from '../core/World';
 import { FINISHER_CONTACT_MS, HandModel } from './HandModel';
@@ -183,6 +184,15 @@ const WEB_COLOR = 0xe6e9e0; // 거미줄 — 희끄무레한 실뭉치
 const WEB_TEAR_SHARDS = 14; // 해머로 걷어낼 때 흩어지는 실 조각
 const WEB_TEAR_MS = 520;
 const ENEMY_BOLT_COLOR = 0xa855f7; // 마법 투사체 색 규약 (balance.telegraph.colorProjectile)
+/** 진액 웅덩이(거수 P2+, B3-2) — 오염 녹색(등갑판 균열·분출공 점등과 같은 색), 반투명 원반 + 조금 밝은 테. 맥동 주기·진폭은 연출값 */
+const POOL_COLOR = 0x39ff88;
+const POOL_RIM_COLOR = 0x8dffb8;
+const POOL_OPACITY = 0.3;
+const POOL_RIM_OPACITY = 0.45;
+const POOL_PULSE_MS = 420;
+const POOL_PULSE_AMP = 0.04;
+/** 진액 구슬 꼬리 — 보라 구(ENEMY_BOLT_COLOR)에 끌리는 어두운 보랏빛 원뿔 */
+const GOO_TAIL_COLOR = 0x6b2fb3;
 const IMPLODE_MS = 560; // 내파 연출 길이 (당김 지속 22틱 ≒ 367ms보다 길게 남는다)
 const IMPLODE_SHARDS = 16;
 
@@ -1014,6 +1024,12 @@ function behemothWeakColors(id: string): { base: number; open: number } {
 /** 약점 구체 연출 상수(시각값) — 열림 맥동 ±12%(기획서 §2)·주기, 명중 플래시 길이·세기, 열림 발광 세기 */
 const BH_WEAK_PULSE_AMP = 0.12;
 const BH_WEAK_PULSE_MS = 640;
+/** 분출공이 열렸을 때(갑각 떨기 예고·시전, 탈진) 구체 크기 배율(기획서 §2 "크기 ×1.4") — 맥동은 이 위에 곱한다. 판정 반지름은 그대로(그림만 커진다 — 표적 강조) */
+export const BH_VENT_OPEN_SCALE = 1.4;
+/** 갑각 떨기 예고·시전 중 등갑판 덜그럭 — 판마다 위상이 다른 잘게 떠는 굴림(rad)·들썩(m)·주기(ms). 튜닝값 아님(연출) */
+const BH_PLATE_RATTLE = 0.05;
+const BH_PLATE_RATTLE_LIFT = 0.03;
+const BH_PLATE_RATTLE_MS = 13;
 const BH_WEAK_FLASH_MS = 170;
 const BH_WEAK_FLASH_INTENSITY = 2.6;
 const BH_WEAK_OPEN_INTENSITY = 0.85;
@@ -1038,6 +1054,8 @@ export const BEHEMOTH_TORSO = {
   recoilLean: 0.12,
   /** 피탄 움찔 — 인간형(ENEMY_LEAN_JITTER.flinch 0.16)은 4족엔 과하고, 낫 예고 중 맞으면 들린 위팔이 3.8m 를 넘는다 */
   flinchLean: 0.05,
+  /** 갑각 떨기(volley, B3-2) — 예고·시전 내내 몸 전체가 잘게 떤다(기울임 잔떨림 진폭 rad). 족장의 VOLLEY_LEAN(상체 젖힘 0.34)은 4족엔 뒷다리가 뜨는 각이라 쓰지 않는다 */
+  ventShake: 0.02,
   /** 들이받기 예고 — 머리를 홱 뒤로 젓는 동안 몸통은 거의 그대로(몸까지 젖히면 솟은 뿔끝이 3.8m 에 닿는다) */
   headbuttLean: 0.03,
   /** 들이받기 — 머리를 내리꽂으며 몸통이 짧게 앞으로 실린다. 헛친 경직도 이 자세로 굳는다 */
@@ -1270,6 +1288,8 @@ export interface BehemothPose {
   slamming?: boolean;
   /** 포즈 타이머의 원인(enemy.poseCause) — head_down 이 'backflow'(역류)면 박힌 낫 대신 두 낫이 벌어져 매달린 고꾸라짐 */
   poseCause?: string;
+  /** 갑각 떨기(volley, B3-2) 예고·시전 중 — 등갑판이 덜그럭거린다(판마다 위상이 다른 잘게 떠는 굴림·들썩). 몸통 잔떨림은 syncEnemies(BEHEMOTH_TORSO.ventShake) */
+  shaking?: boolean;
 }
 
 
@@ -1547,16 +1567,22 @@ export function behemothEyeDimmed(enemy: Pick<EnemyState, 'dazeCooldown' | 'ai' 
   return (enemy.dazeCooldown ?? 0) > 0 && !(enemy.ai === 'charging' && enemy.attackMode === 'charge');
 }
 
+/** 열린 약점의 크기 배율 — 분출공(vent)은 열리면 ×BH_VENT_OPEN_SCALE(갑각 떨기 예고·시전·탈진, 기획서 §2), 다른 약점은 1. syncEnemies·debug/behemoth 가 같은 규칙 */
+export function behemothWeakScaleMul(id: string, open: boolean): number {
+  return id === 'vent' && open ? BH_VENT_OPEN_SCALE : 1;
+}
+
 export function styleBehemothWeakPoints(
   rig: BehemothRig,
   nowMs: number,
-  state: (id: string) => { open: boolean; broken: boolean; flashAgeMs: number; dim?: boolean; lit?: boolean; sealed?: boolean },
+  state: (id: string) => { open: boolean; broken: boolean; flashAgeMs: number; dim?: boolean; lit?: boolean; sealed?: boolean; scaleMul?: number },
 ): void {
   for (const id in rig.weakPoints) {
     const mesh = rig.weakPoints[id]!;
     const mat = mesh.material as THREE.MeshLambertMaterial;
     const colors = behemothWeakColors(id);
     const st = state(id);
+    const scaleMul = st.scaleMul ?? 1; // 열림 크기 배율(분출공 ×1.4) — 맥동·플래시 위에 곱한다
     const flash = st.flashAgeMs >= 0 && st.flashAgeMs < BH_WEAK_FLASH_MS ? 1 - st.flashAgeMs / BH_WEAK_FLASH_MS : 0;
     if (st.broken) {
       mat.color.setHex(BEHEMOTH_COLORS.jointBroken);
@@ -1575,13 +1601,13 @@ export function styleBehemothWeakPoints(
       mat.color.setHex(dimColor);
       mat.emissive.setHex(dimColor);
       mat.emissiveIntensity = BH_WEAK_DIM_INTENSITY + (BH_WEAK_FLASH_INTENSITY - BH_WEAK_DIM_INTENSITY) * flash;
-      mesh.scale.setScalar(1 + flash * 0.2);
+      mesh.scale.setScalar((1 + flash * 0.2) * scaleMul);
     } else if (st.open) {
       mat.color.setHex(colors.open);
       mat.emissive.setHex(colors.open);
       mat.emissiveIntensity = BH_WEAK_OPEN_INTENSITY + (BH_WEAK_FLASH_INTENSITY - BH_WEAK_OPEN_INTENSITY) * flash;
       const pulse = 1 + Math.sin((nowMs / BH_WEAK_PULSE_MS) * Math.PI * 2) * BH_WEAK_PULSE_AMP;
-      mesh.scale.setScalar(pulse + flash * 0.2);
+      mesh.scale.setScalar((pulse + flash * 0.2) * scaleMul);
     } else if (st.lit) {
       // 점등(P2 분출공) — 닫혀 있되 제 색으로 은은하게 빛난다, 맥동 없음(맥동은 열림의 표시)
       mat.color.setHex(colors.base);
@@ -1650,6 +1676,17 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
   // 꼬리 — 느린 좌우 흔들림, 달릴 때 뒤로 뻗친다. 앞발 들기(rear)엔 몸통이 35° 젖혀지니 그만큼 되들어 꼬리가 바닥을 뚫지 않게(월드 각 ≈ 살짝 처짐)
   rig.tail.rotation.y = mix(rig.tail.rotation.y, Math.sin(p.nowMs / 900) * BH_TAIL_SWAY);
   rig.tail.rotation.x = mix(rig.tail.rotation.x, p.charging ? BH_TAIL_DROOP * 0.3 : BH_TAIL_DROOP - rearing * (lean + BH_TAIL_DROOP * 0.6));
+
+  // 등갑판 덜그럭(갑각 떨기, B3-2) — 판마다 위상이 다른 잘게 떠는 굴림(z)과 들썩(y). 제 자리(restY)는 처음 볼 때 기억한다. 떨지 않으면 제자리로
+  for (let i = 0; i < rig.plates.length; i++) {
+    const plate = rig.plates[i]!;
+    const restY = (plate.userData['restY'] as number | undefined) ?? (plate.userData['restY'] = plate.position.y);
+    const phase = p.nowMs / BH_PLATE_RATTLE_MS + i * 2.1;
+    const rattleZ = p.shaking ? Math.sin(phase) * BH_PLATE_RATTLE : 0;
+    const rattleY = p.shaking ? Math.abs(Math.sin(phase * 0.7)) * BH_PLATE_RATTLE_LIFT : 0;
+    plate.rotation.z = mix(plate.rotation.z, rattleZ);
+    plate.position.y = mix(plate.position.y, restY + rattleY);
+  }
 
   // 머리 — 표 자세(charge·head_down·stunned …)면 목 IK 로 머리 메시의 눈을 약점 표의 눈 자리(구체)에 맞춘다(보이는 눈 = 판정 구체,
   // 배치 1 메모 (d)). 들이받기는 손 각: 예고에 목을 뒤로 홱 젓고(1 − (1−t)³ — 앞부분에서 확 젖혀 끝에서 버틴다, 뿔이 하늘을 본다)
@@ -4138,9 +4175,10 @@ export class Stage {
       // 낫뿔 거수 — 낫은 낫 공격(오른·왼, 파랑)에만, 뿔은 뿔이 무기인 공격(돌격·들이받기, 빨강)에만 물든다.
       // 예고가 아닌 상태색(피격 섬광·화상·서리·스태거)은 둘 다 받는다. 약점 구체는 어느 쪽에도 없다(비활성)
       if (visual.behemoth) {
-        const telegraphing = flashing || enemy.ai === 'windup';
+        const telegraphing = flashing || enemy.ai === 'windup' || enemy.ai === 'volley';
         const hornMode = enemy.attackMode === 'charge' || enemy.attackMode === 'close';
-        const bladeEmissive = telegraphing && hornMode ? 0x000000 : emissive;
+        const ventMode = enemy.attackMode === 'volley'; // 갑각 떨기(보라, B3-2) — 무기는 분출공이라 낫·뿔 어느 쪽도 물들지 않는다(몸·등갑판만)
+        const bladeEmissive = telegraphing && (hornMode || ventMode) ? 0x000000 : emissive;
         const hornEmissive = telegraphing && !hornMode ? 0x000000 : emissive;
         for (const material of visual.behemoth.bladeMats) {
           material.emissive.set(bladeEmissive);
@@ -4291,7 +4329,8 @@ export class Stage {
       const volleying =
         enemy.attackMode === 'volley' && (inWindup || enemy.ai === 'volley');
       if (volleying) {
-        leanTarget = inWindup ? VOLLEY_LEAN * windupProgress : VOLLEY_LEAN;
+        // 거수 갑각 떨기(B3-2)는 젖히지 않고 몸 전체가 잘게 떤다(등갑판 덜그럭은 poseBehemothRig 의 shaking) — 4족은 젖히면 뒷다리가 뜬다
+        leanTarget = visual.behemoth ? Math.sin(now / 9) * BEHEMOTH_TORSO.ventShake : inWindup ? VOLLEY_LEAN * windupProgress : VOLLEY_LEAN;
         lungeTarget = 0;
       }
 
@@ -4583,6 +4622,7 @@ export class Stage {
           slamCoil: slamMode && inWindup ? windupProgress : 0,
           slamming: slamMode && (enemy.ai === 'impact' || (enemy.ai === 'recover' && enemy.pose === undefined)),
           poseCause: enemy.poseCause,
+          shaking: volleying, // 갑각 떨기(B3-2) — 등갑판 덜그럭
         });
         // 약점 구체 — 열림(노출 타이머·자세, Entities.weakPointOpen — 판정과 같은 규칙)·파열·명중 플래시·혼절 쿨다운(눈 어두운 청록).
         // 플래시 시각은 Stage.weakFlashAt(적 id:약점 id)
@@ -4600,12 +4640,14 @@ export class Stage {
           const age = at === undefined ? -1 : now - at;
           if (at !== undefined && age > 1000) flashMap.delete(key); // 다 꺼진 플래시는 치운다
           const hp = enemy.weakHp?.[id];
-          const broken = hp !== undefined && hp <= 0;
+          // 내구 0 = 파열(관절 — 어둡게 붉게). 분출공 내구 0 은 질식(choke) — 파열색이 아니라 '꺼짐'(sealed 와 같은 어두운 본색·발광 없음, B3-2)
+          const choked = id === 'vent' && (enemy.chokeTicks ?? 0) > 0;
+          const broken = hp !== undefined && hp <= 0 && id !== 'vent';
           const wp = wps.find((w) => w.id === id);
           const open = wp !== undefined && weakPointOpen(enemy, wp);
           // 봉인(역류 뒤 심장 쿨다운, B3-1) — 자세 자리에 나와 있어도 어둡게(판정 없음 = weakPointOpen 도 false)
-          const sealed = (enemy.weakCooldown?.[id] ?? 0) > 0;
-          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye, lit: id === 'vent' && ventLit, sealed };
+          const sealed = (enemy.weakCooldown?.[id] ?? 0) > 0 || choked;
+          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye, lit: id === 'vent' && ventLit, sealed, scaleMul: behemothWeakScaleMul(id, open) };
         });
       }
 
@@ -4896,6 +4938,22 @@ export class Stage {
           halo.scale.set(proj.radius * 5, proj.radius * 5, 1);
           group.add(halo);
           group.add(new THREE.PointLight(0x9fe0ff, 1.4, 5, 0));
+        } else if (proj.kind === 'goo') {
+          // 진액 구슬(거수 갑각 떨기, B3-2) — 보라 구(반사 가능 규약색) + 뒤로 끌리는 어두운 보라 꼬리 + 보라 광원. 진행 방향으로 눕는다(아래 lookAt: 로컬 -Z 가 진행 방향)
+          group.add(
+            new THREE.Mesh(
+              new THREE.SphereGeometry(proj.radius, 10, 10),
+              new THREE.MeshBasicMaterial({ color: ENEMY_BOLT_COLOR }),
+            ),
+          );
+          const tail = new THREE.Mesh(
+            new THREE.ConeGeometry(proj.radius * 0.75, proj.radius * 3.2, 8),
+            new THREE.MeshBasicMaterial({ color: GOO_TAIL_COLOR, transparent: true, opacity: 0.55, depthWrite: false }),
+          );
+          tail.rotation.x = Math.PI / 2; // 원뿔 축(+y)을 +z(진행의 뒤)로 — 꼭지가 뒤로 끌린다
+          tail.position.z = proj.radius * 1.6;
+          group.add(tail);
+          group.add(new THREE.PointLight(ENEMY_BOLT_COLOR, 1.6, 8, 0));
         } else if (proj.kind === 'arrow') {
           // 화살 — 나무 화살대 + 회색 촉. 발광하지 않아 어둠 속에서 위협적
           const shaft = new THREE.Mesh(
@@ -4943,8 +5001,8 @@ export class Stage {
         pz = launch.from.z + (pz - launch.from.z) * k;
       }
       group.position.set(px, py, pz);
-      if (proj.kind === 'arrow' || proj.kind === 'frost') {
-        // 화살대·얼음 결정을 비행 방향으로 정렬 (로컬 -Z가 진행 방향)
+      if (proj.kind === 'arrow' || proj.kind === 'frost' || proj.kind === 'goo') {
+        // 화살대·얼음 결정·진액 구슬 꼬리를 비행 방향으로 정렬 (로컬 -Z가 진행 방향)
         group.lookAt(px - proj.vx, py - proj.vy, pz - proj.vz);
       }
     }
@@ -5336,6 +5394,49 @@ export class Stage {
       v.mesh.geometry.dispose();
       v.mat.dispose();
       this.gooVisuals.delete(id);
+    }
+  }
+
+  /** 진액 웅덩이(거수 P2+, B3-2) — 납작 원반(오염 녹색 0x39ff88 반투명)이 숨쉬듯 맥동하고, 남은 시간이 짧아지면 옅어진다. 반경은 판정(pool.r)과 같다.
+   *  id 키 동기화(syncGoo 와 같은 틀 — 사라진 웅덩이는 지운다) */
+  private readonly poolVisuals = new Map<number, { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; rim: THREE.Mesh; rimMat: THREE.MeshBasicMaterial }>();
+
+  syncPools(pools: PoolState[], nowMs: number): void {
+    const seen = new Set<number>();
+    for (const pool of pools) {
+      seen.add(pool.id);
+      let v = this.poolVisuals.get(pool.id);
+      if (!v) {
+        const mat = new THREE.MeshBasicMaterial({ color: POOL_COLOR, transparent: true, opacity: POOL_OPACITY, depthWrite: false });
+        const mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 24), mat);
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.set(pool.x, 0.03, pool.z); // 점액 장판(0.02) 위 — 겹쳐도 깜빡이지 않는다
+        const rimMat = new THREE.MeshBasicMaterial({ color: POOL_RIM_COLOR, transparent: true, opacity: POOL_RIM_OPACITY, depthWrite: false });
+        const rim = new THREE.Mesh(new THREE.RingGeometry(0.86, 1, 24), rimMat);
+        rim.rotation.x = -Math.PI / 2;
+        rim.position.set(pool.x, 0.035, pool.z);
+        this.scene.add(mesh);
+        this.scene.add(rim);
+        v = { mesh, mat, rim, rimMat };
+        this.poolVisuals.set(pool.id, v);
+      }
+      // 맥동(웅덩이마다 위상을 흩어 한 박자로 뛰지 않게) + 마지막 35% 동안 옅어짐
+      const pulse = 1 + Math.sin(nowMs / POOL_PULSE_MS + pool.id * 1.7) * POOL_PULSE_AMP;
+      const fade = Math.min(1, pool.ticks / (pool.duration * 0.35));
+      v.mesh.scale.set(pool.r * pulse, pool.r * pulse, 1);
+      v.rim.scale.set(pool.r, pool.r, 1);
+      v.mat.opacity = POOL_OPACITY * fade * (0.85 + 0.15 * Math.sin(nowMs / POOL_PULSE_MS + pool.id * 1.7));
+      v.rimMat.opacity = POOL_RIM_OPACITY * fade;
+    }
+    for (const [id, v] of this.poolVisuals) {
+      if (seen.has(id)) continue;
+      for (const m of [v.mesh, v.rim]) {
+        m.removeFromParent();
+        m.geometry.dispose();
+      }
+      v.mat.dispose();
+      v.rimMat.dispose();
+      this.poolVisuals.delete(id);
     }
   }
 

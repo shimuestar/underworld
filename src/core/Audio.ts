@@ -93,6 +93,9 @@ export type SoundName =
   | 'behemoth_scream'
   | 'stomp_ready'
   | 'vent_gag'
+  | 'vent_hiss'
+  | 'goo_spit'
+  | 'vent_choke'
   | 'player_hurt'
   | 'block_hit'
   | 'hammer_heavy'
@@ -159,7 +162,7 @@ const MASTER_GAIN = 0.25;
 
 /** 예고음 버스로 가는 소리 — 덕킹(진탕 concussion 등)을 우회한다. 파랑 예고음 1760/2637Hz 는 판정 단서라 언제나 같은 크기로 들려야 한다.
  *  charge_ready 는 긴 돌격의 빨강 예고를 대신하는 소리(main enemy_charge) */
-const TELEGRAPH_SOUNDS: ReadonlySet<SoundName> = new Set<SoundName>(['telegraph_blue', 'telegraph_red', 'telegraph_purple', 'charge_ready', 'stomp_ready']);
+const TELEGRAPH_SOUNDS: ReadonlySet<SoundName> = new Set<SoundName>(['telegraph_blue', 'telegraph_red', 'telegraph_purple', 'charge_ready', 'stomp_ready', 'vent_hiss']);
 
 /** dB → 선형 게인 (0dB = 1) */
 function dbToGain(db: number): number {
@@ -1262,6 +1265,28 @@ export class GameAudio {
         this.noise(0.1, 0.7, 900, 0.14);
         this.tone(210, 0.32, 'sawtooth', 0.45, 0.04, 90);
         this.tone(105, 0.5, 'square', 0.28, 0.12, 48);
+        break;
+      case 'vent_hiss':
+        // 갑각 떨기 예고(B3-2, 예고음 버스) — 분출공에서 새는 쉭쉭 증기(높은 노이즈가 차오른다) + 등갑판이 덜그럭거리는 마른 딸깍 셋
+        this.noise(0.55, 0.4, 5200, 0.0);
+        this.noise(0.4, 0.3, 3200, 0.2);
+        this.tone(1900, 0.03, 'square', 0.25, 0.08, 1500);
+        this.tone(1700, 0.03, 'square', 0.22, 0.22, 1400);
+        this.tone(2100, 0.03, 'square', 0.22, 0.38, 1600);
+        break;
+      case 'goo_spit':
+        // 진액 구슬 발사(B3-2) — 젖은 '푸욱' 하는 분출: 짧은 저역 펄스 + 위로 튀는 습한 노이즈
+        this.tone(160, 0.12, 'sine', 0.7, 0, 60);
+        this.noise(0.14, 0.55, 1800, 0.01);
+        this.tone(620, 0.08, 'triangle', 0.25, 0.02, 1100);
+        break;
+      case 'vent_choke':
+        // 질식(B3-2) — 분출공이 막혀 거친 숨을 몰아쉬는 소리: 막힌 저역 헐떡임 둘 + 컥 하고 끊기는 습한 노이즈
+        this.tone(95, 0.3, 'sawtooth', 0.45, 0, 70);
+        this.noise(0.12, 0.6, 700, 0.05);
+        this.tone(88, 0.34, 'sawtooth', 0.4, 0.34, 60);
+        this.noise(0.1, 0.5, 600, 0.4);
+        this.noise(0.06, 0.8, 1500, 0.66);
         break;
       case 'bow_twang':
         // 활시위 튕김 + 화살 바람 소리

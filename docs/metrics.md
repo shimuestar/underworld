@@ -48,11 +48,19 @@ spell_kill      { enemyType }
 weak_point_hit    { enemyId, enemyType, id, damage, x, y, z }   ← 약점 구체 명중 (거수 눈·관절·심장·분출공), 권총·화살·화염구 직격만
 weak_point_broken { enemyId, enemyType, id, x, y, z }   ← 약점 내구 0 (관절 파열 — 착탄점)
 exposure_closed   { enemyId, enemyType, id, hits }   ← 약점 노출 창이 닫힘 (관절 타이머 소진·머리 내림 종료·혼절·파열). hits = 그 창 안의 명중 수 → 노출 활용률
-boss_status       { enemyId, enemyType, kind, on, id?, blade?, ticks?, cause?, cell?, sealed?, selfDamage? }   ← 보스 상태이상 on/off (expose{id — 관절 또는 돌격 중 눈}·head_down{cause? 'topple'|'backflow'}·daze·rupture{id, blade}·limp·skid·blind·topple{cell 'P'|'C', row, col}·rear{sealed — 발구르기 앞발 들기 자세, 심장 열림}·backflow{ticks, selfDamage — 심장 66 으로 발구르기 취소} — 기획서 §5 의 12종이 이 하나로)
+boss_status       { enemyId, enemyType, kind, on, id?, blade?, ticks?, cause?, cell?, sealed?, selfDamage? }   ← 보스 상태이상 on/off (expose{id — 관절·돌격 중 눈·갑각 떨기 중 분출공}·head_down{cause? 'topple'|'backflow'}·daze·rupture{id, blade}·limp·skid·blind·topple{cell 'P'|'C', row, col}·rear{sealed — 발구르기 앞발 들기 자세, 심장 열림}·backflow{cause 'heart'|'vent', ticks, selfDamage — 심장 66 으로 발구르기 취소(자해 45) / 분출공 66 으로 갑각 떨기 취소(자해 0)}·choke{ticks — 분출공 내구 0, 갑각 떨기 봉인·웅덩이 증발·예고 +10, B3-2} — 기획서 §5 의 12종이 이 하나로)
 charge_dodged     { enemyId, enemyType, x, z }   ← 돌격을 무적 8틱 안에 완벽 회피 (거수 미끄러짐 + 양 관절 노출)
 enemy_slam_start  { enemyId, enemyType, wake, dist }   ← 거수 발구르기 예고 시작(B3-1). wake = 기상 발구르기(머리 내림·혼절이 끝나며 확정)
-slam_landed       { enemyId, enemyType, x, z, radius, wake, hit }   ← 발구르기 착지(ground_slam 과 함께 — 착지점 웅덩이는 B3-2 Hazards 가 받는다). hit = 플레이어 직격
+slam_landed       { enemyId, enemyType, x, z, radius, wake, hit }   ← 발구르기 착지(ground_slam 과 함께). hit = 플레이어 직격
 hobble_applied / hobble_ended   { kind, ticks } / { kind, reason }   ← 절뚝(발구르기 직격, B3-1) — numb_arm·concussion 과 같은 플레이어 상태 규약
+enemy_volley_start / enemy_volley_shot   { enemyId, enemyType, shots } / { enemyId, enemyType, left }   ← 연사(족장 화살 세례·거수 갑각 떨기 B3-2 — 종류는 def.volleyAttack.projectileKind)
+spawn_pool        { kind, x, z, enemyId?, hit? }   ← 진액 웅덩이 요청(거수 P2+, B3-2 — Enemies 낫 착지 'blade'·발구르기 'stomp'·미끄러짐 'skid', Projectiles 구슬 착탄 'orb'). Hazards 가 받아 만든다
+pool_spawned      { id, x, z, r, kind }   ← 웅덩이가 생김(balance.hazards.pools)
+pool_evaporated   { id, x, z, r, kind, reason }   ← 웅덩이 소멸 — reason 'expired'(자연) / 'fire'(폭발·불붙은 기름) / 'choke'(질식) / 'overflow'(상한 poolMax)
+corrosive_applied / corrosive_ended   { kind, ticks } / { kind, reason }   ← 오염 진액(웅덩이 위·진액 구슬 직격 — 막아도, B3-2) 플레이어 상태 규약
+corrosive_tick    { amount, health }   ← 오염 진액 도트(dotIntervalTicks 마다 dotPerTick) — player_damaged 를 안 내는 도트 규약(damageTakenTotal 합산, 함정 사망은 아님)
+corrosive_pending { amount, total, cap, enemyId }   ← 오염 진액이 오염 대기에 +1(pendingPerTicks 마다, 전투당 상한 pendingCap — 보스 EnemyState.fightPendingIn)
+corruption_cleansed { amount, source, enemyId, enemyType, total }   ← 분출공 명중 정화(source 'vent' — 오염 대기 −ventHitCleanse, 부착 중 ×2, 전투당 상한 ventCleanseCap). Corruption.ts 가 구독해 pending 만 깎는다(applied 불변)
 pillar_hit        { enemyId, enemyType, row, col, x, z }   ← 거수 돌격이 기둥 P 에 박힘 (전도와 함께 — 내구 −1·붕괴는 B3-5 Arena)
 enemy_whiffed     { enemyId, enemyType, ticks, wall? }   ← 헛침 경직. wall = 돌격이 일반 벽·문에 막힘(거수 wallWhiffRecoverTicks — 박히지 않음)
 boss_staggered    { enemyId, enemyType, cause }   ← cause 'parry'(족장 연속 패링) / 'eye'(거수 눈 누적 66 혼절)
@@ -81,6 +89,21 @@ zone_cleared    { tick }
 | `damageTakenTotal` (기존) | `player_damaged` + `poison_tick` + `burn_tick` | 도트는 player_damaged 를 안 내므로 따로 합산 |
 
 시스템(`src/systems/Traps.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).
+
+## 진액 웅덩이·오염 진액·분출공 (hazards) — 2026-09-06 (거수 B3-2)
+
+| 카운터 | 이벤트 | 뜻 |
+|---|---|---|
+| `hazards.pools` | `pool_spawned` | 생긴 웅덩이 수(낫 착지·발구르기·구슬 착탄·미끄러짐) — 바닥 압박 밀도 |
+| `hazards.evaporated` | `pool_evaporated` (`reason !== 'expired'`) | 자연 소멸이 아닌 증발(불·질식·상한) — 플레이어가 웅덩이를 지운 수 |
+| `hazards.corrosiveApplied` | `corrosive_applied` | 오염 진액이 붙은 횟수 — 웅덩이를 밟는 빈도 |
+| `hazards.corrosiveDamage` | `corrosive_tick` (`amount` 합) | 오염 진액 도트 피해 합(damageTakenTotal 에도 합산) |
+| `hazards.pendingIn` | `corrosive_pending` (`amount` 합) | 오염 진액이 오염 대기에 더한 양(전투당 ≤ 8) |
+| `hazards.ventCleanse` | `corruption_cleansed` (`amount` 합) | 분출공 명중이 오염 대기에서 깎은 양(전투당 ≤ 6) — 반사·직격 노선 성공 지표 |
+| `hazards.chokes` | `boss_status` (`kind 'choke'`, on) | 질식 수 — 반사 4회 달성 |
+| `weakPoints.backflows` (기존) | `boss_status` (`kind 'backflow'`, on) | 심장(cause 'heart')·분출공(cause 'vent') 역류 합 |
+
+순 오염 변화(기획서 §11.1 장부) = `pendingIn − ventCleanse`(처형·사망 정화는 B3-6). 시스템(`Hazards.ts`·`Status.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).
 
 ## 전리품 (loot) — 2026-09-04
 

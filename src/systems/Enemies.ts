@@ -24,9 +24,9 @@
 // 발구르기 직격은 플레이어 절뚝(statusOnHit 'hobble'), 착지는 ground_slam + slam_landed(웅덩이는 B3-2).
 
 import { balance } from '../core/Balance';
-import { attackInPhase, attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, currentAttack, enemyDef, healthBarState, jointOfBlade, resolvePhase, slotUnlocked, type BladeSide, type EnemyAttackDef } from '../core/Entities';
+import { VENT_WEAK_POINT, attackInPhase, attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, currentAttack, enemyDef, healthBarState, jointOfBlade, poolsOn, resolvePhase, slotUnlocked, type BladeSide, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, beginPose, breakCrackWalls, closeExposure, findWallNormal, noiseField, openExposure, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, setPlayerStatus, PLAYER_STATUS_CFG, type EnemyState, type World, damagePlayer } from '../core/World';
+import { alertEnemy, alertNearbyAt, beginPose, breakCrackWalls, closeExposure, findWallNormal, noiseField, openExposure, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, setPlayerStatus, statusDurationOf, PLAYER_STATUS_CFG, type EnemyState, type World, damagePlayer } from '../core/World';
 
 /** 혼절 임계를 재는 약점 id — 기획서 §4.1 "혼절은 눈 누적 66 으로만". 돌격 중 6m 안 노출·눈멂(B2-5)도 같은 눈이다 */
 const DAZE_WEAK_POINT = 'eye';
@@ -38,6 +38,8 @@ const REAR_POSE = 'rear';
 const CHARGE_EYE_REFRESH = 2;
 /** 돌격 지형 충돌 — 막힌 몸의 선두 면을 이만큼 넘어 그 칸의 문자를 읽는 여유(m, Level.blockedAhead 의 SKIN 위 수치 오차 방지 — 튜닝값 아님) */
 const CHARGE_PROBE_EPS = 0.01;
+/** 갑각 떨기(volley) 예고·시전 중 분출공(vent) 노출 타이머를 매 틱 되살리는 값(B3-2) — 돌격 중 눈(CHARGE_EYE_REFRESH)과 같은 문. 시전이 끝나면 그 틱에 닫힌다 (튜닝값 아님) */
+const VENT_OPEN_REFRESH = 2;
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
 
@@ -1273,6 +1275,31 @@ function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<ty
     beginBackflow(world, enemy, def);
     return true;
   }
+  // ⑬ 질식(choke, B3-2) — 타이머가 다하면 분출공 hp 가 돌아온다(갑각 재생은 이 타이머를 건드리지 않는다)
+  if ((enemy.chokeTicks ?? 0) > 0) {
+    enemy.chokeTicks = (enemy.chokeTicks ?? 0) - 1;
+    if ((enemy.chokeTicks ?? 0) <= 0) endChoke(world, enemy, def);
+  }
+  // ⑭ 분출공 내구 0 → 질식 — 반사 자가 피격 33 × 4(또는 직격 누적)로 hp 가 0 에 닿은 첫 틱에 한 번. 낫 짝이 없으니 ⑦ 파열이 아니다
+  const ventWp = def.weakPoints.find((wp) => wp.id === VENT_WEAK_POINT);
+  if (ventWp?.hp !== undefined && (enemy.weakHp?.[VENT_WEAK_POINT] ?? 1) <= 0 && (enemy.chokeTicks ?? 0) <= 0) {
+    beginChoke(world, enemy, def);
+  }
+  // ⑯ 분출공 노출(B3-2, 기획서 §4.1 vent) — 갑각 떨기(volley) 예고·시전 중 분출공이 열린다(직격 ×openMul). 돌격 중 눈과 같은 노출 타이머 문
+  //    (판정 weakPointOpen·그림 Stage·장부 exposure_closed 가 하나) — 질식(hp 0)이면 openExposure 가 거른다. 시전이 끊기면 다음 틱 여기서 닫힌다
+  const venting = ventWp !== undefined && enemy.attackMode === 'volley' && (enemy.ai === 'windup' || enemy.ai === 'volley');
+  if (venting) {
+    if ((enemy.exposure?.[VENT_WEAK_POINT] ?? 0) > 0) enemy.exposure![VENT_WEAK_POINT] = VENT_OPEN_REFRESH;
+    else openExposure(world, enemy, VENT_WEAK_POINT, VENT_OPEN_REFRESH);
+  } else if (ventWp !== undefined && (enemy.exposure?.[VENT_WEAK_POINT] ?? 0) > 0) {
+    closeExposure(world, enemy, VENT_WEAK_POINT);
+  }
+  // ⑮ 분출공 직격 누적 → 역류(B3-2) — 갑각 떨기 예고(windup) 중 열린 분출공의 한 노출 안 누적이 ventGagThreshold 에 닿았다: 시전 취소 + 머리 내림(자해·봉인 없음).
+  //    시전(volley) 중 직격은 피해·정화만(역류 없음 — 예고 안 66 이 취소의 창이다)
+  if (venting && enemy.ai === 'windup' && (enemy.weakAccum?.[VENT_WEAK_POINT] ?? 0) >= wpCfg.ventGagThreshold) {
+    beginVentBackflow(world, enemy, def);
+    return true;
+  }
   // ⑥ 낫 잠김 — 먼저 깎고(파열 틱에 새로 잠긴 낫은 다음 틱부터 줄어 bladeLockTicks 뒤에 풀린다) 0 이면 해제. 관절 hp 는 그대로 0(갑각 재생 B2-6 만 되돌린다)
   if (enemy.bladeLock) {
     for (const blade of ['r', 'l'] as const) {
@@ -1519,7 +1546,7 @@ function beginBackflow(world: World, enemy: EnemyState, def: ReturnType<typeof e
   enemy.health -= selfDamage;
   world.events.emit('damage_pop', { enemyId: enemy.id, amount: selfDamage });
   world.events.emit('boss_status', {
-    enemyId: enemy.id, enemyType: enemy.type, kind: 'backflow', on: true, ticks: wpCfg.headDown.backflowTicks, selfDamage, x: enemy.x, z: enemy.z,
+    enemyId: enemy.id, enemyType: enemy.type, kind: 'backflow', on: true, cause: 'heart', ticks: wpCfg.headDown.backflowTicks, selfDamage, x: enemy.x, z: enemy.z,
   });
   if (enemy.health <= 0) {
     enemy.health = 0;
@@ -1530,6 +1557,55 @@ function beginBackflow(world: World, enemy: EnemyState, def: ReturnType<typeof e
   }
   beginPose(world, enemy, 'head_down', wpCfg.headDown.backflowTicks, 'backflow');
   if (!def.flying) enemy.jumpY = 0;
+}
+
+/** 갑각 떨기 취소(B3-2) — 역류·질식이 진행 중인 갑각 떨기(예고·시전)를 접는다: 남은 발수는 버리고 쿨다운은 문다(붙어 와서 접는 abortRange 와 같은 결 — 안 물면 머리 내림 뒤 곧바로
+ *  다시 떨어 역류 농사가 된다). 분출공 노출도 닫는다(exposure_closed{vent, hits}) */
+function cancelVolley(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  if ((enemy.exposure?.[VENT_WEAK_POINT] ?? 0) > 0) closeExposure(world, enemy, VENT_WEAK_POINT);
+  if (enemy.attackMode !== 'volley') return;
+  const volley = def.volleyAttack;
+  enemy.attackMode = 'melee';
+  enemy.volleyLeft = 0;
+  enemy.strikeProgress = 0;
+  if (volley && (enemy.ai === 'windup' || enemy.ai === 'volley')) enemy.volleyCooldown = Math.max(enemy.volleyCooldown ?? 0, attackInPhase(def, enemy, 'volley', volley).cooldownTicks ?? 0);
+}
+
+/** 분출공 역류(B3-2, 기획서 §4.1 vent·§5 backflow) — 갑각 떨기 예고 중 분출공 직격 누적 ventGagThreshold: 시전 취소(구슬 안 나감) + 머리 내림 headDown.backflowTicks
+ *  (cause 'backflow' — 눈 ×3.0 피해만, 혼절 누적 없음). 심장 원인과 달리 자해·봉인 쿨다운은 없다. boss_status{kind 'backflow', cause 'vent', selfDamage 0} */
+function beginVentBackflow(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  const wpCfg = balance.weakPoint;
+  cancelVolley(world, enemy, def);
+  world.events.emit('boss_status', {
+    enemyId: enemy.id, enemyType: enemy.type, kind: 'backflow', on: true, cause: 'vent', ticks: wpCfg.headDown.backflowTicks, selfDamage: 0, x: enemy.x, z: enemy.z,
+  });
+  beginPose(world, enemy, 'head_down', wpCfg.headDown.backflowTicks, 'backflow');
+  if (!def.flying) enemy.jumpY = 0;
+}
+
+/** 질식(B3-2, 기획서 §5 choke) — 분출공 내구 0: 갑각 떨기가 choke.sealTicks 동안 봉인되고(진행 중이었으면 접는다) 모든 예고가 windupPenalty 만큼 늘어진다(startWindup),
+ *  아레나 웅덩이는 Hazards 가 boss_status choke on 을 받아 전부 증발시킨다. 분출공 판정은 hp 0 으로 이미 닫혔다(weakPointOpen). 갑각 재생이 풀지 않는다 */
+function beginChoke(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  const ticks = balance.weakPoint.choke.sealTicks;
+  const casting = enemy.attackMode === 'volley' && (enemy.ai === 'windup' || enemy.ai === 'volley');
+  cancelVolley(world, enemy, def);
+  if (casting) {
+    // 떨던 몸이 컥 막힌다 — 시전 자리에서 후딜만 남긴다(포즈는 없다 — 머리 내림 창을 공짜로 주지 않는다)
+    enemy.ai = 'recover';
+    enemy.timer = def.volleyAttack?.recoverTicks ?? def.attack.recoverTicks;
+    enemy.whiffed = false;
+    enemy.recoiled = false;
+  }
+  enemy.chokeTicks = ticks;
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'choke', on: true, ticks, x: enemy.x, z: enemy.z });
+}
+
+/** 질식 종료 — 분출공 hp 가 정의값으로 돌아오고 갑각 떨기가 다시 열린다(boss_status choke off) */
+function endChoke(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  enemy.chokeTicks = 0;
+  const ventWp = def.weakPoints?.find((wp) => wp.id === VENT_WEAK_POINT);
+  if (ventWp?.hp !== undefined && enemy.weakHp) enemy.weakHp[VENT_WEAK_POINT] = ventWp.hp;
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'choke', on: false });
 }
 
 /** 발구르기 선택(B3-1, 기획서 §9.2) — wake 면 기상 발구르기(거리·쿨다운 무관, 슬롯 'wakeSlam' 해금), 아니면 minRange < dist ≤ maxRange 에서 쿨다운이 끝났을 때
@@ -2101,12 +2177,15 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (
         def.volleyAttack &&
         slotUnlocked(def, enemy, 'volley') && // 페이즈 해금(거수 P2 갑각 떨기, B3-2) — 표가 없는 족장은 늘 열려 있다
+        (enemy.chokeTicks ?? 0) <= 0 && // 질식 봉인(B3-2, 기획서 §9.2 7번) — 분출공이 막힌 동안은 갑각을 떨지 못한다
         (enemy.volleyCooldown ?? 0) <= 0 &&
         dist >= (def.volleyAttack.minRange ?? 0) &&
         world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
       ) {
         enemy.attackMode = 'volley';
         startWindup(world, enemy, def.volleyAttack);
+        // 분출공(거수, B3-2)은 예고 첫 틱부터 열린다 — 장부(⑯)는 이 틱 첫머리에 이미 돌았으니 여기서 한 번 열고, 다음 틱부터 ⑯ 이 되살린다
+        if (def.weakPoints?.some((wp) => wp.id === VENT_WEAK_POINT)) openExposure(world, enemy, VENT_WEAK_POINT, VENT_OPEN_REFRESH);
         world.events.emit('enemy_volley_start', {
           enemyId: enemy.id,
           enemyType: enemy.type,
@@ -2438,6 +2517,10 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         world.events.emit('charge_dodged', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
         for (const id of dodgeExpose.joints) openExposure(world, enemy, id, dodgeExpose.ticks);
         beginPose(world, enemy, 'skid', balance.weakPoint.skid.ticks);
+        // 미끄러진 자리에 진액 웅덩이(P2+, B3-2 — 기획서 §7 P2 "미끄러진 자리에 웅덩이"). Hazards 가 spawn_pool 을 받아 만든다
+        if (dodgeExpose.poolKind && poolsOn(def, enemy)) {
+          world.events.emit('spawn_pool', { kind: dodgeExpose.poolKind, x: enemy.x, z: enemy.z, enemyId: enemy.id, enemyType: enemy.type });
+        }
         break;
       }
       if (connected) {
@@ -2496,9 +2579,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           }
         }
         // 플레이어 상태(B2-4, 기획서 §6) — 막았으면 statusOnBlock(낫 → 팔 저림), 직격이면 statusOnHit(돌격 → 진탕).
-        // 값만 세운다 — 감소·상한·_applied/_ended 는 Status.ts. 지속은 balance.status.*.ticks
+        // 값만 세운다 — 감소·상한·_applied/_ended 는 Status.ts. 지속은 balance.status 블록(ticks / 오염 진액은 lingerTicks — World.statusDurationOf)
         const status = blocked ? attack.statusOnBlock : attack.statusOnHit;
-        if (status) setPlayerStatus(p, status, balance.status[PLAYER_STATUS_CFG[status]].ticks);
+        if (status) setPlayerStatus(p, status, statusDurationOf(balance.status[PLAYER_STATUS_CFG[status]]));
         world.events.emit('player_damaged', {
           amount: damage, health: p.health, blocked,
           srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id,
@@ -2515,6 +2598,14 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           world.dead = true;
           world.events.emit('player_died', { tick: world.tick });
         }
+      }
+      // 진액 웅덩이(거수 P2+, B3-2 — attack.poolKind, 페이즈 poolsOn) — 낫은 착지한 낫끝(무기 끝 거리만큼 앞: 헛치면 사거리 끝, 맞았으면 맞은 자리 — 밀린 플레이어는
+      // 대개 반경 밖, 막은 플레이어는 안에 남는다), 원형 강타(발구르기)는 착지 중심. 패링된 낫은 impact 에 오지 않으니 웅덩이도 없다. Hazards 가 spawn_pool 을 받는다
+      if (attack.poolKind && poolsOn(def, enemy)) {
+        const tip = attack.aoeRadius !== undefined ? 0 : enemy.weaponTipDist ?? fullReach(def, attack);
+        world.events.emit('spawn_pool', {
+          kind: attack.poolKind, x: enemy.x - Math.sin(enemy.yaw) * tip, z: enemy.z - Math.cos(enemy.yaw) * tip, enemyId: enemy.id, enemyType: enemy.type, hit: connected,
+        });
       }
       // 지면 강타 — 맞았든 빗나갔든 땅은 울린다. 소리·화면 흔들림은 main 이 붙인다
       if (attack.aoeRadius !== undefined) {
@@ -3097,6 +3188,8 @@ function pickMeleeMode(def: ReturnType<typeof enemyDef>, enemy: EnemyState): 'me
 function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
   enemy.ai = 'windup';
   enemy.timer = Math.max(1, Math.round(attack.windupTicks / frenzyMul(enemy, enemyDef(enemy.type))));
+  // 질식(거수 B3-2, 기획서 §5 choke) — 분출공이 막혀 헐떡이는 동안 모든 예고가 windupPenalty 틱 늘어진다(패링 판정은 무기 끝 거리라 그대로, 읽을 시간만 는다)
+  if ((enemy.chokeTicks ?? 0) > 0) enemy.timer += balance.weakPoint.choke.windupPenalty;
   enemy.whiffed = false;
   enemy.recoiled = false;
   enemy.wakeSlam = false; // 기상 발구르기 표식은 trySlam 이 이 뒤에 세운다 — 다른 공격이 시작되면 지워진다
@@ -3159,12 +3252,18 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
     casterId: enemy.id,
     deflectable: attack.deflectable ?? false,
     kind:
-      (attack.projectileKind as 'rock' | 'web' | undefined) ??
+      (attack.projectileKind as 'rock' | 'web' | 'goo' | undefined) ??
       ((attack.deflectable ?? false) ? 'magic' : 'arrow'),
     // 광역 효과는 투사체가 들고 간다 — 시전자가 먼저 죽어도, 반사돼도 그대로 터진다
     splash: attack.splash,
     appliesWeb: attack.appliesWeb,
     breakable: attack.breakable,
+    // 거수 진액 구슬(B3-2) — 반사 자가 피격(분출공 고정 피해)·착탄 웅덩이·오염 진액·밀림 재정의도 투사체가 들고 간다(근접 impact 와 같은 공격별 재정의 규약)
+    deflectSelfDamage: attack.deflectSelfDamage,
+    poolKind: attack.poolKind,
+    statusOnHit: attack.statusOnHit,
+    statusOnBlock: attack.statusOnBlock,
+    playerKnockback: attack.playerKnockback,
   });
   world.events.emit('enemy_cast', { enemyId: enemy.id, enemyType: enemy.type });
 }

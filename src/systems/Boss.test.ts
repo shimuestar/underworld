@@ -5,12 +5,14 @@ import { balance } from '../core/Balance';
 import { attackInPhase, attackReaches, bladeOfJoint, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, jointOfBlade, rayHitsEnemy, resolvePhase, slotUnlocked, wakeSlamAttack, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { World, openExposure, playerStatusTicks, setPlayerStatus, type EnemyState } from '../core/World';
+import { World, openExposure, playerStatusTicks, setPlayerStatus, type EnemyState, type ProjectileState } from '../core/World';
 import { sigilDef } from '../core/SigilData';
 import { Level } from '../level/GridLoader';
 import { isSpawnable, spawnEnemyAt } from '../level/Spawner';
+import * as Corruption from './Corruption';
 import * as Enemies from './Enemies';
 import * as Exit from './Exit';
+import * as Hazards from './Hazards';
 import * as Mana from './Mana';
 import * as PlayerMove from './PlayerMove';
 import * as Projectiles from './Projectiles';
@@ -1791,7 +1793,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
 
   it('(c) 완벽 회피(B2-3) — 접촉 순간이 회피 무적 8틱 안이면 피해 0 + charge_dodged + 미끄러짐(pose skid 90, 이동·공격 불가) + 양 관절 40틱 노출. 90틱 뒤 chase, 관절은 40틱에 닫힌다', () => {
     const ch = def.chargeAttack!;
-    expect(ch.perfectDodgeExposes).toEqual({ ticks: 40, joints: ['joint_r', 'joint_l'] });
+    expect(ch.perfectDodgeExposes).toEqual({ ticks: 40, joints: ['joint_r', 'joint_l'], poolKind: 'skid' }); // poolKind 는 B3-2 미끄러짐 웅덩이
     expect(balance.weakPoint.skid.ticks).toBe(90);
     const boss = makeBehemoth(10);
     const hits: unknown[] = [];
@@ -2897,6 +2899,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     it('칸 경계 전환 — 추격 중 체력이 1000(3칸째 비움)에 닿는 틱에 boss_phase{phase 2, from 3} 한 번 + phase_shift: recover 90·pose roar·molting(약점 전부 닫힘), 90틱 뒤 chase 복귀 + molt off. 1001 에선 아무 일도 없다', () => {
       const boss = makeBehemoth(10);
       boss.chargeCooldown = 9999; // 돌격이 끼어들지 않게 — 걷기만
+      boss.volleyCooldown = 9999; // P2 복귀 뒤 10m 는 갑각 떨기(B3-2, ≥ 6m) 거리다 — 여기선 걷기만 본다
       const w = watch();
       Enemies.tick(world, DT);
       expect(boss.phase).toBe(3);
@@ -3084,7 +3087,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       boss.health = perBar * 2;
       Enemies.tick(world, DT);
       expect(w.phases).toHaveLength(1);
-      expect(boss.weakHp).toEqual({ joint_r: wp('joint_r').hp, joint_l: wp('joint_l').hp });
+      expect(boss.weakHp).toEqual({ joint_r: wp('joint_r').hp, joint_l: wp('joint_l').hp, vent: wp('vent').hp }); // 분출공 내구(B3-2)는 낫 짝이 없어 재생 대상이 아니다(질식이 따로 관리)
       expect(boss.ruptured).toEqual({});
       expect(boss.bladeLock).toEqual({});
       // 절반 — 전환 틱의 쿨다운 감소(−1)가 그 뒤에 한 번 돈다
@@ -3615,6 +3618,541 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       for (let i = 0; i < balance.status.hobble.ticks; i++) Status.tick(world, DT);
       expect(playerStatusTicks(p, 'hobble')).toBe(0);
       expect(ended.at(-1)).toEqual({ kind: 'hobble', reason: 'expired' });
+    });
+  });
+
+  describe('B3-2 웅덩이·오염 진액·갑각 떨기·분출공 (기획서 §4.1 vent·§5 backflow/choke·§6 corrosive·§7 P2·§10.2·§11)', () => {
+    const wpc = balance.weakPoint;
+    const volley = def.volleyAttack!;
+    const pistol = balance.weapons.pistol;
+    type Status = { kind: string; on: boolean; id?: string; ticks?: number; cause?: string; selfDamage?: number };
+    function watch() {
+      const status: Status[] = [];
+      world.events.on('boss_status', (p) => status.push(p as Status));
+      const hits: { amount: number; blocked?: boolean }[] = [];
+      world.events.on('player_damaged', (p) => hits.push(p as { amount: number; blocked?: boolean }));
+      const windups: { telegraph: string }[] = [];
+      world.events.on('enemy_windup', (p) => windups.push(p as { telegraph: string }));
+      const starts: { shots: number }[] = [];
+      world.events.on('enemy_volley_start', (p) => starts.push(p as { shots: number }));
+      const shots: { left: number }[] = [];
+      world.events.on('enemy_volley_shot', (p) => shots.push(p as { left: number }));
+      const closed: { id: string; hits: number }[] = [];
+      world.events.on('exposure_closed', (p) => closed.push(p as { id: string; hits: number }));
+      const weakHits: { id: string; damage: number }[] = [];
+      world.events.on('weak_point_hit', (p) => weakHits.push(p as { id: string; damage: number }));
+      const broken: { id: string }[] = [];
+      world.events.on('weak_point_broken', (p) => broken.push(p as { id: string }));
+      const pops: { enemyId: number; amount: number }[] = [];
+      world.events.on('damage_pop', (p) => pops.push(p as { enemyId: number; amount: number }));
+      const cleansed: { amount: number; source: string; total: number }[] = [];
+      world.events.on('corruption_cleansed', (p) => cleansed.push(p as { amount: number; source: string; total: number }));
+      const spawned: { kind: string; x: number; z: number; r: number }[] = [];
+      world.events.on('pool_spawned', (p) => spawned.push(p as { kind: string; x: number; z: number; r: number }));
+      const evaporated: { kind: string; reason: string }[] = [];
+      world.events.on('pool_evaporated', (p) => evaporated.push(p as { kind: string; reason: string }));
+      const deflects: unknown[] = [];
+      world.events.on('deflect', (p) => deflects.push(p));
+      const tag = (st: Status): string => `${st.kind}${st.id ? ':' + st.id : ''}:${st.on}`;
+      return { status, hits, windups, starts, shots, closed, weakHits, broken, pops, cleansed, spawned, evaporated, deflects, tag };
+    }
+    function toP2(boss: EnemyState): void {
+      boss.phase = 2;
+    }
+    /** 갑각 떨기 예고까지 — 돌격(4.5~15)·발구르기(≤ 6)는 쿨다운으로 막는다 */
+    function untilVolleyWindup(boss: EnemyState, maxTicks = 60): void {
+      boss.chargeCooldown = 9999;
+      boss.slamCooldown = 9999;
+      tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'volley', maxTicks);
+    }
+    /** 분출공 구체 중심을 권총으로 쏜다 */
+    function shootVent(boss: EnemyState): void {
+      const c = weakPointWorldPos(boss, def, wp('vent'));
+      shootAt(c.x, c.y, c.z);
+    }
+    /** 게임 틱 한 번 — 적 → 반응 → 상태 → 투사체 → 웅덩이 (main 의 systems 순서에서 이 검증에 필요한 것만) */
+    function stepAll(): void {
+      Enemies.tick(world, DT);
+      Reaction.tick(world, DT);
+      Status.tick(world, DT);
+      Projectiles.tick(world, DT);
+      Hazards.tick(world, DT);
+    }
+    /** 다음 진액 구슬이 반응 반경에 들면 눌러 반사한다 — 반사된 구슬을 돌려준다 */
+    function deflectNextOrb(maxTicks = 400): ProjectileState {
+      for (let i = 0; i < maxTicks; i++) {
+        stepAll();
+        const orb = world.projectiles.find(
+          (pr) => pr.owner === 'enemy' && pr.kind === 'goo' && Math.hypot(world.player.x - pr.x, world.player.z - pr.z) <= balance.reaction.radius,
+        );
+        if (orb) {
+          pressReaction();
+          expect(orb.owner).toBe('player');
+          expect(orb.deflected).toBe(true);
+          return orb;
+        }
+      }
+      throw new Error('구슬이 반응 반경에 들지 않았다');
+    }
+    /** 이 구슬이 사라질 때까지(착탄) 돌린다 */
+    function flyUntilGone(orb: ProjectileState, maxTicks = 300): void {
+      for (let i = 0; i < maxTicks && world.projectiles.includes(orb); i++) stepAll();
+      expect(world.projectiles.includes(orb)).toBe(false);
+    }
+
+    it('데이터 — volleyAttack(projectile·48틱·보라·goo·16 m/s·r0.35·반사·부술 수 있음·3발/24틱·16·2.8m·minRange 6·abortRange 4·쿨 540·deflectSelfDamage 33·poolKind orb·corrosive 막아도), vent hp 132(= 33 × 4)·openMul 1.5·damageMul 3.0, 낫 poolKind blade·발구르기 stomp·완벽 회피 skid, balance hazards.pools{blade 1.6, stomp 2.0, orb 1.2, skid 1.6 / 480}·poolMax 12, status.corrosive, corruption 정화 1/6/×2, weakPoint ventGagThreshold 66·choke{1800, 10}. P2 해금 volley, P1 잠김. 족장 volley 는 옛 그대로', () => {
+      expect(volley).toMatchObject({
+        type: 'projectile', windupTicks: 48, telegraph: 'purple', projectileKind: 'goo', projectileSpeed: 16, projectileRadius: 0.35, deflectable: true, breakable: true,
+        shots: 3, shotIntervalTicks: 24, damage: 16, playerKnockback: 2.8, minRange: 6, abortRange: 4, cooldownTicks: 540, deflectSelfDamage: 33, poolKind: 'orb',
+        statusOnHit: 'corrosive', statusOnBlock: 'corrosive', parryable: false,
+      });
+      expect(volley.playerKnockback).toBe(balance.playerKnockback.magic); // "magic 밀림 2.8m"
+      expect(volley.muzzleHeightMul! * def.height).toBeCloseTo(wp('vent').offset.y, 6); // 구슬은 분출공에서 나간다
+      expect(wp('vent')).toMatchObject({ hp: 132, openMul: 1.5, damageMul: 3.0, exposedStates: [] });
+      expect(wp('vent').hp).toBe(volley.deflectSelfDamage! * 4); // 반사 4회 = 질식
+      expect(wpc.ventGagThreshold).toBe(66);
+      expect(wpc.ventGagThreshold).toBe(pistol.damage * wp('vent').openMul! * 4); // 예고 중 권총 4발
+      expect(wpc.choke).toEqual({ sealTicks: 1800, windupPenalty: 10 });
+      expect(def.attack.poolKind).toBe('blade');
+      expect(def.attackAlt!.poolKind).toBe('blade');
+      expect(def.slamAttack!.poolKind).toBe('stomp');
+      expect(def.chargeAttack!.perfectDodgeExposes!.poolKind).toBe('skid');
+      expect(def.closeAttack!.poolKind).toBeUndefined();
+      expect(balance.hazards.pools).toEqual({ blade: { radius: 1.6, ticks: 480 }, stomp: { radius: 2.0, ticks: 480 }, orb: { radius: 1.2, ticks: 480 }, skid: { radius: 1.6, ticks: 480 } });
+      expect(balance.hazards.poolMax).toBe(12);
+      expect(balance.status.corrosive).toEqual({ moveSpeedMul: 0.6, dotPerTick: 2, dotIntervalTicks: 30, lingerTicks: 30, pendingPerTicks: 60, pendingCap: 8 });
+      expect(balance.corruption).toMatchObject({ ventHitCleanse: 1, ventCleanseCap: 6, corrosiveCleanseMul: 2 });
+      expect(resolvePhase(def, 2)!.unlock.has('volley')).toBe(true);
+      expect(resolvePhase(def, 2)!.poolsOn).toBe(true);
+      expect(resolvePhase(def, 3)!.poolsOn).toBe(false);
+      expect(slotUnlocked(def, { phase: 3 }, 'volley')).toBe(false);
+      expect(slotUnlocked(def, { phase: 2 }, 'volley')).toBe(true);
+      // 족장 화살 세례는 새 필드가 없다(옛 경로)
+      const chief = enemyDef('goblin_chieftain').volleyAttack!;
+      expect(chief.deflectSelfDamage).toBeUndefined();
+      expect(chief.poolKind).toBeUndefined();
+      expect(chief.statusOnHit).toBeUndefined();
+      expect(slotUnlocked(enemyDef('goblin_chieftain'), {}, 'volley')).toBe(true);
+      // 스포너 — 분출공 내구가 장부에 오른다
+      expect(spawnEnemyAt(TYPE, 20, 10, 9).weakHp).toEqual({ joint_r: 132, joint_l: 132, vent: 132 });
+    });
+
+    it('P1 에선 8m 에서 갑각 떨기가 나오지 않고(걸어온다) 웅덩이도 없다(낫 착지·발구르기·미끄러짐 어느 것도). P2 에선 8m 에서 갑각 떨기: 예고 48·보라·enemy_volley_start{shots 3}, 예고·시전 내내 분출공 열림(×1.5), 3발이 24틱 간격으로 kind goo 로 나가고, 시전이 끝나면 분출공이 닫힌다(exposure_closed{vent})', () => {
+      Hazards.init(world);
+      const boss = makeBehemoth(8.0);
+      boss.chargeCooldown = 9999;
+      const w = watch();
+      const x0 = boss.x;
+      for (let i = 0; i < 20; i++) Enemies.tick(world, DT);
+      expect(boss.attackMode ?? 'melee').not.toBe('volley');
+      expect(boss.x).toBeLessThan(x0);
+      expect(w.starts).toHaveLength(0);
+      expect(weakPointOpen(boss, wp('vent'))).toBe(false);
+      // P1 낫 착지 — 웅덩이 없음
+      world.enemies.length = 0;
+      const b1 = makeBehemoth(4.0);
+      tickEnemiesUntil(() => b1.ai === 'recover', 120);
+      expect(w.hits).toHaveLength(1);
+      expect(world.pools).toHaveLength(0);
+      expect(w.spawned).toHaveLength(0);
+      // P2 — 갑각 떨기
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.kbTicks = 0;
+      const b2 = makeBehemoth(8.0);
+      toP2(b2);
+      untilVolleyWindup(b2, 5);
+      expect(b2.timer).toBe(volley.windupTicks);
+      expect(w.windups.at(-1)).toMatchObject({ telegraph: 'purple' });
+      expect(w.starts).toEqual([expect.objectContaining({ shots: 3 })]);
+      // 분출공 — 예고 첫 틱부터 열려 있다(노출 타이머), 배율은 openMul 1.5
+      expect(weakPointOpen(b2, wp('vent'))).toBe(true);
+      expect(b2.exposure?.['vent']).toBeGreaterThan(0);
+      expect(w.status.map(w.tag)).toEqual(['expose:vent:true']);
+      const hp0 = b2.health;
+      shootVent(b2);
+      expect(w.weakHits).toEqual([expect.objectContaining({ id: 'vent', damage: pistol.damage * 1.5 })]);
+      expect(b2.health).toBeCloseTo(hp0 - pistol.damage * 1.5, 5);
+      expect(b2.weakHp!['vent']).toBeCloseTo(132 - pistol.damage * 1.5, 5);
+      // 예고 내내 열려 있고 눈·관절·심장은 닫혀 있다
+      for (let i = 0; i < volley.windupTicks - 2; i++) {
+        Enemies.tick(world, DT);
+        expect(b2.ai).toBe('windup');
+        expect(weakPointOpen(b2, wp('vent'))).toBe(true);
+        expect(weakPointOpen(b2, wp('eye'))).toBe(false);
+        expect(weakPointOpen(b2, wp('heart'))).toBe(false);
+      }
+      tickEnemiesUntil(() => b2.ai === 'volley', 5);
+      expect(b2.volleyLeft).toBe(3);
+      // 첫 발은 예고가 끝나는 즉시, 이어서 24틱 간격
+      Enemies.tick(world, DT);
+      expect(world.projectiles).toHaveLength(1);
+      const orb = world.projectiles[0]!;
+      expect(orb).toMatchObject({ owner: 'enemy', kind: 'goo', deflectable: true, breakable: true, radius: 0.35, damage: 16, deflectSelfDamage: 33, poolKind: 'orb', statusOnHit: 'corrosive', statusOnBlock: 'corrosive', playerKnockback: 2.8, casterId: b2.id });
+      expect(Math.hypot(orb.vx, orb.vy, orb.vz)).toBeCloseTo(16, 5);
+      expect(orb.y).toBeCloseTo(wp('vent').offset.y, 6); // 분출공 높이에서 나간다
+      expect(weakPointOpen(b2, wp('vent'))).toBe(true); // 시전 중에도 열려 있다
+      // 발사 간격 — shotIntervalTicks(24)만큼 기다린 다음 틱에 쏜다(족장 화살 세례와 같은 volley 파이프: 24틱 대기 + 발사 틱)
+      for (let i = 0; i < 24; i++) Enemies.tick(world, DT);
+      expect(world.projectiles).toHaveLength(1);
+      Enemies.tick(world, DT);
+      expect(world.projectiles).toHaveLength(2);
+      for (let i = 0; i < 25; i++) Enemies.tick(world, DT);
+      expect(world.projectiles).toHaveLength(3);
+      expect(w.shots.map((s) => s.left)).toEqual([2, 1, 0]);
+      expect(b2.ai).toBe('recover');
+      expect(b2.volleyCooldown).toBe(volley.cooldownTicks);
+      // 시전이 끝난 다음 틱 분출공이 닫힌다 — 그 창 안의 명중 1
+      Enemies.tick(world, DT);
+      expect(weakPointOpen(b2, wp('vent'))).toBe(false);
+      expect(w.closed).toEqual([expect.objectContaining({ id: 'vent', hits: 1 })]);
+      expect(w.status.map(w.tag)).toEqual(['expose:vent:true', 'expose:vent:false']);
+      // 닫힌 분출공은 몸통 0.8× — 약점 장부에 안 오른다
+      shootVent(b2);
+      expect(w.weakHits).toHaveLength(1);
+    });
+
+    it('진액 구슬 직격 — 16 + magic 밀림 2.8m + 오염 진액(lingerTicks 30, corrosive_applied) + 착탄 자리 웅덩이(orb r1.2). 막아도 붙는다(칩 4.8 + 오염 진액), 무적이면 지나간다. 구슬 3발이 순서대로 웅덩이를 남긴다', () => {
+      Hazards.init(world);
+      const boss = makeBehemoth(8.0);
+      toP2(boss);
+      const w = watch();
+      const applied: unknown[] = [];
+      world.events.on('corrosive_applied', (p) => applied.push(p));
+      untilVolleyWindup(boss, 5);
+      // 첫 구슬이 플레이어에 닿을 때까지
+      for (let i = 0; i < 200 && w.hits.length === 0; i++) stepAll();
+      expect(w.hits).toEqual([expect.objectContaining({ amount: 16, blocked: false })]);
+      expect(world.player.health).toBe(84);
+      expect(world.player.kbTicks).toBe(balance.playerKnockback.ticks);
+      expect(Math.hypot(world.player.kbX!, world.player.kbZ!) * balance.playerKnockback.ticks).toBeCloseTo(2.8, 5);
+      expect(playerStatusTicks(world.player, 'corrosive')).toBe(balance.status.corrosive.lingerTicks); // 직격이 세운 값 — Status 는 다음 틱에 알린다
+      Status.tick(world, DT);
+      expect(applied).toHaveLength(1);
+      expect(w.spawned).toEqual([expect.objectContaining({ kind: 'orb', r: 1.2 })]);
+      expect(Math.hypot(w.spawned[0]!.x - world.player.x, w.spawned[0]!.z - world.player.z)).toBeLessThan(1.0); // 발밑
+      expect(world.pools).toHaveLength(1);
+      expect(world.pools[0]).toMatchObject({ kind: 'orb', r: 1.2, ticks: expect.any(Number) });
+      // 둘째 구슬은 막는다 — 칩만 들어오되 진액은 붙고 밀림은 1/3
+      world.player.kbTicks = 0;
+      world.input = { ...Input.emptySnapshot(), reactionHeld: true };
+      Reaction.tick(world, DT);
+      expect(world.player.blocking).toBe(true);
+      for (let i = 0; i < 200 && w.hits.length === 1; i++) {
+        Enemies.tick(world, DT);
+        Projectiles.tick(world, DT);
+        Hazards.tick(world, DT);
+      }
+      world.input = Input.emptySnapshot();
+      expect(w.hits[1]).toMatchObject({ amount: 16 * balance.block.chipDamageRatio, blocked: true });
+      expect(Math.hypot(world.player.kbX!, world.player.kbZ!) * balance.playerKnockback.ticks).toBeCloseTo(2.8 * balance.playerKnockback.blockedMul, 5);
+      expect(world.pools).toHaveLength(2);
+      // 셋째 구슬 — 회피 무적이면 통과해 벽·바닥에 떨어져 거기 웅덩이
+      world.player.blocking = false;
+      for (let i = 0; i < 200 && world.pools.length < 3; i++) {
+        world.player.iframeTicks = 5;
+        Enemies.tick(world, DT);
+        Projectiles.tick(world, DT);
+        Hazards.tick(world, DT);
+      }
+      expect(w.hits).toHaveLength(2);
+      expect(world.pools).toHaveLength(3);
+      expect(w.spawned.every((s) => s.kind === 'orb')).toBe(true);
+    });
+
+    it('반사 노선 — 반응 반경 안의 구슬을 누르면 반사(deflect)돼 시전자 가슴으로 되돌아가 분출공에 고정 33(배율·열림 무관 — 시전이 끝나 닫힌 뒤에도) + weak_point_hit{vent 33} + damage_pop 33 + 오염 대기 −1(corruption_cleansed) — 웅덩이는 남기지 않는다. 뒤따라오는 구슬과 부딛혀 깨지지 않는다. 4회(볼리 2번)면 내구 0 → 질식: boss_status choke{ticks 1800} + 웅덩이 전부 증발 + 갑각 떨기 봉인(8m 에서 걸어온다) + 예고 +10(낫 32 → 42) + 분출공 닫힘·hp 0. 1800틱 뒤 hp 132 복귀·choke off·갑각 떨기 재개', () => {
+      Hazards.init(world);
+      Corruption.init(world);
+      world.corruption.pending = 5;
+      const boss = makeBehemoth(8.0);
+      toP2(boss);
+      const w = watch();
+      const broken: unknown[] = [];
+      world.events.on('projectile_broken', (p) => broken.push(p));
+      untilVolleyWindup(boss, 5);
+      // 첫 볼리 — 세 발 전부 반사
+      const hpBefore = boss.health;
+      for (let n = 1; n <= 3; n++) {
+        const orb = deflectNextOrb();
+        expect(orb.damage).toBeCloseTo(16 * 1.5, 5); // 반사 규약(×1.5)은 그대로지만 분출공엔 고정 33 이 들어간다
+        flyUntilGone(orb);
+        expect(w.weakHits).toHaveLength(n);
+        expect(w.weakHits[n - 1]).toMatchObject({ id: 'vent', damage: 33 });
+        expect(boss.weakHp!['vent']).toBe(132 - 33 * n);
+        expect(w.cleansed).toHaveLength(n);
+        expect(w.cleansed[n - 1]).toMatchObject({ amount: 1, source: 'vent', total: n });
+        expect(world.corruption.pending).toBe(5 - n);
+      }
+      expect(w.deflects).toHaveLength(3);
+      expect(broken).toHaveLength(0); // 되돌아가는 구슬이 다음 구슬을 깨지 않았다
+      expect(boss.health).toBeCloseTo(hpBefore - 99, 5);
+      expect(w.pops.filter((p) => p.amount === 33)).toHaveLength(3);
+      expect(w.hits).toHaveLength(0);
+      expect(world.pools).toHaveLength(0); // 분출공으로 되돌아간 구슬은 웅덩이가 없다
+      expect(w.spawned).toHaveLength(0);
+      expect(world.corruption.applied).toBe(0); // applied 는 불변
+      expect(boss.chokeTicks ?? 0).toBe(0);
+      // 둘째 볼리 — 첫 구슬 반사로 내구 0 → 질식. 그 사이 웅덩이 하나를 놓아 증발을 본다
+      Hazards.spawnPool(world, 20, 12, 'blade');
+      expect(world.pools).toHaveLength(1);
+      boss.volleyCooldown = 0;
+      untilVolleyWindup(boss, 120);
+      const orb4 = deflectNextOrb();
+      flyUntilGone(orb4);
+      expect(boss.weakHp!['vent']).toBe(0);
+      expect(w.broken).toEqual([expect.objectContaining({ id: 'vent' })]);
+      // 질식은 다음 Enemies 틱의 장부에서 — 이미 stepAll 이 돌았을 수 있으니 한 틱 더
+      tickEnemiesUntil(() => (boss.chokeTicks ?? 0) > 0, 3);
+      expect(boss.chokeTicks).toBeGreaterThanOrEqual(wpc.choke.sealTicks - 2);
+      const choke = w.status.find((st) => st.kind === 'choke' && st.on)!;
+      expect(choke).toMatchObject({ kind: 'choke', on: true, ticks: wpc.choke.sealTicks });
+      expect(w.status.filter((st) => st.kind === 'rupture')).toHaveLength(0); // 파열이 아니다
+      expect(world.pools).toHaveLength(0);
+      expect(w.evaporated).toEqual([expect.objectContaining({ kind: 'blade', reason: 'choke' })]);
+      expect(boss.attackMode).not.toBe('volley'); // 시전이 접혔다(남은 두 발 없음)
+      expect(weakPointOpen(boss, wp('vent'))).toBe(false);
+      expect(w.cleansed).toHaveLength(4);
+      // 봉인 — 8m 에서 쿨다운이 비어도 갑각 떨기가 안 나간다(걸어온다)
+      boss.volleyCooldown = 0;
+      tickEnemiesUntil(() => boss.ai === 'chase', 120);
+      const x0 = boss.x;
+      for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+      expect(boss.attackMode ?? 'melee').not.toBe('volley');
+      expect(boss.x).toBeLessThan(x0);
+      // 예고 +10 — 낫 사거리에 두면 예고 42
+      boss.x = world.player.x + 4.0;
+      boss.prevX = boss.x;
+      boss.closeCooldown = 9999;
+      tickEnemiesUntil(() => boss.ai === 'windup', 10);
+      expect(boss.timer).toBe(def.attack.windupTicks + wpc.choke.windupPenalty);
+      // 질식 중 되돌아온 구슬(가상)은 분출공이 없으니 몸 피해(옛 반사 경로)로 — 여기선 hp 가 0 인 채 유지되는지만
+      expect(boss.weakHp!['vent']).toBe(0);
+      // 1800틱이 다하면 hp 복귀 + choke off, 갑각 떨기가 다시 나간다
+      boss.ai = 'recover';
+      boss.timer = 9999;
+      boss.attackMode = 'melee';
+      for (let i = 0; i < wpc.choke.sealTicks + 2 && (boss.chokeTicks ?? 0) > 0; i++) Enemies.tick(world, DT);
+      expect(boss.chokeTicks).toBe(0);
+      expect(boss.weakHp!['vent']).toBe(132);
+      expect(w.status.filter((st) => st.kind === 'choke').map((st) => st.on)).toEqual([true, false]);
+      boss.ai = 'chase';
+      boss.timer = 0;
+      boss.x = world.player.x + 8;
+      boss.prevX = boss.x;
+      boss.volleyCooldown = 0;
+      untilVolleyWindup(boss, 5);
+      expect(w.starts).toHaveLength(3);
+    });
+
+    it('갑각 떨기 예고 중 분출공 직격 누적 66(권총 4발 × 16.5) → 역류: 시전 취소(구슬 안 나감·attackMode melee·쿨다운은 문다) + head_down 60 cause backflow(눈 열림·혼절 누적 없음) + boss_status backflow{cause vent, selfDamage 0} — 자해·봉인 없음. 시전(volley) 중 직격은 역류가 아니다. 일어서며 기상 발구르기', () => {
+      const boss = makeBehemoth(8.0);
+      toP2(boss);
+      const w = watch();
+      const staggers: unknown[] = [];
+      world.events.on('boss_staggered', (p) => staggers.push(p));
+      untilVolleyWindup(boss, 5);
+      const hp0 = boss.health;
+      for (let i = 0; i < 4; i++) shootVent(boss);
+      expect(boss.weakAccum!['vent']).toBeCloseTo(66, 5);
+      expect(boss.ai).toBe('windup');
+      Enemies.tick(world, DT);
+      expect(boss.attackMode).toBe('melee');
+      expect(boss.pose).toBe('head_down');
+      expect(boss.poseCause).toBe('backflow');
+      expect(boss.poseTicks).toBe(wpc.headDown.backflowTicks);
+      expect(boss.volleyLeft ?? 0).toBe(0);
+      expect(boss.volleyCooldown).toBe(volley.cooldownTicks);
+      expect(boss.health).toBeCloseTo(hp0 - 66, 5); // 자해 없음
+      expect(boss.weakCooldown?.['vent']).toBeUndefined(); // 봉인 없음
+      expect(world.projectiles).toHaveLength(0);
+      expect(w.status.map(w.tag)).toEqual(['expose:vent:true', 'expose:vent:false', 'backflow:true', 'head_down:true']);
+      expect(w.status[2]).toMatchObject({ kind: 'backflow', on: true, cause: 'vent', ticks: 60, selfDamage: 0 });
+      expect(w.closed).toEqual([expect.objectContaining({ id: 'vent', hits: 4 })]);
+      expect(weakPointOpen(boss, wp('vent'))).toBe(false);
+      expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+      // 머리 내림 중 눈 66 — 혼절 없음(역류 원인)
+      shootEye(boss);
+      shootEye(boss);
+      Enemies.tick(world, DT);
+      expect(staggers).toHaveLength(0);
+      expect(boss.pose).toBe('head_down');
+      tickEnemiesUntil(() => boss.ai === 'chase', 70);
+      expect(w.status.map(w.tag).slice(4)).toEqual(['head_down:false', 'backflow:false']);
+      expect(boss.wakeSlamPending).toBe(true);
+      // 대조 — 시전(volley) 중 4발은 피해·정화만, 역류 없음
+      world.enemies.length = 0;
+      const b2 = makeBehemoth(8.0);
+      toP2(b2);
+      untilVolleyWindup(b2, 5);
+      tickEnemiesUntil(() => b2.ai === 'volley', 60);
+      for (let i = 0; i < 4; i++) shootVent(b2);
+      Enemies.tick(world, DT);
+      expect(b2.ai).toBe('volley');
+      expect(b2.pose).toBeUndefined();
+      expect(b2.weakHp!['vent']).toBeCloseTo(132 - 66, 5);
+    });
+
+    it('정화 장부 — 분출공 명중마다 오염 대기 −1, 오염 진액 부착 중 ×2, 전투당 상한 −6(넘으면 corruption_cleansed 없음·pending 그대로), applied 불변. pending 은 음수가 될 수 있고 제단 정산은 0 이하를 건너뛴다', () => {
+      Corruption.init(world);
+      world.corruption.pending = 2;
+      world.corruption.applied = 30;
+      const boss = makeBehemoth(8.0);
+      toP2(boss);
+      const w = watch();
+      untilVolleyWindup(boss, 5);
+      shootVent(boss);
+      expect(w.cleansed).toEqual([expect.objectContaining({ amount: 1, total: 1 })]);
+      expect(world.corruption.pending).toBe(1);
+      // 부착 중 ×2
+      setPlayerStatus(world.player, 'corrosive', 30);
+      shootVent(boss);
+      expect(w.cleansed[1]).toMatchObject({ amount: 2, total: 3 });
+      expect(world.corruption.pending).toBe(-1);
+      shootVent(boss);
+      expect(w.cleansed[2]).toMatchObject({ amount: 2, total: 5 });
+      shootVent(boss); // 상한 6 — 남은 1 만
+      expect(w.cleansed[3]).toMatchObject({ amount: 1, total: 6 });
+      expect(world.corruption.pending).toBe(-4);
+      expect(boss.fightCleansed).toBe(6);
+      // 상한 뒤 — 명중은 들어가되 정화는 없다(역류가 났으니 새 예고에서)
+      Enemies.tick(world, DT); // 66 누적 → 역류
+      expect(boss.pose).toBe('head_down');
+      boss.exposure = { vent: 900 }; // 시험용 — 분출공을 억지로 열어 둔다(장부만 본다)
+      boss.weakAccum!['vent'] = 0;
+      shootVent(boss);
+      expect(w.weakHits).toHaveLength(5);
+      expect(w.cleansed).toHaveLength(4);
+      expect(world.corruption.pending).toBe(-4);
+      expect(world.corruption.applied).toBe(30);
+      // 제단 정산 — 음수 pending 은 그대로 남고 applied 도 그대로
+      Corruption.settle(world);
+      expect(world.corruption.applied).toBe(30);
+      expect(world.corruption.pending).toBe(-4);
+      world.corruption.pending += 6; // 각인 하나(8~15)의 일부가 여유로 상쇄되는 그림
+      Corruption.settle(world);
+      expect(world.corruption.applied).toBe(32);
+      expect(world.corruption.pending).toBe(0);
+    });
+
+    it('웅덩이 — P2 낫 착지점(낫끝 4.4m 앞, blade r1.6·480틱)에 웅덩이가 생겨 밟은 플레이어에게 오염 진액이 붙는다(패링하면 착지가 없으니 웅덩이도 없다), 발구르기 착지 중심 stomp r2.0, 완벽 회피 미끄러짐 자리 skid r1.6. P1 에선 셋 다 없다', () => {
+      Hazards.init(world);
+      const w = watch();
+      // 낫 — 맞은 자리(4.0m)가 곧 낫끝, 밀린 플레이어(2.0m)는 반경 밖 근처, 여기선 넉백을 지워 웅덩이 위에 남는다
+      const boss = makeBehemoth(4.0);
+      toP2(boss);
+      tickEnemiesUntil(() => boss.ai === 'recover', 120);
+      expect(w.hits).toHaveLength(1);
+      expect(w.spawned).toEqual([expect.objectContaining({ kind: 'blade', r: 1.6 })]);
+      const pool = world.pools[0]!;
+      expect(pool).toMatchObject({ kind: 'blade', r: 1.6, ticks: 480, duration: 480 });
+      expect(pool.x).toBeCloseTo(boss.x - 4.4, 3); // 낫끝 = 사거리 끝(정면 -x)
+      expect(pool.z).toBeCloseTo(boss.z, 3);
+      expect(playerStatusTicks(world.player, 'corrosive')).toBe(0);
+      Hazards.tick(world, DT);
+      expect(playerStatusTicks(world.player, 'corrosive')).toBe(balance.status.corrosive.lingerTicks);
+      // 패링 — 웅덩이 없음
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.kbTicks = 0;
+      const b2 = makeBehemoth(4.0);
+      toP2(b2);
+      expect(normalParry(b2)).toBe('normal');
+      tickEnemiesUntil(() => b2.ai === 'chase', 200);
+      expect(world.pools).toHaveLength(1);
+      // 발구르기 착지 — 중심에 stomp r2.0
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.kbTicks = 0;
+      const b3 = makeBehemoth(5.0);
+      toP2(b3);
+      b3.chargeCooldown = 9999;
+      tickEnemiesUntil(() => b3.ai === 'windup' && b3.attackMode === 'slam', 30);
+      tickEnemiesUntil(() => b3.ai === 'recover', 60);
+      expect(w.spawned.at(-1)).toMatchObject({ kind: 'stomp', r: 2.0 });
+      expect(Math.hypot(w.spawned.at(-1)!.x - b3.x, w.spawned.at(-1)!.z - b3.z)).toBeLessThan(1e-6);
+      // 완벽 회피 — 미끄러진 자리에 skid r1.6
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.kbTicks = 0;
+      world.player.x = 6;
+      world.player.prevX = 6;
+      const b4 = makeBehemoth(10);
+      toP2(b4);
+      tickEnemiesUntil(() => b4.ai === 'charging', 300);
+      const cd = Enemies.contactDist(def);
+      tickEnemiesUntil(() => Math.hypot(b4.x - world.player.x, b4.z - world.player.z) <= cd + 1.0, 300);
+      world.player.iframeTicks = 1e9;
+      tickEnemiesUntil(() => b4.pose === 'skid', 60);
+      world.player.iframeTicks = 0;
+      expect(w.spawned.at(-1)).toMatchObject({ kind: 'skid', r: 1.6 });
+      expect(Math.hypot(w.spawned.at(-1)!.x - b4.x, w.spawned.at(-1)!.z - b4.z)).toBeLessThan(1e-6);
+      expect(world.pools).toHaveLength(3);
+      // P1 대조 — 셋 다 없다
+      Hazards.clearAll(world);
+      const before = w.spawned.length;
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.kbTicks = 0;
+      world.player.iframeTicks = 0;
+      const p1 = makeBehemoth(4.0);
+      tickEnemiesUntil(() => p1.ai === 'recover', 120);
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.kbTicks = 0;
+      const p1b = makeBehemoth(10);
+      tickEnemiesUntil(() => p1b.ai === 'charging', 300);
+      tickEnemiesUntil(() => Math.hypot(p1b.x - world.player.x, p1b.z - world.player.z) <= cd + 1.0, 300);
+      world.player.iframeTicks = 1e9;
+      tickEnemiesUntil(() => p1b.pose === 'skid', 60);
+      world.player.iframeTicks = 0;
+      expect(w.spawned.length).toBe(before);
+      expect(world.pools).toHaveLength(0);
+    });
+
+    it('갑각 떨기는 abortRange 4 안으로 붙으면 접고(쿨다운은 문다) 분출공도 닫힌다. 페이즈 전환이 예고 중 끼면 분출공 노출을 닫고 포효로(진행 중 시전 취소). 족장 화살 세례는 분출공·웅덩이·정화 어느 것도 없다(옛 경로)', () => {
+      const boss = makeBehemoth(8.0);
+      toP2(boss);
+      const w = watch();
+      untilVolleyWindup(boss, 5);
+      expect(weakPointOpen(boss, wp('vent'))).toBe(true);
+      boss.x = world.player.x + 3.5;
+      boss.prevX = boss.x;
+      boss.closeCooldown = 9999;
+      Enemies.tick(world, DT);
+      expect(boss.ai).toBe('chase');
+      expect(boss.attackMode).toBe('melee');
+      expect(boss.volleyCooldown ?? 0).toBe(0); // 예고 중 접은 것은 옛 경로 그대로(쿨다운 없음) — 시전 중 접으면 문다
+      Enemies.tick(world, DT);
+      expect(weakPointOpen(boss, wp('vent'))).toBe(false);
+      expect(w.closed).toEqual([expect.objectContaining({ id: 'vent' })]);
+      // 페이즈 전환 — 예고 중 칸이 비면 시전 취소 + 분출공 닫힘 + 포효
+      world.enemies.length = 0;
+      const b2 = makeBehemoth(8.0);
+      toP2(b2);
+      untilVolleyWindup(b2, 5);
+      b2.health = (def.health / def.healthBars!) * 1; // 500 — 2칸째가 빈다 → P3
+      Enemies.tick(world, DT);
+      expect(b2.phase).toBe(1);
+      expect(b2.pose).toBe('roar');
+      expect(b2.attackMode).toBe('melee');
+      expect(weakPointOpen(b2, wp('vent'))).toBe(false);
+      expect(b2.exposure?.['vent']).toBeUndefined();
+      expect(world.projectiles).toHaveLength(0);
+      // 족장 — 옛 경로
+      world.enemies.length = 0;
+      world.player.health = 100;
+      const chief = spawnEnemyAt('goblin_chieftain', 6 + 9, 6, 2);
+      chief.ai = 'chase';
+      chief.chargeCooldown = 9999;
+      world.enemies.push(chief);
+      tickEnemiesUntil(() => chief.ai === 'volley', 120);
+      Enemies.tick(world, DT);
+      expect(world.projectiles).toHaveLength(1);
+      expect(world.projectiles[0]!.kind).toBe('arrow');
+      expect(world.projectiles[0]!.deflectSelfDamage).toBeUndefined();
+      expect(world.projectiles[0]!.poolKind).toBeUndefined();
+      expect(chief.exposure).toBeUndefined();
+      expect(chief.chokeTicks).toBeUndefined();
     });
   });
 });

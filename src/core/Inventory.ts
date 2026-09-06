@@ -331,8 +331,8 @@ export function curableStatuses(world: World, kind: ItemKind): PlayerStatusKind[
   const out: PlayerStatusKind[] = [];
   for (const status of PLAYER_STATUS_KINDS) {
     if (!cures.includes(status)) continue;
-    // 상태 블록마다 필드가 다르다(numbArm 엔 potionCures 가 없다) — 공통인 ticks 로 묶어 옵셔널로 읽는다
-    const cfg: { ticks: number; potionCures?: boolean } = balance.status[PLAYER_STATUS_CFG[status]];
+    // 상태 블록마다 필드가 다르다(numbArm 엔 potionCures 가 없고, 오염 진액은 ticks 대신 lingerTicks) — potionCures 만 옵셔널로 읽는다
+    const cfg = balance.status[PLAYER_STATUS_CFG[status]] as { potionCures?: boolean };
     if (cfg.potionCures !== true) continue;
     if (playerStatusTicks(world.player, status) > 0) out.push(status);
   }

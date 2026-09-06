@@ -14,6 +14,8 @@ import {
   behemothEyeDimmed,
   behemothRearOffset,
   behemothVentLit,
+  behemothWeakScaleMul,
+  BH_VENT_OPEN_SCALE,
   buildBehemothRig,
   poseBehemothRig,
   setBehemothPhaseLook,
@@ -791,5 +793,45 @@ describe('페이즈 외형(B2-6) — 포효 자세·등갑판 균열·분출공 
     // 다른 약점은 점등이 없다(닫힘 = 발광 없음)
     const heart = rig.weakPoints['heart']!.material as THREE.MeshLambertMaterial;
     expect(heart.emissive.getHex()).toBe(0x000000);
+  });
+});
+
+describe('갑각 떨기·분출공·질식 외형(B3-2)', () => {
+  it('열린 분출공은 ×1.4(BH_VENT_OPEN_SCALE — 맥동 위에 곱한다), 다른 약점은 1. 닫힌 분출공은 1. 질식(sealed)이면 어두운 본색·발광 없음·크기 1(파열색 0x7a1f3a 이 아니다)', () => {
+    expect(BH_VENT_OPEN_SCALE).toBe(1.4);
+    expect(behemothWeakScaleMul('vent', true)).toBe(1.4);
+    expect(behemothWeakScaleMul('vent', false)).toBe(1);
+    expect(behemothWeakScaleMul('eye', true)).toBe(1);
+    const { rig } = measureRig(0, 0, 0, {});
+    const vent = rig.weakPoints['vent']!;
+    const mat = vent.material as THREE.MeshLambertMaterial;
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: true, broken: false, flashAgeMs: -1, scaleMul: behemothWeakScaleMul(id, true) }));
+    expect(vent.scale.x).toBeCloseTo(1.12 * 1.4, 3); // 맥동 봉우리 × 열림 배율
+    expect(rig.weakPoints['eye']!.scale.x).toBeCloseTo(1.12, 3);
+    expect(mat.emissive.getHex()).toBe(0x39ff88); // 텔레그래프 보라가 아니다 — 약점 발광은 제 색
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent', scaleMul: behemothWeakScaleMul(id, false) }));
+    expect(vent.scale.x).toBeCloseTo(1, 6);
+    // 질식 — sealed 로 그린다(syncEnemies 가 chokeTicks > 0 이면 sealed, broken 은 vent 에 쓰지 않는다)
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: false, broken: false, flashAgeMs: -1, sealed: id === 'vent' }));
+    expect(mat.emissive.getHex()).toBe(0x000000);
+    expect(mat.color.getHex()).not.toBe(0x7a1f3a);
+    expect(mat.color.getHex()).not.toBe(0x1f3a2e); // 본색보다 어둡다
+    expect(vent.scale.x).toBe(1);
+  });
+
+  it('갑각 떨기(shaking) — 등갑판 셋이 판마다 다른 위상으로 잘게 굴러(rotation.z ≠ 0, 서로 다름) 살짝 들썩이고, 떨지 않으면 제자리(0·restY). 꼭대기는 3.8 아래', () => {
+    const { rig, box } = measureRig(0, 0, 0, { shaking: true, nowMs: 7 });
+    const rz = rig.plates.map((p) => p.rotation.z);
+    expect(rz.every((r) => Math.abs(r) > 1e-4)).toBe(true);
+    expect(new Set(rz.map((r) => r.toFixed(4))).size).toBe(3);
+    expect(rz.every((r) => Math.abs(r) <= 0.05 + 1e-6)).toBe(true);
+    const restY = def.visual!.plates.y * def.height;
+    expect(rig.plates.every((p) => p.position.y >= restY - 1e-6 && p.position.y <= restY + 0.03 + 1e-6)).toBe(true);
+    expect(box.max.y).toBeLessThan(3.8);
+    poseBehemothRig(rig, { nowMs: 100, legPhase: 0, legBlend: 0, bladeSide: 1, bladeWindup: 0, bladeStriking: false, strikeProgress: 0, tipDist: pullback, recoiled: false, chargeCoil: 0, charging: false, headbuttCoil: 0, headbutting: false, trembling: false, snap: 1, shaking: false });
+    for (const p of rig.plates) {
+      expect(p.rotation.z).toBeCloseTo(0, 6);
+      expect(p.position.y).toBeCloseTo(restY, 6);
+    }
   });
 });

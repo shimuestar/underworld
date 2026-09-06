@@ -599,6 +599,43 @@
       #buff-hobble svg {
         display: block;
       }
+      /* 오염 진액 디버프(거수 진액 웅덩이·구슬, B3-2) — 같은 틀, 오염 녹색 결(분출공·균열 발광과 같은 계열). 이속 ×0.6·도트·오염 대기 가산, 웅덩이에서 나오면 곧 풀린다 */
+      #buff-corrosive {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        padding: 3px;
+        box-sizing: border-box;
+        border: 1px solid #2f8a55;
+        border-radius: 6px;
+        background: rgba(4, 28, 14, 0.62);
+        display: none;
+        animation: corrosive-pulse 0.9s ease-in-out infinite;
+      }
+      #buff-corrosive.on {
+        display: block;
+      }
+      @keyframes corrosive-pulse {
+        0%, 100% { box-shadow: 0 0 4px rgba(57, 255, 136, 0.35); }
+        50% { box-shadow: 0 0 10px rgba(57, 255, 136, 0.85); }
+      }
+      #buff-corrosive .buff-cd {
+        position: absolute;
+        inset: 0;
+        border-radius: 5px;
+        pointer-events: none;
+      }
+      #buff-corrosive .buff-sec {
+        position: absolute;
+        right: 1px;
+        bottom: -1px;
+        font: bold 10px/1 monospace;
+        color: #bfffd6;
+        text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+      }
+      #buff-corrosive svg {
+        display: block;
+      }
       /* 디버프 재시작 — 세 번 크게 깜빡인다 (독·화염·상태 공용, id 맥동보다 우선) */
       #buff-poison.refresh,
       #buff-burn.refresh,
@@ -1214,7 +1251,7 @@
     <div id="sigil-toast"><div class="name"></div><div class="sub"></div></div>
     <div id="web-overlay"></div>
     <div id="status">
-      <div id="buffs"><div class="buff-group buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div></div><div class="buff-group debuffs"><div id="buff-poison"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-burn"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-numb"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-concussion"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-hobble"><div class="buff-cd"></div><span class="buff-sec"></span></div></div></div>
+      <div id="buffs"><div class="buff-group buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div></div><div class="buff-group debuffs"><div id="buff-poison"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-burn"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-numb"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-concussion"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-hobble"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-corrosive"><div class="buff-cd"></div><span class="buff-sec"></span></div></div></div>
       <div id="status-bars">
         <div id="status-hp"><div id="status-hp-fill"></div><span class="bar-num" id="status-hp-num"></span></div>
         <div id="status-mana"><div id="status-mana-fill"></div><span class="bar-num" id="status-mana-num"></span></div>

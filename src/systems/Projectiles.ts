@@ -3,10 +3,10 @@
 // 시전 시 cast_spell 이벤트 발행 → Mana가 연쇄를 리셋한다.
 
 import { balance } from '../core/Balance';
-import { barrierUp, enemyDef, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, type WeakPointDef } from '../core/Entities';
+import { VENT_WEAK_POINT, barrierUp, enemyDef, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, ventCleanseAmount, weakPointDamageMul, type WeakPointDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakCrackWalls, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, hitWeakPoint, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius, damagePlayer } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakCrackWalls, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, hitWeakPoint, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius, damagePlayer, PLAYER_STATUS_CFG, playerStatusTicks, setPlayerStatus, statusDurationOf } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -875,7 +875,9 @@ function moveProjectiles(world: World, dt: number): void {
     // 부술 수 있는 적 투사체 — 화염구·수류탄이 공중에서 맞히면 함께 사라진다.
     // 히트스캔인 총알은 이 경로를 타지 않는다 (Weapons 는 투사체를 만들지 않는다)
     let hitProjectile: ProjectileState | null = null;
-    if (proj.owner === 'player') {
+    // 반사된 투사체(deflected)는 부수는 무기가 아니라 되돌아가는 것이다 — 되돌아가는 진액 구슬이 24틱 뒤따라오는 다음 구슬과 부딛혀 둘 다 사라지면
+    // 반사 노선(분출공 33 × 4)이 성립하지 않는다(B3-2)
+    if (proj.owner === 'player' && !proj.deflected) {
       for (const other of world.projectiles) {
         if (other === proj || other.owner !== 'enemy' || !other.breakable) continue;
         const pad = proj.radius + other.radius;
@@ -1187,7 +1189,8 @@ function moveProjectiles(world: World, dt: number): void {
           // 방어 감쇠는 종류별 예외를 먼저 본다 — 던진 바위는 방패로 받아도 그대로 민다
           const byKind = balance.playerKnockback.blockedMulByKind as Record<string, number>;
           const blockedMul = byKind[proj.kind ?? ''] ?? kb['blockedMul']!;
-          const push = (kb[proj.kind ?? 'arrow'] ?? kb['arrow']!) * (blocked ? blockedMul : 1);
+          // 공격별 밀림 재정의(proj.playerKnockback — 거수 진액 구슬 2.8 = magic)가 있으면 그것, 없으면 종류 표
+          const push = (proj.playerKnockback ?? kb[proj.kind ?? 'arrow'] ?? kb['arrow']!) * (blocked ? blockedMul : 1);
           pushPlayer(p, dirX, dirZ, push, balance.playerKnockback.ticks);
 
           if (blocked) world.events.emit('block_hit', { amount: damage, kind: proj.kind });
@@ -1196,6 +1199,10 @@ function moveProjectiles(world: World, dt: number): void {
             p.webSwingsLeft = balance.web.breakSwings;
             world.events.emit('web_caught', { swings: p.webSwingsLeft });
           }
+          // 플레이어 상태(근접 impact 와 같은 규약, B3-2) — 막았으면 statusOnBlock, 직격이면 statusOnHit. 진액 구슬은 둘 다 오염 진액(막아도 붙는다).
+          // 값만 세운다 — 감소·도트·_applied/_ended 는 Status.ts. 지속은 balance.status 블록(ticks / 오염 진액은 lingerTicks)
+          const status = blocked ? proj.statusOnBlock : proj.statusOnHit;
+          if (status) setPlayerStatus(p, status, statusDurationOf(balance.status[PLAYER_STATUS_CFG[status]]));
           // 출처 방향 = 날아온 방향의 반대 — 투사체는 이미 몸에 닿아 있어 속도로 되짚는다
           world.events.emit('player_damaged', {
             amount: damage, health: p.health, blocked,
@@ -1209,12 +1216,23 @@ function moveProjectiles(world: World, dt: number): void {
             world.events.emit('player_died', { tick: world.tick });
           }
         }
-      } else if (hitEnemy && proj.kind !== 'frost') {
+      }
+      // 분출공 자가 피격인지는 피해를 넣기 전에 정한다 — 넣은 뒤엔 내구가 0 이 되어(질식) 같은 판정이 거짓으로 뒤집힌다
+      const swallowed = hitEnemy !== null && ventSelfHit(proj, hitEnemy);
+      if (hitEnemy && proj.kind !== 'frost' && !hitPlayer) {
         // 착탄점을 넘긴다 — 화살 헤드샷 판정(높이)·약점 착탄 연출 (얼음 화살은 위에서 터졌다)
         applyProjectileHit(
           world, proj, hitEnemy, shieldedAtImpact,
           proj.y + dirY * hitT, hitWeak, proj.x + dirX * hitT, proj.z + dirZ * hitT,
         );
+      }
+      // 진액 웅덩이(거수 진액 구슬, B3-2) — 어디에 닿았든 그 자리 바닥에 남는다(플레이어·바닥·벽 — 벽이면 구슬 반지름만큼 앞). 시전자의 분출공으로 되돌아간
+      // 반사 구슬(swallowed)은 삼켜진 것이라 남기지 않는다. 다른 투사체에 깨진 구슬(hitProjectile 은 이쪽이 화염구·수류탄일 때)은 이 문을 지나지 않는다
+      if (proj.poolKind && !swallowed) {
+        const back = hitEnemy !== null || hitPlayer ? 0 : proj.radius;
+        world.events.emit('spawn_pool', {
+          kind: proj.poolKind, x: proj.x + dirX * (hitT - back), z: proj.z + dirZ * (hitT - back), enemyId: proj.casterId, hit: hitPlayer,
+        });
       }
       world.projectiles.splice(i, 1);
       i = removeBroken(world, hitProjectile, i);
@@ -1247,6 +1265,16 @@ function dropArrow(world: World, x: number, z: number, scatter = false): void {
   });
 }
 
+/** 반사된 채 시전자 몸에 되돌아온 진액 구슬인가(거수 B3-2) — deflected + deflectSelfDamage + 시전자 = 맞은 적 + 그 적의 분출공(vent, 내구 있음)이 살아 있다(hp > 0).
+ *  Projectiles 안에서 자가 피격 경로와 '웅덩이를 남기지 않는다' 판정이 같은 함수를 쓴다 */
+function ventSelfHit(proj: ProjectileState, enemy: EnemyState): boolean {
+  if (!proj.deflected || proj.deflectSelfDamage === undefined || enemy.id !== proj.casterId) return false;
+  const def = enemyDef(enemy.type);
+  const ventWp = def.weakPoints?.find((wp) => wp.id === VENT_WEAK_POINT);
+  if (!ventWp) return false;
+  return (enemy.weakHp?.[VENT_WEAK_POINT] ?? (ventWp.hp ?? 1)) > 0;
+}
+
 function applyProjectileHit(
   world: World,
   proj: (typeof world.projectiles)[number],
@@ -1271,6 +1299,24 @@ function applyProjectileHit(
     !def.hitZonesImmune &&
     (impactY - (enemy.jumpY ?? 0)) / def.height >= balance.weapons.pistol.hitZones.headFrac;
   if (headHit) world.events.emit('headshot', { enemyId: enemy.id });
+
+  // 반사된 진액 구슬이 시전자 몸에 되돌아왔다(거수 B3-2, 기획서 §4.1 vent "반사 자가 피격은 항상 성립") — 분출공에 deflectSelfDamage 고정(배율·열림·방패 무관).
+  // 몸 상자에 닿은 순간이 곧 분출공 명중이다(반사 복귀 높이 0.6h = 1.8m 가 분출공 1.65 ± 구슬 0.35 와 겹친다 — 구체 레이를 따로 재지 않는다).
+  // 질식(hp 0) 중이면 삼킬 분출공이 없다 — 아래 몸 피해(옛 반사 경로)로 흘러간다
+  if (ventSelfHit(proj, enemy)) {
+    const fixed = applyFrostOnHit(world.events, enemy, proj.deflectSelfDamage!);
+    enemy.health -= fixed;
+    const ventWp = def.weakPoints!.find((wp) => wp.id === VENT_WEAK_POINT)!;
+    const cleanse = ventCleanseAmount(enemy, ventWp.id, playerStatusTicks(world.player, 'corrosive') > 0);
+    hitWeakPoint(world, enemy, ventWp.id, fixed, impactX, impactY, impactZ, cleanse);
+    world.events.emit('damage_pop', { enemyId: enemy.id, amount: fixed });
+    if (enemy.health <= 0) {
+      enemy.alive = false;
+      world.events.emit('spell_kill', { enemyType: enemy.type, deflected: true });
+      world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
+    }
+    return;
+  }
 
   // 정면 방패 — 화염구가 명중하면 방패가 부서진다. 방패가 화염을 일부 먹으므로 피해 감소
   if (shielded) {
@@ -1311,12 +1357,15 @@ function applyProjectileHit(
     proj.owner === 'enemy' && !proj.trapShot
       ? proj.damage * balance.enemyAi.friendlyFireDamageMul
       : proj.damage;
-  // 약점 배율 — 화살·화염구 직격(호출부가 weakEligible 로 골라 넘긴다). 폭발·내파 광역은 배율 없음
-  if (weak && proj.owner === 'player') damage *= weak.damageMul;
+  // 약점 배율 — 화살·화염구 직격(호출부가 weakEligible 로 골라 넘긴다). 폭발·내파 광역은 배율 없음. 배율은 열림 방식에 따른다(분출공: 타이머 ×1.5 / 자세 ×3.0)
+  if (weak && proj.owner === 'player') damage *= weakPointDamageMul(enemy, weak);
   const directDealt = applyFrostOnHit(world.events, enemy, damage);
   enemy.health -= directDealt;
-  // 약점 장부 — 피해 숫자보다 먼저(HUD 가 같은 틱의 약점 명중을 보고 숫자 옆에 '약점!' 을 붙인다)
-  if (weak && proj.owner === 'player') hitWeakPoint(world, enemy, weak.id, directDealt, impactX, impactY, impactZ);
+  // 약점 장부 — 피해 숫자보다 먼저(HUD 가 같은 틱의 약점 명중을 보고 숫자 옆에 '약점!' 을 붙인다). 분출공이면 오염 정화(B3-2)도 함께
+  if (weak && proj.owner === 'player') {
+    const cleanse = ventCleanseAmount(enemy, weak.id, playerStatusTicks(world.player, 'corrosive') > 0);
+    hitWeakPoint(world, enemy, weak.id, directDealt, impactX, impactY, impactZ, cleanse);
+  }
   if (proj.owner === 'player' || proj.trapShot) {
     world.events.emit('damage_pop', { enemyId: enemy.id, amount: directDealt });
   }

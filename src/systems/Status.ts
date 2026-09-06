@@ -1,8 +1,9 @@
-// 플레이어 상태이상 — docs/systems/boss_scythe_behemoth.md §6 (B2-4: 팔 저림·진탕, B3-1: 절뚝).
+// 플레이어 상태이상 — docs/systems/boss_scythe_behemoth.md §6 (B2-4: 팔 저림·진탕, B3-1: 절뚝, B3-2: 오염 진액).
 //
-// 소유 규약(stunTicks 와 같다): 카운터는 PlayerState 옵셔널(numbArmTicks·concussionTicks·hobbleTicks). 다른 시스템은
-// 값을 **세우기만** 한다(Enemies impact → setPlayerStatus / Reaction 일반 패링 → 0 / Items 물약 → 0).
+// 소유 규약(stunTicks 와 같다): 카운터는 PlayerState 옵셔널(numbArmTicks·concussionTicks·hobbleTicks·corrosiveTicks). 다른 시스템은
+// 값을 **세우기만** 한다(Enemies impact·Projectiles 피격·Hazards 웅덩이 접촉 → setPlayerStatus / Reaction 일반 패링 → 0 / Items 물약 → 0).
 // 감소·상한·`${kind}_applied/_ended` 이벤트는 전부 여기서만 낸다 — 그래서 "누가 지웠든" 해제 문구는 한 곳에서 나온다.
+// 오염 진액의 도트(corrosive_tick)·오염 대기 가산(corrosive_pending)도 여기서만 — p.dots(Traps.tickDots)는 쓰지 않는다(기획서 §6 소유).
 //
 // 상한: balance.status.maxConcurrent — 세 번째가 걸리면 가장 오래된 것이 해제된다(statusOrder 가 걸린 순서).
 // 어느 상태도 회피 거리·무적 틱을 건드리지 않는다("언제나 반응 버튼으로 답할 수 있다").
@@ -12,13 +13,18 @@
 //   concussion — 조준 흔들림은 여기서 박쥐 aimShake 채널에 싣는다(PlayerMove 가 소비), 화면 기울기·오디오 덕킹·HUD 는 main 이 카운터를 읽는다,
 //                Items.drink(체력 물약이 0 으로) / Inventory.isUseful(지울 상태가 있으면 유용)
 //   hobble    — Reaction.tryDodge(회피 스태미너 ×dodgeStaminaMul), PlayerMove(질주 불가 noSprint). 시간으로만 풀린다(물약 없음)
+//   corrosive — PlayerMove(이속 ×moveSpeedMul). 도트·오염 대기는 여기서: dotIntervalTicks 마다 dotPerTick(corrosive_tick — player_damaged 없음),
+//                pendingPerTicks 마다 오염 대기 +1(전투당 상한 pendingCap — 살아 있는 보스의 EnemyState.fightPendingIn 에 누적, 보스가 없으면 오르지 않는다).
+//                웅덩이 위에선 Hazards 가 매 틱 lingerTicks 로 되살린다. 물약이 지우지 않는다
 //
 // 실행 순서: Reaction 뒤 — 같은 틱의 일반 패링 해제·impact 부여를 이 틱 안에 이벤트로 낸다.
 
 import { balance } from '../core/Balance';
+import { enemyDef } from '../core/Entities';
 import {
   PLAYER_STATUS_FIELD,
   PLAYER_STATUS_KINDS,
+  damagePlayer,
   playerStatusTicks,
   type PlayerStatusKind,
   type World,
@@ -57,6 +63,32 @@ export function tick(world: World, _dt: number): void {
     p.aimShakeTicks = concussion;
     p.aimShakeAmp = cfg.concussion.aimShakeAmp;
   }
+
+  // 4) 오염 진액(B3-2, 기획서 §6) — 붙어 있는 동안 누적 틱을 세어 pendingPerTicks 마다 오염 대기 +1(전투당 상한), dotIntervalTicks 마다 dotPerTick 피해.
+  //    도트는 player_damaged 를 내지 않는다(붉은 화면·진동 도배 방지 — 독·화염과 같은 도트 규약, main 은 corrosive_tick 에 신음만). 풀린 틱엔 end 가 누적을 0 으로 비웠다
+  if (!world.dead && playerStatusTicks(p, 'corrosive') > 0) {
+    const cc = cfg.corrosive;
+    const accum = (p.corrosiveAccum ?? 0) + 1;
+    p.corrosiveAccum = accum;
+    if (accum % cc.pendingPerTicks === 0) {
+      // 카운터는 살아 있는 보스의 EnemyState — 새 거수·부활이면 0 부터. 보스가 없으면(전투 끝·시험방 빈 방) 오염은 오르지 않는다
+      const boss = world.enemies.find((e) => e.alive && enemyDef(e.type).boss === true);
+      if (boss && (boss.fightPendingIn ?? 0) < cc.pendingCap) {
+        boss.fightPendingIn = (boss.fightPendingIn ?? 0) + 1;
+        world.corruption.pending += 1;
+        world.events.emit('corrosive_pending', { amount: 1, total: boss.fightPendingIn, cap: cc.pendingCap, enemyId: boss.id });
+      }
+    }
+    if (accum % cc.dotIntervalTicks === 0) {
+      const applied = damagePlayer(world, cc.dotPerTick);
+      world.events.emit('corrosive_tick', { amount: applied, health: p.health });
+      if (p.health <= 0) {
+        p.health = 0;
+        world.dead = true;
+        world.events.emit('player_died', { tick: world.tick });
+      }
+    }
+  }
 }
 
 /** 전부 해제 — 부활·층 이동·시험방 진입(main.loadFloor). 이벤트 없이 조용히 (HUD·덕킹·기울기는 카운터를 매 프레임 읽어 스스로 꺼진다).
@@ -65,6 +97,7 @@ export function clearAll(world: World): void {
   const p = world.player;
   releaseConcussionShake(p);
   for (const kind of PLAYER_STATUS_KINDS) setTicks(p, kind, 0);
+  p.corrosiveAccum = 0;
   p.statusOrder = [];
 }
 
@@ -90,5 +123,6 @@ function end(world: World, order: PlayerStatusKind[], kind: PlayerStatusKind, re
   if (at >= 0) order.splice(at, 1);
   setTicks(p, kind, 0);
   if (kind === 'concussion') releaseConcussionShake(p);
+  if (kind === 'corrosive') p.corrosiveAccum = 0; // 다음에 붙으면 도트·오염 박자를 처음부터
   world.events.emit(`${kind}_ended`, { kind, reason });
 }

@@ -21,7 +21,9 @@
 //   나와 진홍 맥동, 앞다리·몸 빨강(발구르기 예고), P2 외형 — 플레이어 눈높이 정면 5m(발구르기 사거리 안)에서 올려다본다) / rear-side(같은 자세 측면 — 뒷발 바닥·앞발 공중·꼬리 되듦) /
 // rear-sealed(B3-1 — 역류 뒤 봉인 600틱의 앞발 들기: 심장이 어둡게(판정 없음), 자세만) /
 // wake-slam(B3-1 — 기상 발구르기 예고: 앞발을 낮게 들고 살짝 뒤로, 심장은 배 밑 그대로(안 보임) — 측면) /
-// backflow(B3-1 — 역류 머리 내림: head_down 자세인데 낫이 박히지 않고 두 낫이 벌어져 매달린 고꾸라짐, 눈 열림(피해만) — 정면 눈높이).
+// backflow(B3-1 — 역류 머리 내림: head_down 자세인데 낫이 박히지 않고 두 낫이 벌어져 매달린 고꾸라짐, 눈 열림(피해만) — 정면 눈높이) /
+// shake(B3-2 — 갑각 떨기 예고: 등갑판 덜그럭(shaking)·몸 보라 텔레그래프(낫·뿔은 물들지 않음)·분출공 열림 ×1.4 오염 녹색 맥동(텔레그래프 보라가 아니다), P2 외형 — 플레이어 눈높이 정면 6m(minRange)) /
+// choke(B3-2 — 질식: 분출공 꺼짐(sealed — 어두운 본색·발광 없음), P2 외형 — 정면 눈높이).
 // &pose=charge|head_down|… 을 붙이면 약점 구체와 머리 메시(목 IK)를 그 자세의 poseOffsets 표 자리에 놓는다
 // (안내문에 구체 자리와 머리 메시의 눈 자리(anchor)를 함께 찍는다 — 어긋남이 0 에 가까워야 한다, B2-2).
 // 참조물: 4.4m 기둥(= attackRange, 흰색) · 플레이어 기둥(r0.4 h1.7, 몸 표면이 4.4m) · 천장 4.0m / 낫 상한 3.8m 선.
@@ -30,7 +32,7 @@
 import * as THREE from 'three';
 import { balance } from '../src/core/Balance';
 import { enemyDef, resolvePhase } from '../src/core/Entities';
-import { BEHEMOTH_TORSO, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, behemothRearOffset, behemothVentLit, buildBehemothRig, poseBehemothRig, setBehemothPhaseLook, styleBehemothWeakPoints } from '../src/render/Stage';
+import { BEHEMOTH_TORSO, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, behemothRearOffset, behemothVentLit, behemothWeakScaleMul, buildBehemothRig, poseBehemothRig, setBehemothPhaseLook, styleBehemothWeakPoints } from '../src/render/Stage';
 
 const def = enemyDef('scythe_behemoth');
 const params = new URLSearchParams(location.search);
@@ -320,6 +322,25 @@ if (view === 'side') {
   styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'eye', broken: false, flashAgeMs: -1, dim: id === 'eye', sealed: id === 'heart', lit: id === 'vent' && behemothVentLit(p2) }));
   camera.position.set(0.5, balance.player.eyeHeight, -(reach + balance.player.radius));
   camera.lookAt(0, 1.1, -1.0);
+} else if (view === 'shake') {
+  // 갑각 떨기 예고(B3-2) — 몸 전체 잔떨림(BEHEMOTH_TORSO.ventShake 봉우리) + 등갑판 덜그럭(shaking) + 몸·등갑판 보라(투사체 텔레그래프 — 낫·뿔은 물들지 않는다).
+  // 분출공은 노출 타이머로 열려 ×1.4 오염 녹색 맥동(약점 발광엔 텔레그래프 색을 쓰지 않는다). P2 외형. 플레이어 눈높이 정면 6m(갑각 떨기 minRange)에서 본다
+  torso.rotation.x = BEHEMOTH_TORSO.ventShake;
+  poseBehemothRig(rig, { ...base, shaking: true, nowMs: 7 });
+  tint(flash, balance.telegraph.colorProjectile);
+  const p2 = resolvePhase(def, 2);
+  setBehemothPhaseLook(rig, p2, 1400 * 0.25);
+  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'vent', broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2), scaleMul: behemothWeakScaleMul(id, id === 'vent') }));
+  camera.position.set(0.4, balance.player.eyeHeight, -(def.volleyAttack!.minRange! + balance.player.radius));
+  camera.lookAt(0, 1.7, -0.5);
+} else if (view === 'choke') {
+  // 질식(B3-2) — 분출공 내구 0: 구체가 꺼진다(sealed — 어두운 본색·발광·맥동 없음, 파열색이 아니다). 갑각 떨기 봉인·웅덩이 증발은 로직. P2 외형, 정면 눈높이
+  poseBehemothRig(rig, base);
+  const p2 = resolvePhase(def, 2);
+  setBehemothPhaseLook(rig, p2, 1400 * 0.25);
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, sealed: id === 'vent' }));
+  camera.position.set(0.6, balance.player.eyeHeight, -7.5);
+  camera.lookAt(0, 1.7, -0.5);
 } else if (view === 'stunned') {
   // 혼절(눈 누적 66) — 몸 스태거 금색, 머리가 처져 휘청, 눈은 닫힘(판정 없음) = 처형 창
   torso.rotation.x = BEHEMOTH_TORSO.stunnedLean;

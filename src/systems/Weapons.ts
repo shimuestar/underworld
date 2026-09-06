@@ -4,12 +4,12 @@
 //    두 자원 경제를 분리하는 유일한 규칙이다 — docs/systems/combat.md §5.
 
 import { balance } from '../core/Balance';
-import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
+import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, ventCleanseAmount, weakPointDamageMul, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
 
 /** 머리 내림 중 해머가 집계되는 약점 id — 기획서 §4 "머리 내림·탈진 중 해머 타격 = 눈 집계(hammerEyeMul)" */
 const HAMMER_EYE_ID = 'eye';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, provokeTrap, hitBarrel, hitWeakPoint, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, provokeTrap, hitBarrel, hitWeakPoint, noiseField, RANGED_WEAPONS, applyFrostOnHit, playerStatusTicks, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
 
 /** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
  *  활을 넣으면서 실제로 방패·경직·무기 교체 세 곳이 bowDraw 를 안 지워
@@ -984,7 +984,7 @@ function fire(world: World): void {
   let zoneMul: number;
   if (hit.weak) {
     zone = 'weak';
-    zoneMul = hit.weak.damageMul;
+    zoneMul = weakPointDamageMul(hit.enemy, hit.weak); // 열림 방식별 배율 — 분출공은 갑각 떨기 타이머 노출 ×1.5 / 자세 노출 ×3.0(B3-2)
   } else if (def.hitZonesImmune) {
     zone = 'body';
     zoneMul = zones.bodyMul;
@@ -1018,7 +1018,11 @@ function fire(world: World): void {
   hit.enemy.health -= shotDealt;
   // 약점 장부 — weak_point_hit(연출·'약점!'·진동) + 내구 차감·파열. 피해 숫자(damage_pop/enemy_damaged)보다 먼저 —
   // HUD 가 같은 틱의 약점 명중을 보고 숫자 옆에 '약점!' 을 붙인다
-  if (hit.weak) hitWeakPoint(world, hit.enemy, hit.weak.id, shotDealt, p.x + dx * hit.t, hitY, p.z + dz * hit.t);
+  if (hit.weak) {
+    // 분출공이면 오염 정화(B3-2, 기획서 §4.1 vent) — 명중마다 오염 대기 −ventHitCleanse(부착 중 ×2, 전투당 상한). 다른 약점은 0
+    const cleanse = ventCleanseAmount(hit.enemy, hit.weak.id, playerStatusTicks(p, 'corrosive') > 0);
+    hitWeakPoint(world, hit.enemy, hit.weak.id, shotDealt, p.x + dx * hit.t, hitY, p.z + dz * hit.t, cleanse);
+  }
   // 피탄 경직 — 잠깐 발이 묶인다. 공격 상태 머신은 그대로 진행되므로
   // 총으로 공격을 끊거나 스턴락할 수는 없다 (패링 게임을 지우지 않는다)
   hit.enemy.flinchTicks = pistol.flinchTicks;

@@ -93,17 +93,28 @@ export interface PlayerState {
   concussionTicks?: number;
   /** 절뚝(hobble, 거수 발구르기 직격, B3-1) 잔여 틱 — 회피 스태미너 ×2·질주 불가(회피 거리·무적은 그대로). 시간으로만 풀린다 */
   hobbleTicks?: number;
+  /** 오염 진액(corrosive, 거수 P2+ 진액 웅덩이 위·진액 구슬 피격, B3-2) 잔여 틱 — 이속 ×0.6·도트·오염 대기 가산. 웅덩이 위에선 Hazards 가 매 틱
+   *  lingerTicks 로 되살리고(막아도 붙는다), 벗어나면 그만큼 뒤 풀린다. 감소·도트·가산은 Status.ts 만 */
+  corrosiveTicks?: number;
+  /** 오염 진액이 붙은 채 흐른 누적 틱 — 도트(dotIntervalTicks)·오염 대기(pendingPerTicks) 박자의 기준. Status 만 쓰고 풀리면 0 */
+  corrosiveAccum?: number;
   /** 걸린 순서(오래된 것부터) — Status.ts 가 상한(balance.status.maxConcurrent)을 넘기면 맨 앞을 해제한다. Status 만 쓴다 */
   statusOrder?: PlayerStatusKind[];
 }
 
 /** 플레이어 상태이상 종류(기획서 §6) — 이벤트는 `${kind}_applied/_ended`. 카운터 필드·balance.status 키는 아래 표 */
-export type PlayerStatusKind = 'numb_arm' | 'concussion' | 'hobble';
-export const PLAYER_STATUS_KINDS: readonly PlayerStatusKind[] = ['numb_arm', 'concussion', 'hobble'];
+export type PlayerStatusKind = 'numb_arm' | 'concussion' | 'hobble' | 'corrosive';
+export const PLAYER_STATUS_KINDS: readonly PlayerStatusKind[] = ['numb_arm', 'concussion', 'hobble', 'corrosive'];
 /** 상태 → PlayerState 카운터 필드 */
-export const PLAYER_STATUS_FIELD = { numb_arm: 'numbArmTicks', concussion: 'concussionTicks', hobble: 'hobbleTicks' } as const satisfies Record<PlayerStatusKind, keyof PlayerState>;
+export const PLAYER_STATUS_FIELD = { numb_arm: 'numbArmTicks', concussion: 'concussionTicks', hobble: 'hobbleTicks', corrosive: 'corrosiveTicks' } as const satisfies Record<PlayerStatusKind, keyof PlayerState>;
 /** 상태 → balance.status 블록 키 (지속 틱 등은 호출부가 balance 에서 읽는다 — World 는 데이터를 읽지 않는다) */
-export const PLAYER_STATUS_CFG = { numb_arm: 'numbArm', concussion: 'concussion', hobble: 'hobble' } as const satisfies Record<PlayerStatusKind, string>;
+export const PLAYER_STATUS_CFG = { numb_arm: 'numbArm', concussion: 'concussion', hobble: 'hobble', corrosive: 'corrosive' } as const satisfies Record<PlayerStatusKind, string>;
+
+/** 상태 설정 블록에서 '세울 때의 지속 틱' — 고정 지속 상태(팔 저림·진탕·절뚝)는 ticks, 오염 진액은 웅덩이에서 나온 뒤 남는 lingerTicks
+ *  (웅덩이 위에선 Hazards 가 매 틱 이 값으로 되살린다). 호출부(Enemies impact·Projectiles 피격)가 balance.status 의 블록을 넘긴다 — World 는 데이터를 읽지 않는다 */
+export function statusDurationOf(cfg: { ticks: number } | { lingerTicks: number }): number {
+  return 'ticks' in cfg ? cfg.ticks : cfg.lingerTicks;
+}
 
 /** 상태 잔여 틱 (없으면 0) */
 export function playerStatusTicks(player: PlayerState, kind: PlayerStatusKind): number {
@@ -203,8 +214,17 @@ export interface ProjectileState {
   casterId?: number;
   /** 반응 버튼으로 반사 가능한가 (마법탄 true, 화살 false) */
   deflectable?: boolean;
-  /** 렌더 형태 */
-  kind?: 'fireball' | 'frost' | 'magic' | 'arrow' | 'rock' | 'grenade' | 'web';
+  /** 렌더 형태. 'goo' = 거수 진액 구슬(보라 구 + 꼬리, 반사 가능·부술 수 있음, 착탄 웅덩이·오염 진액 — B3-2) */
+  kind?: 'fireball' | 'frost' | 'magic' | 'arrow' | 'rock' | 'grenade' | 'web' | 'goo';
+  /** 반사된 채 시전자 몸에 되돌아가면 시전자의 분출공(vent)에 넣는 고정 피해(거수 진액 구슬 33 — 배율·열림 무관, 기획서 §4.1 vent). 없으면 반사 마법의 옛 경로(×1.5 몸 피해) */
+  deflectSelfDamage?: number;
+  /** 착탄 자리에 남기는 진액 웅덩이 종류(balance.hazards.pools 키 — 거수 진액 구슬 'orb'). 분출공으로 되돌아간 반사 구슬은 남기지 않는다 */
+  poolKind?: string;
+  /** 플레이어 피격 시 세우는 상태 — 막지 않은 직격(statusOnHit) / 막았을 때(statusOnBlock). 근접 impact 와 같은 규약(진액 구슬은 둘 다 corrosive — 막아도 붙는다) */
+  statusOnHit?: PlayerStatusKind;
+  statusOnBlock?: PlayerStatusKind;
+  /** 이 투사체만의 플레이어 밀림 거리(m) — 없으면 balance.playerKnockback[kind]. 공격 정의의 playerKnockback 을 그대로 든다(진액 구슬 2.8 = magic) */
+  playerKnockback?: number;
   /** 착탄 시 광역 효과. 시전자가 죽어도 남도록 투사체가 들고 다닌다.
    *  반사되면 그대로 적에게 터진다 */
   splash?: ProjectileSplashDef;
@@ -912,6 +932,19 @@ export interface GooPuddle {
   ticks: number;
 }
 
+/** 진액 웅덩이(거수 P2+, B3-2 — systems/Hazards 가 spawn_pool 로 만들고 말리며 접촉을 판정한다). r = 반경(m), kind = balance.hazards.pools 의 키(blade·stomp·orb·skid).
+ *  위에 서면 플레이어 corrosive. 불(폭발·불붙은 기름)·질식(choke)에 즉시 증발 */
+export interface PoolState {
+  id: number;
+  x: number;
+  z: number;
+  r: number;
+  ticks: number;
+  /** 전체 지속(틱) — 렌더가 남은 비율로 옅어진다 */
+  duration: number;
+  kind: string;
+}
+
 export interface EnemyState {
   id: number;
   type: string;
@@ -1116,6 +1149,13 @@ export interface EnemyState {
   phaseSince?: number;
   /** 페이즈 전환(갑각 재생 molt) 중 — pose roar 타이머가 도는 동안 참. 약점 판정이 전부 닫힌다(Entities.weakPointOpen) */
   molting?: boolean;
+  /** 질식(choke, 거수 B3-2) 잔여 틱 — 분출공 내구 0. 이 동안 갑각 떨기(volley)가 봉인되고 모든 예고가 windupPenalty 만큼 늘어진다(헐떡임).
+   *  갑각 재생이 풀지 않고, 0 에 닿으면 Enemies 가 분출공 hp 를 되돌린다(boss_status choke off) */
+  chokeTicks?: number;
+  /** 이번 전투에서 오염 진액이 플레이어의 오염 대기에 더한 양(Status.ts 가 올린다) — 전투당 상한 balance.status.corrosive.pendingCap. 새 거수(부활·재소환)면 0 부터 */
+  fightPendingIn?: number;
+  /** 이번 전투에서 분출공 명중이 오염 대기에서 깎은 양(hitWeakPoint 가 올린다) — 전투당 상한 balance.corruption.ventCleanseCap */
+  fightCleansed?: number;
   /** 밀착 공격(closeAttack) 재사용 대기 */
   closeCooldown?: number;
   /** 연사 남은 발수 / 재사용 대기 (족장 화살 세례) */
@@ -1184,9 +1224,11 @@ export interface EnemyState {
 }
 
 /** 약점 명중 정산 — weak_point_hit 발행 + 이번 노출 장부(횟수·누적 피해) + 내구(weakHp)가 있으면 그만큼 깎고 0 에 닿는 순간
- *  weak_point_broken 한 번. 권총·해머(Weapons)·화살·화염구(Projectiles)가 같은 문을 지난다. 피해 자체는 호출부가 이미 체력에
+ *  weak_point_broken 한 번. 권총·해머(Weapons)·화살·화염구·반사 구슬(Projectiles)가 같은 문을 지난다. 피해 자체는 호출부가 이미 체력에
  *  넣었다 — 이 함수는 약점 장부만 적는다. 누적(weakAccum)의 임계 판정(눈 66 → 혼절)과 "쿨다운 중 누적 없음"은 Enemies 가
- *  매 틱 본다(World 는 데이터를 모른다). (x,y,z) 는 착탄점(연출용) */
+ *  매 틱 본다(World 는 데이터를 모른다). (x,y,z) 는 착탄점(연출용).
+ *  cleanse(B3-2, 분출공) — 0 보다 크면 이 명중이 오염 대기에서 깎는 양: 전투 장부(fightCleansed)에 더하고 corruption_cleansed{amount, source 'vent'} 를 낸다
+ *  (pending 을 실제로 깎는 건 Corruption.ts 구독). 양은 호출부가 Entities.ventCleanseAmount 로 계산해 넘긴다 — World 는 데이터를 읽지 않는다 */
 export function hitWeakPoint(
   world: World,
   enemy: EnemyState,
@@ -1195,12 +1237,17 @@ export function hitWeakPoint(
   x: number,
   y: number,
   z: number,
+  cleanse = 0,
 ): void {
   world.events.emit('weak_point_hit', { enemyId: enemy.id, enemyType: enemy.type, id, damage, x, y, z });
   enemy.exposureHits ??= {};
   enemy.exposureHits[id] = (enemy.exposureHits[id] ?? 0) + 1;
   enemy.weakAccum ??= {};
   enemy.weakAccum[id] = (enemy.weakAccum[id] ?? 0) + damage;
+  if (cleanse > 0) {
+    enemy.fightCleansed = (enemy.fightCleansed ?? 0) + cleanse;
+    world.events.emit('corruption_cleansed', { amount: cleanse, source: 'vent', enemyId: enemy.id, enemyType: enemy.type, total: enemy.fightCleansed });
+  }
   const hp = enemy.weakHp?.[id];
   if (hp === undefined || hp <= 0) return;
   const left = Math.max(0, hp - damage);
@@ -1506,6 +1553,8 @@ export class World {
 
   /** 슬라임 점액 장판 — 층 이동 시 loadFloor 가 비운다. 없으면 빈 배열로 취급 */
   gooPuddles?: GooPuddle[];
+  /** 진액 웅덩이(거수 P2+, B3-2) — systems/Hazards 가 만들고 말린다. 층 이동·부활 시 Hazards.clearAll */
+  pools: PoolState[] = [];
 
   /** 통통 튀는 구울 머리들 — 층 이동·부활 시 비운다 */
   ghoulHeads?: GhoulHeadState[];

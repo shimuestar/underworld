@@ -1,0 +1,83 @@
+// 오염 — 정화(corruption_cleansed) 구독(B3-2, 기획서 §11): pending 만 깎고 applied 는 불변, 음수 pending 은 정산에서 건너뛰고 다음 부착의 여유가 된다.
+
+import { beforeEach, describe, expect, it } from 'vitest';
+import { balance } from '../core/Balance';
+import { Events } from '../core/Events';
+import { Input } from '../core/Input';
+import { World } from '../core/World';
+import { Level } from '../level/GridLoader';
+import * as Corruption from './Corruption';
+import * as Sigils from './Sigils';
+
+function makeWorld(): World {
+  const level = new Level({
+    id: 'arena', name: 'arena', cellSize: 4, ceiling: 4,
+    grid: ['######', '#S..X#', '######'],
+    lighting: { ambient: 0.04, torches: [] },
+  });
+  return new World(new Events(), {
+    input: Input.emptySnapshot(),
+    player: {
+      x: 6, y: 0, z: 6, prevX: 6, prevY: 0, prevZ: 6, yaw: 0, pitch: 0, health: 100,
+      stunTicks: 0, dodgeTicks: 0, dodgeDirX: 0, dodgeDirZ: 0, iframeTicks: 0, reactionBufferTicks: 0, blocking: false, reactionHeldTicks: 0,
+    },
+    lantern: { on: true, battery: 100, spares: 0 },
+    weapon: { melee: 'hammer', ranged: 'pistol', mag: 12, reserve: 60, cooldown: 0, reloading: 0, muzzleFlash: 0, grenades: 3, meleeCooldown: 0, grenadeCharge: 0, comboStep: 0, comboTimer: 0, swingImpact: 0, swingHeavy: false },
+    mana: { value: 0, chainIndex: 0, outOfCombatTicks: 0, inCombat: false },
+    sigils: { inventory: [], equipped: { eye: null, rightArm: null, leftArm: null, heart: null, spine: null } },
+    modifiers: Sigils.defaultModifiers(),
+    corruption: { applied: 20, pending: 3 },
+    enemies: [],
+    level,
+  });
+}
+
+let world: World;
+beforeEach(() => {
+  world = makeWorld();
+  Corruption.init(world);
+});
+
+describe('Corruption — 정화(corruption_cleansed) 구독 (B3-2)', () => {
+  it('데이터 — ventHitCleanse 1·ventCleanseCap 6·corrosiveCleanseMul 2', () => {
+    expect(balance.corruption).toMatchObject({ ventHitCleanse: 1, ventCleanseCap: 6, corrosiveCleanseMul: 2 });
+  });
+
+  it('corruption_cleansed{amount} 만큼 pending 이 준다 — applied 는 그대로. 0 이하 양은 무시', () => {
+    world.events.emit('corruption_cleansed', { amount: 1, source: 'vent' });
+    expect(world.corruption.pending).toBe(2);
+    expect(world.corruption.applied).toBe(20);
+    world.events.emit('corruption_cleansed', { amount: 2, source: 'vent' });
+    expect(world.corruption.pending).toBe(0);
+    world.events.emit('corruption_cleansed', { amount: 0, source: 'vent' });
+    world.events.emit('corruption_cleansed', { amount: -3, source: 'vent' });
+    expect(world.corruption.pending).toBe(0);
+    Corruption.cleanse(world, 4);
+    expect(world.corruption.pending).toBe(-4); // 음수 = 여유
+    expect(world.corruption.applied).toBe(20);
+  });
+
+  it('음수 pending 은 제단 정산에서 건너뛰고(applied 불변, corruption_applied 없음) 다음 부착(pending 가산)이 그 여유를 쓴다', () => {
+    const appliedEv: unknown[] = [];
+    world.events.on('corruption_applied', (p) => appliedEv.push(p));
+    Corruption.cleanse(world, 5); // 3 → −2
+    world.events.emit('altar_entered', {});
+    expect(world.corruption.applied).toBe(20);
+    expect(world.corruption.pending).toBe(-2);
+    expect(appliedEv).toHaveLength(0);
+    world.corruption.pending += 8; // 각인 부착(눈 8)
+    world.events.emit('altar_entered', {});
+    expect(world.corruption.applied).toBe(26); // 8 중 2 가 상쇄됐다
+    expect(world.corruption.pending).toBe(0);
+    expect(appliedEv).toEqual([{ from: 20, to: 26 }]);
+  });
+
+  it('정화는 임계를 되돌리지 않는다 — applied 가 이미 25 를 넘었으면 pending 을 아무리 깎아도 그대로', () => {
+    world.corruption.applied = 30;
+    world.canReadGlyphs = true;
+    Corruption.cleanse(world, 50);
+    world.events.emit('altar_entered', {});
+    expect(world.corruption.applied).toBe(30);
+    expect(world.canReadGlyphs).toBe(true);
+  });
+});

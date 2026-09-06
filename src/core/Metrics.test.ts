@@ -68,10 +68,25 @@ describe('Metrics', () => {
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 2, from: 3, skipped: false, fromTicks: 5400, tick: 5400 });
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 1, from: 2, skipped: false, fromTicks: 7200, tick: 12600 });
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 0, from: 1, skipped: false, fromTicks: 5400, tick: 18000, death: true });
+    // 진액 웅덩이·오염 진액·분출공 정화·질식(B3-2)
+    events.emit('pool_spawned', { id: 1, x: 0, z: 0, r: 1.6, kind: 'blade' });
+    events.emit('pool_spawned', { id: 2, x: 0, z: 0, r: 1.2, kind: 'orb' });
+    events.emit('pool_evaporated', { id: 1, x: 0, z: 0, r: 1.6, kind: 'blade', reason: 'fire' });
+    events.emit('pool_evaporated', { id: 2, x: 0, z: 0, r: 1.2, kind: 'orb', reason: 'expired' }); // 자연 소멸은 증발로 세지 않는다
+    events.emit('corrosive_applied', { kind: 'corrosive', ticks: 30 });
+    events.emit('corrosive_tick', { amount: 2, health: 76 }); // 도트 — 받은 피해에 합산, 함정 사망은 아니다
+    events.emit('corrosive_pending', { amount: 1, total: 1, cap: 8, enemyId: 1 });
+    events.emit('corruption_cleansed', { amount: 2, source: 'vent', enemyId: 1, total: 2 });
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'backflow', on: true, cause: 'vent', ticks: 60, selfDamage: 0 }); // 분출공 역류도 역류
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'choke', on: true, ticks: 1800 });
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'choke', on: false });
 
     const s = metrics.snapshot(makeWorldStub());
-    expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1, chargeDodges: 1, limps: 1, blinds: 1, topples: 1, pillarHits: 1, backflows: 1 });
+    expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1, chargeDodges: 1, limps: 1, blinds: 1, topples: 1, pillarHits: 1, backflows: 2 });
     expect(s.boss).toEqual({ phaseShifts: 2, phaseSkips: 0, phaseSeconds: { '3': 90, '2': 120, '1': 90 } });
+    expect(s.hazards).toEqual({ pools: 2, evaporated: 1, corrosiveApplied: 1, corrosiveDamage: 2, pendingIn: 1, ventCleanse: 2, chokes: 1 });
+    expect(s.combat.damageTakenTotal).toBe(22 + 2); // 오염 진액 도트도 받은 피해다
+    expect(s.traps.deaths).toBe(0);
     expect(s.combat.parryAttempts).toBe(4);
     expect(s.derived.perfectParryRatio).toBeCloseTo(0.5);
     expect(s.derived.parrySuccessRatio).toBeCloseTo(0.75);
@@ -98,6 +113,7 @@ describe('Metrics', () => {
     const metrics = new Metrics(new Events());
     const s = metrics.snapshot(makeWorldStub());
     expect(s.boss).toEqual({ phaseShifts: 0, phaseSkips: 0, phaseSeconds: {} });
+    expect(s.hazards).toEqual({ pools: 0, evaporated: 0, corrosiveApplied: 0, corrosiveDamage: 0, pendingIn: 0, ventCleanse: 0, chokes: 0 });
     expect(s.derived.perfectParryRatio).toBeNull();
     expect(s.derived.manaWasteRatio).toBeNull();
     expect(s.derived.ammoLeftRatioAtAltar).toBeNull();

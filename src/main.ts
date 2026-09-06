@@ -40,6 +40,7 @@ import * as Altar from './systems/Altar';
 import * as Barrels from './systems/Barrels';
 import * as Props from './systems/Props';
 import * as Traps from './systems/Traps';
+import * as Hazards from './systems/Hazards';
 import * as Chest from './systems/Chest';
 import * as Exit from './systems/Exit';
 import * as Door from './systems/Door';
@@ -557,6 +558,14 @@ for (const name of [
   'hobble_ended',
   'enemy_slam_start',
   'slam_landed',
+  'spawn_pool',
+  'pool_spawned',
+  'pool_evaporated',
+  'corrosive_applied',
+  'corrosive_tick',
+  'corrosive_ended',
+  'corrosive_pending',
+  'corruption_cleansed',
   'enemy_split',
   'grave_dropped',
   'slime_ate',
@@ -1353,9 +1362,12 @@ events.on('enemy_frozen', (payload) => {
 events.on('enemy_cast', (payload) => {
   const info = payload as { enemyType: string; enemyId: number };
   if (info.enemyType === 'goblin_archer') audio.play('bow_twang');
-  // 족장 화살 세례 — 발사할 때마다 시위 소리 (바위 투척과 구분)
+  // 족장 화살 세례 — 발사할 때마다 시위 소리 (바위 투척과 구분). 거수 갑각 떨기(진액 구슬, B3-2)는 젖은 분출음
   const boss = world.enemies.find((e) => e.id === info.enemyId);
-  if (boss?.ai === 'volley') audio.play('bow_twang');
+  if (boss?.ai === 'volley') {
+    const goo = enemyDef(boss.type).volleyAttack?.projectileKind === 'goo';
+    audio.play(goo ? 'goo_spit' : 'bow_twang', goo ? panAt(boss.x, boss.z) : undefined);
+  }
 });
 // 보스가 처음 알아채는 순간 — 포효로 조우를 알린다
 // 랜턴에 들킨 첫 순간만 알려 준다 — 한 마리씩 깰 때마다 뜨면 잔소리가 된다
@@ -1398,7 +1410,14 @@ events.on('ground_slam', (payload) => {
   stage.triggerCameraKick(0.45 + 1.35 * near, 430);
 });
 events.on('enemy_volley_start', (payload) => {
-  const info = payload as { shots: number };
+  const info = payload as { enemyId: number; enemyType: string; shots: number };
+  // 거수 갑각 떨기(B3-2) — 예고음(telegraph_purple)은 enemy_windup 이 냈다. 여기선 분출공 증기·등갑판 덜그럭(vent_hiss, 예고음 버스)과 안내만
+  if (enemyDef(info.enemyType).volleyAttack?.projectileKind === 'goo') {
+    const e = world.enemies.find((en) => en.id === info.enemyId);
+    audio.play('vent_hiss', e ? panAt(e.x, e.z) : undefined);
+    showReaction(`갑각 떨기 — 진액 구슬 ${info.shots}발, 반사해 분출공에 되돌리라! (예고 중 분출공 직격 = 역류)`, 2000);
+    return;
+  }
   audio.play('boss_volley_draw');
   showReaction(`화살 세례 — ${info.shots}발이 온다!`, 2000);
 });
@@ -1703,7 +1722,7 @@ events.on('chest_opened', () => {
   showReaction('보물상자를 열었다 — 안을 뒤진다', 1600);
 });
 // 날아오던 것을 공중에서 깼다 — 바위가 파편으로 흩어진다
-const PROJECTILE_DEBRIS_COLORS: Record<string, number> = { rock: 0x6b675e, web: 0xe6e9e0 };
+const PROJECTILE_DEBRIS_COLORS: Record<string, number> = { rock: 0x6b675e, web: 0xe6e9e0, goo: 0xa855f7 };
 events.on('projectile_broken', (payload) => {
   const info = payload as { x: number; y: number; z: number; kind?: string; radius: number };
   audio.play('rock_shattered');
@@ -1714,7 +1733,8 @@ events.on('projectile_broken', (payload) => {
     info.radius,
     PROJECTILE_DEBRIS_COLORS[info.kind ?? ''] ?? 0x8a8f9a,
   );
-  showReaction('바위를 공중에서 깼다!', 1200);
+  // 진액 구슬(거수)은 불에 타 흩어진다 — 웅덩이도 남지 않는다
+  showReaction(info.kind === 'goo' ? '진액 구슬을 공중에서 태웠다!' : '바위를 공중에서 깼다!', 1200);
 });
 // 폭발통 — 때리면 통 울리는 소리, 도화선에 불이 붙으면 알려 준다
 events.on('barrel_hit', (payload) => {
@@ -2763,6 +2783,7 @@ function respawnAtAltar(): void {
   world.chestInView = null;
   world.projectiles.length = 0;
   world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
+  Hazards.clearAll(world); // 진액 웅덩이도(거수는 되살아나므로 전투 장부 fightPendingIn 도 새 몸에서 0 부터)
   world.ghoulHeads = []; // 튀는 머리도 층에 속한다
   // 바닥 보상은 리셋하되 비석과 주머니는 남긴다 — 유품은 다시 죽어도 그 자리에 있고,
   // 주머니의 주인(죽인 적)은 되살아나지 않으니 전리품까지 지우면 이중 처벌이다
@@ -2982,6 +3003,8 @@ events.on('boss_status', (payload) => {
   const e = world.enemies.find((en) => en.id === st.enemyId);
   const at = e ? panAt(e.x, e.z) : undefined;
   if (st.kind === 'expose' && st.on) {
+    // 갑각 떨기 중 분출공(B3-2)도 같은 노출 타이머지만 소리·문구는 enemy_volley_start(vent_hiss·안내)가 이미 냈다 — 여기선 조용히
+    if (st.id === 'vent') return;
     audio.play('joint_open', at);
     // 돌격 중 6m 안 눈(B2-5)도 같은 노출 타이머다 — 문구만 다르다
     showReaction(st.id === 'eye' ? '눈이 다가온다 — 쏴서 눈멀게 하라!' : '어깨 관절이 벌어졌다 — 쏴라!', 900);
@@ -3017,11 +3040,21 @@ events.on('boss_status', (payload) => {
       showReaction('앞발을 들었다 — 배 심장을 쏴라!', 700);
     }
   } else if (st.kind === 'backflow' && st.on) {
-    // 역류(B3-1) — 심장 66: 발구르기가 무너지고(AoE 없음) 자해 + 머리 내림(눈 피해만). 구역질 소리 + 몸 들썩(Stage) + 안내
+    // 역류(B3-1 심장 66 → 발구르기 취소 + 자해 / B3-2 분출공 66 → 갑각 떨기 취소, 자해 없음) — 머리 내림(눈 피해만). 구역질 소리 + 몸 들썩(Stage) + 안내
     audio.play('vent_gag', at);
     stage.lurchBehemoth(st.enemyId);
     padRumble('weakPoint');
-    showReaction('역류 — 발구르기가 무너졌다, 머리가 내려온다 (혼절은 안 된다)', 1600);
+    showReaction(st.cause === 'vent' ? '역류 — 갑각 떨기가 무너졌다, 머리가 내려온다 (혼절은 안 된다)' : '역류 — 발구르기가 무너졌다, 머리가 내려온다 (혼절은 안 된다)', 1600);
+  } else if (st.kind === 'choke') {
+    // 질식(B3-2) — 분출공 내구 0(반사 4회): 갑각 떨기 봉인 + 웅덩이 전부 증발 + 예고가 늘어진다. 거친 숨소리 + 안내 / 풀리면 안내만
+    if (st.on) {
+      audio.play('vent_choke', at);
+      padRumble('weakPoint');
+      const sec = Math.round(balance.weakPoint.choke.sealTicks / balance.loop.tickRate);
+      showReaction(`질식 — 분출공이 막혔다: 갑각 떨기 봉인 ${sec}초, 웅덩이가 마르고 예고가 느려진다`, 2600);
+    } else {
+      showReaction('거수가 숨을 되찾았다 — 분출공이 다시 열린다', 1600);
+    }
   }
 });
 // 발구르기 예고 시작(거수 B3-1) — 예고음(telegraph_red)은 enemy_windup 이 냈다. 여기선 땅울림(stomp_ready, 예고음 버스)과 안내만.
@@ -3081,6 +3114,23 @@ events.on('hobble_applied', (payload) => {
   showReaction(`절뚝 — ${statusSeconds(payload)}초 동안 질주 불가·회피 스태미너 ×${balance.status.hobble.dodgeStaminaMul}. 발구르기는 막거나 걸어 나가라`, 2800);
 });
 events.on('hobble_ended', () => showReaction('다리가 풀렸다 — 절뚝이 끝났다', 1200));
+// 오염 진액(B3-2, 거수 진액 웅덩이·구슬) — 이속 ×0.6·도트·오염 대기 가산. 도트 틱은 붉은 화면·진동 없이 신음만(독·화염 규약), 정화는 분출공 명중이 알린다
+events.on('corrosive_applied', () => {
+  audio.play('grunt');
+  const cc = balance.status.corrosive;
+  showReaction(`오염 진액이 붙었다 — 느려지고 체력이 닳는다, ${Math.round(cc.pendingPerTicks / balance.loop.tickRate)}초마다 오염 +1. 웅덩이에서 나가라(불이 지운다)`, 2600);
+});
+events.on('corrosive_tick', (payload) => {
+  audio.play('grunt');
+  showDamageTaken((payload as { amount: number }).amount, 'poison');
+});
+events.on('corrosive_ended', () => showReaction('진액이 씻겼다', 1200));
+// 분출공 정화(B3-2, 기획서 §11) — 명중마다 오염 대기가 줄어든다(부착 중 ×2, 전투당 상한). 소리는 weak_point_hit 이 냈다
+events.on('corruption_cleansed', (payload) => {
+  const c = payload as { amount: number; total: number };
+  const cap = balance.corruption.ventCleanseCap;
+  showReaction(`분출공 명중 — 오염 대기 −${c.amount} (이번 전투 ${c.total}/${cap})`, 900);
+});
 // 이제 exit_opened 는 "보스 없는(또는 이미 딴) 층" 의 로드 직후 신호다 — 조용히 안내만
 events.on('exit_opened', () => {
   showReaction('내려가는 계단 — E 로 내려간다', 2200);
@@ -3251,6 +3301,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   }
   world.projectiles.length = 0;
   world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
+  Hazards.clearAll(world); // 진액 웅덩이도
   world.ghoulHeads = []; // 튀는 머리도 층에 속한다
 
   // 도착 지점 — 내려왔으면 입구 계단 앞, 올라왔으면 출구 계단 앞
@@ -3409,6 +3460,7 @@ Enemies.init(world); // 공격 행동 소음 — 시전·휘두름이 코앞의 
 GhoulHeads.init(world); // 구울 머리 소품 — 목이 날아가면 통통 튀는 머리가 남는다
 Props.init(world); // 기믹 — 부서지는 순간의 결과 롤(전리품·매복·폭발 심지)을 구독한다
 Traps.init(world); // 함정 — 기름 점화 소음 구독
+Hazards.init(world); // 진액 웅덩이(거수 P2+) — spawn_pool·불(폭발)·질식 구독
 const systems = [
   PlayerMove.tick,
   Enemies.tick,
@@ -3425,6 +3477,7 @@ const systems = [
   Barrels.tick, // 같은 틱에 쏜 화염구·던진 수류탄이 통을 터뜨릴 수 있게 뒤에 둔다
   Props.tick, // 기믹 심지도 같은 이유로 투사체 뒤
   Traps.tick, // 함정 — 다트가 같은 틱에 나가고, 반응(Reaction)은 다음 틱부터 받아친다
+  Hazards.tick, // 진액 웅덩이 — 같은 틱의 착지·착탄(Enemies·Projectiles)이 만든 웅덩이를 말리고, 불붙은 기름(Traps) 뒤에서 증발·접촉을 본다
   Mana.tick,
   Altar.tick,
   Door.tick,
@@ -3682,6 +3735,17 @@ buffHobbleEl.insertAdjacentHTML(
 );
 const buffHobbleCd = buffHobbleEl.querySelector<HTMLElement>('.buff-cd')!;
 const buffHobbleSec = buffHobbleEl.querySelector<HTMLElement>('.buff-sec')!;
+// 오염 진액 디버프 아이콘(B3-2, 거수 진액 웅덩이·구슬) — 발밑 웅덩이에서 오르는 방울 셋(오염 녹색)
+const buffCorrosiveEl = document.getElementById('buff-corrosive')!;
+buffCorrosiveEl.insertAdjacentHTML(
+  'afterbegin',
+  '<svg width="22" height="22" viewBox="0 0 22 22">' +
+    '<ellipse cx="11" cy="17.5" rx="8.5" ry="3" fill="#39ff88" opacity="0.85"/>' +
+    '<path d="M11 3 C13.2 6.4 14.6 8.4 14.6 10.4 A3.6 3.6 0 0 1 7.4 10.4 C7.4 8.4 8.8 6.4 11 3Z" fill="#8dffb8"/>' +
+    '<circle cx="4.5" cy="12.5" r="1.4" fill="#8dffb8"/><circle cx="17.8" cy="11.5" r="1.1" fill="#8dffb8"/></svg>',
+);
+const buffCorrosiveCd = buffCorrosiveEl.querySelector<HTMLElement>('.buff-cd')!;
+const buffCorrosiveSec = buffCorrosiveEl.querySelector<HTMLElement>('.buff-sec')!;
 /** 디버프 아이콘 깜빡임 — 상태가 다시 시작됐다. 클래스를 떼고 리플로우로 애니메이션을 처음부터 다시 돌린다 */
 function flashBuffIcon(el: HTMLElement): void {
   el.classList.remove('refresh');
@@ -3948,6 +4012,7 @@ function render(alpha: number): void {
   stage.setMuzzleFlash(world.weapon.muzzleFlash > 0);
   stage.syncEnemies(world.enemies, alpha);
   stage.syncGoo(world.gooPuddles, balance.goo.lifeTicks);
+  stage.syncPools(world.pools, performance.now()); // 진액 웅덩이(거수 P2+, B3-2)
   stage.syncGhoulHeads(world.ghoulHeads);
   stage.syncProjectiles(world.projectiles, alpha);
   // 바라보는 것(주머니 또는 바닥 소모품)이 밝아지고, 선 끝 키캡은 지금 장치의 상호작용 키를 보여 준다
@@ -4197,6 +4262,8 @@ function render(alpha: number): void {
   syncDotIcon(buffNumbEl, buffNumbCd, buffNumbSec, statusIconArg(p.numbArmTicks, balance.status.numbArm.ticks));
   syncDotIcon(buffConcussionEl, buffConcussionCd, buffConcussionSec, statusIconArg(p.concussionTicks, balance.status.concussion.ticks));
   syncDotIcon(buffHobbleEl, buffHobbleCd, buffHobbleSec, statusIconArg(p.hobbleTicks, balance.status.hobble.ticks)); // 절뚝(B3-1)
+  // 오염 진액(B3-2) — 웅덩이 위에선 매 틱 lingerTicks 로 되살아나 부채꼴이 꽉 찬 채, 나오면 30틱에 걸쳐 줄어든다
+  syncDotIcon(buffCorrosiveEl, buffCorrosiveCd, buffCorrosiveSec, statusIconArg(p.corrosiveTicks, balance.status.corrosive.lingerTicks));
   // 랜턴 — HP·마나 바 아래의 얇은 실선 게이지. 오른쪽에 % 와 예비 전지 개수
   const battFrac = Math.max(0, Math.min(1, world.lantern.battery / balance.lantern.batteryMax));
   const battPct = Math.round(battFrac * 100);
@@ -4278,7 +4345,7 @@ function render(alpha: number): void {
     altarPrompt!.textContent =
       `제단 — ${IK} 보급 상점\n` +
       `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
-      `오염 +${world.corruption.pending} 정산 · 리스폰 지점 등록`;
+      `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 리스폰 지점 등록`;
   } else if (nearChest) {
     altarPrompt!.textContent = `${IK} — ${world.chestInView!.opened ? '보물상자를 뒤진다' : '보물상자를 연다'}`;
   } else if (nearLoot) {
@@ -4369,7 +4436,7 @@ function render(alpha: number): void {
     `위치 ${floorIndex + 1}층  (${p.x.toFixed(1)}, ${p.z.toFixed(1)})  칸 [${Math.floor(p.z / level.cellSize)},${Math.floor(p.x / level.cellSize)}]\n` +
     `9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}${p.blocking ? '  [방어]' : ''}\n` +
     `spell ${spellHudText()}   스킬 ${world.sigils.inventory.length}개   chain ×${chainMult}\n` +
-    `corruption ${world.corruption.applied}${world.corruption.pending > 0 ? ` (+${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}\n` +
+    `corruption ${world.corruption.applied}${world.corruption.pending !== 0 ? ` (${world.corruption.pending > 0 ? '+' : ''}${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}\n` +
     bossLine +
     `enemies ${aliveCount}${reactionLabel ? `   ${reactionLabel}` : ''}${world.godMode ? '   [무적]' : ''}${world.skillTestMode ? '   [스킬 테스트]' : ''}\n` +
     (input.pointerLocked ? '' : '[클릭] 마우스 잠금\n') +
