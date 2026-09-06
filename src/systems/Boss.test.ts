@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
-import { attackReaches, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, rayHitsEnemy, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
+import { attackReaches, bladeOfJoint, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, jointOfBlade, rayHitsEnemy, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
@@ -1288,7 +1288,7 @@ describe('캐스터 재배치 — 아군이 사선을 막을 때', () => {
   });
 });
 
-describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + 왼낫 교대·들이받기(B1-3) + 패링 → 노출·머리 내림·눈 혼절(B2-2)', () => {
+describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + 왼낫 교대·들이받기(B1-3) + 패링 → 노출·머리 내림·눈 혼절(B2-2) + 파열·낫 잠김·절뚝·완벽 회피(B2-3)', () => {
   const TYPE = 'scythe_behemoth';
   const def = enemyDef(TYPE);
 
@@ -1724,7 +1724,6 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
 
   it('(g) 자세 비추기 — 돌격 예고·질주·헛돌격 경직 동안 pose charge(구체 표 1.1m), 끝나면 사라진다. 눈은 돌격 중 닫혀 있다(6m 안 노출은 B2-5)', () => {
     const boss = makeBehemoth(10);
-    world.player.iframeTicks = 1e9; // 헛돌격으로 끝나게
     tickEnemiesUntil(() => boss.ai === 'windup', 300);
     expect(boss.attackMode).toBe('charge');
     Enemies.tick(world, DT); // 자세 비추기는 틱 첫머리 — 예고를 시작한 다음 틱부터
@@ -1733,6 +1732,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect(weakPointWorldPos(boss, def, wp('eye')).y).toBeCloseTo(1.1, 6);
     expect(weakPointOpen(boss, wp('eye'))).toBe(false);
     tickEnemiesUntil(() => boss.ai === 'charging', 300);
+    world.player.z += 4; // 헛돌격으로 끝나게 — 예고 끝에 고정된 목표 옆으로 크게 비킨다(무적 접촉은 B2-3 부터 완벽 회피라 헛돌격이 아니다)
     expect(boss.pose).toBe('charge');
     tickEnemiesUntil(() => boss.ai === 'recover', 300);
     expect(boss.whiffed).toBe(true);
@@ -1785,11 +1785,19 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect(Math.hypot(boss.x - world.player.x, boss.z - world.player.z)).toBeLessThanOrEqual(Enemies.contactDist(def));
   });
 
-  it('(c) 접촉 순간이 회피 무적 8틱 안이면 미접촉 — 피해 0, 헛돌격 경직', () => {
+  it('(c) 완벽 회피(B2-3) — 접촉 순간이 회피 무적 8틱 안이면 피해 0 + charge_dodged + 미끄러짐(pose skid 90, 이동·공격 불가) + 양 관절 40틱 노출. 90틱 뒤 chase, 관절은 40틱에 닫힌다', () => {
     const ch = def.chargeAttack!;
+    expect(ch.perfectDodgeExposes).toEqual({ ticks: 40, joints: ['joint_r', 'joint_l'] });
+    expect(balance.weakPoint.skid.ticks).toBe(90);
     const boss = makeBehemoth(10);
     const hits: unknown[] = [];
     world.events.on('player_damaged', (p) => hits.push(p));
+    const dodged: unknown[] = [];
+    world.events.on('charge_dodged', (p) => dodged.push(p));
+    const status: { kind: string; on: boolean; id?: string }[] = [];
+    world.events.on('boss_status', (p) => status.push(p as { kind: string; on: boolean; id?: string }));
+    const closed: { id: string; hits: number }[] = [];
+    world.events.on('exposure_closed', (p) => closed.push(p as { id: string; hits: number }));
 
     tickEnemiesUntil(() => boss.ai === 'charging', 300);
     // 몸이 닿기 직전(≈ 4틱 전, 15 m/s = 0.25m/틱)에 회피 무적을 건다 — 무적은 Reaction 이 매 틱 깎는다
@@ -1801,12 +1809,62 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       Reaction.tick(world, DT);
     }
 
-    expect(boss.ai).toBe('recover');
     expect(hits).toHaveLength(0);
     expect(world.player.health).toBe(100);
     expect(world.player.kbTicks ?? 0).toBe(0);
-    expect(boss.whiffed).toBe(true); // 헛돌격 — 긴 경직(반격 창)
-    expect(boss.timer).toBe(ch.whiffRecoverTicks);
+    expect(dodged).toEqual([{ enemyId: boss.id, enemyType: TYPE, x: boss.x, z: boss.z }]);
+    // 헛돌격(whiff 90)이 아니라 미끄러짐 — 포즈 타이머가 이동·공격을 막는다
+    expect(boss.ai).toBe('recover');
+    expect(boss.whiffed).toBe(false);
+    expect(boss.pose).toBe('skid');
+    expect(boss.poseTicks).toBe(90);
+    expect(boss.exposure).toEqual({ joint_r: 40, joint_l: 40 });
+    expect(weakPointOpen(boss, wp('joint_r'))).toBe(true);
+    expect(weakPointOpen(boss, wp('joint_l'))).toBe(true);
+    expect(weakPointOpen(boss, wp('eye'))).toBe(false); // 눈은 skid 자세에서 닫혀 있다
+    expect(weakPointWorldPos(boss, def, wp('joint_r')).y).toBeCloseTo(2.4, 6); // 표의 skid 자리
+    expect(status.map((s) => `${s.kind}${s.id ? ':' + s.id : ''}:${s.on}`)).toEqual(['expose:joint_r:true', 'expose:joint_l:true', 'skid:true']);
+
+    // 미끄러지는 90틱 동안 제자리 — 코앞이라도 들이받기·낫·돌격 어느 것도 나가지 않는다
+    const x0 = boss.x;
+    const z0 = boss.z;
+    const windups: unknown[] = [];
+    world.events.on('enemy_windup', (p) => windups.push(p));
+    for (let i = 0; i < 40; i++) Enemies.tick(world, DT);
+    expect(closed.map((c) => c.id).sort()).toEqual(['joint_l', 'joint_r']); // 관절은 40틱에 닫힌다
+    expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+    expect(boss.pose).toBe('skid');
+    for (let i = 0; i < 49; i++) Enemies.tick(world, DT);
+    expect(boss.pose).toBe('skid');
+    expect(boss.poseTicks).toBe(1);
+    expect(boss.x).toBe(x0);
+    expect(boss.z).toBe(z0);
+    expect(windups).toHaveLength(0);
+    Enemies.tick(world, DT);
+    expect(boss.pose).toBeUndefined();
+    expect(boss.ai).toBe('chase');
+    expect(status.filter((s) => s.kind === 'skid').map((s) => s.on)).toEqual([true, false]);
+  });
+
+  it('완벽 회피는 마나를 주지 않는다 — 노출이 보상(결정 6). 돌격이 아닌 들이받기는 무적 접촉이어도 그냥 빗나간다(perfectDodgeExposes 없음)', () => {
+    const boss = makeBehemoth(10);
+    const mana: unknown[] = [];
+    world.events.on('mana_gained', (p) => mana.push(p));
+    tickEnemiesUntil(() => boss.ai === 'charging', 300);
+    const cd = Enemies.contactDist(def);
+    tickEnemiesUntil(() => Math.hypot(boss.x - world.player.x, boss.z - world.player.z) <= cd + 1.0, 300);
+    world.player.iframeTicks = 1e9;
+    tickEnemiesUntil(() => boss.pose === 'skid', 300);
+    expect(mana).toHaveLength(0);
+    // 들이받기 — 무적 접촉은 옛 경로(헛침)
+    const boss2 = makeBehemoth(2.4);
+    world.enemies.splice(world.enemies.indexOf(boss), 1);
+    tickEnemiesUntil(() => boss2.ai === 'windup', 60);
+    expect(boss2.attackMode).toBe('close');
+    tickEnemiesUntil(() => boss2.ai === 'recover', 60);
+    expect(boss2.whiffed).toBe(true);
+    expect(boss2.pose).toBeUndefined();
+    expect(boss2.exposure ?? {}).toEqual({});
   });
 
   it('무적이 아니면 같은 자리에서 그대로 맞는다 — (c)의 대조군', () => {
@@ -2064,6 +2122,252 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect(seen.map((s) => s.mode)).toEqual(['melee', 'melee', 'melee']);
     expect(chief.lastBlade).toBeUndefined();
     expect(chief.closeCooldown).toBeUndefined();
+  });
+
+  // ── B2-3 관절 파열·낫 잠김·절뚝 ──
+
+  /** 보스를 (10, 12) 에, 플레이어를 보스의 오른 옆(−z 쪽, 보스는 −x 를 본다) 5m 로 — 관절 원뿔(facing 1, 0.4, −0.4)이 그쪽 옆을 향한다 */
+  function makeBehemothSideShot(): ReturnType<typeof spawnEnemyAt> {
+    world.player.z = 12;
+    world.player.prevZ = 12;
+    const boss = spawnEnemyAt(TYPE, 10, 12, 1);
+    boss.ai = 'chase';
+    world.enemies.push(boss);
+    return boss;
+  }
+
+  /** 노출된 관절 구체 중심을 권총으로 n 발 — 쿨다운을 비워 같은 틱에 쏜다(노출 36틱 안) */
+  function shootJoint(boss: EnemyState, id: string, n: number): void {
+    for (let i = 0; i < n; i++) {
+      const c = weakPointWorldPos(boss, def, wp(id));
+      shootAt(c.x, c.y, c.z);
+    }
+  }
+
+  it('B2-3 데이터 — rupture{60, 600}·limp{0.65, 0.7}·skid{90}·retreatWhenDisarmed{2.5, 6}, 관절 132 = 권총 6발(22×6), 낫 ↔ 관절 짝은 exposeOnParry 표의 역', () => {
+    expect(balance.weakPoint.rupture).toEqual({ staggerTicks: 60, bladeLockTicks: 600 });
+    expect(balance.weakPoint.limp).toEqual({ speedMul: 0.65, chargeSpeedMul: 0.7 });
+    expect(balance.weakPoint.skid).toEqual({ ticks: 90 });
+    expect(def.retreatWhenDisarmed).toEqual({ min: 2.5, max: 6 });
+    expect(wp('joint_r').hp).toBe(132);
+    expect(wp('joint_l').hp).toBe(132);
+    expect(balance.weapons.pistol.damage * wp('joint_r').damageMul * 6).toBe(132);
+    expect(bladeOfJoint(def, 'joint_r')).toBe('r');
+    expect(bladeOfJoint(def, 'joint_l')).toBe('l');
+    expect(bladeOfJoint(def, 'eye')).toBeUndefined();
+    expect(jointOfBlade(def, 'r')).toBe('joint_r');
+    expect(jointOfBlade(def, 'l')).toBe('joint_l');
+    expect(bladeOfJoint(enemyDef('goblin_chieftain'), 'joint_r')).toBeUndefined();
+    expect(enemyDef('goblin_chieftain').retreatWhenDisarmed).toBeUndefined();
+    expect(enemyDef('goblin_chieftain').chargeAttack!.perfectDodgeExposes).toBeUndefined();
+  });
+
+  it('관절 132 → 파열: 권총 6발(22×6)에 내구 0 → weak_point_broken + boss_status rupture{joint_r, r} + 비틀거림 60(recover) + 오른낫 잠김 600, 관절 판정 닫힘(exposure_closed{hits 6})', () => {
+    const boss = makeBehemothSideShot();
+    expect(normalParry(boss)).toBe('normal');
+    const recoverAfterParry = boss.timer; // 40 + 36 = 76
+    const status: { kind: string; on: boolean; id?: string; blade?: string; ticks?: number }[] = [];
+    world.events.on('boss_status', (p) => status.push(p as { kind: string; on: boolean; id?: string; blade?: string; ticks?: number }));
+    const broken: { id: string }[] = [];
+    world.events.on('weak_point_broken', (p) => broken.push(p as { id: string }));
+    const closed: { id: string; hits: number }[] = [];
+    world.events.on('exposure_closed', (p) => closed.push(p as { id: string; hits: number }));
+    world.player.x = 10;
+    world.player.z = 7;
+    // 5발까지는 내구만 깎인다 — 파열 없음
+    shootJoint(boss, 'joint_r', 5);
+    expect(boss.weakHp!['joint_r']).toBeCloseTo(132 - 22 * 5, 5);
+    expect(broken).toHaveLength(0);
+    Enemies.tick(world, DT);
+    expect(boss.bladeLock).toBeUndefined();
+    expect(weakPointOpen(boss, wp('joint_r'))).toBe(true);
+    // 6발째 — 내구 0. 판정은 그 즉시 닫히고(weakPointOpen), Enemies 다음 틱에 파열 처리
+    shootJoint(boss, 'joint_r', 1);
+    expect(boss.weakHp!['joint_r']).toBe(0);
+    expect(broken).toEqual([expect.objectContaining({ id: 'joint_r' })]);
+    expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+    const before = boss.health;
+    shootJoint(boss, 'joint_r', 1); // 파열한 관절은 몸통 0.8×
+    expect(boss.health).toBeCloseTo(before - balance.weapons.pistol.damage * balance.weapons.pistol.hitZones.bodyMul, 5);
+    expect(boss.timer).toBe(recoverAfterParry - 1);
+    Enemies.tick(world, DT);
+    expect(boss.ruptured).toEqual({ joint_r: true });
+    expect(boss.bladeLock).toEqual({ r: 600 });
+    expect(boss.lastBlade).toBe('r');
+    // 비틀거림 — recover 60 (남은 튕김 경직 74 가 더 길면 그쪽) + 튕긴 자세
+    expect(boss.ai).toBe('recover');
+    expect(boss.timer).toBe(Math.max(recoverAfterParry - 2, balance.weakPoint.rupture.staggerTicks));
+    expect(boss.recoiled).toBe(true);
+    // 장부 — 노출은 파열 틱에 닫혀 명중 6 을 센다, 상태 이벤트는 rupture on 하나(절뚝은 아직)
+    expect(closed).toEqual([expect.objectContaining({ id: 'joint_r', hits: 6 })]);
+    expect(status.filter((st) => st.kind === 'rupture')).toEqual([
+      expect.objectContaining({ kind: 'rupture', id: 'joint_r', blade: 'r', on: true, ticks: 600 }),
+    ]);
+    expect(status.some((st) => st.kind === 'limp')).toBe(false);
+    expect(boss.limping ?? false).toBe(false);
+    // 왼 관절은 멀쩡하다
+    expect(boss.weakHp!['joint_l']).toBe(132);
+  });
+
+  it('파열 비틀거림은 자유 상태에서만 — 머리 내림(완벽 패링) 중 관절이 터지면 눈 창을 빼앗지 않고 낫만 잠근다', () => {
+    const boss = makeBehemothSideShot();
+    expect(perfectParry(boss)).toBe('perfect');
+    expect(boss.pose).toBe('head_down');
+    world.player.x = 10;
+    world.player.z = 7;
+    for (let i = 0; i < 10; i++) Enemies.tick(world, DT);
+    shootJoint(boss, 'joint_r', 6);
+    Enemies.tick(world, DT);
+    expect(boss.bladeLock).toEqual({ r: 600 });
+    expect(boss.pose).toBe('head_down');
+    expect(boss.poseTicks).toBe(90 - 11);
+    expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+    expect(boss.recoiled).toBe(false);
+    // 낫 공격 예고 중에 터지면 예고가 끊긴다 — 잠긴 낫으로는 휘두르지 못한다
+    const boss2 = makeBehemoth(4.0);
+    world.enemies.splice(world.enemies.indexOf(boss), 1);
+    world.player.x = 6;
+    world.player.z = 6;
+    tickEnemiesUntil(() => boss2.ai === 'windup', 60);
+    expect(boss2.attackMode).toBe('melee');
+    boss2.weakHp!['joint_r'] = 0; // 내구 0 (외부 경로)
+    Enemies.tick(world, DT);
+    expect(boss2.ai).toBe('recover');
+    expect(boss2.timer).toBe(balance.weakPoint.rupture.staggerTicks - 1); // 파열 틱의 recover 가 한 틱 깎는다 — 60틱 뒤 chase
+    expect(boss2.bladeLock).toEqual({ r: 600 });
+    for (let i = 0; i < 58; i++) Enemies.tick(world, DT);
+    expect(boss2.ai).toBe('recover');
+    Enemies.tick(world, DT);
+    expect(boss2.ai).toBe('chase');
+  });
+
+  it('잠긴 낫은 선택되지 않는다 — 오른낫 잠김 600틱 동안 낫 공격은 전부 왼낫(alt), 601틱 뒤 rupture off 와 함께 오른낫이 다시 나온다', () => {
+    const boss = makeBehemoth(4.0);
+    world.player.health = 1e6; // 관찰 중 죽지 않게 (Enemies 만 돌리므로 밀림은 적용되지 않는다)
+    boss.chargeCooldown = 1e9; // 낫 선택만 본다
+    boss.closeCooldown = 1e9;
+    const status: { kind: string; on: boolean; blade?: string }[] = [];
+    world.events.on('boss_status', (p) => status.push(p as { kind: string; on: boolean; blade?: string }));
+    const modes: string[] = [];
+    world.events.on('enemy_windup', () => modes.push(boss.attackMode ?? '?'));
+    // 첫 낫은 오른낫 — 예고 시작 뒤 파열(외부 경로로 내구 0)
+    tickEnemiesUntil(() => boss.ai === 'windup', 60);
+    expect(modes).toEqual(['melee']);
+    boss.weakHp!['joint_r'] = 0;
+    Enemies.tick(world, DT);
+    const lockedAt = world.tick; // (Enemies.tick 은 world.tick 을 세지 않으니 틱 수를 직접 센다)
+    void lockedAt;
+    expect(boss.bladeLock).toEqual({ r: 600 });
+    expect(boss.ai).toBe('recover');
+    // 잠김 600틱 동안 — 나가는 낫은 전부 왼낫
+    let ticks = 0;
+    for (; ticks < 599; ticks++) Enemies.tick(world, DT);
+    expect(boss.bladeLock).toEqual({ r: 1 });
+    expect(modes.length).toBeGreaterThan(3);
+    expect(modes.slice(1).every((m) => m === 'alt')).toBe(true);
+    expect(weakPointOpen(boss, wp('joint_r'))).toBe(false); // 관절 hp 는 그대로 0 — 갑각 재생(B2-6) 전엔 닫힌 채
+    // 600틱째 — 해제
+    Enemies.tick(world, DT);
+    expect(boss.bladeLock).toEqual({});
+    expect(status.filter((st) => st.kind === 'rupture').map((st) => `${st.blade}:${st.on}`)).toEqual(['r:true', 'r:false']);
+    expect(boss.weakHp!['joint_r']).toBe(0);
+    expect(boss.ruptured).toEqual({ joint_r: true }); // 다시 파열하지 않는다
+    // 이후 — 교대가 돌아온다: 다음 낫들 중에 오른낫(melee)이 있다
+    const n = modes.length;
+    for (let i = 0; i < 400; i++) Enemies.tick(world, DT);
+    expect(modes.slice(n)).toContain('melee');
+    expect(modes.slice(n)).toContain('alt');
+    expect(boss.ruptured).toEqual({ joint_r: true });
+  });
+
+  it('양 낫 잠김 → 절뚝(boss_status limp on): 낫이 안 나가고 2.5m 안이면 이속 ×0.65 로 물러나 2.5~6m 를 유지, 돌격 속도 ×0.7. 한쪽이 풀리면 limp off', () => {
+    const boss = makeBehemoth(2.0); // 낫 사거리 안·들이받기 3.0m 안
+    boss.closeCooldown = 1e9; // 들이받기를 빼고 물러서기만 본다
+    boss.chargeCooldown = 1e9;
+    const status: { kind: string; on: boolean }[] = [];
+    world.events.on('boss_status', (p) => status.push(p as { kind: string; on: boolean }));
+    const windups: unknown[] = [];
+    world.events.on('enemy_windup', (p) => windups.push(p));
+    boss.bladeLock = { r: 3000, l: 3000 }; // 관찰 내내 잠겨 있게
+    Enemies.tick(world, DT);
+    expect(boss.limping).toBe(true);
+    expect(status).toEqual([expect.objectContaining({ kind: 'limp', on: true })]);
+    // 물러난다 — 한 틱 이동량 = speed × 0.65 / 60
+    const d0 = Math.hypot(boss.x - world.player.x, boss.z - world.player.z);
+    Enemies.tick(world, DT);
+    const d1 = Math.hypot(boss.x - world.player.x, boss.z - world.player.z);
+    expect(d1 - d0).toBeCloseTo((def.speed * balance.weakPoint.limp.speedMul) / 60, 4);
+    expect(boss.yaw).toBeCloseTo(Math.atan2(-(world.player.x - boss.x), -(world.player.z - boss.z)), 6); // 마주 본 채 뒷걸음
+    // 2.5m 에 닿으면 멈춘다 — 그 뒤로는 제자리, 낫 예고는 한 번도 없다
+    tickEnemiesUntil(() => Math.hypot(boss.x - world.player.x, boss.z - world.player.z) >= def.retreatWhenDisarmed!.min, 200);
+    const x1 = boss.x;
+    for (let i = 0; i < 60; i++) Enemies.tick(world, DT);
+    expect(boss.x).toBe(x1);
+    expect(boss.ai).toBe('chase');
+    expect(windups).toHaveLength(0);
+    // 4.4~6m — 다가오지 않는다(유지). 6m 밖 — 평소처럼 다가온다(절뚝 이속). 플레이어는 방 안쪽(+x, 벽은 x < 4)에 둔다
+    world.player.x = boss.x + 5.0;
+    for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+    expect(boss.x).toBe(x1);
+    world.player.x = boss.x + 8.0;
+    const x2 = boss.x;
+    const z2 = boss.z;
+    Enemies.tick(world, DT);
+    // 접근은 산개 편각(flank)이 붙으니 이동량 크기로 잰다
+    expect(Math.hypot(boss.x - x2, boss.z - z2)).toBeCloseTo((def.speed * balance.weakPoint.limp.speedMul) / 60, 4);
+    // 돌격(4.5~15m, 쿨다운 0) — 질주 속도도 ×0.7
+    boss.chargeCooldown = 0;
+    world.player.x = boss.x + 10;
+    tickEnemiesUntil(() => boss.ai === 'charging', 200);
+    expect(boss.attackMode).toBe('charge');
+    const cx = boss.x;
+    Enemies.tick(world, DT);
+    expect(boss.x - cx).toBeCloseTo((def.chargeAttack!.chargeSpeed! * balance.weakPoint.limp.chargeSpeedMul) / 60, 4);
+    // 왼낫 잠김이 먼저 풀리면 절뚝 해제
+    boss.bladeLock = { r: 5, l: 1 };
+    Enemies.tick(world, DT);
+    expect(boss.bladeLock).toEqual({ r: 4 });
+    expect(boss.limping).toBe(false);
+    expect(status.filter((st) => st.kind === 'limp').map((st) => st.on)).toEqual([true, false]);
+  });
+
+  it('절뚝 중에도 들이받기(3.0m 안·쿨다운)는 나간다 — 낫만 빠진다. 절뚝이 아닌 한쪽 잠김은 물러서지 않는다', () => {
+    const boss = makeBehemoth(2.4);
+    boss.bladeLock = { r: 600, l: 600 };
+    tickEnemiesUntil(() => boss.ai === 'windup', 60);
+    expect(boss.attackMode).toBe('close');
+    // 한쪽만 잠김 — 4.0m 에서 물러서지 않고 남은 낫으로 친다
+    const boss2 = makeBehemoth(4.0);
+    world.enemies.splice(world.enemies.indexOf(boss), 1);
+    boss2.bladeLock = { l: 600 };
+    const x0 = boss2.x;
+    tickEnemiesUntil(() => boss2.ai === 'windup', 60);
+    expect(boss2.x).toBe(x0);
+    expect(boss2.attackMode).toBe('melee');
+    // 족장은 아무것도 달라지지 않는다 — 장부가 생기지 않는다
+    const chief = spawnEnemyAt('goblin_chieftain', 6 + 3, 6, 2);
+    chief.ai = 'chase';
+    world.enemies.splice(world.enemies.indexOf(boss2), 1);
+    world.enemies.push(chief);
+    for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+    expect(chief.bladeLock).toBeUndefined();
+    expect(chief.limping).toBeUndefined();
+    expect(chief.ruptured).toBeUndefined();
+  });
+
+  it('완벽 회피 노출은 파열한 관절을 열지 않는다 — 오른 관절 hp 0 이면 왼 관절만 40틱', () => {
+    const boss = makeBehemoth(10);
+    boss.weakHp!['joint_r'] = 0;
+    boss.ruptured = { joint_r: true };
+    boss.bladeLock = { r: 600 };
+    tickEnemiesUntil(() => boss.ai === 'charging', 300);
+    const cd = Enemies.contactDist(def);
+    tickEnemiesUntil(() => Math.hypot(boss.x - world.player.x, boss.z - world.player.z) <= cd + 1.0, 300);
+    world.player.iframeTicks = 1e9;
+    tickEnemiesUntil(() => boss.pose === 'skid', 300);
+    expect(boss.exposure).toEqual({ joint_l: 40 });
+    expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+    expect(weakPointOpen(boss, wp('joint_l'))).toBe(true);
   });
 
   it('보스 포효 기상 반경 — alertRadius(18) 밖의 잠든 적은 함께 깨지 않는다', () => {

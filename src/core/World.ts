@@ -1030,6 +1030,13 @@ export interface EnemyState {
   weakAccum?: Record<string, number>;
   /** 혼절 쿨다운 잔여 틱 — 이 동안 눈은 열려도 피해만 들어가고 누적은 없다(어두운 청록) */
   dazeCooldown?: number;
+  /** 낫 잠김 잔여 틱 r/l(거수 관절 파열, B2-3) — 0 보다 크면 그 낫 공격은 선택되지 않고 Stage 는 낫을 축 늘어뜨린다.
+   *  Enemies 가 매 틱 깎아 0 이 되면 지운다(boss_status rupture off). 둘 다 잠기면 절뚝(limping) */
+  bladeLock?: { r?: number; l?: number };
+  /** 파열을 이미 처리한 관절 id → true — 내구 0 이 유지되는 동안(갑각 재생 전) 비틀거림·잠김을 다시 걸지 않는다 */
+  ruptured?: Record<string, boolean>;
+  /** 절뚝 중(양 낫 잠김) — Enemies 가 bladeLock 에서 매 틱 맞추고 바뀔 때 boss_status limp on/off 를 낸다 */
+  limping?: boolean;
   /** 눈 누적으로 혼절 중 — staggered 가 끝나는 순간(시간·처형 어느 경로든) Enemies 가 쿨다운을 건다 */
   dazed?: boolean;
   /** 밀착 공격(closeAttack) 재사용 대기 */

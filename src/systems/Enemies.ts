@@ -8,13 +8,15 @@
 // windup 진입 시 enemy_windup(오디오), 종료 visualLeadTicks 전에 telegraph_flash(섬광).
 //
 // 거수(약점 보스) 상태 장부(tickWeakPointStatus): 노출 타이머(exposure) 감소·닫힘, 자세(pose) 비추기(stunned ↔ staggered,
-// charge ↔ 돌격), 눈 누적(weakAccum.eye) ≥ dazeThreshold → 혼절(staggered + boss_staggered), 혼절 종료 → dazeCooldown.
-// 포즈 타이머(poseTicks, head_down)는 오버라이드 순서 넉백 > brace > attackFreeze > 포즈 > 돌격 캔슬 > notice (기획서 §9.1).
+// charge ↔ 돌격), 눈 누적(weakAccum.eye) ≥ dazeThreshold → 혼절(staggered + boss_staggered), 혼절 종료 → dazeCooldown,
+// 관절 내구 0 → 파열(비틀거림 + 그 낫 잠김 bladeLock, 양 낫 잠김 = 절뚝 limp — 이속·돌격 속도 배율, 낫 없이 들이받기·돌격만·물러서기).
+// 돌격 완벽 회피(impact 의 reaches && iframeTicks > 0) → charge_dodged + 미끄러짐(pose skid) + 양 관절 노출.
+// 포즈 타이머(poseTicks, head_down·skid)는 오버라이드 순서 넉백 > brace > attackFreeze > 포즈 > 돌격 캔슬 > notice (기획서 §9.1).
 
 import { balance } from '../core/Balance';
-import { attackReaches, currentAttack, enemyDef, type EnemyAttackDef } from '../core/Entities';
+import { attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, currentAttack, enemyDef, jointOfBlade, type BladeSide, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, closeExposure, findWallNormal, noiseField, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, type EnemyState, type World, damagePlayer } from '../core/World';
+import { alertEnemy, alertNearbyAt, beginPose, closeExposure, findWallNormal, noiseField, openExposure, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, type EnemyState, type World, damagePlayer } from '../core/World';
 
 /** 혼절 임계를 재는 약점 id — 기획서 §4.1 "혼절은 눈 누적 66 으로만" */
 const DAZE_WEAK_POINT = 'eye';
@@ -1218,6 +1220,8 @@ function tickGhoulMoan(world: World, enemy: EnemyState): void {
  *  ④ 자세 비추기: staggered ↔ pose 'stunned' / 돌격(예고·질주·타격·헛돌격 경직) ↔ pose 'charge' — 포즈 타이머(head_down)가 없을 때만.
  *  ⑤ 눈 누적: head_down 중·쿨다운 아님·혼절 아님일 때만 weakAccum.eye 가 산다(아니면 매 틱 0 — 쿨다운 중 맞힌 것은 안 쌓인다).
  *     dazeThreshold 에 닿으면 혼절: staggered(reaction.staggerTicks) + pose stunned + boss_staggered{cause 'eye'}, 눈 노출은 닫힌다.
+ *  ⑥ 낫 잠김(bladeLock) 감소 → 0 이면 해제(boss_status rupture off). ⑦ 관절 내구 0 이 새로 생겼으면 파열(ruptureJoint).
+ *  ⑧ 절뚝(limping) = 양 낫 잠김 — 바뀌는 틱에 boss_status limp on/off.
  *  약점 정의가 없는 적(족장·잡몹)은 아무것도 하지 않는다. 혼절로 넘어간 틱은 true — 그 틱의 나머지 행동은 건너뛴다
  *  (Reaction 의 패링 스태거와 같이 staggerTicks 가 온전히 남는다) */
 function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): boolean {
@@ -1230,6 +1234,32 @@ function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<ty
       if (left > 0) enemy.exposure[id] = left;
       else closeExposure(world, enemy, id);
     }
+  }
+  // ⑥ 낫 잠김 — 먼저 깎고(파열 틱에 새로 잠긴 낫은 다음 틱부터 줄어 bladeLockTicks 뒤에 풀린다) 0 이면 해제. 관절 hp 는 그대로 0(갑각 재생 B2-6 만 되돌린다)
+  if (enemy.bladeLock) {
+    for (const blade of ['r', 'l'] as const) {
+      const left = enemy.bladeLock[blade];
+      if (left === undefined) continue;
+      if (left > 1) {
+        enemy.bladeLock[blade] = left - 1;
+      } else {
+        delete enemy.bladeLock[blade];
+        world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'rupture', id: jointOfBlade(def, blade), blade, on: false });
+      }
+    }
+  }
+  // ⑦ 관절 파열 — 내구가 0 에 닿은(Weapons/Projectiles 의 hitWeakPoint 가 깎는다) 관절을 처음 보는 틱에 한 번
+  if (enemy.weakHp) {
+    for (const wp of def.weakPoints) {
+      if (wp.hp === undefined || (enemy.weakHp[wp.id] ?? 1) > 0 || enemy.ruptured?.[wp.id]) continue;
+      ruptureJoint(world, enemy, def, wp.id);
+    }
+  }
+  // ⑧ 절뚝 — 양 낫 잠김이면 켜지고 하나라도 풀리면 꺼진다(bladeLock 을 밖에서 세워도 같은 문을 지난다)
+  const limp = bothBladesLocked(enemy);
+  if (limp !== (enemy.limping ?? false)) {
+    enemy.limping = limp;
+    world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'limp', on: limp });
   }
   // ② 혼절 쿨다운
   if ((enemy.dazeCooldown ?? 0) > 0) enemy.dazeCooldown = (enemy.dazeCooldown ?? 0) - 1;
@@ -1278,7 +1308,33 @@ function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<ty
   return false;
 }
 
-/** 포즈 타이머가 다했다(head_down 종료) — 자세로 열려 있던 약점(눈)을 닫고 추격으로 돌아간다. 기상 발구르기(P2+)는 B3-1 */
+/** 관절 파열(기획서 §4.1·§5 rupture) — 관절 내구 0: 노출 장부를 닫고(판정은 hp 0 으로 이미 닫혔다), 그 관절의 낫(bladeOfJoint — 패링 표의 역)을
+ *  bladeLockTicks 동안 잠근다. 비틀거림 staggerTicks 는 recover 로 — 진행 중인 낫·돌격 예고는 끊긴다. 머리 내림·미끄러짐(포즈 타이머)·혼절 중이면
+ *  이미 굳어 있으니 덧붙이지 않는다(눈 창을 빼앗지 않는다). boss_status{kind 'rupture', id, blade, on: true} — 소리·파편·문구는 main/Stage */
+function ruptureJoint(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>, jointId: string): void {
+  const cfg = balance.weakPoint.rupture;
+  enemy.ruptured ??= {};
+  enemy.ruptured[jointId] = true;
+  closeExposure(world, enemy, jointId);
+  const blade: BladeSide | undefined = bladeOfJoint(def, jointId);
+  if (blade) {
+    enemy.bladeLock ??= {};
+    enemy.bladeLock[blade] = cfg.bladeLockTicks;
+  }
+  if ((enemy.poseTicks ?? 0) <= 0 && enemy.ai !== 'staggered') {
+    const remaining = enemy.ai === 'recover' ? enemy.timer : 0;
+    enemy.ai = 'recover';
+    enemy.timer = Math.max(remaining, cfg.staggerTicks);
+    enemy.recoiled = true; // 튕긴 자세로 굳는다 — 비틀거림의 그림
+    enemy.whiffed = false;
+    enemy.strikeProgress = 0;
+  }
+  world.events.emit('boss_status', {
+    enemyId: enemy.id, enemyType: enemy.type, kind: 'rupture', id: jointId, blade, on: true, ticks: cfg.bladeLockTicks, x: enemy.x, z: enemy.z,
+  });
+}
+
+/** 포즈 타이머가 다했다(head_down·skid 종료) — 자세로 열려 있던 약점(눈)을 닫고 추격으로 돌아간다. 기상 발구르기(P2+)는 B3-1 */
 function endPose(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
   const pose = enemy.pose;
   enemy.poseTicks = 0;
@@ -1472,8 +1528,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     return;
   }
 
-  // 포즈 타이머(거수 head_down — 낫이 바닥에 박혀 머리가 내려온 동안) — 이동·회전·공격 전부 없다.
-  // 눈(0.9m)이 열려 있고 해머도 닿는다. 다하면 추격으로(기획서 §9.1: attackFreeze 다음, 돌격 캔슬·notice 앞)
+  // 포즈 타이머(거수 head_down — 낫이 바닥에 박혀 머리가 내려온 동안 / skid — 완벽 회피에 미끄러진 동안) — 이동·회전·공격 전부 없다.
+  // head_down 은 눈(0.9m)이 열려 있고 해머도 닿는다. 다하면 추격으로(기획서 §9.1: attackFreeze 다음, 돌격 캔슬·notice 앞)
   if ((enemy.poseTicks ?? 0) > 0) {
     enemy.poseTicks = (enemy.poseTicks ?? 0) - 1;
     if ((enemy.poseTicks ?? 0) <= 0) endPose(world, enemy, def);
@@ -1638,7 +1694,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           startWindup(world, enemy, close);
           break;
         }
-        enemy.attackMode = pickMeleeMode(def, enemy);
+        const bladeMode = pickMeleeMode(def, enemy);
+        if (bladeMode === null) {
+          // 양 낫 잠김(절뚝) — 낫이 없다. 들이받기(위)·돌격(아래 거리 조건)만 남으니 붙은 플레이어에게서 물러나 거리를 유지한다(기획서 §9.2)
+          holdDisarmedRange(world, enemy, def, distX, distZ, dist, dt);
+          break;
+        }
+        enemy.attackMode = bladeMode;
         startWindup(world, enemy, currentAttack(def, enemy));
         break;
       }
@@ -1719,6 +1781,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         startWindup(world, enemy, def.rangedAttack);
         break;
       }
+      // 절뚝(양 낫 잠김) — 돌격이 안 나갔으면 유지 거리(retreatWhenDisarmed.max) 안에서는 더 다가가지 않는다
+      if (holdDisarmedRange(world, enemy, def, distX, distZ, dist, dt)) break;
       if (dist > 0) {
         // 살금살금 — stalk 이 있으면 달려들기 사정거리 밖에서는 천천히 걸어온다 (구울)
         const stalkMul = def.stalk && dist > def.stalk.untilRange ? def.stalk.speedMul : 1;
@@ -1879,7 +1943,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       const tdist = Math.hypot(tdx, tdz);
       if (tdist > 0.01) {
         enemy.yaw = Math.atan2(-tdx, -tdz);
-        moveAvoiding(world, enemy, def, tdx / tdist, tdz / tdist, attack.chargeSpeed! * slowFactor(enemy) * dt);
+        moveAvoiding(world, enemy, def, tdx / tdist, tdz / tdist, attack.chargeSpeed! * slowFactor(enemy) * limpChargeMul(enemy) * dt);
       }
       // 겨눈 자리에 닿았거나(몸 반경), 플레이어가 그대로 서 있어 이미 사거리거나, 시간이 다하면 친다.
       // hitOnContact(구울 물어뜯기)는 사거리가 아니라 몸이 부딛친 순간이다 — 옆을 스쳐 지나가면 물지 않는다
@@ -1999,6 +2063,17 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           ? dist <= contactDist(def)
           : attackReaches(def, enemy, attack, p.x, p.z);
       const connected = reaches && p.iframeTicks <= 0;
+      const dodgeExpose = attack.perfectDodgeExposes;
+      if (reaches && p.iframeTicks > 0 && dodgeExpose) {
+        // 완벽 회피(거수 돌격, 기획서 §9.3) — 몸이 닿은 순간이 회피 무적 안이다. 피해 0, 거수는 헛돌격이 아니라 미끄러져 굳고(pose skid)
+        // 양 어깨 관절이 짧게 열린다(마나 0 — 노출이 보상). 파열한(내구 0) 관절은 열지 않는다. 눈멂(B2-5)보다 우선
+        world.events.emit('charge_dodged', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+        for (const id of dodgeExpose.joints) {
+          if ((enemy.weakHp?.[id] ?? 1) > 0) openExposure(world, enemy, id, dodgeExpose.ticks);
+        }
+        beginPose(world, enemy, 'skid', balance.weakPoint.skid.ticks);
+        break;
+      }
       if (connected) {
         // 방어(정면) — 칩 데미지만 관통. 피해가 있으므로 연쇄는 여전히 리셋된다
         const blocked = playerBlocks(world, enemy.x, enemy.z, balance.block.arcDeg);
@@ -2384,9 +2459,38 @@ function slowFactor(enemy: EnemyState): number {
   return (enemy.slowTicks ?? 0) > 0 ? (enemy.slowMul ?? 1) : 1;
 }
 
-/** 이동 속도 — 둔화 배율을 곱한다 (공격 리듬은 그대로다) */
+/** 이동 속도 — 둔화 배율을 곱한다 (공격 리듬은 그대로다). 절뚝(거수 양 낫 잠김)이면 limp.speedMul */
 function moveSpeed(enemy: EnemyState, def: ReturnType<typeof enemyDef>): number {
-  return def.speed * slowFactor(enemy) * frenzyMul(enemy, def);
+  return def.speed * slowFactor(enemy) * frenzyMul(enemy, def) * limpMul(enemy);
+}
+
+/** 절뚝 이속 배율 — 양 낫 잠김이면 balance.weakPoint.limp.speedMul, 아니면 1 */
+function limpMul(enemy: EnemyState): number {
+  return bothBladesLocked(enemy) ? balance.weakPoint.limp.speedMul : 1;
+}
+
+/** 절뚝 돌격 속도 배율 — 양 낫 잠김이면 limp.chargeSpeedMul */
+function limpChargeMul(enemy: EnemyState): number {
+  return bothBladesLocked(enemy) ? balance.weakPoint.limp.chargeSpeedMul : 1;
+}
+
+/** 절뚝(양 낫 잠김) 중 거리 유지(기획서 §9.2 retreatWhenDisarmed) — min 안이면 뒤로 물러나고, min~max 는 제자리에서 마주 보고,
+ *  max 밖(또는 절뚝이 아님·설정 없음)이면 false 를 돌려 평소 접근으로. 물러날 때도 이속은 절뚝 배율이다 */
+function holdDisarmedRange(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  distX: number,
+  distZ: number,
+  dist: number,
+  dt: number,
+): boolean {
+  const rr = def.retreatWhenDisarmed;
+  if (!rr || !bothBladesLocked(enemy) || dist <= 0) return false;
+  if (dist > rr.max) return false;
+  enemy.yaw = Math.atan2(-distX, -distZ);
+  if (dist < rr.min) moveAvoiding(world, enemy, def, -distX / dist, -distZ / dist, moveSpeed(enemy, def) * dt);
+  return true;
 }
 
 /** 광란 배율 — 생명 입자를 먹은 만큼 빨라진다 (이속·공속 공용, 구울) */
@@ -2601,11 +2705,17 @@ function advanceStrike(
 }
 
 /** 근접 모드 선택 — attackAlt.alternate(거수 두 낫)가 있으면 오른낫('melee' = attack)·왼낫('alt' = attackAlt)을 번갈아
- *  낸다. 마지막으로 휘두른 낫은 enemy.lastBlade 가 기억한다(첫 낫은 오른낫). 잠긴 낫 건너뛰기는 B2-3 몫.
+ *  낸다. 마지막으로 휘두른 낫은 enemy.lastBlade 가 기억한다(첫 낫은 오른낫). 관절 파열로 잠긴 낫(bladeLock)은 선택지에서 빠져
+ *  남은 낫만 나가고(예측 가능해진다 — 통제 노선), 둘 다 잠겼으면 null(낫 없음 — 호출부가 물러선다).
  *  슬롯·플래그가 없는 적은 예전처럼 늘 'melee' */
-function pickMeleeMode(def: ReturnType<typeof enemyDef>, enemy: EnemyState): 'melee' | 'alt' {
+function pickMeleeMode(def: ReturnType<typeof enemyDef>, enemy: EnemyState): 'melee' | 'alt' | null {
   if (!def.attackAlt?.alternate) return 'melee';
-  enemy.lastBlade = enemy.lastBlade === 'r' ? 'l' : 'r';
+  const rLocked = bladeLocked(enemy, 'r');
+  const lLocked = bladeLocked(enemy, 'l');
+  if (rLocked && lLocked) return null;
+  if (rLocked) enemy.lastBlade = 'l';
+  else if (lLocked) enemy.lastBlade = 'r';
+  else enemy.lastBlade = enemy.lastBlade === 'r' ? 'l' : 'r';
   return enemy.lastBlade === 'l' ? 'alt' : 'melee';
 }
 

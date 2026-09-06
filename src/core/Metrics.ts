@@ -30,8 +30,9 @@ export interface MetricsSnapshot {
     lifeMotesExpired: number;
   };
   kills: { weapon: number; execution: number; spell: number; friendlyFire: number; total: number };
-  /** 약점(거수) — 명중 수 / 약점 피해 합 / 파열 수 / 닫힌 노출 창 수와 그 안의 명중 합(노출 활용률 = hits/closed) / 혼절 수 (기획서 boss_scythe_behemoth §12) */
-  weakPoints: { hits: number; damage: number; broken: number; exposuresClosed: number; exposureHits: number; dazes: number };
+  /** 약점(거수) — 명중 수 / 약점 피해 합 / 파열 수 / 닫힌 노출 창 수와 그 안의 명중 합(노출 활용률 = hits/closed) / 혼절 수 /
+   *  돌격 완벽 회피 수 / 절뚝(양 낫 잠김) 진입 수 (기획서 boss_scythe_behemoth §12) */
+  weakPoints: { hits: number; damage: number; broken: number; exposuresClosed: number; exposureHits: number; dazes: number; chargeDodges: number; limps: number };
   pickups: { potions: number; healed: number; gold: number; xp: number };
   shieldsBroken: number;
   ammo: { shotsFired: number; shotsHit: number; altarEntries: number; altarBypasses: number };
@@ -79,6 +80,8 @@ export class Metrics {
   private exposuresClosed = 0;
   private exposureHits = 0;
   private dazes = 0;
+  private chargeDodges = 0;
+  private limps = 0;
   private potionsPicked = 0;
   private healedTotal = 0;
   private goldCollected = 0;
@@ -147,6 +150,11 @@ export class Metrics {
     });
     events.on('boss_staggered', (payload) => {
       if ((payload as { cause?: string }).cause === 'eye') this.dazes++;
+    });
+    events.on('charge_dodged', () => this.chargeDodges++);
+    events.on('boss_status', (payload) => {
+      const st = payload as { kind: string; on: boolean };
+      if (st.kind === 'limp' && st.on) this.limps++;
     });
     // 소모품은 이제 줍는 순간이 아니라 마시는 순간을 센다 (가방을 거치므로)
     events.on('item_used', (payload) => {
@@ -276,6 +284,7 @@ export class Metrics {
       weakPoints: {
         hits: this.weakPointHits, damage: this.weakPointDamage, broken: this.weakPointsBroken,
         exposuresClosed: this.exposuresClosed, exposureHits: this.exposureHits, dazes: this.dazes,
+        chargeDodges: this.chargeDodges, limps: this.limps,
       },
       pickups: {
         potions: this.potionsPicked,

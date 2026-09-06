@@ -544,6 +544,7 @@ for (const name of [
   'weak_point_broken',
   'exposure_closed',
   'boss_status',
+  'charge_dodged',
   'enemy_split',
   'grave_dropped',
   'slime_ate',
@@ -1581,11 +1582,11 @@ events.on('weak_point_hit', (payload) => {
   audio.play('weak_point_hit');
   padRumble('weakPoint');
 });
-// 약점 파열(관절 내구 0) — 무거운 파열음. 낫 잠김·비틀거림은 B2-3
+// 약점 파열(관절 내구 0) — 무거운 파열음 + 착탄점에서 몸통색 파편(소형). 낫 잠김·비틀거림의 소리·문구는 boss_status rupture 가 낸다
 events.on('weak_point_broken', (payload) => {
-  const b = payload as { x: number; z: number };
+  const b = payload as { x: number; z: number; enemyType: string };
   audio.play('heavy_hit', panAt(b.x, b.z));
-  showReaction('관절 파열!', 900);
+  stage.spawnDeathBurst(b.x, b.z, b.enemyType, 0.4);
 });
 events.on('damage_pop', (payload) => {
   const d = payload as { enemyId: number; amount: number };
@@ -2954,10 +2955,11 @@ events.on('boss_staggered', (payload) => {
   if (cause === 'eye') audio.play('eye_burst');
   showReaction(`${cause === 'eye' ? '거수 혼절' : '보스 스태거'} — 지금 처형! (${input.usingPad ? padBtn('melee') : 'Space·우클릭'})`);
 });
-// 거수 상태이상(기획서 §5 boss_status 하나로) — 관절 노출(일반 패링): 짧은 금속음 + 안내 / 머리 내림(완벽 패링): 낫이 박히는 소리 + 안내.
+// 거수 상태이상(기획서 §5 boss_status 하나로) — 관절 노출(일반 패링): 짧은 금속음 + 안내 / 머리 내림(완벽 패링): 낫이 박히는 소리 + 안내 /
+// 관절 파열(내구 0): 갑각 갈라지는 소리 + 그 낫이 잠겼다는 안내 / 절뚝(양 낫 잠김): 안내. 미끄러짐(skid)은 charge_dodged 가 소리·문구를 낸다.
 // 표시는 구체 발광·자세가 하고(Stage), 여기서는 소리와 한 줄 문구만
 events.on('boss_status', (payload) => {
-  const st = payload as { enemyId: number; enemyType: string; kind: string; on: boolean; id?: string };
+  const st = payload as { enemyId: number; enemyType: string; kind: string; on: boolean; id?: string; blade?: string };
   const e = world.enemies.find((en) => en.id === st.enemyId);
   const at = e ? panAt(e.x, e.z) : undefined;
   if (st.kind === 'expose' && st.on) {
@@ -2966,7 +2968,19 @@ events.on('boss_status', (payload) => {
   } else if (st.kind === 'head_down' && st.on) {
     audio.play('blade_stuck', at);
     showReaction('낫이 바닥에 박혔다 — 눈을 노려라!', 1400);
+  } else if (st.kind === 'rupture' && st.on) {
+    audio.play('joint_crack', at);
+    showReaction(`관절 파열 — ${st.blade === 'l' ? '왼' : '오른'}낫이 늘어졌다 (10초)`, 1600);
+  } else if (st.kind === 'limp' && st.on) {
+    showReaction('두 낫이 다 늘어졌다 — 거수가 절뚝인다', 1800);
   }
+});
+// 돌격 완벽 회피(무적 8틱 안 접촉) — 미끄러지는 소리 + 안내. 관절 노출 소리(joint_open)는 boss_status expose 가 따로 낸다
+events.on('charge_dodged', (payload) => {
+  const d = payload as { x: number; z: number };
+  audio.play('charge_dodged', panAt(d.x, d.z));
+  padRumble('weakPoint');
+  showReaction('완벽 회피 — 거수가 미끄러진다, 양 관절을 쏴라!', 1400);
 });
 // 이제 exit_opened 는 "보스 없는(또는 이미 딴) 층" 의 로드 직후 신호다 — 조용히 안내만
 events.on('exit_opened', () => {

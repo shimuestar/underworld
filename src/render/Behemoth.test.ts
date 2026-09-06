@@ -24,8 +24,8 @@ const pullback = reach * balance.parrySpace.pullbackRatio;
 const T = BEHEMOTH_TORSO;
 const J = ENEMY_LEAN_JITTER;
 
-/** 실제 리그를 지어 Stage 와 같은 기울임·전진·낮춤·자세를 넣고 잰다 */
-function measureRig(lean: number, lunge: number, crouch: number, pose: Partial<BehemothPose>) {
+/** 실제 리그를 지어 Stage 와 같은 기울임·전진·낮춤·(굴림)·자세를 넣고 잰다 */
+function measureRig(lean: number, lunge: number, crouch: number, pose: Partial<BehemothPose>, roll = 0) {
   const base: BehemothPose = {
     nowMs: 0, legPhase: 0, legBlend: 0, bladeSide: 1, bladeWindup: 0, bladeStriking: false,
     strikeProgress: 0, tipDist: pullback, recoiled: false, chargeCoil: 0, charging: false,
@@ -37,6 +37,7 @@ function measureRig(lean: number, lunge: number, crouch: number, pose: Partial<B
   const flash: THREE.MeshLambertMaterial[] = [];
   const rig = buildBehemothRig(group, torso, def, flash);
   torso.rotation.x = lean;
+  torso.rotation.z = roll;
   torso.position.z = lunge;
   torso.position.y = crouch;
   poseBehemothRig(rig, { ...base, ...pose });
@@ -53,6 +54,7 @@ function measureRig(lean: number, lunge: number, crouch: number, pose: Partial<B
 const HEAD_DOWN = { lean: T.headDownLean, lunge: 0, crouch: -def.height * T.headDownCrouch };
 const CHARGE = { lean: T.chargeLean, lunge: 0, crouch: -def.height * T.chargeCrouch };
 const STUNNED = { lean: T.stunnedLean, lunge: 0, crouch: -def.height * T.stunnedCrouch };
+const SKID = { lean: T.skidLean, lunge: T.skidLunge, crouch: -def.height * T.skidCrouch, roll: T.skidRoll };
 
 describe('약점 구체 = 판정 구체', () => {
   it('구체는 def.weakPoints 마다 하나(wp_<id>), group 소속, 반지름 = wp.radius, 자리 = normal 표', () => {
@@ -198,7 +200,7 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
   const FLOOR = -0.08; // 기운 원기둥 발의 테두리(r 0.22)가 살짝 잠기는 만큼만 허용 — 배치 1 메모 (c) 돌격 −0.46m 는 안 된다
   // 떨림은 sin(nowMs/12)·sin(nowMs/11) 진폭 — 봉우리 근처를 몇 점 찍는다
   const peaks = [0, 12 * Math.PI * 0.5, 11 * Math.PI * 0.5, 100, 1234];
-  const cases: { name: string; lean: number; lunge: number; crouch: number; pose: Partial<BehemothPose> }[] = [
+  const cases: { name: string; lean: number; lunge: number; crouch: number; pose: Partial<BehemothPose>; roll?: number }[] = [
     { name: 'rest', lean: 0, lunge: 0, crouch: 0, pose: {} },
     { name: 'rest+flinch', lean: T.flinchLean, lunge: 0, crouch: 0, pose: {} },
     { name: 'walk', lean: 0, lunge: 0, crouch: 0, pose: { legPhase: Math.PI / 2, legBlend: 1 } },
@@ -246,18 +248,34 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
     { name: 'head_down 0.5', lean: T.headDownLean * 0.5, lunge: 0, crouch: HEAD_DOWN.crouch * 0.5, pose: { pose: 'head_down', poseBlend: 0.5 } },
     { name: 'head_down+flinch', lean: T.headDownLean + T.flinchLean, lunge: 0, crouch: HEAD_DOWN.crouch, pose: { pose: 'head_down' } },
     ...peaks.map((nowMs) => ({ name: `stunned@${nowMs.toFixed(0)}`, lean: T.stunnedLean + 0.02, lunge: 0, crouch: STUNNED.crouch, pose: { pose: 'stunned', nowMs } })),
+    // B2-3 미끄러짐(옆 15° 굴림 + 앞으로 밀림, 두 낫 매달림, 다리 벌려 버팀) — 굴림 양쪽·움찔·진행 중간
+    ...peaks.map((nowMs) => ({ name: `skid@${nowMs.toFixed(0)}`, lean: SKID.lean + T.flinchLean, lunge: SKID.lunge, crouch: SKID.crouch, roll: SKID.roll, pose: { pose: 'skid', nowMs } })),
+    { name: 'skid roll-', ...SKID, roll: -SKID.roll, pose: { pose: 'skid' } },
+    { name: 'skid 0.5', lean: SKID.lean * 0.5, lunge: SKID.lunge * 0.5, crouch: SKID.crouch * 0.5, roll: SKID.roll * 0.5, pose: { pose: 'skid', poseBlend: 0.5 } },
+    // B2-3 잠긴 낫(관절 파열) — 오른/왼/양쪽, 대기·걸음·튕김(비틀거림)·예고(남은 낫)·돌격 웅크림에서 끌리는 낫끝이 바닥 위
+    { name: 'locked r', lean: 0, lunge: 0, crouch: 0, pose: { bladeLocked: { r: true, l: false } } },
+    { name: 'locked l walk', lean: 0, lunge: 0, crouch: 0, pose: { bladeLocked: { r: false, l: true }, legPhase: Math.PI / 2, legBlend: 1 } },
+    { name: 'locked r recoil+flinch', lean: T.recoilLean + J.recoilShake + T.flinchLean, lunge: 0, crouch: 0, pose: { bladeLocked: { r: true, l: false }, recoiled: true } },
+    { name: 'locked r + left windup', lean: T.windupLean + J.tremble, lunge: 0, crouch: 0, pose: { bladeLocked: { r: true, l: false }, bladeSide: -1, bladeWindup: 1, tipDist: pullback, trembling: true, nowMs: 100 } },
+    { name: 'locked both charging', ...CHARGE, pose: { pose: 'charge', charging: true, bladeLocked: { r: true, l: true } } },
+    { name: 'locked both head_down', ...HEAD_DOWN, pose: { pose: 'head_down', bladeLocked: { r: true, l: true } } },
+    // B2-3 절뚝(양 낫 잠김) — 절룩 걸음 + 몸 굴림 양쪽 봉우리
+    ...[Math.PI / 2, -Math.PI / 2].map((ph) => ({
+      name: `limp walk ${ph > 0 ? '+' : '-'}`, lean: 0, lunge: 0, crouch: 0, roll: Math.sin(ph) * T.limpRoll,
+      pose: { limping: true, bladeLocked: { r: true, l: true }, legPhase: ph, legBlend: 1 },
+    })),
   ];
 
   it('어깨→위팔→낫을 실제로 지어 모든 자세(떨림·움찔·튕김 흔들림을 더한 최악)에서 꼭대기가 3.8m 아래', () => {
     for (const c of cases) {
-      const { box } = measureRig(c.lean, c.lunge, c.crouch, c.pose);
+      const { box } = measureRig(c.lean, c.lunge, c.crouch, c.pose, c.roll ?? 0);
       expect(box.max.y, `${c.name} 꼭대기 ${box.max.y.toFixed(2)}m`).toBeLessThanOrEqual(CEIL);
     }
   });
 
   it('바닥(B2-2, 배치 1 메모 c) — 모든 자세에서 발·낫끝이 바닥을 뚫지 않는다: 기울임·낮춤만큼 다리를 늘이고 접어 발이 바닥에 남는다', () => {
     for (const c of cases) {
-      const { box, rig } = measureRig(c.lean, c.lunge, c.crouch, c.pose);
+      const { box, rig } = measureRig(c.lean, c.lunge, c.crouch, c.pose, c.roll ?? 0);
       expect(box.min.y, `${c.name} 바닥 ${box.min.y.toFixed(2)}m`).toBeGreaterThanOrEqual(FLOOR);
       // 발끝(다리 원기둥 밑면 중심)이 바닥 근처
       for (const hip of rig.legs) {
@@ -380,5 +398,60 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
     expect(horns).toHaveLength(2);
     // 자세(headPitch)와 헤드샷(headShake)은 다른 노드 — 서로 덮어쓰지 않는다
     expect(rig.headShake.parent).toBe(rig.headPitch);
+  });
+  it('잠긴 낫(B2-3) — 그 팔이 축 늘어져 낫끝이 바닥 가까이(0.05~0.45m) 앞·바깥에 끌리고, 예고·타격·튕김보다 우선한다. 다른 낫은 대기 그대로', () => {
+    for (const side of [1, -1] as const) {
+      const locked = { r: side === 1, l: side === -1 };
+      const { rig, tip } = measureRig(0, 0, 0, { bladeSide: side, bladeLocked: locked });
+      expect(tip.y, `side ${side} 낫끝 y ${tip.y.toFixed(2)}`).toBeGreaterThanOrEqual(0.05);
+      expect(tip.y, `side ${side} 낫끝 y ${tip.y.toFixed(2)}`).toBeLessThanOrEqual(0.45);
+      expect(-tip.z).toBeGreaterThan(1.5); // 몸 앞으로 끌린다
+      expect(Math.sign(tip.x)).toBe(side); // 바깥으로 벌어진 채
+      const other = behemothBladeTip(rig, side === 1 ? -1 : 1, new THREE.Vector3());
+      expect(other.y).toBeGreaterThan(0.5); // 다른 낫은 들려 있다
+      // 잠긴 낫은 예고(bladeWindup)·타격(bladeStriking)·튕김(recoiled)에도 그대로 늘어져 있다
+      for (const pose of [{ bladeWindup: 1, tipDist: pullback }, { bladeStriking: true, strikeProgress: 1, tipDist: reach }, { recoiled: true }] as Partial<BehemothPose>[]) {
+        const t2 = measureRig(0, 0, 0, { bladeSide: side, bladeLocked: locked, ...pose }).tip;
+        expect(t2.y, `${JSON.stringify(pose)} 낫끝 y ${t2.y.toFixed(2)}`).toBeLessThanOrEqual(0.45);
+      }
+    }
+    // 잠기지 않은 낫은 예전 그대로 — bladeLocked 를 안 주면 대기 높이
+    const { tip } = measureRig(0, 0, 0, {});
+    expect(tip.y).toBeGreaterThan(0.5);
+  });
+
+  it('미끄러짐(B2-3, pose skid) — 몸통이 옆으로 15° 굴러도 네 발은 바닥에 남고(굴림을 되돌려 세운다), 두 낫은 벌어져 매달리고, 눈 구체는 표의 skid 자리(2.2m)', () => {
+    const { rig, group } = measureRig(SKID.lean, SKID.lunge, SKID.crouch, { pose: 'skid' }, SKID.roll);
+    group.updateMatrixWorld(true);
+    for (const hip of rig.legs) {
+      const foot = new THREE.Vector3(0, -rig.dims.legH * hip.children[0]!.scale.y, 0);
+      let o: THREE.Object3D | null = hip;
+      while (o && o !== rig.torso.parent) {
+        o.updateMatrix();
+        foot.applyMatrix4(o.matrix);
+        o = o.parent;
+      }
+      expect(foot.y, `발 ${foot.y.toFixed(2)}`).toBeGreaterThanOrEqual(-0.02);
+      expect(foot.y, `발 ${foot.y.toFixed(2)}`).toBeLessThanOrEqual(0.35);
+      expect(Math.abs(hip.rotation.z + SKID.roll)).toBeLessThan(1e-6); // 굴림 되돌림
+    }
+    // 앞다리는 앞으로, 뒷다리는 뒤로 벌려 버틴다
+    expect(rig.legs[0]!.rotation.x).toBeGreaterThan(rig.legs[2]!.rotation.x);
+    for (const side of [1, -1] as const) {
+      const tip = behemothBladeTip(rig, side, new THREE.Vector3());
+      expect(Math.sign(tip.x)).toBe(side); // 바깥으로
+      expect(tip.y).toBeGreaterThan(0.2);
+    }
+    expect(rig.weakPoints['eye']!.position.y).toBeCloseTo(2.2, 6);
+    expect(rig.weakPoints['joint_r']!.position.y).toBeCloseTo(2.4, 6);
+  });
+
+  it('절뚝(B2-3, limping) — 앞다리 걸음이 뒷다리보다 짧다(절룩), 잠기지 않았으면 대칭', () => {
+    const limp = measureRig(0, 0, 0, { limping: true, bladeLocked: { r: true, l: true }, legPhase: Math.PI / 2, legBlend: 1 }).rig;
+    const front = Math.abs(limp.legs[0]!.rotation.x);
+    const rear = Math.abs(limp.legs[3]!.rotation.x);
+    expect(front).toBeLessThan(rear * 0.5);
+    const walk = measureRig(0, 0, 0, { legPhase: Math.PI / 2, legBlend: 1 }).rig;
+    expect(Math.abs(walk.legs[0]!.rotation.x)).toBeCloseTo(Math.abs(walk.legs[3]!.rotation.x), 6);
   });
 });

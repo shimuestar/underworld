@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { equipColor } from '../core/EquipData';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
-import { currentAttack, enemyDef, healthBarState, shieldLowered, weakPointOffset, weakPointOpen, type EnemyDef } from '../core/Entities';
+import { bladeLocked, currentAttack, enemyDef, healthBarState, shieldLowered, weakPointOffset, weakPointOpen, type EnemyDef } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN } from '../level/GridLoader';
 import type {
@@ -477,6 +477,8 @@ interface EnemyVisual {
   /** 거수 자세 보간 — 마지막 로직 자세(구체·머리가 향하는 표 자리)와 그 진행 0~1. 자세가 사라지면 0 으로 돌아가며 normal 로 복귀 */
   bhPose?: string;
   bhBlend?: number;
+  /** 거수 몸통 굴림(rad, 보간값) — 미끄러짐 15°·절뚝 절룩. 감전 떨림이 없을 때 torso.rotation.z 에 들어간다 */
+  bhRoll?: number;
   /** 시위 당김 0~1 — 놓는 순간 0으로 스냅해 시위가 튕겨 돌아간다 */
   bowDraw?: number;
   /** 머리 위 이름표 + HP 바 */
@@ -1037,6 +1039,15 @@ export const BEHEMOTH_TORSO = {
   /** 혼절(stunned) — 앞으로 살짝 처지며(표의 눈 2.0m 에 목이 닿는 자세) 흔들린다 */
   stunnedLean: -0.06,
   stunnedCrouch: 0.04,
+  /** 미끄러짐(skid, 완벽 회피) — 옆으로 기울고(굴림) 앞으로 짧게 밀리며 낮아진다. 다리는 poseBehemothRig 가 버티는 모양으로 벌린다.
+   *  굴림 축은 어깨 높이(skidRollPivot = joints.pos y) — 발이 옆으로 미끄러지고 관절·눈 메시는 표의 구체 자리에 남는다.
+   *  기획서 §2 의 15° 는 발을 축으로 하면 머리·관절 메시가 구체(표)에서 0.6m 벌어져 8° 로 줄였다 */
+  skidLean: -0.08,
+  skidRoll: 0.14,
+  skidLunge: -0.3,
+  skidCrouch: 0.02,
+  /** 절뚝(limp, 양 낫 잠김) — 걸음마다 몸이 좌우로 절룩이는 굴림 진폭(rad, 발이 축) */
+  limpRoll: 0.05,
 } as const;
 
 /** syncEnemies 가 자세 위에 더하는 기울임 떨림 진폭(rad) — 섬광 구간 떨림·튕김 흔들림·피탄 움찔.
@@ -1080,6 +1091,20 @@ const BH_BUTT_HEAD_COUNTER = 0.45; // 내리꽂을 때 머리를 되들어 뿔�
 const BH_TAIL_DROOP = 0.3;
 const BH_TAIL_SWAY = 0.18;
 const BH_TIP_MIN_Y = 0.08; // 낫끝이 바닥을 뚫지 않게 (m)
+// 잠긴 낫(관절 파열, B2-3) — 위팔이 앞아래로 축 늘어지고(월드 각) 낫끝이 바닥을 긁는다. 낫 상자의 날 높이(0.5m)가 기울어 있으니 끝 중심은 조금 띄운다
+const BH_ARM_LOCKED = -1.0;
+const BH_ARM_LOCKED_YAW = -0.45; // 바깥으로 벌어진 채 끌린다
+const BH_LOCKED_TIP_Y = 0.3;
+const BH_LOCKED_DRAG = 0.06; // 걸을 때 끌리는 낫이 좌우로 흔들리는 각
+// 미끄러짐(skid) — 두 낫이 바깥으로 벌어져 매달리고, 앞다리는 앞으로 뒷다리는 뒤로 벌려 버틴다
+const BH_ARM_SKID = 0.3;
+const BH_ARM_SKID_YAW = -0.55;
+const BH_BLADE_SKID = -1.6;
+const BH_LEG_SKID_FRONT = 0.32;
+const BH_LEG_SKID_REAR = -0.26;
+// 절뚝(limp) — 앞다리(낫 어깨 쪽) 걸음이 줄고 뒷다리가 크게 저으며 몸이 굴러 절룩인다
+const BH_LIMP_FRONT_MUL = 0.45;
+const BH_LIMP_REAR_MUL = 1.15;
 const BH_POSE_BLEND_K = 0.35; // 자세 표 보간 계수(프레임당) — 머리 내림·혼절이 서고 풀릴 때 구체와 머리가 함께 옮겨 간다
 
 /** 거수 리그 손잡이 — buildBehemothRig 가 만들고 poseBehemothRig 가 움직인다 */
@@ -1146,6 +1171,10 @@ export interface BehemothPose {
   pose?: string;
   /** 자세 진행 0~1 — 구체·머리가 normal 자리에서 표 자리로 가는 보간(돌격 예고는 예고 진행도, 그 외는 syncEnemies 가 부드럽게). 없으면 1 */
   poseBlend?: number;
+  /** 잠긴 낫(관절 파열, enemy.bladeLock) — 그 팔은 축 늘어져 낫끝이 바닥을 긁는다. 없으면 둘 다 자유 */
+  bladeLocked?: { r: boolean; l: boolean };
+  /** 절뚝(양 낫 잠김) — 걸음이 절룩인다(앞다리 짧게·뒷다리 크게). 몸 굴림은 syncEnemies 가 torso.rotation.z 로 */
+  limping?: boolean;
 }
 
 
@@ -1291,6 +1320,8 @@ export function buildBehemothRig(
   for (const [sx, sz] of [[1, -1], [-1, -1], [1, 1], [-1, 1]] as const) {
     const hip = new THREE.Group();
     hip.position.set(sx * lx, ly + legH / 2, sz * lz);
+    // 회전 순서 ZXY — torso(XYZ: 굴림 z 를 먼저, 기울임 x 를 나중에)의 역순으로 되돌려 다리를 정확히 세운다: Rz(−roll)·Rx(swing − lean)
+    hip.rotation.order = 'ZXY';
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(legR, legR * 0.85, legH, 8), legMat);
     leg.position.y = -legH / 2;
     hip.add(leg);
@@ -1408,15 +1439,28 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
   const tablePose = p.pose !== undefined && p.pose !== 'normal' && rig.def.poseOffsets?.[p.pose] !== undefined ? p.pose : undefined;
 
   // 다리 — 대각 쌍(앞오+뒤왼 / 앞왼+뒤오)이 번갈아. 돌격 예고엔 앞발이 땅을 긁는다.
-  // 몸통이 기울거나 낮아져도 발은 바닥에 남는다: 엉덩이의 group 높이만큼 다리를 늘이고 접고, 기울임을 되돌려 세운다
-  // (배치 1 메모 — 돌격 웅크림에서 앞다리가 바닥을 0.46m 뚫었다)
+  // 몸통이 기울거나 낮아져도 발은 바닥에 남는다: 엉덩이의 group 높이만큼 다리를 늘이고 접고, 기울임(x)·굴림(z)을 되돌려 세운다
+  // (배치 1 메모 — 돌격 웅크림에서 앞다리가 바닥을 0.46m 뚫었다). 미끄러짐은 앞다리 앞·뒷다리 뒤로 벌려 버티고,
+  // 절뚝은 앞다리 걸음이 짧고 뒷다리가 크게 젓는다
+  const roll = torso.rotation.z;
   const swing = Math.sin(p.legPhase) * BH_LEG_SWING * p.legBlend;
   const scrape = p.chargeCoil > 0 ? Math.sin(p.nowMs / 90) * BH_PAW_SCRAPE * p.chargeCoil : 0;
-  const legTargets = [swing + scrape, -swing - scrape, -swing, swing];
+  const frontMul = p.limping ? BH_LIMP_FRONT_MUL : 1;
+  const rearMul = p.limping ? BH_LIMP_REAR_MUL : 1;
+  const skid = tablePose === 'skid' ? blend : 0;
+  const legTargets = [
+    (swing + scrape) * frontMul + BH_LEG_SKID_FRONT * skid,
+    (-swing - scrape) * frontMul + BH_LEG_SKID_FRONT * skid,
+    -swing * rearMul + BH_LEG_SKID_REAR * skid,
+    swing * rearMul + BH_LEG_SKID_REAR * skid,
+  ];
   for (let i = 0; i < rig.legs.length; i++) {
     const hip = rig.legs[i]!;
     hip.rotation.x = mix(hip.rotation.x, (legTargets[i] ?? 0) - lean);
-    const hipY = torso.position.y + hip.position.y * Math.cos(lean) - hip.position.z * Math.sin(lean);
+    hip.rotation.z = mix(hip.rotation.z, -roll);
+    // 엉덩이의 group 높이 — torso 회전 순서(XYZ = z 굴림을 먼저, x 기울임을 나중에 적용)를 그대로 따른다
+    const rolledY = hip.position.x * Math.sin(roll) + hip.position.y * Math.cos(roll);
+    const hipY = torso.position.y + rolledY * Math.cos(lean) - hip.position.z * Math.sin(lean);
     const scale = Math.max(BH_LEG_SCALE_MIN, Math.min(BH_LEG_SCALE_MAX, hipY / rig.dims.legH));
     const leg = hip.children[0];
     if (leg) {
@@ -1500,7 +1544,22 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     };
 
     const charged = p.charging || p.chargeCoil > 0;
-    if (acting && p.bladeStriking) {
+    const locked = arm.side === 1 ? p.bladeLocked?.r === true : p.bladeLocked?.l === true;
+    if (locked) {
+      // 잠긴 낫(관절 파열) — 팔이 축 늘어져 낫끝이 바닥을 긁는다. 위팔은 앞아래로(월드 각 고정), 낫은 끝이 BH_LOCKED_TIP_Y 에 오는 각.
+      // 걸을 때 끌리는 낫이 조금 흔들린다. 공격·예고·튕김보다 먼저 — 이 팔은 무기가 아니다
+      armTarget = BH_ARM_LOCKED - lean;
+      yaw = BH_ARM_LOCKED_YAW + Math.sin(p.legPhase) * BH_LOCKED_DRAG * p.legBlend;
+      const elbowY = shoulderY + rig.dims.upperArm * Math.sin(BH_ARM_LOCKED);
+      // 몸통 굴림(절뚝·미끄러짐)은 바깥으로 벌어진 낫끝(옆으로 2m 남짓)을 그만큼 더 내리니 그 몫을 띄운다 — 바닥을 뚫지 않게
+      const rollDrop = Math.abs(Math.sin(roll)) * (shoulderX + (rig.dims.upperArm + rig.dims.blade) * Math.abs(Math.sin(yaw)));
+      bladeWorld = -Math.asin(Math.max(-1, Math.min(1, (elbowY - (BH_LOCKED_TIP_Y + rollDrop)) / rig.dims.blade)));
+    } else if (tablePose === 'skid' && blend > 0.01) {
+      // 미끄러짐(완벽 회피) — 두 낫이 바깥으로 벌어진 채 매달려 흔들린다
+      armTarget = BH_ARM_SKID + Math.sin(p.nowMs / 120) * 0.03;
+      yaw = BH_ARM_SKID_YAW;
+      bladeWorld = BH_BLADE_SKID;
+    } else if (acting && p.bladeStriking) {
       // 타격 — 위팔은 진행도로 내려오고 낫끝은 판정 거리 그대로 (즉시 반영).
       // 안쪽으로 휩쓸어 끝에서 낫끝이 몸 가운데 선(플레이어 정면)에 온다 — 호 110° 의 그림
       armTarget = BH_ARM_WINDUP + (BH_ARM_STRIKE_END - BH_ARM_WINDUP) * p.strikeProgress;
@@ -4058,6 +4117,11 @@ export class Stage {
           leanTarget = BEHEMOTH_TORSO.headDownLean;
           lungeTarget = 0;
           crouchTarget = -def2.height * BEHEMOTH_TORSO.headDownCrouch;
+        } else if (enemy.pose === 'skid') {
+          // 미끄러짐(완벽 회피) — 앞으로 밀리며 낮아지고 옆으로 15° 기운다(굴림은 아래 bhRoll). 다리는 poseBehemothRig 가 벌려 버틴다
+          leanTarget = BEHEMOTH_TORSO.skidLean;
+          lungeTarget = BEHEMOTH_TORSO.skidLunge;
+          crouchTarget = -def2.height * BEHEMOTH_TORSO.skidCrouch;
         } else if (enemy.pose === 'stunned') {
           // 혼절 — 앞으로 살짝 처진 채 휘청 (처형 창)
           leanTarget = BEHEMOTH_TORSO.stunnedLean + Math.sin(now / 170) * 0.02;
@@ -4250,6 +4314,19 @@ export class Stage {
           const cur = visual.bhBlend ?? 0;
           visual.bhBlend = cur < 0.01 ? 0 : cur * (1 - BH_POSE_BLEND_K);
         }
+        // 몸통 굴림 — 미끄러짐은 옆으로(어깨 높이가 축: 발이 미끄러지고 관절·눈 메시는 표 자리에 남는다), 절뚝은 걸음 위상에 맞춰
+        // 좌우로 절룩(발이 축). 감전 떨림(위에서 rotation.z 를 쓴다)이 없을 때만
+        const skidding = enemy.pose === 'skid';
+        const rollTarget = skidding
+          ? BEHEMOTH_TORSO.skidRoll
+          : enemy.limping
+            ? Math.sin(visual.legPhase ?? 0) * BEHEMOTH_TORSO.limpRoll * (visual.legBlend ?? 0)
+            : 0;
+        visual.bhRoll = (visual.bhRoll ?? 0) + (rollTarget - (visual.bhRoll ?? 0)) * (solidIce ? 0 : 0.25);
+        if (!shocked) visual.torso.rotation.z = visual.bhRoll;
+        // 굴림 축을 어깨 높이로 올린다 — Rz 가 (0, y) 를 x = −y·sin 으로 보내니 그만큼 되민다. 축이 발이면 0
+        const rollPivotY = skidding ? (def2.visual?.joints.pos[1] ?? 0) * def2.height : 0;
+        visual.torso.position.x = Math.sin(visual.bhRoll) * rollPivotY;
         poseBehemothRig(visual.behemoth, {
           nowMs: now,
           legPhase: visual.legPhase ?? 0,
@@ -4268,6 +4345,8 @@ export class Stage {
           snap: solidIce ? 0 : bladeStriking ? 1 : headbutting ? 0.6 : 0.25,
           pose: visual.bhPose,
           poseBlend: visual.bhBlend ?? 0,
+          bladeLocked: { r: bladeLocked(enemy, 'r'), l: bladeLocked(enemy, 'l') },
+          limping: enemy.limping === true,
         });
         // 약점 구체 — 열림(노출 타이머·자세, Entities.weakPointOpen — 판정과 같은 규칙)·파열·명중 플래시·혼절 쿨다운(눈 어두운 청록).
         // 플래시 시각은 Stage.weakFlashAt(적 id:약점 id)

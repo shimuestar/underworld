@@ -88,6 +88,8 @@ export type SoundName =
   | 'joint_open'
   | 'blade_stuck'
   | 'eye_burst'
+  | 'joint_crack'
+  | 'charge_dodged'
   | 'player_hurt'
   | 'block_hit'
   | 'hammer_heavy'
@@ -1176,6 +1178,19 @@ export class GameAudio {
         this.noise(0.12, 0.8, 2600);
         this.tone(320, 0.22, 'sawtooth', 0.5, 0.02, 760);
         this.tone(880, 0.3, 'square', 0.3, 0.06, 1400);
+        break;
+      case 'joint_crack':
+        // 관절 파열(내구 0) — 갑각이 쩍 갈라지는 마른 파열 두 번 + 뼈 낫이 축 늘어지며 내려오는 낮은 미끄러짐음
+        this.noise(0.05, 0.9, 3800);
+        this.noise(0.08, 0.7, 2200, 0.06);
+        this.tone(640, 0.09, 'square', 0.35, 0.0, 180);
+        this.tone(140, 0.36, 'sawtooth', 0.4, 0.12, 55);
+        break;
+      case 'charge_dodged':
+        // 돌격 완벽 회피 — 거수가 미끄러지는 발톱 긁힘(긴 마찰 노이즈, 음이 내려감) + 무적 안에 스친 짧은 휘파람
+        this.tone(1480, 0.07, 'triangle', 0.35, 0, 2200);
+        this.noise(0.42, 0.55, 1300, 0.03);
+        this.tone(220, 0.4, 'sawtooth', 0.3, 0.03, 70);
         break;
       case 'bow_twang':
         // 활시위 튕김 + 화살 바람 소리

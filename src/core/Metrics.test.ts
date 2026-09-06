@@ -51,9 +51,13 @@ describe('Metrics', () => {
     events.emit('exposure_closed', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'eye', hits: 0 });
     events.emit('boss_staggered', { enemyId: 1, enemyType: 'scythe_behemoth', cause: 'eye' });
     events.emit('boss_staggered', { enemyId: 2, enemyType: 'goblin_chieftain', cause: 'parry' }); // 족장 스태거는 혼절이 아니다
+    events.emit('charge_dodged', { enemyId: 1, enemyType: 'scythe_behemoth', x: 0, z: 0 });
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'limp', on: true });
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'limp', on: false }); // 해제는 세지 않는다
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'rupture', id: 'joint_r', blade: 'r', on: true }); // 파열은 weak_point_broken 이 센다
 
     const s = metrics.snapshot(makeWorldStub());
-    expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1 });
+    expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1, chargeDodges: 1, limps: 1 });
     expect(s.combat.parryAttempts).toBe(4);
     expect(s.derived.perfectParryRatio).toBeCloseTo(0.5);
     expect(s.derived.parrySuccessRatio).toBeCloseTo(0.75);

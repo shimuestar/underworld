@@ -7,7 +7,10 @@
 // weak(약점 5개 열림 발광·맥동 + 눈 명중 플래시, B2-1 — 정면 눈높이) /
 // head_down(B2-2 — 완벽 패링에 낫이 바닥에 박혀 머리가 0.9m 로 내려온 자세: 눈 청록 맥동·관절 백황, 플레이어 눈높이 정면) /
 // head_down-side(같은 자세 측면 — 다리가 바닥에 남고 낫끝이 바닥에 꽂히는지) / head_down-cooldown(혼절 쿨다운 — 눈 어두운 청록, 맥동 없음) /
-// stunned(혼절 — 몸 스태거 금색, 머리 처짐·휘청, 눈 닫힘 = 처형 창).
+// stunned(혼절 — 몸 스태거 금색, 머리 처짐·휘청, 눈 닫힘 = 처형 창) /
+// skid(B2-3 — 돌격 완벽 회피에 미끄러짐: 어깨 높이를 축으로 옆 8° 굴림(발이 미끄러짐)·앞으로 밀림, 두 낫 매달림, 다리 벌려 버팀, 양 관절 백황 40틱) /
+// rupture(B2-3 — 오른 관절 파열: 구체 어둡게(0x7a1f3a), 오른낫이 축 늘어져 끝이 바닥을 긁는다, 왼낫은 대기 — 오른 옆에서) /
+// limp(B2-3 — 양 낫 잠김 절뚝: 두 낫이 다 끌리고 앞다리 걸음이 짧다, 측면 걸음).
 // &pose=charge|head_down|… 을 붙이면 약점 구체와 머리 메시(목 IK)를 그 자세의 poseOffsets 표 자리에 놓는다
 // (안내문에 구체 자리와 머리 메시의 눈 자리(anchor)를 함께 찍는다 — 어긋남이 0 에 가까워야 한다, B2-2).
 // 참조물: 4.4m 기둥(= attackRange, 흰색) · 플레이어 기둥(r0.4 h1.7, 몸 표면이 4.4m) · 천장 4.0m / 낫 상한 3.8m 선.
@@ -183,6 +186,32 @@ if (view === 'side') {
     camera.position.set(0.5, balance.player.eyeHeight, -(reach + balance.player.radius));
     camera.lookAt(0, 1.1, -1.0);
   }
+} else if (view === 'skid') {
+  // 미끄러짐(B2-3) — 완벽 회피 직후. 몸통 옆 15°(rotation.z) + 앞으로 밀림·낮춤, 로직 자세 'skid'(표: 눈 2.2·관절 2.4), 양 관절 열림
+  torso.rotation.x = BEHEMOTH_TORSO.skidLean;
+  torso.rotation.z = BEHEMOTH_TORSO.skidRoll;
+  torso.position.x = Math.sin(BEHEMOTH_TORSO.skidRoll) * def.visual!.joints.pos[1] * def.height; // 굴림 축 = 어깨 높이(syncEnemies 와 같다)
+  torso.position.z = BEHEMOTH_TORSO.skidLunge;
+  torso.position.y = -def.height * BEHEMOTH_TORSO.skidCrouch;
+  poseBehemothRig(rig, { ...base, pose: 'skid' });
+  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'joint_r' || id === 'joint_l', broken: false, flashAgeMs: -1 }));
+  camera.position.set(4.5, 2.2, -7.0);
+  camera.lookAt(0, 1.6, -0.6);
+} else if (view === 'rupture') {
+  // 관절 파열(B2-3) — 오른 관절 내구 0: 구체 어둡게, 오른낫이 축 늘어져 바닥을 긁는다(잠김 600틱). 비틀거림은 튕김 자세(recoiled). 오른 옆에서 본다
+  torso.rotation.x = BEHEMOTH_TORSO.recoilLean;
+  poseBehemothRig(rig, { ...base, recoiled: true, bladeLocked: { r: true, l: false } });
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: id === 'joint_r', flashAgeMs: -1 }));
+  camera.position.set(7.5, 2.4, -4.5);
+  camera.lookAt(0, 1.6, -0.8);
+} else if (view === 'limp') {
+  // 절뚝(B2-3) — 양 낫 잠김: 두 낫이 다 끌리고, 걸음에 몸이 굴러 절룩(rotation.z)·앞다리 걸음이 짧다. 측면 걸음
+  torso.rotation.x = 0;
+  torso.rotation.z = Math.sin(1.2) * BEHEMOTH_TORSO.limpRoll;
+  poseBehemothRig(rig, { ...base, legPhase: 1.2, legBlend: 1, limping: true, bladeLocked: { r: true, l: true } });
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: id === 'joint_r' || id === 'joint_l', flashAgeMs: -1 }));
+  camera.position.set(9.0, 2.4, -1.5);
+  camera.lookAt(0, 1.4, -0.6);
 } else if (view === 'stunned') {
   // 혼절(눈 누적 66) — 몸 스태거 금색, 머리가 처져 휘청, 눈은 닫힘(판정 없음) = 처형 창
   torso.rotation.x = BEHEMOTH_TORSO.stunnedLean;

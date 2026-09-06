@@ -104,6 +104,9 @@ export interface EnemyAttackDef {
   /** 패링 → 약점 노출(parryOutcome 'expose' 적, 기획서 §4.1 ①②) — 이 공격을 일반 패링하면 joint 약점이 normalTicks,
    *  완벽 패링하면 perfectTicks 동안 열린다(완벽은 머리 내림도 함께 — balance.weakPoint.headDown.stuckTicks). 없으면 노출 없음 */
   exposeOnParry?: { joint: string; normalTicks: number; perfectTicks: number };
+  /** 완벽 회피 보상(거수 돌격, 기획서 §9.3) — 접촉 순간 플레이어가 회피 무적(iframeTicks > 0)이면 피해 대신 charge_dodged +
+   *  미끄러짐(pose skid, balance.weakPoint.skid.ticks) + joints 의 관절이 ticks 동안 열린다. 없으면 무적 접촉은 헛돌격(옛 경로) */
+  perfectDodgeExposes?: { ticks: number; joints: string[] };
 }
 
 /** 세 성분 좌표·치수 — [x, y, z]. x·z 는 def.radius 배, y 는 def.height 배 (Stage 가 곱한다) */
@@ -352,6 +355,36 @@ export interface EnemyDef {
   poseOffsets?: Record<string, Record<string, LocalVec3>>;
   /** 권총 부위 배율(head/limb)을 받지 않는다 — 약점 아닌 명중은 전부 body 배율, 권총·화살 헤드샷 이벤트 억제(거수: 머리 = 눈 약점) */
   hitZonesImmune?: boolean;
+  /** 양 낫 잠김(절뚝) 중 낫 사거리 안에 붙은 플레이어에게서 물러나 유지하는 거리(m, 기획서 §9.2) — min 안이면 뒤로, min~max 는 제자리,
+   *  max 밖은 평소 접근. 없으면 제자리에 선다 */
+  retreatWhenDisarmed?: { min: number; max: number };
+}
+
+/** 낫 쪽 id — 'r' 오른낫(attack) / 'l' 왼낫(attackAlt). EnemyState.lastBlade·bladeLock 이 같은 키를 쓴다 */
+export type BladeSide = 'r' | 'l';
+
+/** 관절 약점 ↔ 낫 짝(거수) — 낫 공격 정의의 exposeOnParry.joint 가 "그 낫을 패링하면 그 관절"을 말하므로 같은 표를 거꾸로 읽는다:
+ *  attack(오른낫) 의 관절이면 'r', attackAlt(왼낫) 의 관절이면 'l'. 관절 파열이 잠글 낫(Enemies)과 잠긴 낫의 관절(Stage)이 이 한 함수를 쓴다.
+ *  짝이 없는 약점(눈·심장·분출공)은 undefined */
+export function bladeOfJoint(def: EnemyDef, jointId: string): BladeSide | undefined {
+  if (def.attack.exposeOnParry?.joint === jointId) return 'r';
+  if (def.attackAlt?.exposeOnParry?.joint === jointId) return 'l';
+  return undefined;
+}
+
+/** 낫의 관절 약점 id(bladeOfJoint 의 역) — 없으면 undefined */
+export function jointOfBlade(def: EnemyDef, blade: BladeSide): string | undefined {
+  return blade === 'r' ? def.attack.exposeOnParry?.joint : def.attackAlt?.exposeOnParry?.joint;
+}
+
+/** 이 낫이 잠겨 있는가(관절 파열, enemy.bladeLock[blade] > 0) — Enemies 의 공격 선택과 Stage 의 늘어진 낫이 같은 규칙을 읽는다 */
+export function bladeLocked(enemy: { bladeLock?: Partial<Record<BladeSide, number>> }, blade: BladeSide): boolean {
+  return (enemy.bladeLock?.[blade] ?? 0) > 0;
+}
+
+/** 절뚝(limp) — 양 낫이 동시에 잠겼다(기획서 §5). 이속·돌격 속도 배율은 balance.weakPoint.limp */
+export function bothBladesLocked(enemy: { bladeLock?: Partial<Record<BladeSide, number>> }): boolean {
+  return bladeLocked(enemy, 'r') && bladeLocked(enemy, 'l');
 }
 
 /** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격 */
