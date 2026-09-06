@@ -218,6 +218,27 @@ B3-5(2026-09-06)가 문서 드리프트(B3-1)·돌격 장부(B3-4 chainLeg)를 �
 - [x] (B3-4, B3-6 에서 처리 — 위 배치 2 메모(B3-4 검토)와 같은 건: `BH_SHOULDER_ALIGN_POSES` 로 어긋남 0.00, Behemoth.test ≤ 0.02) 판정 = 그림 잔여 — head_down·exhaust 자세의 어깨 관절 메시가 판정 구체와 0.44m 어긋난다(debug ?view=exhaust 안내문 '어긋남 r 0.44 / l 0.44', /tmp/pw/behemoth-b34-exhaust.png). 완벽 패링 뒤 head_down 90틱 동안은 그 관절이 실제로 열려(exposeOnParry.perfectTicks) 열린 구체가 어깨 메시에서 떨어져 보인다. B2-2 부터 있던 값이라 이 체크박스 범위 밖이고 TASKS.md 배치 2 잔여 메모(190행)에 처리 방식과 함께 기록돼 있다 — 차단 사유는 아니다.
   → 메모대로 다음 리그 손질 때 roar 에 쓴 shoulderLift/shoulderShift 방식을 head_down·exhaust(가능하면 stunned)에도 적용하고 src/render/Behemoth.test.ts 의 관절 메시–구체 검사에 두 자세를 ≤ 0.2 로 추가한다.
 
+### 배치 3 후반 검토 잔여 메모 (전부 저순위 — 밸런스/후속 때 처리, 2026-09-07)
+
+- [ ] (B3-5) 기획서 §12 계측 절 드리프트 — docs/systems/boss_scythe_behemoth.md 427행 이벤트 목록이 여전히 `arena_opened`·`pillar_hit{hp}` 로 적혀 있는데 구현(Arena.ts, docs/metrics.md)은 `arena_unsealed{reason}`·`pillar_damaged{hp}` 다. 같은 커밋이 §10.1·§14 는 갱신했으면서 §12 만 남겼다. 동작·게이트 영향 없음.
+  → §12 이벤트 목록을 `arena_sealed`, `arena_unsealed{reason}`, `arena_hold`, `pillar_damaged{hp}`, `pillar_collapsed`, `arena_rubble_broken`, `anticamp_charge`, `anticamp_stun`, `anticamp_far{on}` 으로 고쳐 metrics.md 와 맞춘다.
+- [ ] (B3-5) 부활 규약 주석·문서가 코드와 어긋남 — src/main.ts:2888 `Hazards.clearAll(world); // ...전투 장부 fightPendingIn 도 새 몸에서 0 부터` 와 Status.ts 머리 주석·TASKS B3-2 의 '새 몸이면 0' 은 그대로인데, 새 Arena.carryOver(Arena.ts:392~393)가 fightPendingIn/fightCleansed 를 새 몸에 옮긴다. B3-2 가 정한 규칙(부활 = 장부 0)을 이번 커밋이 조용히 바꾼 셈이고, 기획서 §10.1 D 행의 '전투 장부' 한 단어로만 기록됐다.
+  → 의도가 '같은 전투가 이어진다(체력 유지)이니 상한 장부도 이어진다' 면 main.ts:2888 주석·Status.ts 17행·TASKS B3-2 줄을 '아레나 주인은 carryOver 로 장부 유지' 로 고치고, B3-2 규칙을 지킬 거면 carryOver 에서 두 필드 복사를 뺀다.
+- [ ] (B3-5) 낙석 연출 결이 함정 낙석과 조금 다름 — Arena.collapsePillar 의 player_damaged source 가 'pillar_rockfall' 인데 src/main.ts:2012 의 굵은 진동('blast') 목록엔 'trap_rockfall' 만 있어 아레나 낙석 40 은 보통 'hurt' 진동으로 떨어진다. 카메라 킥 상수도 함정(0.6·12m, main.ts:1248)과 달리 0.7·14m 로 따로 박혀 있다(기존 코드도 인라인이라 규칙 위반은 아님).
+  → main.ts:2012 목록에 `hit.source === 'pillar_rockfall'` 을 추가하고, 킥 세기·반경은 함정 낙석 핸들러와 같은 값을 쓰거나 한 상수로 묶는다.
+- [ ] (B3-5) (설계 판단 — 구현은 과제·기획서 그대로) 밖에서 깨운 보스가 홈(3,22)에서 대기하는 동안 반캠핑은 봉쇄 중에만 세므로(Arena.tick 은 inside 분기에서만 tickAnticamp), 플레이어가 문 밖 복도 (12,22)·(13,22) 에 서면 열린 문 D 를 지나 홈까지 직선 시야(약 36m)가 열려 서 있는 보스를 반응 없이 저격할 수 있다. 기둥·벽감 캠핑은 막았지만 '문 밖 캠핑' 은 열려 있다.
+  → B3-6/밸런스에서 결정: (a) holdHome 중에도 farTicks 를 세어 anticamp_far 대신 '문 앞까지 나와 노려보기'(bounds 남쪽 경계 − 반경 지점으로 이동) 를 붙이거나, (b) 밖에서 깨웠을 때 보스가 문 D 를 닫아 시야를 끊거나, (c) 기획서 §10.1 에 '문 밖 저격은 허용(보스 체력 1500 · 탄 경제로 상쇄)' 을 명시한다.
+- [ ] (B3-5) 드문 경계 사례 — 반캠핑 예고(windup) 중 플레이어가 아레나 밖으로 나가면 Arena.tick(231행)이 anticampTarget 만 지우고 enemy.anticampCharge 는 남는다. 이후 그 질주가 플레이어 자리(clamp)로 가서 기둥 P 에 박히면 chargeCollide(Enemies.ts 1652행)가 anticamp 로 읽어 전도(눈 노출) 대신 실신 30 + pillar_hit{anticamp} 을 낸다. 봉쇄 300틱 뒤에야 요청되므로 문이 열려 있을 가능성은 낮아 실사용 영향은 거의 없다.
+  → Arena.tick 의 밖 분기에서 `boss.anticampTarget = undefined` 옆에 `boss.anticampCharge = false` 를 함께 내리거나, chargeCollide 의 anticamp 판정을 `enemy.anticampCharge && enemy.anticampTarget` 으로 좁힌다.
+- [ ] (B3-6) 보스 사망 정화가 `def.boss` 전체에 걸린다 — /Users/shimu/Dev/GameDev/underworld/src/systems/Corruption.ts:17-21 은 enemyType 정의의 boss 만 보므로 f1 의 slime_mother(boss true, 처형 불가)·f3 의 goblin_chieftain(처형 250) 처치도 오염 대기 −10(족장 처형 −15)을 준다. 기획서 §11.1 장부는 거수 1회만 가정했는데 슬라이스 전체로 ~+30 의 공짜 오염 여유가 생겨 기존 층 경제가 바뀐다. 구현자가 테스트('족장도 정화한다 — 거수 전용 규칙이 아니다', Corruption.test.ts)·커밋·§11 에 공개했고 체크박스 문구('보스 사망 시')와도 어긋나지 않으므로 버그는 아니며 의도 확인 사안.
+  → 의도면 그대로 두고 §11.1 장부에 '족장·어미 슬라임도 −10/−15' 한 줄만. 거수 한정이 의도면 EnemyDef 에 데이터 플래그(예: `deathCleanse: true`, scythe_behemoth 만)를 두고 Corruption.bossCleanse 게이트를 `def.boss && def.deathCleanse` 로 + Corruption.test 의 족장 케이스를 '정화 없음' 으로 반전, TASKS/§11/§14 갱신.
+- [ ] (B3-6) 관절 원뿔 여유가 얇다 — facing (±1, 0.3, −1)·coneDeg 140 은 정면 중앙·눈높이 1.6 기준 4.4m 에서 dot −0.388(문턱 −cos70° = −0.342, 여유 0.046 ≈ 2.7°)이고 4.0m −0.350(경계)·3.8m −0.328 ✗·3.5m −0.288 ✗·3.0m −0.204 ✗ 다(node 로 재계산). 잔여 메모 요구('정면 4.4m 성립')와 WeakPoint.test 는 충족하지만, 패링 뒤 한 걸음(≤ 3.9m) 다가선 정면에서는 열린 관절을 여전히 못 맞히고 그 낫 쪽 옆으로 비켜야 한다. 등 뒤 ×·반대쪽 옆 × 는 유지.
+  → 선택 튜닝(데이터·문서·테스트 수치만): /Users/shimu/Dev/GameDev/underworld/data/entities.json joint_r/l `coneDeg` 150(문턱 −0.259 → 정면 3.5m 부터 성립, 3.0m 은 여전히 ×) 또는 facing z 를 −1.3 으로. 바꾸면 §4.2 의 'dot ≈ −0.39' 문구와 WeakPoint.test 데이터 기대값을 함께 고친다. 유지도 무방 — 그렇다면 §4.2 에 '정면 성립 하한 ≈ 4.0m' 를 적어 두는 편이 낫다.
+- [ ] (B3-6) Metrics 의 처형 마무리 비율 분모·분자 모집단이 다르다 — /Users/shimu/Dev/GameDev/underworld/src/core/Metrics.ts:257,272: `boss.kills` 는 `boss_phase{phase 0}`(페이즈 보스 = 거수만)로 세고, `boss.executeFinishes` 는 `enemy_died{execution && boss}`(Reaction 의 보스 처형 — 족장 250 도 boss:true) 로 센다. 족장만 처형한 세션은 kills 0 / executeFinishes 1 이 되어 docs/metrics.md 158행의 'executeFinishes / kills' 가 1 을 넘거나 0 나누기가 된다.
+  → 가장 싼 처리: docs/metrics.md 158행과 Metrics.ts 주석에 'kills 는 페이즈 보스(거수)만, executeFinishes 는 처형 가능한 전 보스(족장 포함)' 를 명시하고 비율은 거수 세션 기준으로만 읽는다고 적기. 정합을 원하면 Reaction 의 보스 처형 enemy_died 에 `phased: def.phases !== undefined` 를 실어 executeFinishes 를 페이즈 보스로 한정(Metrics.test 의 goblin 처형 케이스는 그대로 0).
+- [ ] (B3-6) 원격이 이미 최신이다 — `git rev-parse origin/main` = 68eb235 = HEAD, reflog 'update by push' 2026-09-07 00:52:17(커밋 00:49:10 뒤 3분, 구현자 종료 이후). 구현자 보고 'push 안 함' 은 사실로 보이고 그 사이 오케스트레이터/사용자가 B3-5·B3-6 을 함께 push 한 듯하다. 작업 트리는 clean.
+  → 없음 — 추가 push 는 불필요(이미 Pages 배포 대상에 올라가 있다). 위 저순위 항목을 손보면 그때 새 커밋으로 push.
+
 ## 의존성 주의
 
 - M3 이전에 M4를 건드리지 않는다. 패링 감각이 확정되기 전 마나 수치를 잡으면 전부 다시 한다
