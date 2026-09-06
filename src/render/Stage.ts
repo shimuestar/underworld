@@ -1415,6 +1415,12 @@ export function behemothAnchorPos(rig: BehemothRig, id: string, out: THREE.Vecto
 
 /** 약점 구체 표시 — 열림: 발광 + 크기 맥동 ±12% / 닫힘: 어두운 본색 / 파열: 어둡게 / 명중 직후(flashAgeMs ≥ 0): 밝게 번쩍.
  *  텔레그래프 3색·스태거 금색은 쓰지 않는다(기획서 §2). syncEnemies 와 debug/behemoth.ts 가 같은 함수를 쓴다 */
+/** 눈 구체를 '어두운 청록(피해만, 누적 없음)' 으로 그릴지 — 혼절 쿨다운(dazeCooldown) 중 머리 내림의 눈.
+ *  돌격 질주 중 6m 눈(Enemies ⑩)은 쿨다운과 무관하게 눈멂 누적이 유효하므로 밝은 청록 그대로(판정 = 그림, B2-5 검토) */
+export function behemothEyeDimmed(enemy: Pick<EnemyState, 'dazeCooldown' | 'ai' | 'attackMode'>): boolean {
+  return (enemy.dazeCooldown ?? 0) > 0 && !(enemy.ai === 'charging' && enemy.attackMode === 'charge');
+}
+
 export function styleBehemothWeakPoints(
   rig: BehemothRig,
   nowMs: number,
@@ -4390,7 +4396,7 @@ export class Stage {
         const eid = enemy.id;
         const flashMap = this.weakFlashAt;
         const wps = def2.weakPoints ?? [];
-        const dimEye = (enemy.dazeCooldown ?? 0) > 0;
+        const dimEye = behemothEyeDimmed(enemy);
         styleBehemothWeakPoints(visual.behemoth, now, (id) => {
           const key = `${eid}:${id}`;
           const at = flashMap.get(key);

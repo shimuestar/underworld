@@ -2531,13 +2531,15 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(weakPointOpen(boss, wp('eye'))).toBe(true);
       expect(w.closed).toHaveLength(0);
       expect(boss.blind ?? false).toBe(false);
-      // 정면에서 권총 2발(33×2 = 66) → 다음 틱 눈멂
+      // 정면에서 권총 2발(33×2 = 66) → 다음 틱 눈멂. 혼절 쿨다운 중이어도 — 쿨다운은 머리 내림의 혼절 누적만 막는다(기획서 §5 blind)
+      boss.dazeCooldown = wpc.dazeCooldownTicks;
       blindShots(boss);
       expect(boss.weakAccum!['eye']).toBe(66);
       const timerBefore = boss.timer;
       const yaw0 = boss.yaw;
       Enemies.tick(world, DT);
       expect(boss.blind).toBe(true);
+      expect(boss.dazeCooldown).toBe(wpc.dazeCooldownTicks - 1); // 쿨다운은 그대로 흐른다 — 눈멂이 건드리지 않는다
       expect(boss.ai).toBe('charging');
       expect(boss.pose).toBe('blind');
       expect(weakPointWorldPos(boss, def, wp('eye')).y).toBeCloseTo(1.2, 6); // 표의 blind 자리(머리 휘저음은 Stage)
@@ -2641,6 +2643,30 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
           expect(world.level.solidAt(5, 3)).toBe(false);
         }
       }
+    });
+
+    it('벽이 아닌 것(소품 AABB — 아군·잔해도 같다)에 막혀 선 질주는 뒤 기둥에 박힌 것으로 오판하지 않는다 — 탐침은 몸 반경 + 이 틱 기대 이동 안의 벽만 본다(전도·pillar_hit·벽 헛돌격 없음, 질주 시간이 다한 뒤 보통 헛돌격 90)', () => {
+      world = makeWorld(laneGrid('P'));
+      // 기둥 동쪽 면(x 24) 앞 0.2m 에 두께 0.5m 소품 — 몸은 소품에 막혀 x 26.3 에 서고, 진행 방향 2.3m 앞에 기둥 면이 있다(옛 탐지 폭 반경 + 반 칸 3.6m 안)
+      world.level.props.push({ minX: 24.2, maxX: 24.7, minZ: 12, maxZ: 16 });
+      const boss = placeBoss(40, 14);
+      const w = watch();
+      chargeToward(boss, 26, 18);
+      tickEnemiesUntil(() => boss.ai !== 'charging', 200);
+      expect(boss.x).toBeCloseTo(24.7 + def.radius, 1); // 소품 앞에 섰다
+      expect(boss.z).toBeCloseTo(14, 6);
+      expect(boss.pose).toBe('charge');
+      expect(boss.poseTicks ?? 0).toBe(0);
+      expect(w.pillars).toHaveLength(0);
+      expect(w.status).toHaveLength(0); // 전도·머리 내림 없음
+      expect(world.level.charAt(5, 3)).toBe('P');
+      // 질주 시간이 다해 impact(지형 충돌이면 곧장 recover 였다) → 다음 틱 플레이어를 놓친 보통 헛돌격(wall 없음, whiffRecoverTicks 90)
+      expect(boss.ai).toBe('impact');
+      Enemies.tick(world, DT);
+      expect(boss.ai).toBe('recover');
+      expect(boss.whiffed).toBe(true);
+      expect(boss.timer).toBe(def.chargeAttack!.whiffRecoverTicks);
+      expect(w.whiffs).toEqual([{ enemyId: boss.id, enemyType: TYPE, ticks: def.chargeAttack!.whiffRecoverTicks }]);
     });
 
     it('일반 벽 # 에 박히면(눈멂 없이) 헛돌격 60(enemy_whiffed{wall}) — 박히지 않고 눈도 안 열린다. 잡몹·족장 돌격은 지형 충돌 코드가 돌지 않는다', () => {

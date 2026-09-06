@@ -11,6 +11,7 @@ import {
   ENEMY_LEAN_JITTER,
   behemothAnchorPos,
   behemothBladeTip,
+  behemothEyeDimmed,
   buildBehemothRig,
   poseBehemothRig,
   solveNeckToEye,
@@ -290,6 +291,15 @@ describe('약점 구체 = 판정 구체', () => {
     expect(mat('eye').emissive.getHex()).toBe(0);
     expect(mat('eye').color.getHex()).toBe(0x0f3a36);
     expect(rig.weakPoints['eye']!.scale.x).toBe(1);
+  });
+
+  it('쿨다운 dim 판정(B2-5 검토) — 혼절 쿨다운 중 머리 내림·회복의 눈은 어둡게, 돌격 질주(charging + charge) 중 6m 눈은 쿨다운이어도 밝게(눈멂 누적이 유효 — 판정과 같은 그림), 쿨다운 0 이면 어디서도 어둡지 않다', () => {
+    expect(behemothEyeDimmed({ dazeCooldown: 600, ai: 'recover', attackMode: 'charge' })).toBe(true);
+    expect(behemothEyeDimmed({ dazeCooldown: 1, ai: 'chase' })).toBe(true);
+    expect(behemothEyeDimmed({ dazeCooldown: 600, ai: 'charging', attackMode: 'charge' })).toBe(false);
+    expect(behemothEyeDimmed({ dazeCooldown: 600, ai: 'windup', attackMode: 'charge' })).toBe(true); // 예고 중엔 눈이 안 열리지만 규칙은 질주만 예외
+    expect(behemothEyeDimmed({ dazeCooldown: 0, ai: 'recover' })).toBe(false);
+    expect(behemothEyeDimmed({ ai: 'charging', attackMode: 'charge' })).toBe(false);
   });
 });
 

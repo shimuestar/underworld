@@ -6,16 +6,18 @@
 
 import { balance } from '../core/Balance';
 import type { EnemyState, PlayerState } from '../core/World';
-import type { Level } from '../level/GridLoader';
+import { COLOR_PILLAR, type Level } from '../level/GridLoader';
 import type { Awareness } from './Awareness';
 
 // 시각 상수 (튜닝값 아님) — 지도 배율(px/unit)은 balance.minimap.pxPerUnit
-// 월드 시각물과 같은 색을 쓴다 — 지도와 실물이 일치해야 한다
+// 월드 시각물과 같은 색을 쓴다 — 지도와 실물이 일치해야 한다. SOLID_CHARS 의 문자는 전부 여기 있어야 한다(없으면 바닥색 = 판정≠그림, Minimap.test)
+const cssHex = (n: number): string => '#' + n.toString(16).padStart(6, '0');
 const COLORS: Record<string, string> = {
   '#': '#565663',
   D: '#6b4a2f',
   G: '#2f6f74',
   C: '#4a5a68',
+  P: cssHex(COLOR_PILLAR), // 기둥(B2-5) — 돌격을 박히게 유도하는 표적이라 지도에 보여야 한다
   L: '#2f6f74',
   A: '#d8c9a0',
   X: '#3fae5a',

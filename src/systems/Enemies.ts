@@ -1373,7 +1373,8 @@ function endBlind(world: World, enemy: EnemyState): void {
 /** 돌격 지형 충돌(B2-5, 기획서 §9.3) — 진행 방향으로 몸 폭 안 세 줄(가운데·양옆 CHARGE_PROBE_SIDE)의 레이를 쏘아 가장 가까운 벽 셀을 읽는다.
  *  기둥 P·균열벽 C → 전도: head_down toppleTicks(눈 0.9m 노출·혼절 누적 가능, cause 'topple') + toppleReboundM 튕김 + pillar_hit{row, col}(내구 −1 은 B3 Arena) /
  *  균열벽은 World.breakCrackWalls 로 그 칸만 개방(crack_wall_broken). 그 외(일반 벽 #·문·문설주) → wallWhiffRecoverTicks 헛돌격 — 박히지 않고
- *  눈도 안 열린다(enemy_whiffed{wall: true}). 몸 반경 + 반 칸 안에 벽이 없으면(아군에 밀려 선 것) 충돌이 아니다 → false, 질주는 계속 */
+ *  눈도 안 열린다(enemy_whiffed{wall: true}). 벽 탐지 폭은 몸 반경 + 이 틱 기대 이동(step) — 막은 것이 벽이라면 벽면은 반경(+SKIN) 안에 있고,
+ *  아군·소품·잔해에 막혀 섰다면 그 몸통 두께만큼 벽이 멀어 이 안에 없다(있어도 뒤 기둥에 '박힌' 것으로 오판하지 않는다) → false, 질주는 계속 */
 function chargeCollide(
   world: World,
   enemy: EnemyState,
@@ -1381,10 +1382,11 @@ function chargeCollide(
   attack: EnemyAttackDef,
   dirX: number,
   dirZ: number,
+  step: number,
 ): boolean {
   const level = world.level;
   const cs = level.cellSize;
-  const reach = def.radius + cs * 0.5;
+  const reach = def.radius + step;
   let best: { t: number; ox: number; oz: number } | null = null;
   for (const k of [0, CHARGE_PROBE_SIDE, -CHARGE_PROBE_SIDE]) {
     const ox = enemy.x - dirZ * def.radius * k;
@@ -2077,7 +2079,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (def.weakPoints && running && (enemy.flinchTicks ?? 0) <= 0) {
         const moved = Math.hypot(enemy.x - enemy.prevX, enemy.z - enemy.prevZ);
         enemy.chargeStuck = moved < step * balance.enemyAi.unstick.minProgress ? (enemy.chargeStuck ?? 0) + 1 : 0;
-        if ((enemy.chargeStuck ?? 0) >= balance.weakPoint.chargeStuckTicks && chargeCollide(world, enemy, def, attack, dirX, dirZ)) break;
+        if ((enemy.chargeStuck ?? 0) >= balance.weakPoint.chargeStuckTicks && chargeCollide(world, enemy, def, attack, dirX, dirZ, step)) break;
       }
       // 겨눈 자리에 닿았거나(몸 반경 — 눈멂이면 겨눈 자리가 없다: 시간이 다하거나 부딛칠 때까지), 플레이어가 그대로 서 있어 이미 사거리거나,
       // 시간이 다하면 친다. hitOnContact(구울 물어뜯기)는 사거리가 아니라 몸이 부딛친 순간이다 — 옆을 스쳐 지나가면 물지 않는다

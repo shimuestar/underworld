@@ -60,7 +60,8 @@ export interface DoorCell {
 
 /** 이동을 막는 셀. 잠긴 문(D)과 균열 벽(C)은 열리기 전까지 벽 취급. 기둥(P, 거수 아레나 — 기획서 §10.1)은 4×4m 단일 셀 벽으로,
  *  거수 돌격이 박히면 전도(Enemies.chargeCollide 가 문자를 읽는다). 내구·붕괴는 B3-5 Arena */
-const SOLID_CHARS = new Set(['#', 'D', 'G', 'C', 'P']);
+/** 막힌 칸 문자 — 지도(Minimap COLORS)는 이 집합의 모든 문자에 색을 가져야 한다(Minimap.test 가 확인) */
+export const SOLID_CHARS: ReadonlySet<string> = new Set(['#', 'D', 'G', 'C', 'P']);
 /** 제단 기둥 발자국(가로세로 m). 충돌과 시각 메시가 반드시 같은 값을 쓴다 —
  *  하나만 고치면 "보이는 것과 부딪히는 것"이 어긋난다 */
 const ALTAR_FOOTPRINT = 1.1;
@@ -422,7 +423,7 @@ const DOOR_WOOD = 0x5a3d24;
 const DOOR_IRON = 0x2e2c2a;
 const COLOR_CRACK = 0x4a5a68;
 /** 기둥(P) — 벽보다 밝은 돌(기획서 §10.1 0x8a8378) + 정 자국 띠(어두운 띠). 균열선(내구 단계)은 B3-5 */
-const COLOR_PILLAR = 0x8a8378;
+export const COLOR_PILLAR = 0x8a8378; // 기둥 P — 지도(Minimap)도 같은 색을 쓴다
 const COLOR_PILLAR_BAND = 0x5e574e;
 const PILLAR_BAND_H = 0.14;
 const PILLAR_BAND_OUT = 0.05;
