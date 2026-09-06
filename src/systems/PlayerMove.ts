@@ -470,7 +470,8 @@ export function tick(world: World, dt: number): void {
   }
   // 밀리는 동안은 발이 안 붙는다 — 밀림과 이동이 더해지는 구조라 배율로 눌러 준다
   if (shoved) speed *= balance.playerKnockback.moveSpeedMul;
-  if (p.blocking) speed *= balance.block.speedMul; // 방어 중 감속 페널티
+  // 방어 중 감속 페널티 — 팔 저림(numb_arm) 중엔 더 무겁다(balance.status.numbArm.blockSpeedMul)
+  if (p.blocking) speed *= (p.numbArmTicks ?? 0) > 0 ? balance.status.numbArm.blockSpeedMul : balance.block.speedMul;
   if (world.itemChannel) speed *= balance.items.channelMoveSpeedMul; // 마시는 중엔 못 뛴다
   // 시위를 당기는 동안 발이 무거워진다 (마시기와 같은 자리·같은 규약)
   if ((world.weapon.bowDraw ?? 0) > 0) speed *= balance.weapons.bow.drawMoveSpeedMul;

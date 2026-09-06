@@ -301,6 +301,8 @@ export function isUseful(world: World, kind: ItemKind): boolean {
   if (kind === 'sigil' || kind === 'equip') return true; // 흐리게 그리지 않는다 — 마시는 값어치가 아니라 새기는/걸치는 것
   const def = itemDef(kind);
   if (def.heal > 0 && world.player.health < balance.player.healthMax) return true;
+  // 지울 상태가 있으면 유용 — 체력 물약은 만피여도 진탕(concussion)을 지운다(기획서 §6, balance.status.concussion.potionCures)
+  if (def.heal > 0 && balance.status.concussion.potionCures && (world.player.concussionTicks ?? 0) > 0) return true;
   if (def.restore > 0 && world.mana.value < balance.mana.max) return true;
   if (def.regen && world.foodRegenTicks <= 0) return true; // 지속 회복은 만피여도 값어치가 있다
   return false;

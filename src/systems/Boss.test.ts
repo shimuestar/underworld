@@ -1759,7 +1759,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect(boss.ai).toBe('staggered');
   });
 
-  it('(b) 돌격 접촉 — 45 피해 + 7m/20틱 밀림, 진탕은 아직 없다 (B2-4)', () => {
+  it('(b) 돌격 접촉 — 45 피해 + 7m/20틱 밀림 + 진탕(concussion 360, B2-4 — 감소·이벤트는 Status.ts, Status.test 가 본다)', () => {
     const ch = def.chargeAttack!;
     const boss = makeBehemoth(10); // minRange 4.5 ~ maxRange 15 안
     const hits: { amount: number; blocked: boolean }[] = [];
@@ -1778,8 +1778,9 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect(world.player.kbTicks).toBe(ch.playerKnockbackTicks);
     const flung = Math.hypot(world.player.kbX!, world.player.kbZ!) * world.player.kbTicks!;
     expect(flung).toBeCloseTo(ch.playerKnockback!, 3);
-    // 진탕(concussion)은 B2-4 의 Status.ts 몫 — 아직 어떤 상태도 붙지 않는다
-    expect('concussionTicks' in world.player).toBe(false);
+    // 진탕(concussion) — 직격만 세운다(statusOnHit). 팔 저림은 낫을 막았을 때만
+    expect(world.player.concussionTicks).toBe(balance.status.concussion.ticks);
+    expect(world.player.numbArmTicks ?? 0).toBe(0);
     expect(boss.whiffed).toBe(false);
     // 몸 접촉이 곧 명중 — 달리기가 멈춘 자리는 접촉 거리 안이다
     expect(Math.hypot(boss.x - world.player.x, boss.z - world.player.z)).toBeLessThanOrEqual(Enemies.contactDist(def));

@@ -912,6 +912,12 @@
     "limp": { "speedMul": 0.65, "chargeSpeedMul": 0.7 },
     "skid": { "ticks": 90 }
   },
+  "_statusNote": "플레이어 상태이상(B2-4, 기획서 §6) — 카운터는 PlayerState 옵셔널(numbArmTicks·concussionTicks), 감소·상한·${kind}_applied/_ended 이벤트는 Status.ts 한 곳. 다른 시스템은 값을 세우기만 한다. maxConcurrent: 동시에 걸리는 상태 상한 — 세 번째가 걸리면 가장 오래된 것이 해제된다. 어느 상태도 회피 거리·무적 틱을 건드리지 않는다. numbArm(팔 저림): 낫 공격을 방패로 막으면(statusOnBlock) ticks 동안 — perfectBandMul 0 = 완벽 대역 0(정직하게 일반만), 방어 이속 block.speedMul 0.35 대신 blockSpeedMul, noManaLossOnFail = 저림 중 패링 실패의 마나 절반 소실 면제. 일반 패링 1회 성립 시 즉시 해제. concussion(진탕): 돌격 직격(statusOnHit, 막으면 안 걸림) ticks 동안 — 조준 흔들림 aimShakeAmp(박쥐 aimShake 채널 재사용), 화면 기울기 tiltDeg(Stage 카메라 롤), 예고음 버스 외 오디오 덕킹 duckDb, potionCures = 체력 물약이 지운다",
+  "status": {
+    "maxConcurrent": 2,
+    "numbArm": { "ticks": 240, "perfectBandMul": 0, "blockSpeedMul": 0.25, "noManaLossOnFail": true },
+    "concussion": { "ticks": 360, "aimShakeAmp": 0.02, "tiltDeg": 3, "duckDb": -6, "potionCures": true }
+  },
   "_spatialAudioNote": "적 소리의 좌우 패닝 + 거리 감쇠 — 시야 밖 위협을 귀가 먼저 안다. minVol 아래로는 안 줄여 예고음이 게임플레이 단서로 항상 들리게 한다",
   "spatialAudio": {
     "maxPan": 0.85,

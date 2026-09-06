@@ -15,10 +15,12 @@
 //       스태거 중 처형은 즉사가 아니라 executeDamage 타격.
 // parryOutcome 'expose'(거수): 패링은 스태거 대신 약점을 연다 — 일반 = 그 낫의 어깨 관절 36틱(recover),
 //       완벽 = 관절 90틱 + 낫이 바닥에 박혀 머리 내림(pose head_down 90틱, 눈 노출). 혼절은 Enemies 가 눈 누적으로 건다.
+// 팔 저림(numb_arm, B2-4 — 거수 낫을 방패로 막음): 완벽 대역 ×perfectBandMul(0 = 정직하게 일반만), 패링 실패의 마나 소실 면제
+//       (parry_attempt 에 noManaLoss — Mana 가 읽는다), 일반 패링 1회 성립 시 즉시 해제(카운터 0 → Status 가 _ended 를 낸다).
 
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef } from '../core/Entities';
-import { beginPose, openExposure, pushEnemy, applyFrostOnHit, spendStamina } from '../core/World';
+import { beginPose, openExposure, pushEnemy, applyFrostOnHit, setPlayerStatus, spendStamina } from '../core/World';
 import type { EnemyState, ProjectileState, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
@@ -139,8 +141,12 @@ export function tick(world: World, _dt: number): void {
     const attack = currentAttack(def, enemy);
     // 무기가 방패에 닿은 순간 = 완벽. 단 parryAlwaysNormal(족장)은 완벽 대역에서만
     // 패링이 성립하므로(perfectParryOnly) 매번 완벽 판정이 나온다 — 그러면 "완벽"이
-    // 특별하지 않고, 연쇄·마나까지 매 패링마다 최대로 붙는다. 결과는 일반 패링으로 낮춘다
-    const perfect = parryTarget.gap <= space.perfectBand + world.modifiers.perfectBandBonus && !def.parryAlwaysNormal; // 가죽 투구
+    // 특별하지 않고, 연쇄·마나까지 매 패링마다 최대로 붙는다. 결과는 일반 패링으로 낮춘다.
+    // 팔 저림 중엔 완벽 대역이 perfectBandMul 배(0 = 대역 없음 → 완벽 불가). perfectParryOnly 의 성립 대역은 그대로 둔다 —
+    // 저림은 "완벽을 일반으로 낮춘다" 이지 패링 자체를 막지 않는다
+    const numb = (p.numbArmTicks ?? 0) > 0;
+    const perfectBand = (space.perfectBand + world.modifiers.perfectBandBonus) * (numb ? balance.status.numbArm.perfectBandMul : 1);
+    const perfect = perfectBand > 0 && parryTarget.gap <= perfectBand && !def.parryAlwaysNormal; // 가죽 투구
     world.freezeTicks = perfect ? reaction.hitstopPerfectTicks : reaction.hitstopNormalTicks;
 
     if (def.parryOutcome === 'expose') {
@@ -182,6 +188,8 @@ export function tick(world: World, _dt: number): void {
       enemy.recoiled = true;
     }
     p.parryBufferTicks = 0;
+    // 일반 패링 1회 성립 = 팔 저림 해제("패링하면 풀린다"). 0 만 세우고 _ended 는 Status 가 낸다
+    if (!perfect && numb) setPlayerStatus(p, 'numb_arm', 0);
     world.events.emit('parry_attempt', {
       result: perfect ? 'perfect' : 'normal',
       chain: 0,
@@ -278,12 +286,14 @@ export function tick(world: World, _dt: number): void {
   }
 
   if (windupTarget && freshPress) {
-    // 조기 입력 — 실패. 경직 20t (마나 절반 소실은 Mana)
+    // 조기 입력 — 실패. 경직 20t (마나 절반 소실은 Mana — 팔 저림 중엔 noManaLoss 로 면제를 알린다)
     p.stunTicks = Math.round(reaction.failStunTicks * world.modifiers.stunMul); // 쇠 투구·인내 반지
+    const numbCfg = balance.status.numbArm;
     world.events.emit('parry_attempt', {
       result: 'fail',
       chain: 0,
       enemyType: windupTarget.enemy.type,
+      noManaLoss: (p.numbArmTicks ?? 0) > 0 && numbCfg.noManaLossOnFail,
     });
     return;
   }

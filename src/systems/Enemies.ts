@@ -16,7 +16,7 @@
 import { balance } from '../core/Balance';
 import { attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, currentAttack, enemyDef, jointOfBlade, type BladeSide, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, beginPose, closeExposure, findWallNormal, noiseField, openExposure, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, type EnemyState, type World, damagePlayer } from '../core/World';
+import { alertEnemy, alertNearbyAt, beginPose, closeExposure, findWallNormal, noiseField, openExposure, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, setPlayerStatus, PLAYER_STATUS_CFG, type EnemyState, type World, damagePlayer } from '../core/World';
 
 /** 혼절 임계를 재는 약점 id — 기획서 §4.1 "혼절은 눈 누적 66 으로만" */
 const DAZE_WEAK_POINT = 'eye';
@@ -2129,6 +2129,10 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
             });
           }
         }
+        // 플레이어 상태(B2-4, 기획서 §6) — 막았으면 statusOnBlock(낫 → 팔 저림), 직격이면 statusOnHit(돌격 → 진탕).
+        // 값만 세운다 — 감소·상한·_applied/_ended 는 Status.ts. 지속은 balance.status.*.ticks
+        const status = blocked ? attack.statusOnBlock : attack.statusOnHit;
+        if (status) setPlayerStatus(p, status, balance.status[PLAYER_STATUS_CFG[status]].ticks);
         world.events.emit('player_damaged', {
           amount: damage, health: p.health, blocked,
           srcX: enemy.x, srcZ: enemy.z, srcId: enemy.id,

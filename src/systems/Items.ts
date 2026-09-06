@@ -8,7 +8,7 @@
 
 import { balance } from '../core/Balance';
 import { countOf, isUseful, itemDef, takeItem } from '../core/Inventory';
-import type { ItemKind, World } from '../core/World';
+import { setPlayerStatus, type ItemKind, type World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   if (world.itemCooldown > 0) world.itemCooldown--;
@@ -112,12 +112,16 @@ function drink(world: World, kind: ItemKind, index: number): void {
     if (ot) queueRegen(world.potionRegen.mp, restoreTotal - now, ot.durationTicks);
   }
   if (def.regen) world.foodRegenTicks = def.regen.durationTicks; // 겹치면 갱신 — 중첩 없음
+  // 체력 물약은 진탕(concussion)을 지운다(기획서 §6 결정 22, balance.status.concussion.potionCures) — 0 만 세우고 _ended 는 Status 가 낸다
+  const cured = def.heal > 0 && balance.status.concussion.potionCures && (p.concussionTicks ?? 0) > 0;
+  if (cured) setPlayerStatus(p, 'concussion', 0);
   world.events.emit('item_used', {
     kind,
     index,
     healed: p.health - hpBefore,
     restored: world.mana.value - manaBefore,
     left: countOf(world, kind),
+    cured: cured ? ['concussion'] : [],
   });
 }
 

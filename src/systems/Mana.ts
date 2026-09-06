@@ -51,10 +51,12 @@ export function init(world: World): void {
     } else if (result === 'normal') {
       gain(world, balance.mana.gain.parryNormal, 'parry_normal'); // 배율 유지, 상승 없음
     } else {
-      // 실패 — 축적 마나 절반 소실 + 연쇄 리셋
-      const lost = world.mana.value * 0.5;
-      world.mana.value -= lost;
-      world.events.emit('mana_lost', { amount: lost, reason: 'parry_fail' });
+      // 실패 — 축적 마나 절반 소실 + 연쇄 리셋. 팔 저림 중(noManaLoss, balance.status.numbArm.noManaLossOnFail)엔 소실만 면제 — 연쇄는 끊긴다
+      if (!(payload as { noManaLoss?: boolean }).noManaLoss) {
+        const lost = world.mana.value * 0.5;
+        world.mana.value -= lost;
+        world.events.emit('mana_lost', { amount: lost, reason: 'parry_fail' });
+      }
       resetChain(world, 'parry_fail');
     }
   });

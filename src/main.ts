@@ -5,9 +5,10 @@ import { Metrics } from './core/Metrics';
 import { DebugOverlay } from './render/DebugOverlay';
 import { Input } from './core/Input';
 import { Loop } from './core/Loop';
-import { World, type ItemKind, type DotState, type LootKind } from './core/World';
+import { World, type ItemKind, type LootKind } from './core/World';
 import { countOf, initInventory, spillInventoryToGrave, itemColor, itemDef } from './core/Inventory';
 import * as Reaction from './systems/Reaction';
+import * as Status from './systems/Status';
 import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt, spawnProps, spawnTraps } from './level/Spawner';
 import { Minimap } from './render/Minimap';
@@ -545,6 +546,10 @@ for (const name of [
   'exposure_closed',
   'boss_status',
   'charge_dodged',
+  'numb_arm_applied',
+  'numb_arm_ended',
+  'concussion_applied',
+  'concussion_ended',
   'enemy_split',
   'grave_dropped',
   'slime_ate',
@@ -2695,6 +2700,7 @@ function respawnAtAltar(): void {
   p.prevZ = point.z;
   p.health = balance.player.healthMax;
   p.dots = {}; // 독·화염도 씻긴다
+  Status.clearAll(world); // 팔 저림·진탕도
   p.stunTicks = 0;
   p.dodgeTicks = 0;
   p.iframeTicks = 0;
@@ -2984,6 +2990,26 @@ events.on('charge_dodged', (payload) => {
   padRumble('weakPoint');
   showReaction('완벽 회피 — 거수가 미끄러진다, 양 관절을 쏴라!', 1400);
 });
+// 플레이어 상태(B2-4, 기획서 §6) — 걸림·해제 안내. 아이콘은 HUD 가 카운터(numbArmTicks·concussionTicks)를 읽어 그리고,
+// 기울기·덕킹은 render 가 매 프레임 세운다. 해제 이유: cured(패링·물약) / expired / displaced(상한에 밀림)
+const statusSeconds = (payload: unknown): number =>
+  Math.round(((payload as { ticks: number }).ticks ?? 0) / balance.loop.tickRate);
+events.on('numb_arm_applied', (payload) => {
+  audio.play('grunt');
+  showReaction(`팔이 저리다 — ${statusSeconds(payload)}초 동안 완벽 패링 불가·방어가 느리다. 일반 패링 한 번이면 풀린다`, 2600);
+});
+events.on('numb_arm_ended', (payload) => {
+  const reason = (payload as { reason: string }).reason;
+  showReaction(reason === 'cured' ? '패링 — 팔 저림이 풀렸다' : '팔 저림이 풀렸다', 1200);
+});
+events.on('concussion_applied', (payload) => {
+  stage.triggerCameraKick(0.35, 260);
+  showReaction(`진탕 — ${statusSeconds(payload)}초 동안 조준이 흔들리고 시야가 기운다. 체력 물약이 지운다`, 2800);
+});
+events.on('concussion_ended', (payload) => {
+  const reason = (payload as { reason: string }).reason;
+  showReaction(reason === 'cured' ? '물약 — 진탕이 가라앉았다' : '진탕이 가라앉았다', 1400);
+});
 // 이제 exit_opened 는 "보스 없는(또는 이미 딴) 층" 의 로드 직후 신호다 — 조용히 안내만
 events.on('exit_opened', () => {
   showReaction('내려가는 계단 — E 로 내려간다', 2200);
@@ -3204,6 +3230,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   p.stunTicks = 0;
   p.dodgeTicks = 0;
   p.iframeTicks = 0;
+  Status.clearAll(world); // 플레이어 상태(팔 저림·진탕)는 층을 넘지 않는다 — 시험방 진입도 여기를 지난다
   Projectiles.endChannel(world);
   // 출구에서 누른 그 E 가 새 층에서 한 번 더 먹히지 않게 한다
   world.input = { ...world.input, interactPressed: false, meleePressed: false };
@@ -3316,6 +3343,7 @@ const systems = [
   Enemies.tick,
   GhoulHeads.tick,
   Reaction.tick,
+  Status.tick, // 플레이어 상태(팔 저림·진탕) — 같은 틱의 impact 부여·일반 패링 해제를 바로 이벤트로 낸다
   Sigils.tick,
   Pickups.tick,
   Summon.tick, // 몬스터 시험방 — 자동 재소환 대기열
@@ -3551,6 +3579,27 @@ buffBurnEl.insertAdjacentHTML(
 );
 const buffBurnCd = buffBurnEl.querySelector<HTMLElement>('.buff-cd')!;
 const buffBurnSec = buffBurnEl.querySelector<HTMLElement>('.buff-sec')!;
+// 팔 저림 디버프 아이콘(B2-4, 거수 낫을 방패로 막음) — 지그재그로 저린 팔 + 찌릿한 불꽃
+const buffNumbEl = document.getElementById('buff-numb')!;
+buffNumbEl.insertAdjacentHTML(
+  'afterbegin',
+  '<svg width="22" height="22" viewBox="0 0 22 22">' +
+    '<path d="M3.5 17 L8.5 11.5 L12.5 13.5 L18 5.5" stroke="#9ec5ff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M4.5 5 l2 2 M2.5 10 h2.4 M16 15.5 l2 2 M17.5 11.5 h2.4" stroke="#e2eeff" stroke-width="1.6" stroke-linecap="round"/></svg>',
+);
+const buffNumbCd = buffNumbEl.querySelector<HTMLElement>('.buff-cd')!;
+const buffNumbSec = buffNumbEl.querySelector<HTMLElement>('.buff-sec')!;
+// 진탕 디버프 아이콘(거수 돌격 직격) — 머리 둘레를 도는 별 궤도(어지러움)
+const buffConcussionEl = document.getElementById('buff-concussion')!;
+buffConcussionEl.insertAdjacentHTML(
+  'afterbegin',
+  '<svg width="22" height="22" viewBox="0 0 22 22">' +
+    '<circle cx="11" cy="12.5" r="5.5" fill="#d9b24a"/>' +
+    '<ellipse cx="11" cy="8" rx="8.5" ry="2.8" fill="none" stroke="#fff0b0" stroke-width="1.5"/>' +
+    '<circle cx="3" cy="7.2" r="1.2" fill="#fff6d0"/><circle cx="19" cy="9.2" r="1.2" fill="#fff6d0"/></svg>',
+);
+const buffConcussionCd = buffConcussionEl.querySelector<HTMLElement>('.buff-cd')!;
+const buffConcussionSec = buffConcussionEl.querySelector<HTMLElement>('.buff-sec')!;
 /** 디버프 아이콘 깜빡임 — 상태가 다시 시작됐다. 클래스를 떼고 리플로우로 애니메이션을 처음부터 다시 돌린다 */
 function flashBuffIcon(el: HTMLElement): void {
   el.classList.remove('refresh');
@@ -3558,8 +3607,9 @@ function flashBuffIcon(el: HTMLElement): void {
   el.classList.add('refresh');
   window.setTimeout(() => el.classList.remove('refresh'), 800);
 }
-/** 지속 피해 디버프 아이콘 — 남은 시간만큼 밝은 부채꼴이 시계 방향으로 줄어든다 + 남은 초 */
-function syncDotIcon(el: HTMLElement, cd: HTMLElement, sec: HTMLElement, dot: DotState | undefined): void {
+/** 지속 피해·상태 디버프 아이콘 — 남은 시간만큼 밝은 부채꼴이 시계 방향으로 줄어든다 + 남은 초.
+ *  DotState 도, 상태 카운터를 {ticks, duration} 으로 묶은 것도 받는다(팔 저림·진탕) */
+function syncDotIcon(el: HTMLElement, cd: HTMLElement, sec: HTMLElement, dot: { ticks: number; duration: number } | undefined): void {
   if (!dot || dot.ticks <= 0 || world.dead) {
     el.classList.remove('on');
     return;
@@ -3568,7 +3618,11 @@ function syncDotIcon(el: HTMLElement, cd: HTMLElement, sec: HTMLElement, dot: Do
   const remainDeg = Math.min(360, (dot.ticks / dot.duration) * 360);
   cd.style.background =
     `conic-gradient(transparent 0deg ${remainDeg}deg, rgba(0, 0, 0, 0.72) ${remainDeg}deg 360deg)`;
-  sec.textContent = String(Math.ceil(dot.ticks / 60));
+  sec.textContent = String(Math.ceil(dot.ticks / balance.loop.tickRate));
+}
+/** 플레이어 상태 카운터 → 아이콘 인자 (없으면 undefined = 숨김). 분모는 balance.status 의 지속 틱 */
+function statusIconArg(ticks: number | undefined, duration: number): { ticks: number; duration: number } | undefined {
+  return ticks && ticks > 0 ? { ticks, duration } : undefined;
 }
 const buffFoodEl = document.getElementById('buff-food')!;
 buffFoodEl.insertAdjacentHTML('afterbegin', itemIconSvg('food', 22));
@@ -3783,6 +3837,11 @@ function render(alpha: number): void {
   }
 
   const p = world.player;
+  // 진탕(concussion, B2-4) — 화면 기울기(Stage 카메라 롤)·예고음 외 오디오 덕킹은 카운터를 매 프레임 읽어 세운다.
+  // 부활·층 이동이 이벤트 없이 지워도(Status.clearAll) 저절로 꺼진다
+  const concussed = (p.concussionTicks ?? 0) > 0 && !world.dead;
+  stage.cameraTiltDeg = concussed ? balance.status.concussion.tiltDeg : 0;
+  audio.setDuckDb(concussed ? balance.status.concussion.duckDb : 0);
   stage.updateCamera(
     p.prevX + (p.x - p.prevX) * alpha,
     p.prevY + (p.y - p.prevY) * alpha,
@@ -4052,6 +4111,9 @@ function render(alpha: number): void {
   // 독·화염 디버프 — 남은 시간 부채꼴 + 남은 초 (오른쪽 정렬 묶음). 도트 소리는 *_tick 이 따로 낸다
   syncDotIcon(buffPoisonEl, buffPoisonCd, buffPoisonSec, p.dots?.poison);
   syncDotIcon(buffBurnEl, buffBurnCd, buffBurnSec, p.dots?.burn);
+  // 팔 저림·진탕(B2-4) — 같은 틀. 카운터는 Status.ts 가 줄인다
+  syncDotIcon(buffNumbEl, buffNumbCd, buffNumbSec, statusIconArg(p.numbArmTicks, balance.status.numbArm.ticks));
+  syncDotIcon(buffConcussionEl, buffConcussionCd, buffConcussionSec, statusIconArg(p.concussionTicks, balance.status.concussion.ticks));
   // 랜턴 — HP·마나 바 아래의 얇은 실선 게이지. 오른쪽에 % 와 예비 전지 개수
   const battFrac = Math.max(0, Math.min(1, world.lantern.battery / balance.lantern.batteryMax));
   const battPct = Math.round(battFrac * 100);

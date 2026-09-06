@@ -3,6 +3,7 @@
 import entitiesJson from '../../data/entities.json';
 import { balance } from './Balance';
 import { rayVsAabb, rayVsSphere } from './Ray';
+import type { PlayerStatusKind } from './World';
 
 /** 착탄 시 광역 효과. 수호주술사 마법탄의 '내파' — 화염구(밀어냄)와 정반대로 끌어당긴다 */
 export interface ProjectileSplashDef {
@@ -107,6 +108,11 @@ export interface EnemyAttackDef {
   /** 완벽 회피 보상(거수 돌격, 기획서 §9.3) — 접촉 순간 플레이어가 회피 무적(iframeTicks > 0)이면 피해 대신 charge_dodged +
    *  미끄러짐(pose skid, balance.weakPoint.skid.ticks) + joints 의 관절이 ticks 동안 열린다. 없으면 무적 접촉은 헛돌격(옛 경로) */
   perfectDodgeExposes?: { ticks: number; joints: string[] };
+  /** 막지 않은 직격이 플레이어에게 남기는 상태(거수 돌격 → 진탕 'concussion', 기획서 §6). 지속은 balance.status.*.ticks.
+   *  값을 세우는 건 Enemies impact, 감소·해제는 Status.ts. 없으면 상태 없음(옛 경로) */
+  statusOnHit?: PlayerStatusKind;
+  /** 방패로 막았을 때 남기는 상태(거수 낫 → 팔 저림 'numb_arm'). 칩 피해·방어 경직은 기존대로 */
+  statusOnBlock?: PlayerStatusKind;
 }
 
 /** 세 성분 좌표·치수 — [x, y, z]. x·z 는 def.radius 배, y 는 def.height 배 (Stage 가 곱한다) */

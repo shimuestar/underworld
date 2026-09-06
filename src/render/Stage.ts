@@ -1890,6 +1890,9 @@ export class Stage {
   private camKickUntil = 0;
   private camKickMs = 1;
   private camKickPower = 0;
+  /** 화면 기울기 목표(도) — 진탕(concussion) 동안 main 이 balance.status.concussion.tiltDeg 를 세우고, 풀리면 0. 부드럽게 들고 난다 */
+  cameraTiltDeg = 0;
+  private cameraTilt = 0;
   /** 처형 섬광 — 짧게 터지는 점광 */
   private readonly executeFlash: THREE.PointLight;
   private executeFlashUntil = 0;
@@ -2783,17 +2786,21 @@ export class Stage {
     this.updatePlayerLegs(x, z, yaw);
 
     const now = performance.now();
+    // 진탕(concussion) — 화면이 cameraTiltDeg 만큼 기울어 있다. 걸리고 풀릴 때 부드럽게(프레임당 5%) 들고 난다.
+    // 롤은 여기서 한 번 세우고, 아래 카메라 킥은 그 위에 얹는다
+    const tiltTarget = (this.cameraTiltDeg * Math.PI) / 180;
+    this.cameraTilt += (tiltTarget - this.cameraTilt) * 0.05;
+    if (tiltTarget === 0 && Math.abs(this.cameraTilt) < 1e-4) this.cameraTilt = 0;
+    this.camera.rotation.z = this.cameraTilt;
     if (now < this.camKickUntil) {
       // 초반에 크게 튀고 빠르게 잦아든다 + 고주파 진동
       const k = ((this.camKickUntil - now) / this.camKickMs) * this.camKickPower;
       const shake = Math.sin(now / 9) * 0.5 + Math.sin(now / 5.5) * 0.5;
       this.camera.rotation.x += k * (0.09 + 0.035 * shake);
-      this.camera.rotation.z = k * 0.05 * shake;
+      this.camera.rotation.z += k * 0.05 * shake;
       this.camera.rotation.y += k * 0.02 * shake;
       // 앞으로 밀려나는 느낌 (시선 방향으로 살짝 전진)
       this.camera.translateZ(-k * 0.22);
-    } else if (this.camera.rotation.z !== 0) {
-      this.camera.rotation.z = 0;
     }
 
     this.updateExitStairs(now);

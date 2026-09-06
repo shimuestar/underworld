@@ -154,9 +154,25 @@ export type SoundName =
 
 const MASTER_GAIN = 0.25;
 
+/** 예고음 버스로 가는 소리 — 덕킹(진탕 concussion 등)을 우회한다. 파랑 예고음 1760/2637Hz 는 판정 단서라 언제나 같은 크기로 들려야 한다.
+ *  charge_ready 는 긴 돌격의 빨강 예고를 대신하는 소리(main enemy_charge) */
+const TELEGRAPH_SOUNDS: ReadonlySet<SoundName> = new Set<SoundName>(['telegraph_blue', 'telegraph_red', 'telegraph_purple', 'charge_ready']);
+
+/** dB → 선형 게인 (0dB = 1) */
+function dbToGain(db: number): number {
+  return Math.pow(10, db / 20);
+}
+
 export class GameAudio {
   private ctx: AudioContext | null = null;
+  /** 지금 소리가 꽂히는 자리 — 평소엔 덕킹 게인(duck), play() 가 예고음이면 마스터(master), 공간화면 패너로 잠깐 바꿔 둔다 */
   private out: AudioNode | null = null;
+  /** 마스터(컴프레서) — 예고음 버스는 여기로 직행 */
+  private master: AudioNode | null = null;
+  /** 예고음 외 전부가 지나는 게인 — 덕킹(setDuckDb)이 이 값을 낮춘다 */
+  private duck: GainNode | null = null;
+  /** 현재 덕킹 목표(dB). 컨텍스트가 아직 없을 때 불려도 기억해 두고 만들 때 적용한다 */
+  private duckDb = 0;
   /** 이어지는 전류음 — 채널 시전이 끝날 때 끈다 */
   private beam: { gain: GainNode; nodes: (OscillatorNode | AudioBufferSourceNode)[] } | null = null;
 
@@ -180,7 +196,13 @@ export class GameAudio {
       compressor.attack.value = 0.003;
       compressor.release.value = 0.25;
       compressor.connect(this.ctx.destination);
-      this.out = compressor;
+      this.master = compressor;
+      // 예고음 외 버스 — 덕킹 게인. 예고음(TELEGRAPH_SOUNDS)은 이 게인을 건너 컴프레서로 직행한다(로패스 없음)
+      const duck = this.ctx.createGain();
+      duck.gain.value = dbToGain(this.duckDb);
+      duck.connect(compressor);
+      this.duck = duck;
+      this.out = duck;
     }
     if (this.ctx.state !== 'running') {
       const now = performance.now();
@@ -198,6 +220,25 @@ export class GameAudio {
   /** 컨텍스트가 만들어졌는가 (첫 클릭 전에는 없다 — 그때는 '멈춤'이 아니라 '아직') */
   get created(): boolean {
     return this.ctx !== null;
+  }
+
+  /** 예고음 외 오디오 덕킹(dB, 0 = 없음) — 진탕(concussion, balance.status.concussion.duckDb) 동안 main 이 매 프레임 세운다.
+   *  같은 값이면 아무 일도 안 하고, 바뀌면 짧게 램프한다. 예고음 버스(TELEGRAPH_SOUNDS)는 영향 없음 */
+  setDuckDb(db: number): void {
+    if (db === this.duckDb) return;
+    this.duckDb = db;
+    const ctx = this.ctx;
+    const duck = this.duck;
+    if (!ctx || !duck) return;
+    const t0 = ctx.currentTime;
+    duck.gain.cancelScheduledValues(t0);
+    duck.gain.setValueAtTime(duck.gain.value, t0);
+    duck.gain.linearRampToValueAtTime(dbToGain(db), t0 + 0.12);
+  }
+
+  /** 지금 덕킹 목표(dB) — 검증·HUD 용 */
+  get duckingDb(): number {
+    return this.duckDb;
   }
 
   /** 채널 시전(관통 뇌창) — 붙들고 있는 동안 이어지는 전류음.
@@ -271,16 +312,23 @@ export class GameAudio {
   play(name: SoundName, at?: { pan: number; vol: number }): void {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
+    // 버스 — 예고음은 마스터 직행(덕킹 우회), 나머지는 덕킹 게인
+    const bus = (TELEGRAPH_SOUNDS.has(name) ? this.master : this.duck) ?? ctx.destination;
+    const prevOut = this.out;
     if (!at) {
-      this.playRouted(name);
+      this.out = bus;
+      try {
+        this.playRouted(name);
+      } finally {
+        this.out = prevOut;
+      }
       return;
     }
-    const prevOut = this.out;
     const panner = ctx.createStereoPanner();
     panner.pan.value = Math.max(-1, Math.min(1, at.pan));
     const g = ctx.createGain();
     g.gain.value = Math.max(0, Math.min(1, at.vol));
-    panner.connect(g).connect(prevOut ?? ctx.destination);
+    panner.connect(g).connect(bus);
     this.out = panner;
     try {
       this.playRouted(name);

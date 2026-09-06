@@ -86,6 +86,33 @@ export interface PlayerState {
   dots?: Partial<Record<DotKind, DotState>>;
   /** 직전 틱의 dodgeTicks — 커지는 순간이 '대시 시도' (조임 즉시 한 방) */
   webLastDodgeTicks?: number;
+  /** 팔 저림(numb_arm, 거수 낫을 방패로 막음) 잔여 틱 — 완벽 패링 불가·방어 이속 감소·패링 실패 마나 소실 면제.
+   *  일반 패링 1회 성립 시 즉시 0. 감소·이벤트는 Status.ts 만 (다른 시스템은 세우기만 — stunTicks 규약) */
+  numbArmTicks?: number;
+  /** 진탕(concussion, 거수 돌격 직격) 잔여 틱 — 조준 흔들림·화면 기울기·오디오 덕킹. 체력 물약이 지운다 */
+  concussionTicks?: number;
+  /** 걸린 순서(오래된 것부터) — Status.ts 가 상한(balance.status.maxConcurrent)을 넘기면 맨 앞을 해제한다. Status 만 쓴다 */
+  statusOrder?: PlayerStatusKind[];
+}
+
+/** 플레이어 상태이상 종류(기획서 §6) — 이벤트는 `${kind}_applied/_ended`. 카운터 필드·balance.status 키는 아래 표 */
+export type PlayerStatusKind = 'numb_arm' | 'concussion';
+export const PLAYER_STATUS_KINDS: readonly PlayerStatusKind[] = ['numb_arm', 'concussion'];
+/** 상태 → PlayerState 카운터 필드 */
+export const PLAYER_STATUS_FIELD = { numb_arm: 'numbArmTicks', concussion: 'concussionTicks' } as const satisfies Record<PlayerStatusKind, keyof PlayerState>;
+/** 상태 → balance.status 블록 키 (지속 틱 등은 호출부가 balance 에서 읽는다 — World 는 데이터를 읽지 않는다) */
+export const PLAYER_STATUS_CFG = { numb_arm: 'numbArm', concussion: 'concussion' } as const satisfies Record<PlayerStatusKind, string>;
+
+/** 상태 잔여 틱 (없으면 0) */
+export function playerStatusTicks(player: PlayerState, kind: PlayerStatusKind): number {
+  return player[PLAYER_STATUS_FIELD[kind]] ?? 0;
+}
+
+/** 상태를 세운다 — 이미 걸려 있으면 긴 쪽으로 갱신(중첩 없음). 0 을 주면 해제 예약(Status 가 다음 틱 `_ended` 를 낸다).
+ *  Enemies(impact)·Reaction(일반 패링 해제)·Items(물약) 가 부르고, 감소는 Status.ts 만 한다 */
+export function setPlayerStatus(player: PlayerState, kind: PlayerStatusKind, ticks: number): void {
+  const field = PLAYER_STATUS_FIELD[kind];
+  player[field] = ticks <= 0 ? 0 : Math.max(player[field] ?? 0, Math.round(ticks));
 }
 
 /** 지속 피해(도트) 종류 — 독(포자 구름)·화염(불붙은 기름). 이벤트는 `${kind}_applied/_tick/_ended` */

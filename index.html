@@ -488,9 +488,85 @@
       #buff-burn svg {
         display: block;
       }
-      /* 디버프 재시작 — 세 번 크게 깜빡인다 (독·화염 공용, id 맥동보다 우선) */
+      /* 팔 저림 디버프(거수 낫을 방패로 막음, B2-4) — 같은 틀, 회청 결. 일반 패링 한 번이면 바로 꺼진다 */
+      #buff-numb {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        padding: 3px;
+        box-sizing: border-box;
+        border: 1px solid #4a6a8a;
+        border-radius: 6px;
+        background: rgba(4, 14, 28, 0.62);
+        display: none;
+        animation: numb-pulse 0.9s ease-in-out infinite;
+      }
+      #buff-numb.on {
+        display: block;
+      }
+      @keyframes numb-pulse {
+        0%, 100% { box-shadow: 0 0 4px rgba(120, 170, 230, 0.35); }
+        50% { box-shadow: 0 0 10px rgba(150, 195, 255, 0.85); }
+      }
+      #buff-numb .buff-cd {
+        position: absolute;
+        inset: 0;
+        border-radius: 5px;
+        pointer-events: none;
+      }
+      #buff-numb .buff-sec {
+        position: absolute;
+        right: 1px;
+        bottom: -1px;
+        font: bold 10px/1 monospace;
+        color: #c4dbff;
+        text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+      }
+      #buff-numb svg {
+        display: block;
+      }
+      /* 진탕 디버프(거수 돌격 직격) — 같은 틀, 황갈 결. 체력 물약이 지운다 */
+      #buff-concussion {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        padding: 3px;
+        box-sizing: border-box;
+        border: 1px solid #8a7a2e;
+        border-radius: 6px;
+        background: rgba(28, 22, 0, 0.62);
+        display: none;
+        animation: concussion-pulse 0.7s ease-in-out infinite;
+      }
+      #buff-concussion.on {
+        display: block;
+      }
+      @keyframes concussion-pulse {
+        0%, 100% { box-shadow: 0 0 4px rgba(230, 200, 90, 0.35); transform: rotate(-3deg); }
+        50% { box-shadow: 0 0 10px rgba(255, 225, 120, 0.85); transform: rotate(3deg); }
+      }
+      #buff-concussion .buff-cd {
+        position: absolute;
+        inset: 0;
+        border-radius: 5px;
+        pointer-events: none;
+      }
+      #buff-concussion .buff-sec {
+        position: absolute;
+        right: 1px;
+        bottom: -1px;
+        font: bold 10px/1 monospace;
+        color: #ffe9a8;
+        text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+      }
+      #buff-concussion svg {
+        display: block;
+      }
+      /* 디버프 재시작 — 세 번 크게 깜빡인다 (독·화염·상태 공용, id 맥동보다 우선) */
       #buff-poison.refresh,
-      #buff-burn.refresh {
+      #buff-burn.refresh,
+      #buff-numb.refresh,
+      #buff-concussion.refresh {
         animation: buff-refresh 0.25s ease-in-out 3;
       }
       @keyframes buff-refresh {
@@ -1100,7 +1176,7 @@
     <div id="sigil-toast"><div class="name"></div><div class="sub"></div></div>
     <div id="web-overlay"></div>
     <div id="status">
-      <div id="buffs"><div class="buff-group buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div></div><div class="buff-group debuffs"><div id="buff-poison"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-burn"><div class="buff-cd"></div><span class="buff-sec"></span></div></div></div>
+      <div id="buffs"><div class="buff-group buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div></div><div class="buff-group debuffs"><div id="buff-poison"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-burn"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-numb"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-concussion"><div class="buff-cd"></div><span class="buff-sec"></span></div></div></div>
       <div id="status-bars">
         <div id="status-hp"><div id="status-hp-fill"></div><span class="bar-num" id="status-hp-num"></span></div>
         <div id="status-mana"><div id="status-mana-fill"></div><span class="bar-num" id="status-mana-num"></span></div>
