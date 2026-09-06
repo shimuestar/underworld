@@ -2,10 +2,11 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
-import { attackInPhase, attackReaches, bladeOfJoint, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, jointOfBlade, rayHitsEnemy, resolvePhase, slotUnlocked, wakeSlamAttack, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
+import { attackInPhase, attackReaches, bladeOfJoint, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, jointOfBlade, rayHitsEnemy, rayHitsWeakPoint, resolvePhase, shellPlatesActive, slotUnlocked, wakeSlamAttack, weakPointOpen, weakPointRadius, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { World, openExposure, playerStatusTicks, setPlayerStatus, type EnemyState, type ProjectileState } from '../core/World';
+import { World, openExposure, playerStatusTicks, setPlayerStatus, type EnemyState, type ProjectileState, type TrapState } from '../core/World';
+import { hitShellPlates } from '../core/ShellPlates';
 import { sigilDef } from '../core/SigilData';
 import { Level } from '../level/GridLoader';
 import { isSpawnable, spawnEnemyAt } from '../level/Spawner';
@@ -13,12 +14,14 @@ import * as Corruption from './Corruption';
 import * as Enemies from './Enemies';
 import * as Exit from './Exit';
 import * as Hazards from './Hazards';
+import * as Loot from './Loot';
 import * as Mana from './Mana';
 import * as PlayerMove from './PlayerMove';
 import * as Projectiles from './Projectiles';
 import * as Reaction from './Reaction';
 import * as Sigils from './Sigils';
 import * as Status from './Status';
+import * as Traps from './Traps';
 import * as Weapons from './Weapons';
 
 const DT = 1 / 60;
@@ -4153,6 +4156,228 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(world.projectiles[0]!.poolKind).toBeUndefined();
       expect(chief.exposure).toBeUndefined();
       expect(chief.chokeTicks).toBeUndefined();
+    });
+  });
+
+  describe('B3-3 갑각판 hp 풀·골드 (기획서 §4.3·§8 P2→P3·§11)', () => {
+    const sp = def.shellPlates!;
+    const perBar = def.health / def.healthBars!; // 500
+    const hammer = balance.weapons.hammer;
+    const finisher = hammer.damage * hammer.combo.damageMul; // 36 — 3타 강타
+    type Broken = { enemyId: number; enemyType: string; gold: number; platesLeft: number; count: number; ventScale: number; x: number; z: number };
+    function watch() {
+      const broken: Broken[] = [];
+      world.events.on('plate_broken', (p) => broken.push(p as Broken));
+      const sheds: { count: number }[] = [];
+      world.events.on('plate_shed', (p) => sheds.push(p as { count: number }));
+      const pouches: { owner?: string; tier: string; entries: number }[] = [];
+      world.events.on('pouch_dropped', (p) => pouches.push(p as { owner?: string; tier: string; entries: number }));
+      return { broken, sheds, pouches };
+    }
+    function toP2(boss: EnemyState): void {
+      boss.phase = 2;
+    }
+    /** 해머 3타 콤보 한 번(1·2 = 15, 3 = 강타 36) — 몸 반경 안에 서 있어야 한다 */
+    function hammerCombo(): void {
+      for (let i = 0; i < hammer.combo.finisherStep; i++) hammerSwing();
+    }
+    const goldPouches = () => world.groundItems.filter((g) => g.kind === 'pouch');
+
+    it('데이터 — shellPlates{3, 60, 6~10, ×1.15}, 스포너 platesLeft 3·plateHp 60·ventScale 없음, 활성은 P2 만(shellPlatesOn ∧ ¬shedPlates ∧ 남은 판), 분출공 반지름 = 0.3 × ventScale. 족장엔 없다', () => {
+      expect(sp).toEqual({ count: 3, hpEach: 60, goldMin: 6, goldMax: 10, ventScalePerPlate: 1.15 });
+      expect(resolvePhase(def, 2)!.shellPlatesOn).toBe(true);
+      expect(resolvePhase(def, 1)!.shedPlates).toBe(true);
+      const boss = makeBehemoth(4.0);
+      expect(boss.platesLeft).toBe(3);
+      expect(boss.plateHp).toBe(60);
+      expect(boss.ventScale).toBeUndefined();
+      expect(shellPlatesActive(def, boss)).toBe(false); // P1
+      expect(shellPlatesActive(def, { phase: 2, platesLeft: 3 })).toBe(true);
+      expect(shellPlatesActive(def, { phase: 2, platesLeft: 0 })).toBe(false);
+      expect(shellPlatesActive(def, { phase: 1, platesLeft: 3 })).toBe(false); // P3 — 탈락
+      expect(weakPointRadius(boss, wp('vent'))).toBe(0.3);
+      expect(weakPointRadius({ ventScale: 1.15 }, wp('vent'))).toBeCloseTo(0.345, 6);
+      expect(weakPointRadius({ ventScale: 1.15 }, wp('eye'))).toBe(0.26); // 다른 약점은 그대로
+      const chief = spawnEnemyAt('goblin_chieftain', 20, 6, 2);
+      expect(enemyDef('goblin_chieftain').shellPlates).toBeUndefined();
+      expect(chief.platesLeft).toBeUndefined();
+      expect(shellPlatesActive(enemyDef('goblin_chieftain'), chief)).toBe(false);
+      world.enemies.push(chief);
+      expect(hitShellPlates(world, chief, 100)).toBe(0);
+    });
+
+    it('P2 해머 강타 — 콤보 한 번에 3타(36)만 판을 깎고(1·2타 무관 — 60 → 24), 두 번째 콤보(누적 72 ≥ 60)에 판 한 장 파괴: plate_broken{gold 6~10, platesLeft 2, ventScale 1.15} + 골드 주머니(일반 등급, 낫뿔 거수의 주머니) + 넘친 12 는 다음 판으로(48). 체력은 132 그대로 깎인다', () => {
+      Loot.init(world);
+      const boss = makeBehemoth(3.5); // 해머 사거리 3.1 + 몸 반경 1.6 안
+      toP2(boss);
+      const w = watch();
+      const hp0 = boss.health;
+      hammerCombo();
+      expect(boss.health).toBeCloseTo(hp0 - (hammer.damage * 2 + finisher), 5);
+      expect(boss.platesLeft).toBe(3);
+      expect(boss.plateHp).toBeCloseTo(sp.hpEach - finisher, 5); // 24 — 1·2타(30)는 판에 무관
+      expect(w.broken).toHaveLength(0);
+      expect(boss.ventScale).toBeUndefined();
+      hammerCombo();
+      expect(boss.health).toBeCloseTo(hp0 - (hammer.damage * 2 + finisher) * 2, 5);
+      expect(boss.platesLeft).toBe(2);
+      expect(boss.plateHp).toBeCloseTo(sp.hpEach - (finisher * 2 - sp.hpEach), 5); // 48 — 넘친 12 가 다음 판으로
+      expect(boss.ventScale).toBeCloseTo(sp.ventScalePerPlate, 6);
+      expect(w.broken).toHaveLength(1);
+      expect(w.broken[0]).toMatchObject({ enemyId: boss.id, enemyType: TYPE, platesLeft: 2, count: 3 });
+      expect(w.broken[0]!.gold).toBeGreaterThanOrEqual(sp.goldMin);
+      expect(w.broken[0]!.gold).toBeLessThanOrEqual(sp.goldMax);
+      expect(Number.isInteger(w.broken[0]!.gold)).toBe(true);
+      // 주머니 — Loot 의 pouch 규약(pouch_dropped·groundItems), 골드만, 일반 등급(보스 금빛 아님), 주인은 거수
+      expect(w.pouches).toEqual([{ id: expect.any(Number), x: expect.any(Number), z: expect.any(Number), owner: TYPE, tier: 'normal', entries: 1, merged: false }]);
+      const pouch = goldPouches();
+      expect(pouch).toHaveLength(1);
+      expect(pouch[0]!.pouchTier).toBe('normal');
+      expect(pouch[0]!.pouchOwner).toBe(TYPE);
+      expect(pouch[0]!.pouchItems).toEqual([{ kind: 'gold', count: w.broken[0]!.gold }]);
+      expect(Loot.pouchTitle(pouch[0])).toBe('낫뿔 거수의 주머니');
+      expect(boss.alive).toBe(true); // 보스는 살아서 떨군다
+    });
+
+    it('총알은 판에 아무 영향 없음 — P2 몸통 권총 3발(81.6 > 60)에도 platesLeft 3·plateHp 60·plate_broken 없음(몸통 0.8× 는 그대로)', () => {
+      Loot.init(world);
+      const boss = makeBehemoth(6.0);
+      toP2(boss);
+      const w = watch();
+      const hp0 = boss.health;
+      const pistol = balance.weapons.pistol;
+      for (let i = 0; i < 3; i++) shootAt(boss.x, 1.6, boss.z);
+      expect(hp0 - boss.health).toBeCloseTo(pistol.damage * pistol.hitZones.bodyMul * 3, 5);
+      expect(boss.platesLeft).toBe(3);
+      expect(boss.plateHp).toBe(sp.hpEach);
+      expect(boss.ventScale).toBeUndefined();
+      expect(w.broken).toHaveLength(0);
+      expect(goldPouches()).toHaveLength(0);
+    });
+
+    it('풀 — 60 마다 한 장(정확히 60 이면 파괴), 넘친 피해는 이어져 180 이면 세 장(수류탄 120 = 두 장); 3장 → 분출공 반지름 ×1.15³ 이고 판정 구체도 그만큼 크다(판정 = 그림). 골드는 goldMin~goldMax 균등(rng 0 → 6, 0.999 → 10)', () => {
+      Loot.init(world);
+      const boss = makeBehemoth(6.0);
+      boss.yaw = 0; // 정면 −z
+      toP2(boss);
+      const w = watch();
+      expect(hitShellPlates(world, boss, 59)).toBe(0);
+      expect(boss.plateHp).toBe(1);
+      expect(hitShellPlates(world, boss, 1, () => 0)).toBe(1); // 정확히 채우면 그 장이 부서진다
+      expect(boss.platesLeft).toBe(2);
+      expect(boss.plateHp).toBe(sp.hpEach); // 새 판
+      expect(w.broken[0]!.gold).toBe(sp.goldMin);
+      expect(hitShellPlates(world, boss, sp.hpEach * 2, () => 0.999)).toBe(2); // 120 → 두 장(수류탄 한 방)
+      expect(boss.platesLeft).toBe(0);
+      expect(w.broken).toHaveLength(3);
+      expect(w.broken.map((b) => b.platesLeft)).toEqual([2, 1, 0]);
+      expect(w.broken[1]!.gold).toBe(sp.goldMax);
+      expect(w.broken[2]!.gold).toBe(sp.goldMax);
+      expect(boss.ventScale).toBeCloseTo(Math.pow(sp.ventScalePerPlate, 3), 6); // 1.5209
+      expect(w.broken.map((b) => b.ventScale)).toEqual([expect.closeTo(1.15, 6), expect.closeTo(1.3225, 6), expect.closeTo(1.520875, 6)]);
+      expect(goldPouches()).toHaveLength(3);
+      // 판정 — 분출공을 열고(갑각 떨기 노출 타이머) 중심에서 0.4m 위를 지나는 정면 레이: 반지름 0.3 이면 빗나가고 0.456 이면 맞는다
+      openExposure(world, boss, 'vent', 60);
+      const c = weakPointWorldPos(boss, def, wp('vent'));
+      const hit = rayHitsWeakPoint(c.x, c.y + 0.4, c.z - 5, 0, 0, 1, boss, def, 0);
+      expect(hit?.wp.id).toBe('vent');
+      expect(weakPointRadius(boss, wp('vent'))).toBeCloseTo(0.3 * Math.pow(sp.ventScalePerPlate, 3), 6);
+      boss.ventScale = 1;
+      expect(rayHitsWeakPoint(c.x, c.y + 0.4, c.z - 5, 0, 0, 1, boss, def, 0)).toBeNull();
+      // 판이 다 부서진 뒤 heavy 타격은 판과 무관
+      expect(hitShellPlates(world, boss, 100)).toBe(0);
+      expect(w.broken).toHaveLength(3);
+    });
+
+    it('P1 에서는 판 hp 가 깎이지 않는다 — hitShellPlates 도 해머 강타도 0, 이벤트·주머니 없음', () => {
+      Loot.init(world);
+      const boss = makeBehemoth(3.5);
+      const w = watch();
+      expect(boss.phase).toBe(3);
+      expect(hitShellPlates(world, boss, 60)).toBe(0);
+      hammerCombo();
+      expect(boss.platesLeft).toBe(3);
+      expect(boss.plateHp).toBe(sp.hpEach);
+      expect(boss.ventScale).toBeUndefined();
+      expect(w.broken).toHaveLength(0);
+      expect(goldPouches()).toHaveLength(0);
+    });
+
+    it('수류탄(120, P2) — 폭심의 거수는 두 장(plate_broken ×2, platesLeft 1, ventScale 1.15²) / 낙석(60 × bossDamageMul 0.6 = 36)은 판 hp 를 36 깎는다 — 폭발·낙석도 heavy', () => {
+      Loot.init(world);
+      const boss = makeBehemoth(8.0); // 플레이어(6,6)는 수류탄 반경 5 밖
+      toP2(boss);
+      const w = watch();
+      const hp0 = boss.health;
+      world.projectiles.push({
+        id: 901, owner: 'player', x: boss.x, y: 0.5, z: boss.z, prevX: boss.x, prevY: 0.5, prevZ: boss.z,
+        vx: 0, vy: 0, vz: 0, lifeTicks: 1, damage: 0, burnTicks: 0, burnDamagePerTick: 0, radius: 0.2, kind: 'grenade',
+      });
+      Projectiles.tick(world, DT);
+      const grenade = balance.weapons.grenade;
+      expect(hp0 - boss.health).toBeCloseTo(grenade.damage, 5);
+      expect(w.broken).toHaveLength(2);
+      expect(boss.platesLeft).toBe(1);
+      expect(boss.plateHp).toBe(sp.hpEach);
+      expect(boss.ventScale).toBeCloseTo(sp.ventScalePerPlate ** 2, 6);
+      expect(goldPouches()).toHaveLength(2);
+      expect(world.player.health).toBe(100);
+      // 낙석 — 거수 발밑에서 떨어진다(적이 밟아 발동, 예고 30틱)
+      const cfg = balance.traps.types.trap_rockfall;
+      const rock: TrapState = {
+        id: 501, type: 'trap_rockfall', x: boss.x, z: boss.z, row: Math.floor(boss.z / 4), col: Math.floor(boss.x / 4),
+        phase: 'armed', timer: 0, charges: cfg.charges, dirX: 0, dirZ: -1,
+      };
+      world.traps.push(rock);
+      const hp1 = boss.health;
+      for (let i = 0; i < cfg.telegraphTicks + 2 && rock.phase !== 'spent'; i++) Traps.tick(world, DT);
+      expect(rock.phase).toBe('spent');
+      expect(hp1 - boss.health).toBeCloseTo(cfg.enemyDamage * cfg.bossDamageMul, 5); // 36
+      expect(boss.platesLeft).toBe(1);
+      expect(boss.plateHp).toBeCloseTo(sp.hpEach - cfg.enemyDamage * cfg.bossDamageMul, 5); // 24
+      expect(w.broken).toHaveLength(2);
+    });
+
+    it('P3 진입 — 남은 판은 골드 없이 탈락: plate_shed{count 2}(부서진 한 장은 빼고), platesLeft 0, plate_broken·주머니 추가 없음, ventScale 은 남는다(균열). 다 부서진 뒤 진입이면 plate_shed 없음. P3 에선 heavy 타격도 판에 무관', () => {
+      Loot.init(world);
+      const boss = makeBehemoth(6.0);
+      toP2(boss);
+      const w = watch();
+      expect(hitShellPlates(world, boss, sp.hpEach)).toBe(1);
+      expect(boss.platesLeft).toBe(2);
+      boss.health = perBar; // 500 — 1칸째(P3)
+      Enemies.tick(world, DT);
+      expect(boss.phase).toBe(1);
+      expect(boss.pose).toBe('roar');
+      expect(w.sheds).toEqual([{ enemyId: boss.id, enemyType: TYPE, count: 2, x: boss.x, z: boss.z }]);
+      expect(boss.platesLeft).toBe(0);
+      expect(w.broken).toHaveLength(1);
+      expect(goldPouches()).toHaveLength(1);
+      expect(boss.ventScale).toBeCloseTo(sp.ventScalePerPlate, 6);
+      expect(shellPlatesActive(def, boss)).toBe(false);
+      expect(hitShellPlates(world, boss, 200)).toBe(0);
+      expect(w.broken).toHaveLength(1);
+      // 다 부서진 뒤 P3 — 탈락할 판이 없으니 이벤트도 없다
+      world.enemies.length = 0;
+      const b2 = makeBehemoth(6.0);
+      toP2(b2);
+      expect(hitShellPlates(world, b2, sp.hpEach * sp.count)).toBe(3);
+      b2.health = perBar;
+      Enemies.tick(world, DT);
+      expect(b2.phase).toBe(1);
+      expect(w.sheds).toHaveLength(1);
+      expect(b2.platesLeft).toBe(0);
+      // P1 → P3 건너뜀 — 세 장이 그대로 탈락(골드 없음)
+      world.enemies.length = 0;
+      const b3 = makeBehemoth(6.0);
+      b3.health = perBar - 100;
+      Enemies.tick(world, DT);
+      expect(b3.phase).toBe(1);
+      expect(w.sheds).toHaveLength(2);
+      expect(w.sheds[1]!.count).toBe(3);
+      expect(b3.platesLeft).toBe(0);
+      expect(w.broken).toHaveLength(1 + 3); // b2 의 세 장만 — 탈락은 골드 없음
+      expect(goldPouches()).toHaveLength(4);
     });
   });
 });

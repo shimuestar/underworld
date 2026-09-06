@@ -68,6 +68,9 @@ describe('Metrics', () => {
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 2, from: 3, skipped: false, fromTicks: 5400, tick: 5400 });
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 1, from: 2, skipped: false, fromTicks: 7200, tick: 12600 });
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 0, from: 1, skipped: false, fromTicks: 5400, tick: 18000, death: true });
+    events.emit('plate_broken', { enemyId: 1, enemyType: 'scythe_behemoth', gold: 7, platesLeft: 2, count: 3, ventScale: 1.15, x: 0, z: 0 }); // 갑각판(B3-3)
+    events.emit('plate_broken', { enemyId: 1, enemyType: 'scythe_behemoth', gold: 10, platesLeft: 1, count: 3, ventScale: 1.3225, x: 0, z: 0 });
+    events.emit('plate_shed', { enemyId: 1, enemyType: 'scythe_behemoth', count: 1, x: 0, z: 0 }); // 탈락은 세지 않는다
     // 진액 웅덩이·오염 진액·분출공 정화·질식(B3-2)
     events.emit('pool_spawned', { id: 1, x: 0, z: 0, r: 1.6, kind: 'blade' });
     events.emit('pool_spawned', { id: 2, x: 0, z: 0, r: 1.2, kind: 'orb' });
@@ -83,7 +86,7 @@ describe('Metrics', () => {
 
     const s = metrics.snapshot(makeWorldStub());
     expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1, chargeDodges: 1, limps: 1, blinds: 1, topples: 1, pillarHits: 1, backflows: 2 });
-    expect(s.boss).toEqual({ phaseShifts: 2, phaseSkips: 0, phaseSeconds: { '3': 90, '2': 120, '1': 90 } });
+    expect(s.boss).toEqual({ phaseShifts: 2, phaseSkips: 0, phaseSeconds: { '3': 90, '2': 120, '1': 90 }, platesBroken: 2, plateGold: 17 });
     expect(s.hazards).toEqual({ pools: 2, evaporated: 1, corrosiveApplied: 1, corrosiveDamage: 2, pendingIn: 1, ventCleanse: 2, chokes: 1 });
     expect(s.combat.damageTakenTotal).toBe(22 + 2); // 오염 진액 도트도 받은 피해다
     expect(s.traps.deaths).toBe(0);
@@ -106,13 +109,13 @@ describe('Metrics', () => {
     const metrics = new Metrics(events);
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 1, from: 3, skipped: true, fromTicks: 600, tick: 600 });
     const s = metrics.snapshot(makeWorldStub());
-    expect(s.boss).toEqual({ phaseShifts: 1, phaseSkips: 1, phaseSeconds: { '3': 10 } });
+    expect(s.boss).toEqual({ phaseShifts: 1, phaseSkips: 1, phaseSeconds: { '3': 10 }, platesBroken: 0, plateGold: 0 });
   });
 
   it('데이터가 없으면 파생 지표는 null (0으로 왜곡하지 않는다)', () => {
     const metrics = new Metrics(new Events());
     const s = metrics.snapshot(makeWorldStub());
-    expect(s.boss).toEqual({ phaseShifts: 0, phaseSkips: 0, phaseSeconds: {} });
+    expect(s.boss).toEqual({ phaseShifts: 0, phaseSkips: 0, phaseSeconds: {}, platesBroken: 0, plateGold: 0 });
     expect(s.hazards).toEqual({ pools: 0, evaporated: 0, corrosiveApplied: 0, corrosiveDamage: 0, pendingIn: 0, ventCleanse: 0, chokes: 0 });
     expect(s.derived.perfectParryRatio).toBeNull();
     expect(s.derived.manaWasteRatio).toBeNull();

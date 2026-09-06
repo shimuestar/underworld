@@ -548,6 +548,7 @@ for (const name of [
   'boss_status',
   'boss_phase',
   'plate_shed',
+  'plate_broken',
   'charge_dodged',
   'pillar_hit',
   'numb_arm_applied',
@@ -3074,6 +3075,15 @@ events.on('boss_phase', (payload) => {
   padRumble('roar');
   const bossName = enemyDef(ph.enemyType).name ?? '보스';
   showReaction(ph.shiftText ? `${ph.shiftText} — ${bossName}${ph.name ? ` · ${ph.name}` : ''}` : `${bossName} — ${ph.name ?? ''}`, 2600);
+});
+// 갑각판 파괴(거수 P2, B3-3) — heavy 타격(해머 강타·수류탄·폭발·낙석)이 판 hp 풀 한 장(60)을 깎았다: 갑각 갈라지는 소리 + 그 판 자리 파편(소형) + 진동 + 안내.
+// 골드 파편 주머니는 Loot 가 떨구고, 판 숨김·커진 분출공은 Stage 가 enemy.platesLeft/ventScale 로 매 프레임 그린다
+events.on('plate_broken', (payload) => {
+  const d = payload as { enemyId: number; enemyType: string; gold: number; platesLeft: number; count: number; x: number; z: number };
+  audio.play('joint_crack', panAt(d.x, d.z));
+  stage.breakBehemothPlate(d.enemyId, d.enemyType, d.platesLeft);
+  padRumble('weakPoint');
+  showReaction(`갑각판이 부서졌다 — 금 파편 ${d.gold}g (${d.count - d.platesLeft}/${d.count}장), 분출공이 커진다`, 1600);
 });
 // 등갑판 탈락(P3 진입) — 남은 판이 파편으로 튕겨 나간다(골드 없음). 판 숨김은 Stage 가 페이즈 표로
 events.on('plate_shed', (payload) => {

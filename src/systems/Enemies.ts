@@ -25,6 +25,7 @@
 
 import { balance } from '../core/Balance';
 import { VENT_WEAK_POINT, attackInPhase, attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, currentAttack, enemyDef, healthBarState, jointOfBlade, poolsOn, resolvePhase, slotUnlocked, type BladeSide, type EnemyAttackDef } from '../core/Entities';
+import { shedShellPlates } from '../core/ShellPlates';
 import { rayVsAabb } from '../core/Ray';
 import { alertEnemy, alertNearbyAt, beginPose, breakCrackWalls, closeExposure, findWallNormal, noiseField, openExposure, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, setPlayerStatus, statusDurationOf, PLAYER_STATUS_CFG, type EnemyState, type World, damagePlayer } from '../core/World';
 
@@ -1713,10 +1714,8 @@ function beginPhaseShift(world: World, enemy: EnemyState, def: ReturnType<typeof
     name: after?.name, shiftText: after?.shiftText, x: enemy.x, z: enemy.z,
   });
   world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'molt', on: true, ticks: enemy.poseTicks, phase: target, from });
-  // 등갑판 탈락(P3) — 남은 판이 골드 없이 튕겨 나간다(파편은 Stage). 판 hp 풀(B3-3)이 생기면 남은 장수를 거기서 읽는다
-  if (after?.shedPlates && !before?.shedPlates) {
-    world.events.emit('plate_shed', { enemyId: enemy.id, enemyType: enemy.type, count: def.visual?.plates.z.length ?? 0, x: enemy.x, z: enemy.z });
-  }
+  // 등갑판 탈락(P3) — 남은 판(platesLeft, B3-3 hp 풀에서 안 부서진 것)이 골드 없이 튕겨 나간다(plate_shed — 파편은 Stage, 소리는 main). 다 부서졌으면 조용히
+  if (after?.shedPlates && !before?.shedPlates) shedShellPlates(world, enemy);
 }
 
 /** 페이즈 보스가 죽었다 — 마지막 페이즈의 소요 시간을 boss_phase{phase 0, from, fromTicks} 로 한 번 알린다(계측: 페이즈별 시간). 두 번 내지 않는다 */

@@ -122,16 +122,22 @@ function landingSpot(world: World, x: number, z: number, r: number): { x: number
 export function dropPouch(world: World, enemyType: string, x: number, z: number): GroundItemState | null {
   const entries = rollLoot(enemyType);
   if (entries.length === 0) return null;
+  return dropPouchWith(world, enemyType, x, z, entries, enemyDef(enemyType).boss === true ? 'boss' : 'normal');
+}
+
+/** 내용물을 정해서 주머니를 떨군다 — 처치 전리품(dropPouch)과 거수 갑각판 파편(plate_broken → 골드만, 일반 등급, B3-3)이 같은 생성 규약(자리·튀어오름·병합·안착)을 쓴다.
+ *  owner 는 창 제목의 주인(적 종류 — 살아 있는 거수의 판 파편도 '낫뿔 거수의 주머니') */
+export function dropPouchWith(world: World, owner: string, x: number, z: number, entries: LootEntry[], tier: 'normal' | 'boss'): GroundItemState | null {
+  if (entries.length === 0) return null;
   const cfg = balance.loot.pouch;
-  const boss = enemyDef(enemyType).boss === true;
   const near = cfg.mergeRadius > 0
     ? world.groundItems.find((g) => g.kind === 'pouch' && Math.hypot(g.x - x, g.z - z) <= cfg.mergeRadius)
     : undefined;
   if (near) {
     const items = (near.pouchItems ??= []);
     for (const e of entries) mergeEntry(items, e);
-    if (boss) near.pouchTier = 'boss';
-    if (near.pouchOwner !== enemyType) near.pouchOwner = undefined; // 섞였다 — '전리품 주머니'
+    if (tier === 'boss') near.pouchTier = 'boss';
+    if (near.pouchOwner !== owner) near.pouchOwner = undefined; // 섞였다 — '전리품 주머니'
     near.noMagnetTicks = cfg.settleTicks;
     // 받아 담는 그림 — 제자리에서 살짝 뛰었다 내려앉는다
     near.bounceFromX = near.x;
@@ -151,23 +157,29 @@ export function dropPouch(world: World, enemyType: string, x: number, z: number)
   const at = landingSpot(world, x, z, cfg.scatterRadius);
   const pouch: GroundItemState = {
     id: nextLootId++, kind: 'pouch', x, z, y: cfg.launchY,
-    pouchItems: entries, pouchTier: boss ? 'boss' : 'normal', pouchOwner: enemyType,
+    pouchItems: entries, pouchTier: tier, pouchOwner: owner,
     noMagnetTicks: cfg.settleTicks,
-    bounceFromX: x, bounceFromZ: z, originX: at.x, originZ: at.z, bounceY0: enemyDef(enemyType).height,
+    bounceFromX: x, bounceFromZ: z, originX: at.x, originZ: at.z, bounceY0: enemyDef(owner).height,
   };
   world.groundItems.push(pouch);
   world.events.emit('pouch_dropped', {
-    id: pouch.id, x: pouch.x, z: pouch.z, owner: enemyType, tier: pouch.pouchTier, entries: entries.length, merged: false,
+    id: pouch.id, x: pouch.x, z: pouch.z, owner, tier: pouch.pouchTier, entries: entries.length, merged: false,
   });
   return pouch;
 }
 
-/** 구독. 시작 시 1회 — 처치마다 주머니 (noLoot 소환수는 없다) */
+/** 구독. 시작 시 1회 — 처치마다 주머니 (noLoot 소환수는 없다). 거수 갑각판 파괴(plate_broken, B3-3)는 골드만 든 일반 주머니 */
 export function init(world: World): void {
   world.events.on('enemy_died', (payload) => {
     const { enemyType, x, z, noLoot } = payload as { enemyType: string; x: number; z: number; noLoot?: boolean };
     if (noLoot) return; // 보스 소환수 — 아이템도 골드도 없다 (생명 입자는 LifeMotes 가 준다)
     dropPouch(world, enemyType, x, z);
+  });
+  // 갑각판 파편 주머니 — 판 한 장 = 골드 goldMin~goldMax(core/ShellPlates 가 굴려 gold 로 넘긴다), 일반 등급(보스 금빛 아님), noLoot 무관(보스가 살아서 떨군다)
+  world.events.on('plate_broken', (payload) => {
+    const d = payload as { enemyType: string; gold: number; x: number; z: number };
+    if (d.gold <= 0) return;
+    dropPouchWith(world, d.enemyType, d.x, d.z, [{ kind: 'gold', count: d.gold }], 'normal');
   });
 }
 

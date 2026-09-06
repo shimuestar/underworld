@@ -24,6 +24,8 @@
 // backflow(B3-1 — 역류 머리 내림: head_down 자세인데 낫이 박히지 않고 두 낫이 벌어져 매달린 고꾸라짐, 눈 열림(피해만) — 정면 눈높이) /
 // shake(B3-2 — 갑각 떨기 예고: 등갑판 덜그럭(shaking)·몸 보라 텔레그래프(낫·뿔은 물들지 않음)·분출공 열림 ×1.4 오염 녹색 맥동(텔레그래프 보라가 아니다), P2 외형 — 플레이어 눈높이 정면 6m(minRange)) /
 // choke(B3-2 — 질식: 분출공 꺼짐(sealed — 어두운 본색·발광 없음), P2 외형 — 정면 눈높이).
+// plates(B3-3 — 갑각판 파괴: &broken=1|2|3(기본 1) 장이 앞 판부터 사라지고 그 자리 실금이 몸 윗면으로 내려와 벌어진다(BH_CRACK_GROW), 분출공(점등)은 ×1.15^broken 으로 커진다(판정 = 그림),
+//   P2 외형 — 앞 위 3/4 에서 등(판)과 가슴(분출공)을 함께 본다).
 // &pose=charge|head_down|… 을 붙이면 약점 구체와 머리 메시(목 IK)를 그 자세의 poseOffsets 표 자리에 놓는다
 // (안내문에 구체 자리와 머리 메시의 눈 자리(anchor)를 함께 찍는다 — 어긋남이 0 에 가까워야 한다, B2-2).
 // 참조물: 4.4m 기둥(= attackRange, 흰색) · 플레이어 기둥(r0.4 h1.7, 몸 표면이 4.4m) · 천장 4.0m / 낫 상한 3.8m 선.
@@ -32,7 +34,7 @@
 import * as THREE from 'three';
 import { balance } from '../src/core/Balance';
 import { enemyDef, resolvePhase } from '../src/core/Entities';
-import { BEHEMOTH_TORSO, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, behemothRearOffset, behemothVentLit, behemothWeakScaleMul, buildBehemothRig, poseBehemothRig, setBehemothPhaseLook, styleBehemothWeakPoints } from '../src/render/Stage';
+import { BEHEMOTH_TORSO, BH_CRACK_GROW, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, behemothRearOffset, behemothVentLit, behemothWeakScaleMul, buildBehemothRig, poseBehemothRig, setBehemothPhaseLook, styleBehemothWeakPoints } from '../src/render/Stage';
 
 const def = enemyDef('scythe_behemoth');
 const params = new URLSearchParams(location.search);
@@ -111,6 +113,10 @@ const tint = (mats: THREE.MeshLambertMaterial[], hex: string): void => {
 
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.05, 100);
 let note = '';
+/** 갑각판 뷰(B3-3) — 부서진 장수·분출공 배율(안내문에도 적는다) */
+const plateCount = def.shellPlates?.count ?? def.visual!.plates.z.length;
+const platesBroken = Math.max(0, Math.min(plateCount, Number(params.get('broken') ?? '1') || 0));
+const plateVentScale = Math.pow(def.shellPlates?.ventScalePerPlate ?? 1, platesBroken);
 if (view === 'side') {
   torso.rotation.x = 0;
   poseBehemothRig(rig, { ...base, legPhase: 1.2, legBlend: 1 });
@@ -333,6 +339,15 @@ if (view === 'side') {
   styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'vent', broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2), scaleMul: behemothWeakScaleMul(id, id === 'vent') }));
   camera.position.set(0.4, balance.player.eyeHeight, -(def.volleyAttack!.minRange! + balance.player.radius));
   camera.lookAt(0, 1.7, -0.5);
+} else if (view === 'plates') {
+  // 갑각판 파괴(B3-3) — P2 외형에 broken 장이 앞 판부터 사라지고(setBehemothPhaseLook platesLeft), 그 자리 실금이 몸 윗면으로 내려와 BH_CRACK_GROW 배로 벌어진다.
+  // 분출공은 점등(닫힘)인 채 ×ventScalePerPlate^broken — 로직 enemy.ventScale 과 같은 값(판정 = 그림). 앞 위 3/4 에서 등과 가슴을 함께 본다
+  poseBehemothRig(rig, base);
+  const p2 = resolvePhase(def, 2);
+  setBehemothPhaseLook(rig, p2, 1400 * 0.25, plateCount - platesBroken);
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2), scaleMul: behemothWeakScaleMul(id, false, plateVentScale) }));
+  camera.position.set(5.2, 4.8, -6.2);
+  camera.lookAt(0, 1.9, -0.3);
 } else if (view === 'choke') {
   // 질식(B3-2) — 분출공 내구 0: 구체가 꺼진다(sealed — 어두운 본색·발광·맥동 없음, 파열색이 아니다). 갑각 떨기 봉인·웅덩이 증발은 로직. P2 외형, 정면 눈높이
   poseBehemothRig(rig, base);
@@ -383,6 +398,11 @@ note =
   `wp_eye(판정 표) = ${f2(eye)}   머리 메시 눈 자리 = ${f2(eyeMesh)}   어긋남 ${eye.distanceTo(eyeMesh).toFixed(2)}m\n` +
   `wp_joint_r(판정 표) = ${f2(jr)}   어깨 관절 메시 = ${f2(jrMesh)}   어긋남 r ${jr.distanceTo(jrMesh).toFixed(2)}m / l ${jl.distanceTo(jlMesh).toFixed(2)}m\n` +
   `wp_heart(판정 표) = ${f2(heart)}   배 메시 심장 자리 = ${f2(heartMesh)}   어긋남 ${heart.distanceTo(heartMesh).toFixed(2)}m`;
+if (view === 'plates') {
+  // 갑각판(B3-3) — 남은 장수·보이는 판·분출공 구체의 실제 반지름(판정 weakPointRadius 와 같은 값)
+  const ventR = def.weakPoints!.find((w) => w.id === 'vent')!.radius * plateVentScale;
+  note += `\n갑각판 ${plateCount - platesBroken}/${plateCount} 남음(부서진 ${platesBroken}장 — 앞 판부터)   보이는 판 = [${rig.plates.map((p) => (p.visible ? 'O' : 'x')).join(' ')}]   실금 벌어짐 ×${BH_CRACK_GROW}   분출공 반지름 ${ventR.toFixed(3)}m (×${plateVentScale.toFixed(4)})`;
+}
 document.getElementById('info')!.textContent = note;
 document.title = note.replace(/\n/g, ' | ');
 

@@ -73,6 +73,11 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
     for (const wp of def.weakPoints) if (wp.hp !== undefined) hp[wp.id] = wp.hp;
     if (Object.keys(hp).length > 0) enemy.weakHp = hp;
   }
+  // 등갑판 hp 풀(거수, B3-3) — 남은 장수·지금 판의 hp. 깎는 건 core/ShellPlates(heavy 타격 호출부), 탈락은 페이즈 전환
+  if (def.shellPlates) {
+    enemy.platesLeft = def.shellPlates.count;
+    enemy.plateHp = def.shellPlates.hpEach;
+  }
   enemy.homeX = x; // 대기 배회의 중심
   enemy.homeZ = z;
   return enemy;

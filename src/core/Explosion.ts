@@ -4,6 +4,7 @@
 
 import { balance } from './Balance';
 import { enemyDef, shieldBlocksProjectile } from './Entities';
+import { hitShellPlates } from './ShellPlates';
 import {
   alertNearbyAt,
   applyFrostOnHit,
@@ -75,6 +76,7 @@ export function explodeAt(world: World, x: number, z: number, cfg: ExplosionSpec
 
     const dealt = applyFrostOnHit(world.events, enemy, damage);
     enemy.health -= dealt;
+    hitShellPlates(world, enemy, dealt); // 갑각판 hp 풀(거수 P2, B3-3) — 폭발통·기믹 폭발도 폭발 계열
     world.events.emit('damage_pop', { enemyId: enemy.id, amount: dealt });
     if (enemy.health <= 0) {
       enemy.alive = false;

@@ -15,6 +15,7 @@ import {
   behemothRearOffset,
   behemothVentLit,
   behemothWeakScaleMul,
+  BH_CRACK_GROW,
   BH_VENT_OPEN_SCALE,
   buildBehemothRig,
   poseBehemothRig,
@@ -793,6 +794,71 @@ describe('페이즈 외형(B2-6) — 포효 자세·등갑판 균열·분출공 
     // 다른 약점은 점등이 없다(닫힘 = 발광 없음)
     const heart = rig.weakPoints['heart']!.material as THREE.MeshLambertMaterial;
     expect(heart.emissive.getHex()).toBe(0x000000);
+  });
+});
+
+describe('갑각판 파괴 외형(B3-3)', () => {
+  it('setBehemothPhaseLook(platesLeft) — P2 에서 부서진 장수만큼 앞 판(plate0 부터)이 사라지고, 그 자리 실금은 몸 윗면으로 내려와 BH_CRACK_GROW 배로 벌어진다(수평). 남은 판의 실금·이음새는 그대로. platesLeft 없음 = 전부, P3(shed)면 남은 장수와 무관하게 전부 숨김', () => {
+    const { rig } = measureRig(0, 0, 0, {});
+    const on = (arr: THREE.Mesh[]): boolean[] => arr.map((m) => m.visible);
+    const n = def.visual!.plates.z.length;
+    const hairs = rig.cracks.slice(n - 1);
+    const H = def.height;
+    const ph = def.visual!.plates.size[1] * H;
+    const restY = def.visual!.plates.y * H + ph * 0.5;
+    const bodyTop = (def.visual!.body.pos[1] + def.visual!.body.size[1] / 2) * H;
+    const tilt = (def.visual!.plates.tiltDeg * Math.PI) / 180;
+    const p2 = resolvePhase(def, 2);
+    setBehemothPhaseLook(rig, p2, 0, 2);
+    expect(on(rig.plates)).toEqual([false, true, true]);
+    expect(on(rig.cracks).every((v) => v)).toBe(true);
+    expect(hairs[0]!.scale.x).toBe(BH_CRACK_GROW);
+    expect(hairs[0]!.position.y).toBeLessThan(restY);
+    expect(hairs[0]!.position.y).toBeGreaterThan(bodyTop);
+    expect(hairs[0]!.position.y).toBeLessThan(bodyTop + ph * 0.1);
+    expect(hairs[0]!.rotation.x).toBe(0);
+    for (const h of hairs.slice(1)) {
+      expect(h.scale.x).toBe(1);
+      expect(h.position.y).toBeCloseTo(restY, 6);
+      expect(h.rotation.x).toBeCloseTo(tilt, 6);
+    }
+    setBehemothPhaseLook(rig, p2, 0, 0);
+    expect(on(rig.plates)).toEqual([false, false, false]);
+    expect(hairs.every((h) => h.scale.x === BH_CRACK_GROW)).toBe(true);
+    // 되돌림 — platesLeft 없음(P1·디버그 기본)은 전부 제자리
+    setBehemothPhaseLook(rig, p2, 0);
+    expect(on(rig.plates)).toEqual([true, true, true]);
+    expect(hairs.every((h) => h.scale.x === 1 && Math.abs(h.position.y - restY) < 1e-6)).toBe(true);
+    setBehemothPhaseLook(rig, p2, 0, 3);
+    expect(on(rig.plates)).toEqual([true, true, true]);
+    // P3 — 탈락: 남은 장수(2)와 무관하게 전부 숨김·균열 꺼짐
+    setBehemothPhaseLook(rig, resolvePhase(def, 1), 0, 2);
+    expect(on(rig.plates)).toEqual([false, false, false]);
+    expect(on(rig.cracks).every((v) => !v)).toBe(true);
+    // 범위 밖 값은 잠근다
+    setBehemothPhaseLook(rig, p2, 0, 7);
+    expect(on(rig.plates)).toEqual([true, true, true]);
+    setBehemothPhaseLook(rig, p2, 0, -1);
+    expect(on(rig.plates)).toEqual([false, false, false]);
+  });
+
+  it('분출공 크기 = 판정 크기 — behemothWeakScaleMul(vent, open, ventScale): 닫힘·점등·봉인·파열 어느 가지든 ventScale 배(판 밑 균열이 벌어진 채), 열리면 그 위에 ×1.4. 다른 약점은 1', () => {
+    expect(behemothWeakScaleMul('vent', false, 1.15)).toBeCloseTo(1.15, 6);
+    expect(behemothWeakScaleMul('vent', true, 1.15)).toBeCloseTo(1.15 * BH_VENT_OPEN_SCALE, 6);
+    expect(behemothWeakScaleMul('eye', true, 1.15)).toBe(1);
+    expect(behemothWeakScaleMul('vent', false)).toBe(1); // 기본 — 옛 호출 그대로
+    const { rig } = measureRig(0, 0, 0, {});
+    const vent = rig.weakPoints['vent']!;
+    const vs = 1.15 ** 3;
+    styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent', scaleMul: behemothWeakScaleMul(id, false, vs) }));
+    expect(vent.scale.x).toBeCloseTo(vs, 6); // 점등(P2 닫힘)
+    expect(rig.weakPoints['eye']!.scale.x).toBe(1);
+    styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, scaleMul: behemothWeakScaleMul(id, false, vs) }));
+    expect(vent.scale.x).toBeCloseTo(vs, 6); // 닫힘(P1 색)
+    styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, sealed: id === 'vent', scaleMul: behemothWeakScaleMul(id, false, vs) }));
+    expect(vent.scale.x).toBeCloseTo(vs, 6); // 질식(sealed)
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'vent', broken: false, flashAgeMs: -1, scaleMul: behemothWeakScaleMul(id, id === 'vent', vs) }));
+    expect(vent.scale.x).toBeCloseTo(1.12 * BH_VENT_OPEN_SCALE * vs, 3); // 열림 — 맥동 봉우리 × 1.4 × 균열
   });
 });
 

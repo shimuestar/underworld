@@ -6,6 +6,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
+import { hitShellPlates } from '../core/ShellPlates';
 import {
   alertNearbyAt,
   applyFrostOnHit,
@@ -89,7 +90,8 @@ function hurtPlayer(
   }
 }
 
-/** 적 피해 — 폭발(explodeAt)과 같은 규약. 처치는 trap_kill (마나 없음 — 총 처치와 같은 결) */
+/** 적 피해 — 폭발(explodeAt)과 같은 규약. 처치는 trap_kill (마나 없음 — 총 처치와 같은 결).
+ *  heavy = 무거운 타격(낙석) — 거수 갑각판 hp 풀을 그 피해만큼 깎는다(B3-3, core/ShellPlates). 가시·진자는 아니다 */
 function hurtEnemy(
   world: World,
   trap: TrapState,
@@ -97,6 +99,7 @@ function hurtEnemy(
   raw: number,
   cfg: TrapCfg,
   knockback?: { distance: number; ticks: number },
+  heavy = false,
 ): void {
   const def = enemyDef(enemy.type);
   const boss = def.boss || enemy.floorBoss === true;
@@ -104,6 +107,7 @@ function hurtEnemy(
   if (enemy.ai === 'idle') enemy.ai = 'chase';
   const dealt = applyFrostOnHit(world.events, enemy, amount);
   enemy.health -= dealt;
+  if (heavy) hitShellPlates(world, enemy, dealt);
   world.events.emit('damage_pop', { enemyId: enemy.id, amount: dealt });
   world.events.emit('trap_hit_enemy', { id: trap.id, type: trap.type, enemyId: enemy.id, amount: dealt });
   if (enemy.health <= 0) {
@@ -315,7 +319,7 @@ function fireRockfall(world: World, trap: TrapState, cfg: TrapCfg): void {
     if (d > R) continue;
     hurtEnemy(world, trap, enemy, (cfg['enemyDamage'] ?? 0) * falloff(d), cfg, {
       distance: (cfg['enemyKnockback'] ?? 0) * falloff(d), ticks: cfg['enemyKnockbackTicks'] ?? 12,
-    });
+    }, true); // 낙석은 heavy 타격 — 거수 갑각판 풀(B3-3)
   }
   trap.blocker = world.level.addBlocker(trap.x, trap.z, cfg['rubbleHalf'] ?? 1.5);
   world.level.setPathBlocked(trap.col, trap.row);

@@ -1156,6 +1156,13 @@ export interface EnemyState {
   fightPendingIn?: number;
   /** 이번 전투에서 분출공 명중이 오염 대기에서 깎은 양(hitWeakPoint 가 올린다) — 전투당 상한 balance.corruption.ventCleanseCap */
   fightCleansed?: number;
+  /** 남은 등갑판 장수(거수 B3-3, def.shellPlates.count 부터 — Spawner 가 세운다). heavy 타격이 hpEach 마다 한 장씩 깎고(core/ShellPlates.hitShellPlates),
+   *  P3 진입에 남은 판은 0 으로(탈락 plate_shed). Stage 는 앞 판부터 count − platesLeft 장을 숨긴다 */
+  platesLeft?: number;
+  /** 지금 깎이고 있는 판의 남은 hp(hpEach 부터) — 넘친 피해는 다음 판으로 이어진다(풀) */
+  plateHp?: number;
+  /** 분출공 구체 반지름 배율(1 = 그대로) — 판이 부서질 때마다 ×ventScalePerPlate(판 밑 균열이 벌어짐). 판정(Entities.weakPointRadius)과 그림이 같은 값을 읽는다 */
+  ventScale?: number;
   /** 밀착 공격(closeAttack) 재사용 대기 */
   closeCooldown?: number;
   /** 연사 남은 발수 / 재사용 대기 (족장 화살 세례) */

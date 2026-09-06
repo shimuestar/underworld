@@ -5,6 +5,7 @@
 import { balance } from '../core/Balance';
 import { VENT_WEAK_POINT, barrierUp, enemyDef, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, ventCleanseAmount, weakPointDamageMul, type WeakPointDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
+import { hitShellPlates } from '../core/ShellPlates';
 import { sigilDef, type SigilDef } from '../core/SigilData';
 import { alertEnemy, alertNearbyAt, breakCrackWalls, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, hitWeakPoint, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius, damagePlayer, PLAYER_STATUS_CFG, playerStatusTicks, setPlayerStatus, statusDurationOf } from '../core/World';
 
@@ -1465,6 +1466,7 @@ function explodeFireball(
     // 방어막은 폭발을 막지 못한다 (화염은 사방에서 온다)
     const splashDealt = applyFrostOnHit(world.events, enemy, damage);
     enemy.health -= splashDealt;
+    hitShellPlates(world, enemy, splashDealt); // 갑각판 hp 풀(거수 P2, B3-3) — 화염구 폭발도 폭발 계열(직격 피해는 마법 직격이라 무관)
     if (proj.owner === 'player') {
       world.events.emit('damage_pop', { enemyId: enemy.id, amount: splashDealt });
     }
@@ -1647,6 +1649,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
 
     const grenadeDealt = applyFrostOnHit(world.events, enemy, damage);
     enemy.health -= grenadeDealt;
+    hitShellPlates(world, enemy, grenadeDealt); // 갑각판 hp 풀(거수 P2, B3-3) — 수류탄은 heavy 타격(120 = 두 장)
     world.events.emit('damage_pop', { enemyId: enemy.id, amount: grenadeDealt });
     if (enemy.health <= 0) {
       enemy.alive = false;

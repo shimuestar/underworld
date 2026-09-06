@@ -1026,6 +1026,8 @@ const BH_WEAK_PULSE_AMP = 0.12;
 const BH_WEAK_PULSE_MS = 640;
 /** 분출공이 열렸을 때(갑각 떨기 예고·시전, 탈진) 구체 크기 배율(기획서 §2 "크기 ×1.4") — 맥동은 이 위에 곱한다. 판정 반지름은 그대로(그림만 커진다 — 표적 강조) */
 export const BH_VENT_OPEN_SCALE = 1.4;
+/** 부서진 등갑판 자리의 실금(B3-3) — 판이 사라진 몸 윗면으로 내려와 이만큼 넓게 벌어진다("판 밑 균열이 커져"). 분출공 크기는 로직의 ventScale(판정 = 그림) */
+export const BH_CRACK_GROW = 4;
 /** 갑각 떨기 예고·시전 중 등갑판 덜그럭 — 판마다 위상이 다른 잘게 떠는 굴림(rad)·들썩(m)·주기(ms). 튜닝값 아님(연출) */
 const BH_PLATE_RATTLE = 0.05;
 const BH_PLATE_RATTLE_LIFT = 0.03;
@@ -1520,11 +1522,31 @@ export function buildBehemothRig(
 /** 페이즈 외형(B2-6, 기획서 §7·§8) — 페이즈 표(Entities.resolvePhase)를 읽어 P2 「오염 갑각」: 등갑판 균열 발광 숨쉬기 / P3 「광란」: 등갑판·균열 숨김(탈락 파편은
  *  Stage.shedBehemothPlates 가 한 번) + 눈 붉은 홍채. 분출공 점등은 styleBehemothWeakPoints 의 lit 로(같은 기준 shellPlatesOn). 표가 없으면(P1·족장) 전부 꺼진다.
  *  syncEnemies 와 debug/behemoth.ts 가 같은 함수를 쓴다 */
-export function setBehemothPhaseLook(rig: BehemothRig, phase: ResolvedPhase | undefined, nowMs: number): void {
+export function setBehemothPhaseLook(rig: BehemothRig, phase: ResolvedPhase | undefined, nowMs: number, platesLeft?: number): void {
   const shed = phase?.shedPlates === true;
   const cracked = phase?.shellPlatesOn === true && !shed;
-  for (const plate of rig.plates) plate.visible = !shed;
+  const total = rig.plates.length;
+  // 부서진 장수(B3-3 hp 풀 — enemy.platesLeft) — 앞 판(plate0, 머리 쪽)부터 사라진다. 없으면(P1·디버그 기본) 전부 있다
+  const broken = Math.max(0, Math.min(total, total - (platesLeft ?? total)));
+  for (let i = 0; i < total; i++) rig.plates[i]!.visible = !shed && i >= broken;
   for (const crack of rig.cracks) crack.visible = cracked;
+  // 실금(뒤쪽 total 개 — 이음새 total−1 개 뒤) — 판이 부서진 자리는 판 밑 균열이 드러난 것: 몸 윗면으로 내려와 BH_CRACK_GROW 배로 벌어진다. 이음새는 뒤 판의 자식이라 판을 따라 숨는다
+  const v = rig.def.visual;
+  if (v) {
+    const H = rig.def.height;
+    const ph = v.plates.size[1] * H;
+    const restY = v.plates.y * H + ph * 0.5;
+    const bodyTopY = (v.body.pos[1] + v.body.size[1] / 2) * H;
+    const tilt = (v.plates.tiltDeg * Math.PI) / 180;
+    for (let i = 0; i < total; i++) {
+      const hair = rig.cracks[total - 1 + i];
+      if (!hair) continue;
+      const gone = i < broken;
+      hair.scale.x = gone ? BH_CRACK_GROW : 1;
+      hair.position.y = gone ? bodyTopY + ph * 0.02 : restY;
+      hair.rotation.x = gone ? 0 : tilt;
+    }
+  }
   if (cracked) {
     const k = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin((nowMs / BH_CRACK_PULSE_MS) * Math.PI * 2));
     rig.crackMat.color.setHex(BEHEMOTH_COLORS.crack).multiplyScalar(k);
@@ -1567,9 +1589,11 @@ export function behemothEyeDimmed(enemy: Pick<EnemyState, 'dazeCooldown' | 'ai' 
   return (enemy.dazeCooldown ?? 0) > 0 && !(enemy.ai === 'charging' && enemy.attackMode === 'charge');
 }
 
-/** 열린 약점의 크기 배율 — 분출공(vent)은 열리면 ×BH_VENT_OPEN_SCALE(갑각 떨기 예고·시전·탈진, 기획서 §2), 다른 약점은 1. syncEnemies·debug/behemoth 가 같은 규칙 */
-export function behemothWeakScaleMul(id: string, open: boolean): number {
-  return id === 'vent' && open ? BH_VENT_OPEN_SCALE : 1;
+/** 약점 구체의 크기 배율 — 분출공(vent)은 갑각판이 부서진 만큼(ventScale — 로직 enemy.ventScale, 판정 Entities.weakPointRadius 와 같은 값, B3-3) 늘 크고,
+ *  열리면 그 위에 ×BH_VENT_OPEN_SCALE(갑각 떨기 예고·시전·탈진, 기획서 §2 — 그림만). 다른 약점은 1. syncEnemies·debug/behemoth 가 같은 규칙 */
+export function behemothWeakScaleMul(id: string, open: boolean, ventScale = 1): number {
+  if (id !== 'vent') return 1;
+  return ventScale * (open ? BH_VENT_OPEN_SCALE : 1);
 }
 
 export function styleBehemothWeakPoints(
@@ -1582,19 +1606,19 @@ export function styleBehemothWeakPoints(
     const mat = mesh.material as THREE.MeshLambertMaterial;
     const colors = behemothWeakColors(id);
     const st = state(id);
-    const scaleMul = st.scaleMul ?? 1; // 열림 크기 배율(분출공 ×1.4) — 맥동·플래시 위에 곱한다
+    const scaleMul = st.scaleMul ?? 1; // 크기 배율(분출공: 갑각판 ventScale × 열림 1.4) — 어느 가지든 맥동·플래시 위에 곱한다
     const flash = st.flashAgeMs >= 0 && st.flashAgeMs < BH_WEAK_FLASH_MS ? 1 - st.flashAgeMs / BH_WEAK_FLASH_MS : 0;
     if (st.broken) {
       mat.color.setHex(BEHEMOTH_COLORS.jointBroken);
       mat.emissive.setHex(0x000000);
       mat.emissiveIntensity = 1;
-      mesh.scale.setScalar(1);
+      mesh.scale.setScalar(scaleMul);
     } else if (st.sealed) {
       // 봉인(역류 뒤 심장 쿨다운, B3-1) — 본색을 어둡게, 발광·맥동 없음: 자세 자리에 나와 있어도 판정이 없다는 표시
       mat.color.setHex(colors.base).multiplyScalar(BH_WEAK_SEALED_MUL);
       mat.emissive.setHex(0x000000);
       mat.emissiveIntensity = 1;
-      mesh.scale.setScalar(1);
+      mesh.scale.setScalar(scaleMul);
     } else if (st.open && st.dim) {
       // 혼절 쿨다운 중의 눈 — 열려 있되 어두운 청록, 맥동 없음("피해만, 누적 없음")
       const dimColor = id === 'eye' ? BEHEMOTH_COLORS.eyeDim : colors.open;
@@ -1613,12 +1637,12 @@ export function styleBehemothWeakPoints(
       mat.color.setHex(colors.base);
       mat.emissive.setHex(colors.open);
       mat.emissiveIntensity = BH_WEAK_LIT_INTENSITY + (BH_WEAK_FLASH_INTENSITY - BH_WEAK_LIT_INTENSITY) * flash;
-      mesh.scale.setScalar(1 + flash * 0.2);
+      mesh.scale.setScalar((1 + flash * 0.2) * scaleMul);
     } else {
       mat.color.setHex(colors.base);
       mat.emissive.setHex(flash > 0 ? colors.open : 0x000000);
       mat.emissiveIntensity = flash > 0 ? BH_WEAK_FLASH_INTENSITY * flash : 1;
-      mesh.scale.setScalar(1);
+      mesh.scale.setScalar(scaleMul);
     }
   }
 }
@@ -4632,7 +4656,7 @@ export class Stage {
         const dimEye = behemothEyeDimmed(enemy);
         // 페이즈 외형(B2-6) — P2 균열 발광·분출공 점등, P3 등갑판 탈락·붉은 홍채. 표는 로직의 enemy.phase(게임플레이 페이즈 — 전환 순간에 바뀐다)
         const phaseLook = resolvePhase(def2, enemy.phase);
-        setBehemothPhaseLook(visual.behemoth, phaseLook, now);
+        setBehemothPhaseLook(visual.behemoth, phaseLook, now, enemy.platesLeft); // 부서진 판(B3-3)은 앞부터 숨김
         const ventLit = behemothVentLit(phaseLook);
         styleBehemothWeakPoints(visual.behemoth, now, (id) => {
           const key = `${eid}:${id}`;
@@ -4647,7 +4671,8 @@ export class Stage {
           const open = wp !== undefined && weakPointOpen(enemy, wp);
           // 봉인(역류 뒤 심장 쿨다운, B3-1) — 자세 자리에 나와 있어도 어둡게(판정 없음 = weakPointOpen 도 false)
           const sealed = (enemy.weakCooldown?.[id] ?? 0) > 0 || choked;
-          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye, lit: id === 'vent' && ventLit, sealed, scaleMul: behemothWeakScaleMul(id, open) };
+          // 분출공 크기 — 갑각판이 부서진 만큼(enemy.ventScale, 판정과 같은 값) × 열림 1.4
+          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye, lit: id === 'vent' && ventLit, sealed, scaleMul: behemothWeakScaleMul(id, open, enemy.ventScale ?? 1) };
         });
       }
 
@@ -5718,6 +5743,21 @@ export class Stage {
     const visual = this.enemyVisuals.get(enemyId);
     if (!visual?.behemoth) return;
     visual.bhLurchUntil = performance.now() + BH_LURCH_MS;
+  }
+
+  /** 갑각판 파괴(거수 P2, plate_broken — B3-3) — 방금 부서진 판(앞 판부터: 남은 platesLeft 장은 뒤쪽) 자리에서 몸통색 파편(소형 0.45)이 등 뒤로 튄다.
+   *  판의 숨김은 setBehemothPhaseLook 이 enemy.platesLeft 로 매 프레임. 거수가 아니거나 자리가 없으면 무시 */
+  breakBehemothPlate(enemyId: number, enemyType: string, platesLeft: number): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    const rig = visual?.behemoth;
+    if (!visual || !rig) return;
+    const idx = rig.plates.length - platesLeft - 1;
+    const plate = rig.plates[idx];
+    if (!plate) return;
+    const yaw = visual.group.rotation.y;
+    const pos = new THREE.Vector3();
+    plate.getWorldPosition(pos);
+    this.spawnDeathBurst(pos.x, pos.z, enemyType, 0.45, Math.sin(yaw), Math.cos(yaw), 1.2);
   }
 
   shedBehemothPlates(enemyId: number, enemyType: string): void {

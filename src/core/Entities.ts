@@ -219,6 +219,17 @@ export interface PhaseDef {
   firstPick?: string;
 }
 
+/** 등갑판 hp 풀(거수 B3-3, 기획서 §4.3) — 판정 볼륨이 아니라 heavy 타격이 보스 몸에 들어갈 때 그 피해만큼 깎이는 풀.
+ *  count 장 × hpEach, hpEach 마다 한 장 파괴 → 골드 goldMin~goldMax 주머니 + 분출공 구체 반지름 ×ventScalePerPlate/장.
+ *  P2(phases[].shellPlatesOn) 동안만, P3 진입(shedPlates)에 남은 판은 골드 없이 탈락. 상태는 EnemyState.platesLeft/plateHp/ventScale(core/ShellPlates) */
+export interface ShellPlatesDef {
+  count: number;
+  hpEach: number;
+  goldMin: number;
+  goldMax: number;
+  ventScalePerPlate: number;
+}
+
 /** 누적 합친 페이즈 — resolvePhase 의 결과. bar 는 지금 칸 */
 export interface ResolvedPhase {
   bar: number;
@@ -430,6 +441,8 @@ export interface EnemyDef {
   retreatWhenDisarmed?: { min: number; max: number };
   /** 페이즈 표(거수, 기획서 §8) — 칸(healthBars)마다 하나. 없으면 페이즈 없음(옛 경로 — 족장·어미 슬라임의 체력 칸은 표시만) */
   phases?: PhaseDef[];
+  /** 등갑판 hp 풀(거수 B3-3) — 없으면 갑각판 없음(heavy 타격은 체력만 깎는다) */
+  shellPlates?: ShellPlatesDef;
 }
 
 /** 낫 쪽 id — 'r' 오른낫(attack) / 'l' 왼낫(attackAlt). EnemyState.lastBlade·bladeLock 이 같은 키를 쓴다 */
@@ -827,6 +840,20 @@ export function poolsOn(def: EnemyDef, enemy: { phase?: number }): boolean {
   return resolvePhase(def, enemy.phase)?.poolsOn ?? false;
 }
 
+/** 갑각판 hp 풀이 지금 heavy 타격을 받는가(거수 B3-3, 기획서 §4.3 "P2 안에서만") — 정의에 shellPlates 가 있고, 페이즈 표가 shellPlatesOn 이되
+ *  shedPlates(P3 — 남은 판은 탈락했다)가 아니고, 남은 판(enemy.platesLeft)이 있을 때. P1·P3·족장은 false */
+export function shellPlatesActive(def: EnemyDef, enemy: { phase?: number; platesLeft?: number }): boolean {
+  if (!def.shellPlates || (enemy.platesLeft ?? 0) <= 0) return false;
+  const rp = resolvePhase(def, enemy.phase);
+  return rp !== undefined && rp.shellPlatesOn && !rp.shedPlates;
+}
+
+/** 약점 구체의 실제 반지름 — 분출공(VENT_WEAK_POINT)은 갑각판이 부서진 만큼 커진다(enemy.ventScale — 판 밑 균열이 벌어짐, B3-3 ×1.15/장).
+ *  판정(rayHitsWeakPoint)과 그림(Stage 구체 크기)이 이 한 함수를 읽는다(보이는 크기 = 판정 크기). 다른 약점은 정의 그대로 */
+export function weakPointRadius(enemy: { ventScale?: number }, wp: WeakPointDef): number {
+  return wp.id === VENT_WEAK_POINT ? wp.radius * (enemy.ventScale ?? 1) : wp.radius;
+}
+
 export interface WeakPointHit {
   wp: WeakPointDef;
   /** 레이 진입 t (방향 벡터 길이 기준 — 호출부가 정규화 방향을 넣으면 미터) */
@@ -848,6 +875,7 @@ export function rayHitsWeakPoint(
   enemy: {
     x: number; z: number; yaw: number; jumpY?: number; pose?: string; molting?: boolean;
     weakHp?: Record<string, number>; exposure?: Record<string, number>; feigning?: boolean; weakCooldown?: Record<string, number>;
+    ventScale?: number;
   },
   def: { weakPoints?: WeakPointDef[]; poseOffsets?: Record<string, Record<string, LocalVec3>> },
   pad: number,
@@ -863,7 +891,8 @@ export function rayHitsWeakPoint(
   for (const wp of wps) {
     if (!weakPointOpen(enemy, wp)) continue;
     const c = weakPointWorldPos(enemy, def, wp);
-    const t = rayVsSphere(ox, oy, oz, dx, dy, dz, c.x, c.y, c.z, wp.radius + pad);
+    // 반지름은 weakPointRadius — 분출공은 갑각판이 부서진 만큼 커진 값(B3-3, Stage 와 같은 함수)
+    const t = rayVsSphere(ox, oy, oz, dx, dy, dz, c.x, c.y, c.z, weakPointRadius(enemy, wp) + pad);
     if (t === null || (best && t >= best.t)) continue;
     // 원뿔 — facing 을 월드로 돌려 정규화하고 레이 방향과 마주보는지 본다
     const f = rotateLocalByYaw(wp.facing, enemy.yaw);

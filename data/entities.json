@@ -325,6 +325,8 @@
       "parryOutcome": "expose", "executeDamage": 240,
       "_hammerNote": "머리 내림 중 해머 타격 = 눈 집계(hammerEyeMul 2.2 — 15×2.2 = 33 = 권총 한 발, 2타면 혼절) + 해머 마무리 넉백 0(noKnockbackWhileHeadDown). 혼절 중 해머 3타 5m 날림 면제(staggerFlingImmune — 처형 반경 4.6 밖으로 날아가는 것 방지, 결정 33). 쿨다운 중엔 눈 ×2.2 피해만(누적 없음)",
       "hammerEyeMul": 2.2, "noKnockbackWhileHeadDown": true, "staggerFlingImmune": true,
+      "_shellPlatesNote": "등갑판 hp 풀(B3-3, 기획서 §4.3) — 판정 볼륨이 아니다. P2(phases[].shellPlatesOn) 동안 heavy 타격(해머 강타 3타 = 콤보 마무리, 수류탄·화염구 폭발·폭발통(explosion 계열 — breakCrackWalls 를 부르는 곳과 같은 셋), 낙석)이 보스 몸에 들어갈 때마다 그 피해만큼 풀을 깎는다(위치 무관, 총·화살·마법 직격은 무관 — 몸통 0.8× 그대로). hpEach 마다 판 한 장 파괴(앞 판부터) → 골드 파편 주머니 goldMin~goldMax(Loot pouch 규약, pouchTier 일반) + plate_broken{gold} + 파편, 판 밑 균열이 커져 분출공 구체 반지름 ×ventScalePerPlate/장(판정·그림 둘 다 — EnemyState.ventScale). 넘친 피해는 다음 판으로 이어진다(풀). P3 진입(shedPlates)엔 남은 판이 골드 없이 탈락(plate_shed). Spawner 가 platesLeft = count, plateHp = hpEach 로 세운다",
+      "shellPlates": { "count": 3, "hpEach": 60, "goldMin": 6, "goldMax": 10, "ventScalePerPlate": 1.15 },
       "_bladeNote": "오른낫 베기(blade_r) — 오른 어깨 관절이 솟고 낫이 뒤로 당겨진 뒤 32틱 예고, 호 110°, 사거리 4.4. 순수 타이밍 창(hitOnContact 아님). 밀림은 smash 급 2.0m",
       "_statusNote": "플레이어 상태(B2-4, balance.status) — statusOnBlock: 이 공격을 방패로 막으면 걸린다(낫 → 팔 저림 numb_arm, 칩 30%·경직 10틱은 기존대로). statusOnHit: 막지 않은 직격에만(돌격 → 진탕 concussion — 막기는 이미 60%·7m 밀림으로 벌받는다). 값을 세우는 건 Enemies impact, 감소·해제는 Status.ts",
       "attack": { "type": "contact", "arcDeg": 110, "windupTicks": 32, "recoverTicks": 40, "whiffRecoverTicks": 60, "impactRangeMul": 1.0, "damage": 30, "playerKnockback": 2.0, "parryable": true, "telegraph": "blue",

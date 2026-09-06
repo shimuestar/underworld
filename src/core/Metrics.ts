@@ -33,8 +33,9 @@ export interface MetricsSnapshot {
   /** 약점(거수) — 명중 수 / 약점 피해 합 / 파열 수 / 닫힌 노출 창 수와 그 안의 명중 합(노출 활용률 = hits/closed) / 혼절 수 /
    *  돌격 완벽 회피 수 / 절뚝(양 낫 잠김) 진입 수 / 눈멂 유도 수 / 전도 수 / 기둥 충돌 수 / 역류(심장 66 — 발구르기 취소) 수 (기획서 boss_scythe_behemoth §12) */
   weakPoints: { hits: number; damage: number; broken: number; exposuresClosed: number; exposureHits: number; dazes: number; chargeDodges: number; limps: number; blinds: number; topples: number; pillarHits: number; backflows: number };
-  /** 페이즈 보스(거수, B2-6) — 전환 수 / 두 경계를 한 번에 넘은(P2 건너뜀) 수 / 페이즈별 소요 초(체력 칸 index 키 '3'·'2'·'1' — 사망까지 포함, 목표 P1 90s / P2 120s / P3 90s) */
-  boss: { phaseShifts: number; phaseSkips: number; phaseSeconds: Record<string, number> };
+  /** 페이즈 보스(거수, B2-6) — 전환 수 / 두 경계를 한 번에 넘은(P2 건너뜀) 수 / 페이즈별 소요 초(체력 칸 index 키 '3'·'2'·'1' — 사망까지 포함, 목표 P1 90s / P2 120s / P3 90s) /
+   *  갑각판 파괴 수(P2 heavy 타격, B3-3 — 최대 3)와 그 골드 합(기획서 §12 "갑각판 파괴 수") */
+  boss: { phaseShifts: number; phaseSkips: number; phaseSeconds: Record<string, number>; platesBroken: number; plateGold: number };
   /** 진액 웅덩이·오염 진액·분출공(거수 P2+, B3-2) — 생긴 웅덩이 수 / 자연 소멸이 아닌 증발 수(불·질식·상한) / 오염 진액이 붙은 횟수 / 오염 진액 도트 피해 합 /
    *  오염 진액이 오염 대기에 더한 양 / 분출공 명중이 오염 대기에서 깎은 양(정화) / 질식 수. 순 오염 변화 = pendingIn − ventCleanse (기획서 §11.1 장부) */
   hazards: { pools: number; evaporated: number; corrosiveApplied: number; corrosiveDamage: number; pendingIn: number; ventCleanse: number; chokes: number };
@@ -94,6 +95,8 @@ export class Metrics {
   private bossPhaseShifts = 0;
   private bossPhaseSkips = 0;
   private bossPhaseTicks: Record<string, number> = {};
+  private platesBroken = 0;
+  private plateGold = 0;
   private poolsSpawned = 0;
   private poolsEvaporated = 0;
   private corrosiveApplied = 0;
@@ -205,6 +208,11 @@ export class Metrics {
         this.bossPhaseShifts++;
         if (ph.skipped) this.bossPhaseSkips++;
       }
+    });
+    // 갑각판 파괴(거수 P2, B3-3) — 장수와 골드 합. 탈락(plate_shed)은 골드가 없어 세지 않는다
+    events.on('plate_broken', (payload) => {
+      this.platesBroken++;
+      this.plateGold += (payload as { gold: number }).gold;
     });
     // 소모품은 이제 줍는 순간이 아니라 마시는 순간을 센다 (가방을 거치므로)
     events.on('item_used', (payload) => {
@@ -340,6 +348,8 @@ export class Metrics {
         phaseShifts: this.bossPhaseShifts,
         phaseSkips: this.bossPhaseSkips,
         phaseSeconds: Object.fromEntries(Object.entries(this.bossPhaseTicks).map(([k, t]) => [k, Math.round(t / balance.loop.tickRate)])),
+        platesBroken: this.platesBroken,
+        plateGold: this.plateGold,
       },
       hazards: {
         pools: this.poolsSpawned, evaporated: this.poolsEvaporated, corrosiveApplied: this.corrosiveApplied, corrosiveDamage: round2(this.corrosiveDamage) ?? 0,

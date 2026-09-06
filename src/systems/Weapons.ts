@@ -9,6 +9,7 @@ import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy
 /** 머리 내림 중 해머가 집계되는 약점 id — 기획서 §4 "머리 내림·탈진 중 해머 타격 = 눈 집계(hammerEyeMul)" */
 const HAMMER_EYE_ID = 'eye';
 import { rayVsAabb } from '../core/Ray';
+import { hitShellPlates } from '../core/ShellPlates';
 import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, provokeTrap, hitBarrel, hitWeakPoint, noiseField, RANGED_WEAPONS, applyFrostOnHit, playerStatusTicks, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
 
 /** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
@@ -339,6 +340,8 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     const eyeHammer = eyeWp !== undefined && weakPointOpen(enemy, eyeWp);
     const meleeDealt = applyFrostOnHit(world.events, enemy, eyeHammer ? damage * def.hammerEyeMul! : damage);
     enemy.health -= meleeDealt;
+    // 갑각판 hp 풀(거수 P2, B3-3) — 마무리 강타(3타)만 heavy 타격으로 그 피해만큼 판을 깎는다. 1·2타는 무관(기획서 §4.3 "해머 강타(3타)")
+    if (heavy) hitShellPlates(world, enemy, meleeDealt);
     if (eyeHammer) {
       const c = weakPointWorldPos(enemy, def, eyeWp!);
       hitWeakPoint(world, enemy, eyeWp!.id, meleeDealt, c.x, c.y, c.z); // 피해 숫자(melee_hit)보다 먼저 — '약점!' 접미
