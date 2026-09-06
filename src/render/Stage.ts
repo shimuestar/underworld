@@ -479,6 +479,8 @@ interface EnemyVisual {
   bhBlend?: number;
   /** 거수 몸통 굴림(rad, 보간값) — 미끄러짐 8°(skidRoll)·절뚝 절룩. 감전 떨림이 없을 때 torso.rotation.z 에 들어간다 */
   bhRoll?: number;
+  /** 거수 굴림 축 높이(m, 보간값) — 미끄러짐은 어깨(joints.pos y), 그 외 0(발). bhRoll 과 같은 계수로 풀려 torso.position.x 가 튀지 않는다(stepBehemothRoll) */
+  bhRollPivot?: number;
   /** 시위 당김 0~1 — 놓는 순간 0으로 스냅해 시위가 튕겨 돌아간다 */
   bowDraw?: number;
   /** 머리 위 이름표 + HP 바 */
@@ -1039,13 +1041,16 @@ export const BEHEMOTH_TORSO = {
   /** 혼절(stunned) — 앞으로 살짝 처지며(표의 눈 2.0m 에 목이 닿는 자세) 흔들린다 */
   stunnedLean: -0.06,
   stunnedCrouch: 0.04,
-  /** 미끄러짐(skid, 완벽 회피) — 옆으로 기울고(굴림) 앞으로 짧게 밀리며 낮아진다. 다리는 poseBehemothRig 가 버티는 모양으로 벌린다.
-   *  굴림 축은 어깨 높이(skidRollPivot = joints.pos y) — 발이 옆으로 미끄러지고 관절·눈 메시는 표의 구체 자리에 남는다.
-   *  기획서 §2 의 15° 는 발을 축으로 하면 머리·관절 메시가 구체(표)에서 0.6m 벌어져 8° 로 줄였다 */
-  skidLean: -0.08,
+  /** 미끄러짐(skid, 완벽 회피) — 앞으로 미끄러지며(lunge) 앞다리로 버텨 몸이 살짝 뒤로 젖혀지고(lean +) 낮아진다(crouch, 표의 관절 2.5 → 2.4).
+   *  다리는 poseBehemothRig 가 앞다리 앞·뒷다리 뒤로 벌려 버틴다. 굴림 축은 어깨 높이(stepBehemothRoll 의 pivotY = joints.pos y) — 발이 옆으로 미끄러진다.
+   *  메시와 표(구체)의 관계: 눈은 목 IK 가 표 자리에 맞추고(어긋남 ≈ 0.05m — 굴림에 x 가 조금 밀린다), 어깨 관절 메시는 표(둘 다 2.4·z −0.8)를
+   *  그대로 맞추지 못한다 — 굴림이 오른/왼 어깨를 ±1.15·sin(roll) 만큼 위아래로 가른다. lean·lunge 는 어깨 z 가 표의 −0.8 에 오도록 짝지었다
+   *  (뒤로 2.5·sin(0.06) ≈ +0.15 ↔ 앞으로 −0.15). 결과 어긋남 오른 0.18 / 왼 0.14m(움찔 최악 0.25, 구체 반지름 0.30 안) — Behemoth.test 가 못박는다.
+   *  기획서 §2 의 15° 는 양 어깨를 높이 0.6m(±0.30) 갈라 놓아 구체가 관절 메시를 벗어나므로 8°(±0.16) 로 줄였다 */
+  skidLean: 0.06,
   skidRoll: 0.14,
-  skidLunge: -0.3,
-  skidCrouch: 0.02,
+  skidLunge: -0.15,
+  skidCrouch: 0.033,
   /** 절뚝(limp, 양 낫 잠김) — 걸음마다 몸이 좌우로 절룩이는 굴림 진폭(rad, 발이 축) */
   limpRoll: 0.05,
 } as const;
@@ -1106,6 +1111,24 @@ const BH_LEG_SKID_REAR = -0.26;
 const BH_LIMP_FRONT_MUL = 0.45;
 const BH_LIMP_REAR_MUL = 1.15;
 const BH_POSE_BLEND_K = 0.35; // 자세 표 보간 계수(프레임당) — 머리 내림·혼절이 서고 풀릴 때 구체와 머리가 함께 옮겨 간다
+const BH_ROLL_BLEND_K = 0.25; // 몸통 굴림(각·축 높이) 보간 계수(프레임당) — 미끄러짐·절뚝이 서고 풀릴 때
+
+/** 거수 몸통 굴림 한 프레임 — 굴림각(bhRoll)과 굴림 축 높이(bhRollPivot)를 같은 계수로 보간하고 torso.position.x 에 넣을 되밀기
+ *  sin(roll)·pivotY 를 돌려준다(Rz 가 (0, pivotY) 를 x = −pivotY·sin 으로 보내니 그만큼 되밀면 축이 그 높이에 온다). 축까지 보간하는 이유:
+ *  미끄러짐이 끝나는 프레임에 축만 어깨(≈2.5m)→발(0)로 즉시 떨어지면 굴림각은 아직 남아 있어 x 가 0.35m 에서 0 으로 한 번에 튄다(B2-3 검토).
+ *  둘을 같은 비율로 풀면 x ∝ (1−k)^2n 으로 이어진다. k 0 이면 굳는다(빙결). syncEnemies 와 Behemoth.test 가 같은 함수를 쓴다 */
+export function stepBehemothRoll(
+  visual: { bhRoll?: number; bhRollPivot?: number },
+  rollTarget: number,
+  pivotTarget: number,
+  k: number = BH_ROLL_BLEND_K,
+): number {
+  const roll = visual.bhRoll ?? 0;
+  const pivot = visual.bhRollPivot ?? 0;
+  visual.bhRoll = roll + (rollTarget - roll) * k;
+  visual.bhRollPivot = pivot + (pivotTarget - pivot) * k;
+  return Math.sin(visual.bhRoll) * visual.bhRollPivot;
+}
 
 /** 거수 리그 손잡이 — buildBehemothRig 가 만들고 poseBehemothRig 가 움직인다 */
 export interface BehemothRig {
@@ -4118,7 +4141,7 @@ export class Stage {
           lungeTarget = 0;
           crouchTarget = -def2.height * BEHEMOTH_TORSO.headDownCrouch;
         } else if (enemy.pose === 'skid') {
-          // 미끄러짐(완벽 회피) — 앞으로 밀리며 낮아지고 어깨 축으로 옆 8° 기운다(굴림은 아래 bhRoll, skidRoll). 다리는 poseBehemothRig 가 벌려 버틴다
+          // 미끄러짐(완벽 회피) — 앞으로 미끄러지며 살짝 뒤로 젖혀 버티고 낮아진다, 어깨 축으로 옆 8° 기운다(굴림은 아래 stepBehemothRoll). 다리는 poseBehemothRig 가 벌려 버틴다
           leanTarget = BEHEMOTH_TORSO.skidLean;
           lungeTarget = BEHEMOTH_TORSO.skidLunge;
           crouchTarget = -def2.height * BEHEMOTH_TORSO.skidCrouch;
@@ -4314,19 +4337,18 @@ export class Stage {
           const cur = visual.bhBlend ?? 0;
           visual.bhBlend = cur < 0.01 ? 0 : cur * (1 - BH_POSE_BLEND_K);
         }
-        // 몸통 굴림 — 미끄러짐은 옆으로(어깨 높이가 축: 발이 미끄러지고 관절·눈 메시는 표 자리에 남는다), 절뚝은 걸음 위상에 맞춰
-        // 좌우로 절룩(발이 축). 감전 떨림(위에서 rotation.z 를 쓴다)이 없을 때만
+        // 몸통 굴림 — 미끄러짐은 옆으로(어깨 높이가 축: 발이 미끄러진다. 눈 메시는 목 IK 로 표 자리, 관절 메시는 표에서 ≤ 0.2m — BEHEMOTH_TORSO 주석),
+        // 절뚝은 걸음 위상에 맞춰 좌우로 절룩(발이 축). 각과 축 높이를 같은 계수로 보간한다(stepBehemothRoll — 축만 즉시 바꾸면 x 가 튄다).
+        // 감전 떨림(위에서 rotation.z 를 쓴다)이 없을 때만 rotation.z 에 넣는다
         const skidding = enemy.pose === 'skid';
         const rollTarget = skidding
           ? BEHEMOTH_TORSO.skidRoll
           : enemy.limping
             ? Math.sin(visual.legPhase ?? 0) * BEHEMOTH_TORSO.limpRoll * (visual.legBlend ?? 0)
             : 0;
-        visual.bhRoll = (visual.bhRoll ?? 0) + (rollTarget - (visual.bhRoll ?? 0)) * (solidIce ? 0 : 0.25);
-        if (!shocked) visual.torso.rotation.z = visual.bhRoll;
-        // 굴림 축을 어깨 높이로 올린다 — Rz 가 (0, y) 를 x = −y·sin 으로 보내니 그만큼 되민다. 축이 발이면 0
-        const rollPivotY = skidding ? (def2.visual?.joints.pos[1] ?? 0) * def2.height : 0;
-        visual.torso.position.x = Math.sin(visual.bhRoll) * rollPivotY;
+        const rollPivotTarget = skidding ? (def2.visual?.joints.pos[1] ?? 0) * def2.height : 0;
+        visual.torso.position.x = stepBehemothRoll(visual, rollTarget, rollPivotTarget, solidIce ? 0 : BH_ROLL_BLEND_K);
+        if (!shocked) visual.torso.rotation.z = visual.bhRoll ?? 0;
         poseBehemothRig(visual.behemoth, {
           nowMs: now,
           legPhase: visual.legPhase ?? 0,

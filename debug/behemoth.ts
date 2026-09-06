@@ -8,7 +8,8 @@
 // head_down(B2-2 — 완벽 패링에 낫이 바닥에 박혀 머리가 0.9m 로 내려온 자세: 눈 청록 맥동·관절 백황, 플레이어 눈높이 정면) /
 // head_down-side(같은 자세 측면 — 다리가 바닥에 남고 낫끝이 바닥에 꽂히는지) / head_down-cooldown(혼절 쿨다운 — 눈 어두운 청록, 맥동 없음) /
 // stunned(혼절 — 몸 스태거 금색, 머리 처짐·휘청, 눈 닫힘 = 처형 창) /
-// skid(B2-3 — 돌격 완벽 회피에 미끄러짐: 어깨 높이를 축으로 옆 8° 굴림(발이 미끄러짐)·앞으로 밀림, 두 낫 매달림, 다리 벌려 버팀, 양 관절 백황 40틱) /
+// skid(B2-3 — 돌격 완벽 회피에 미끄러짐: 어깨 높이를 축으로 옆 8° 굴림(발이 미끄러짐)·앞으로 미끄러지며 살짝 뒤로 젖혀 버팀, 두 낫 매달림, 다리 벌려 버팀,
+//   양 관절 백황 40틱. 눈은 목 IK 로 표 자리(≈0.05m), 관절 메시는 굴림이 어깨를 위아래로 갈라 표 구체에서 ≤ 0.2m — 안내문의 어긋남 수치) /
 // rupture(B2-3 — 오른 관절 파열: 구체 어둡게(0x7a1f3a), 오른낫이 축 늘어져 끝이 바닥을 긁는다, 왼낫은 대기 — 오른 옆에서) /
 // limp(B2-3 — 양 낫 잠김 절뚝: 두 낫이 다 끌리고 앞다리 걸음이 짧다, 측면 걸음).
 // &pose=charge|head_down|… 을 붙이면 약점 구체와 머리 메시(목 IK)를 그 자세의 poseOffsets 표 자리에 놓는다
@@ -187,10 +188,10 @@ if (view === 'side') {
     camera.lookAt(0, 1.1, -1.0);
   }
 } else if (view === 'skid') {
-  // 미끄러짐(B2-3) — 완벽 회피 직후. 몸통 옆 8°(rotation.z = skidRoll, 어깨 축) + 앞으로 밀림·낮춤, 로직 자세 'skid'(표: 눈 2.2·관절 2.4), 양 관절 열림
+  // 미끄러짐(B2-3) — 완벽 회피 직후. 몸통 옆 8°(rotation.z = skidRoll, 어깨 축) + 앞으로 미끄러짐·살짝 뒤로 젖힘·낮춤, 로직 자세 'skid'(표: 눈 2.2·관절 2.4), 양 관절 열림
   torso.rotation.x = BEHEMOTH_TORSO.skidLean;
   torso.rotation.z = BEHEMOTH_TORSO.skidRoll;
-  torso.position.x = Math.sin(BEHEMOTH_TORSO.skidRoll) * def.visual!.joints.pos[1] * def.height; // 굴림 축 = 어깨 높이(syncEnemies 와 같다)
+  torso.position.x = Math.sin(BEHEMOTH_TORSO.skidRoll) * def.visual!.joints.pos[1] * def.height; // 굴림 축 = 어깨 높이(syncEnemies stepBehemothRoll 의 정착값)
   torso.position.z = BEHEMOTH_TORSO.skidLunge;
   torso.position.y = -def.height * BEHEMOTH_TORSO.skidCrouch;
   poseBehemothRig(rig, { ...base, pose: 'skid' });
@@ -239,13 +240,17 @@ const eye = rig.weakPoints['eye']!.position;
 const jr = rig.weakPoints['joint_r']!.position;
 // 머리 메시 위의 눈 자리(anchor) — 구체(판정 표)와 얼마나 어긋나는지. 대기 자세에선 0, 돌격 예고·들이받기에선 벌어진다(B2-2 가 메시를 표에 맞춘다)
 const eyeMesh = behemothAnchorPos(rig, 'eye', new THREE.Vector3());
+// 어깨 관절 메시(위팔 피벗) 자리 — 구체(표)와의 어긋남. 대기 0, 미끄러짐은 굴림이 어깨를 갈라 ≤ 0.2m(Behemoth.test), 돌격 예고·머리 내림은 표가 메시를 안 따라가 더 크다
+const jrMesh = behemothAnchorPos(rig, 'joint_r', new THREE.Vector3());
+const jlMesh = behemothAnchorPos(rig, 'joint_l', new THREE.Vector3());
+const jl = rig.weakPoints['joint_l']!.position;
 const f2 = (v: THREE.Vector3): string => `${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}`;
 note =
   `view=${view}${logicPose ? ` pose=${logicPose}` : ''}\n` +
   `blade_${tipSide === 1 ? 'r' : 'l'} tip (x,y,z) = ${f2(tip)}  → 앞 거리 ${(-tip.z).toFixed(2)}m (판정 ${(view.startsWith('strike') ? reach : view.startsWith('windup') ? pullback : NaN).toFixed(2)})\n` +
   `꼭대기 ${bounds.max.y.toFixed(2)}m (낫 상한 3.8 / 천장 4.0)   바닥 ${bounds.min.y.toFixed(2)}m (0 아래 금지)\n` +
   `wp_eye(판정 표) = ${f2(eye)}   머리 메시 눈 자리 = ${f2(eyeMesh)}   어긋남 ${eye.distanceTo(eyeMesh).toFixed(2)}m\n` +
-  `wp_joint_r = ${f2(jr)}`;
+  `wp_joint_r(판정 표) = ${f2(jr)}   어깨 관절 메시 = ${f2(jrMesh)}   어긋남 r ${jr.distanceTo(jrMesh).toFixed(2)}m / l ${jl.distanceTo(jlMesh).toFixed(2)}m`;
 document.getElementById('info')!.textContent = note;
 document.title = note.replace(/\n/g, ' | ');
 

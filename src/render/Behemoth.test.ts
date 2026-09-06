@@ -14,6 +14,7 @@ import {
   buildBehemothRig,
   poseBehemothRig,
   solveNeckToEye,
+  stepBehemothRoll,
   styleBehemothWeakPoints,
   type BehemothPose,
 } from './Stage';
@@ -24,8 +25,9 @@ const pullback = reach * balance.parrySpace.pullbackRatio;
 const T = BEHEMOTH_TORSO;
 const J = ENEMY_LEAN_JITTER;
 
-/** 실제 리그를 지어 Stage 와 같은 기울임·전진·낮춤·(굴림)·자세를 넣고 잰다 */
-function measureRig(lean: number, lunge: number, crouch: number, pose: Partial<BehemothPose>, roll = 0) {
+/** 실제 리그를 지어 Stage 와 같은 기울임·전진·낮춤·(굴림·굴림 축 높이)·자세를 넣고 잰다.
+ *  rollPivotY 는 syncEnemies(stepBehemothRoll)가 torso.position.x 에 넣는 되밀기 sin(roll)·pivotY 의 정착값 — 미끄러짐은 어깨 높이 */
+function measureRig(lean: number, lunge: number, crouch: number, pose: Partial<BehemothPose>, roll = 0, rollPivotY = 0) {
   const base: BehemothPose = {
     nowMs: 0, legPhase: 0, legBlend: 0, bladeSide: 1, bladeWindup: 0, bladeStriking: false,
     strikeProgress: 0, tipDist: pullback, recoiled: false, chargeCoil: 0, charging: false,
@@ -40,6 +42,7 @@ function measureRig(lean: number, lunge: number, crouch: number, pose: Partial<B
   torso.rotation.z = roll;
   torso.position.z = lunge;
   torso.position.y = crouch;
+  torso.position.x = Math.sin(roll) * rollPivotY;
   poseBehemothRig(rig, { ...base, ...pose });
   group.updateMatrixWorld(true);
   const box = new THREE.Box3();
@@ -54,7 +57,8 @@ function measureRig(lean: number, lunge: number, crouch: number, pose: Partial<B
 const HEAD_DOWN = { lean: T.headDownLean, lunge: 0, crouch: -def.height * T.headDownCrouch };
 const CHARGE = { lean: T.chargeLean, lunge: 0, crouch: -def.height * T.chargeCrouch };
 const STUNNED = { lean: T.stunnedLean, lunge: 0, crouch: -def.height * T.stunnedCrouch };
-const SKID = { lean: T.skidLean, lunge: T.skidLunge, crouch: -def.height * T.skidCrouch, roll: T.skidRoll };
+const SKID_PIVOT = def.visual!.joints.pos[1] * def.height; // 미끄러짐 굴림 축 = 어깨 높이(syncEnemies 와 같다)
+const SKID = { lean: T.skidLean, lunge: T.skidLunge, crouch: -def.height * T.skidCrouch, roll: T.skidRoll, pivot: SKID_PIVOT };
 
 describe('약점 구체 = 판정 구체', () => {
   it('구체는 def.weakPoints 마다 하나(wp_<id>), group 소속, 반지름 = wp.radius, 자리 = normal 표', () => {
@@ -153,6 +157,76 @@ describe('약점 구체 = 판정 구체', () => {
     expect(Math.abs(ik.pitch)).toBeLessThan(0.01);
   });
 
+  it('미끄러짐(B2-3) — 어깨 축 굴림·전진·젖힘·낮춤을 넣어도 눈은 표 자리(≤ 0.06m), 완벽 회피 보상 표적인 양 어깨 관절 메시–구체 어긋남 ≤ 0.20m(움찔 최악은 구체 반지름 0.30 안), 진행 중간도', () => {
+    // 표(±1.15, 2.4, −0.8)가 정본이고 굴림이 오른/왼 어깨를 ±1.15·sin(roll) 갈라 놓으니 0 은 못 만든다 — BEHEMOTH_TORSO 주석의 수치를 여기서 못박는다.
+    // skidLunge −0.3 이던 때는 어깨가 z −1.31 로 밀려 0.52m 였다(검토)
+    const jointR = def.weakPoints!.find((wp) => wp.id === 'joint_r')!;
+    const cases: { name: string; lean: number; lunge: number; crouch: number; roll: number; pose: Partial<BehemothPose>; jointTol: number; eyeTol?: number }[] = [
+      { name: 'skid roll+', ...SKID, pose: { pose: 'skid' }, jointTol: 0.2, eyeTol: 0.06 },
+      { name: 'skid roll-', ...SKID, roll: -SKID.roll, pose: { pose: 'skid' }, jointTol: 0.2, eyeTol: 0.06 },
+      // 진행 중간 — 굴림 축이 아직 어깨까지 오지 않아(stepBehemothRoll 이 축도 같은 비율로 올린다) 눈 x 가 (축 − 눈 높이)·sin 만큼 잠깐 밀린다(≈0.07, 몇 프레임)
+      { name: 'skid 0.5', lean: SKID.lean * 0.5, lunge: SKID.lunge * 0.5, crouch: SKID.crouch * 0.5, roll: SKID.roll * 0.5, pose: { pose: 'skid', poseBlend: 0.5 }, jointTol: 0.2, eyeTol: 0.08 },
+      { name: 'skid+flinch', ...SKID, lean: SKID.lean + T.flinchLean, pose: { pose: 'skid', nowMs: 100 }, jointTol: jointR.radius },
+    ];
+    for (const c of cases) {
+      // 진행 중간은 굴림 축 되밀기도 stepBehemothRoll 이 같은 비율로 — 정착값의 절반 근처
+      const pivot = c.name === 'skid 0.5' ? SKID.pivot * 0.5 : SKID.pivot;
+      const { rig } = measureRig(c.lean, c.lunge, c.crouch, c.pose, c.roll, pivot);
+      for (const id of ['joint_r', 'joint_l']) {
+        const d = behemothAnchorPos(rig, id, new THREE.Vector3()).distanceTo(rig.weakPoints[id]!.position);
+        expect(d, `${c.name} ${id} 어긋남 ${d.toFixed(3)}`).toBeLessThanOrEqual(c.jointTol);
+      }
+      if (c.eyeTol !== undefined) {
+        const d = behemothAnchorPos(rig, 'eye', new THREE.Vector3()).distanceTo(rig.weakPoints['eye']!.position);
+        expect(d, `${c.name} 눈 어긋남 ${d.toFixed(3)}`).toBeLessThanOrEqual(c.eyeTol);
+      }
+      // 구체는 표 자리 그대로(굴림·전진에 딸려 가지 않는다)
+      const table = weakPointOffset(def, jointR, 'skid');
+      if (c.name !== 'skid 0.5') expect(rig.weakPoints['joint_r']!.position.z).toBeCloseTo(table.z, 6);
+    }
+    // 어깨 관절의 앞뒤(z)는 표에 맞춘다 — 젖힘(+lean)이 어깨를 뒤로 2.5·sin 만큼, 전진(lunge)이 앞으로 그만큼
+    const { rig } = measureRig(SKID.lean, SKID.lunge, SKID.crouch, { pose: 'skid' }, SKID.roll, SKID.pivot);
+    for (const id of ['joint_r', 'joint_l']) {
+      expect(Math.abs(behemothAnchorPos(rig, id, new THREE.Vector3()).z - weakPointOffset(def, jointR, 'skid').z), id).toBeLessThan(0.03);
+    }
+  });
+
+  it('굴림 보간(stepBehemothRoll, B2-3 검토) — 미끄러짐이 끝나 굴림 축이 어깨→발로 바뀌어도 torso.position.x 는 프레임마다 절반 이상 남기며 단조 감소(한 프레임에 0.35 → 0 으로 튀지 않음), 정착값은 sin(skidRoll)·어깨 높이', () => {
+    const settled = Math.sin(T.skidRoll) * SKID_PIVOT; // ≈ 0.35
+    const v: { bhRoll?: number; bhRollPivot?: number } = {};
+    // 서는 동안 — 단조 증가, 넘지 않고 정착
+    let prev = 0;
+    for (let i = 0; i < 90; i++) {
+      const x = stepBehemothRoll(v, T.skidRoll, SKID_PIVOT);
+      expect(x).toBeGreaterThanOrEqual(prev - 1e-9);
+      expect(x).toBeLessThanOrEqual(settled + 1e-9);
+      prev = x;
+    }
+    expect(prev).toBeCloseTo(settled, 3);
+    expect(v.bhRoll).toBeCloseTo(T.skidRoll, 6);
+    expect(v.bhRollPivot).toBeCloseTo(SKID_PIVOT, 3);
+    // 끝난 뒤 — 각과 축이 같은 계수로 풀려 x ∝ (1−k)^2n: 프레임마다 절반 이상 남고(옛 방식은 첫 프레임에 0), 20 프레임 안에 0.01 아래
+    let frames = 0;
+    for (let i = 0; i < 60; i++) {
+      const x = stepBehemothRoll(v, 0, 0);
+      expect(x, `종료 후 ${i}번째 프레임 ${x.toFixed(3)} (이전 ${prev.toFixed(3)})`).toBeGreaterThanOrEqual(prev * 0.5 - 1e-9);
+      expect(x).toBeLessThanOrEqual(prev + 1e-9);
+      prev = x;
+      if (prev >= 0.01) frames++;
+    }
+    expect(frames).toBeGreaterThanOrEqual(3);
+    expect(frames).toBeLessThan(20);
+    expect(prev).toBeLessThan(1e-3);
+    // 대조 — 축만 즉시 0 으로 떨어뜨리면(옛 syncEnemies) 첫 프레임에 0.35 → 0
+    const oldRoll = T.skidRoll + (0 - T.skidRoll) * 0.25;
+    expect(Math.abs(Math.sin(oldRoll) * 0 - settled)).toBeGreaterThan(0.3);
+    // 빙결(k 0) — 굳는다. 절뚝(축 0, 각은 걸음 사인)은 x 0
+    const frozen = { bhRoll: 0.1, bhRollPivot: 1 };
+    expect(stepBehemothRoll(frozen, 0, 0, 0)).toBeCloseTo(Math.sin(0.1), 9);
+    const limp = { bhRoll: 0, bhRollPivot: 0 };
+    for (let i = 0; i < 10; i++) expect(stepBehemothRoll(limp, Math.sin(i / 3) * T.limpRoll, 0)).toBe(0);
+  });
+
   it('표시 — 열림: 발광(id 색)+맥동 ±12% / 쿨다운(dim): 어두운 청록·맥동 없음 / 파열: 어둡게·발광 없음 / 명중 직후: 더 밝게. 텔레그래프 3색·스태거 금색은 쓰지 않는다', () => {
     const { rig } = measureRig(0, 0, 0, {});
     const forbidden = new Set([0x4a9eff, 0xff3b3b, 0xa855f7, 0xcc9922, 0xffb648]);
@@ -200,7 +274,7 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
   const FLOOR = -0.08; // 기운 원기둥 발의 테두리(r 0.22)가 살짝 잠기는 만큼만 허용 — 배치 1 메모 (c) 돌격 −0.46m 는 안 된다
   // 떨림은 sin(nowMs/12)·sin(nowMs/11) 진폭 — 봉우리 근처를 몇 점 찍는다
   const peaks = [0, 12 * Math.PI * 0.5, 11 * Math.PI * 0.5, 100, 1234];
-  const cases: { name: string; lean: number; lunge: number; crouch: number; pose: Partial<BehemothPose>; roll?: number }[] = [
+  const cases: { name: string; lean: number; lunge: number; crouch: number; pose: Partial<BehemothPose>; roll?: number; pivot?: number }[] = [
     { name: 'rest', lean: 0, lunge: 0, crouch: 0, pose: {} },
     { name: 'rest+flinch', lean: T.flinchLean, lunge: 0, crouch: 0, pose: {} },
     { name: 'walk', lean: 0, lunge: 0, crouch: 0, pose: { legPhase: Math.PI / 2, legBlend: 1 } },
@@ -248,10 +322,10 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
     { name: 'head_down 0.5', lean: T.headDownLean * 0.5, lunge: 0, crouch: HEAD_DOWN.crouch * 0.5, pose: { pose: 'head_down', poseBlend: 0.5 } },
     { name: 'head_down+flinch', lean: T.headDownLean + T.flinchLean, lunge: 0, crouch: HEAD_DOWN.crouch, pose: { pose: 'head_down' } },
     ...peaks.map((nowMs) => ({ name: `stunned@${nowMs.toFixed(0)}`, lean: T.stunnedLean + 0.02, lunge: 0, crouch: STUNNED.crouch, pose: { pose: 'stunned', nowMs } })),
-    // B2-3 미끄러짐(어깨 축 옆 8° 굴림 + 앞으로 밀림, 두 낫 매달림, 다리 벌려 버팀) — 굴림 양쪽·움찔·진행 중간
-    ...peaks.map((nowMs) => ({ name: `skid@${nowMs.toFixed(0)}`, lean: SKID.lean + T.flinchLean, lunge: SKID.lunge, crouch: SKID.crouch, roll: SKID.roll, pose: { pose: 'skid', nowMs } })),
+    // B2-3 미끄러짐(어깨 축 옆 8° 굴림 + 앞으로 미끄러지며 살짝 뒤로 젖힘, 두 낫 매달림, 다리 벌려 버팀) — 굴림 양쪽·움찔·진행 중간
+    ...peaks.map((nowMs) => ({ name: `skid@${nowMs.toFixed(0)}`, lean: SKID.lean + T.flinchLean, lunge: SKID.lunge, crouch: SKID.crouch, roll: SKID.roll, pivot: SKID.pivot, pose: { pose: 'skid', nowMs } })),
     { name: 'skid roll-', ...SKID, roll: -SKID.roll, pose: { pose: 'skid' } },
-    { name: 'skid 0.5', lean: SKID.lean * 0.5, lunge: SKID.lunge * 0.5, crouch: SKID.crouch * 0.5, roll: SKID.roll * 0.5, pose: { pose: 'skid', poseBlend: 0.5 } },
+    { name: 'skid 0.5', lean: SKID.lean * 0.5, lunge: SKID.lunge * 0.5, crouch: SKID.crouch * 0.5, roll: SKID.roll * 0.5, pivot: SKID.pivot * 0.5, pose: { pose: 'skid', poseBlend: 0.5 } },
     // B2-3 잠긴 낫(관절 파열) — 오른/왼/양쪽, 대기·걸음·튕김(비틀거림)·예고(남은 낫)·돌격 웅크림에서 끌리는 낫끝이 바닥 위
     { name: 'locked r', lean: 0, lunge: 0, crouch: 0, pose: { bladeLocked: { r: true, l: false } } },
     { name: 'locked l walk', lean: 0, lunge: 0, crouch: 0, pose: { bladeLocked: { r: false, l: true }, legPhase: Math.PI / 2, legBlend: 1 } },
@@ -268,14 +342,14 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
 
   it('어깨→위팔→낫을 실제로 지어 모든 자세(떨림·움찔·튕김 흔들림을 더한 최악)에서 꼭대기가 3.8m 아래', () => {
     for (const c of cases) {
-      const { box } = measureRig(c.lean, c.lunge, c.crouch, c.pose, c.roll ?? 0);
+      const { box } = measureRig(c.lean, c.lunge, c.crouch, c.pose, c.roll ?? 0, c.pivot ?? 0);
       expect(box.max.y, `${c.name} 꼭대기 ${box.max.y.toFixed(2)}m`).toBeLessThanOrEqual(CEIL);
     }
   });
 
   it('바닥(B2-2, 배치 1 메모 c) — 모든 자세에서 발·낫끝이 바닥을 뚫지 않는다: 기울임·낮춤만큼 다리를 늘이고 접어 발이 바닥에 남는다', () => {
     for (const c of cases) {
-      const { box, rig } = measureRig(c.lean, c.lunge, c.crouch, c.pose, c.roll ?? 0);
+      const { box, rig } = measureRig(c.lean, c.lunge, c.crouch, c.pose, c.roll ?? 0, c.pivot ?? 0);
       expect(box.min.y, `${c.name} 바닥 ${box.min.y.toFixed(2)}m`).toBeGreaterThanOrEqual(FLOOR);
       // 발끝(다리 원기둥 밑면 중심)이 바닥 근처
       for (const hip of rig.legs) {
