@@ -13,10 +13,14 @@
 // 돌격 완벽 회피(impact 의 reaches && iframeTicks > 0) → charge_dodged + 미끄러짐(pose skid) + 양 관절 노출.
 // 돌격 질주 중 플레이어 ≤ blindRangeM 이면 눈 노출(노출 타이머) → 누적 blindThreshold → 눈멂(blind: 목표 무시·직진 + 오버런), 질주가 지형에 막히면
 // (chargeStuckTicks) 부딛힌 셀 문자로 전도(P·C → head_down toppleTicks, pillar_hit / 균열벽 개방) 또는 헛돌격(벽·문 → wallWhiffRecoverTicks) — B2-5.
-// 포즈 타이머(poseTicks, head_down·skid)는 오버라이드 순서 넉백 > brace > attackFreeze > 포즈 > 돌격 캔슬 > notice (기획서 §9.1).
+// 포즈 타이머(poseTicks, head_down·skid·roar)는 오버라이드 순서 넉백 > brace > attackFreeze > 포즈 > 돌격 캔슬 > notice (기획서 §9.1).
+// 페이즈(tickPhase, B2-6, 기획서 §8): healthBarState.index 가 enemy.phase 보다 낮아진 틱에 phase_shift(beginPhaseShift — recover phaseShiftTicks + pose roar,
+// 진행 중 공격 취소, 약점 전부 닫힘(molting), 갑각 재생 = 관절 hp 회복·ruptured 삭제·낫 잠김·절뚝 해제·공격 쿨다운 × phaseShiftCooldownMul, 무적 아님) → boss_phase.
+// 혼절·포즈 타이머·눈멂·넉백 중이면 phaseTarget 에 큐잉하고 풀리는 틱에 한 번 — 두 경계를 넘었으면 P2 를 건너 P3. 페이즈 표(phases[]) 의 speedMul·attackOverrides 는
+// moveSpeed·Entities.currentAttack/attackInPhase 가 읽고, unlock 은 slotUnlocked 가 가른다.
 
 import { balance } from '../core/Balance';
-import { attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, currentAttack, enemyDef, jointOfBlade, type BladeSide, type EnemyAttackDef } from '../core/Entities';
+import { attackInPhase, attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, currentAttack, enemyDef, healthBarState, jointOfBlade, resolvePhase, slotUnlocked, type BladeSide, type EnemyAttackDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { alertEnemy, alertNearbyAt, beginPose, breakCrackWalls, closeExposure, findWallNormal, noiseField, openExposure, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, setPlayerStatus, PLAYER_STATUS_CFG, type EnemyState, type World, damagePlayer } from '../core/World';
 
@@ -76,6 +80,7 @@ export function tick(world: World, dt: number): void {
       if (world.grappleEnemyId === enemy.id) releaseGrapple(world, enemy, false); // 죽으면 놓는다
       if (world.faceLeechId === enemy.id) world.faceLeechId = null; // 얼굴에서 흘러내린다
       handleSplit(world, enemy); // 슬라임 분열 — 어디서 어떻게 죽었든 여기서 한 번만 가른다
+      endPhaseOnDeath(world, enemy); // 페이즈 보스(거수) — 마지막 페이즈의 소요 시간을 한 번 알린다(boss_phase{phase 0})
       continue;
     }
     // 죽은 척인데 이미 깨어 있다 — 피격·폭발·함정이 idle→chase 로만 넘기고 feigning 을 안 지워
@@ -1440,16 +1445,119 @@ function ruptureJoint(world: World, enemy: EnemyState, def: ReturnType<typeof en
   });
 }
 
-/** 포즈 타이머가 다했다(head_down·skid 종료) — 자세로 열려 있던 약점(눈)을 닫고 추격으로 돌아간다. 기상 발구르기(P2+)는 B3-1 */
+/** 페이즈 전환을 미뤄야 하는 창(기획서 §8 큐잉) — 혼절(처형 창)·포즈 타이머(머리 내림·미끄러짐·전환 자체)·눈멂 질주·넉백(처형 넉백) 중.
+ *  플레이어의 처형·노출 창을 빼앗지 않는다. 그 밖(추격·예고·타격·경직)이면 즉시 전환하고 진행 중 공격은 취소된다 */
+function phaseShiftBlocked(enemy: EnemyState): boolean {
+  return enemy.ai === 'staggered' || (enemy.poseTicks ?? 0) > 0 || enemy.blind === true || (enemy.kbTicks ?? 0) > 0;
+}
+
+/** 페이즈 훅(B2-6, 기획서 §8) — 매 틱 healthBarState.index 를 enemy.phase(게임플레이 페이즈)와 비교한다. 낮아졌으면(칸이 비었으면) 목표 index 를
+ *  phaseTarget 에 두고, 막는 창이 아니면 그 틱에 beginPhaseShift. 창 안에서 두 경계를 넘으면 목표만 더 낮아져 한 번의 전환으로 P3 까지 간다.
+ *  페이즈 표가 없는 적(족장·어미 슬라임 — 체력 칸은 표시만)은 아무것도 하지 않는다. 잠든 보스는 깨어난 뒤부터(phaseSince 도 그때 찍는다) */
+function tickPhase(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  if (!def.phases || enemy.ai === 'idle') return;
+  if (enemy.phase === undefined) enemy.phase = healthBarState(def, def.health).index; // Spawner 를 안 거친 상태(옛 세이브)의 안전망
+  if (enemy.phaseSince === undefined) enemy.phaseSince = world.tick;
+  const idx = healthBarState(def, enemy.health).index;
+  if (idx < enemy.phase && idx < (enemy.phaseTarget ?? Infinity)) enemy.phaseTarget = idx;
+  if (enemy.phaseTarget === undefined || enemy.phaseTarget >= enemy.phase) {
+    enemy.phaseTarget = undefined;
+    return;
+  }
+  if (phaseShiftBlocked(enemy)) return;
+  beginPhaseShift(world, enemy, def, enemy.phaseTarget);
+}
+
+/** 페이즈 전환 = 갑각 재생(molt, 기획서 §5·§8) — recover phaseShiftTicks 동안 pose roar(머리 치켜듦·입 벌림)로 굳는다. 진행 중 공격 취소, 노출 전부 닫힘
+ *  (molting 동안 판정도 닫힘 — Entities.weakPointOpen), 관절 hp 회복 + ruptured 삭제(다시 0 이 되면 다시 파열) + 낫 잠김 해제(절뚝은 ⑧ 이 다음 틱 끈다),
+ *  남은 공격 쿨다운 × phaseShiftCooldownMul. 무적은 아니다(몸통 0.8× 는 들어간다). 질식·전도·눈멂은 건드리지 않는다(전도·눈멂은 막는 창이라 여기 올 일이 없다).
+ *  boss_phase{phase, from, skipped, fromTicks} + boss_status{kind 'molt', on} + (P3) plate_shed — 소리·문구·HUD 는 main, 균열 발광·판 탈락·홍채는 Stage */
+function beginPhaseShift(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>, target: number): void {
+  const wpCfg = balance.weakPoint;
+  const from = enemy.phase ?? target;
+  const before = resolvePhase(def, from);
+  const after = resolvePhase(def, target);
+  enemy.phase = target;
+  enemy.phaseTarget = undefined;
+  const fromTicks = world.tick - (enemy.phaseSince ?? world.tick);
+  enemy.phaseSince = world.tick;
+  // 진행 중 공격 취소 — 예고·타격·질주·연사 어느 것이든 여기서 끊긴다
+  endBlind(world, enemy);
+  enemy.attackMode = 'melee';
+  enemy.volleyLeft = 0;
+  enemy.chargeHealthRef = undefined;
+  enemy.chargeStuck = 0;
+  enemy.wantsCharge = false;
+  enemy.wantsBash = false;
+  enemy.braceTicks = 0;
+  if (!def.flying) enemy.jumpY = 0;
+  // 약점 전부 닫힘 — 타이머 노출은 장부까지 닫고(exposure_closed), 자세 노출은 molting 이 판정을 막는다
+  if (enemy.exposure) for (const id of Object.keys(enemy.exposure)) closeExposure(world, enemy, id);
+  if (enemy.weakAccum) for (const id in enemy.weakAccum) enemy.weakAccum[id] = 0;
+  // 갑각 재생 — 낫 짝이 있는 관절만 hp 회복 + 파열 표식 삭제(분출공은 질식이 따로 관리, B3-2). 잠긴 낫은 풀린다(rupture off)
+  for (const wp of def.weakPoints ?? []) {
+    if (wp.hp === undefined || bladeOfJoint(def, wp.id) === undefined) continue;
+    if (enemy.weakHp) enemy.weakHp[wp.id] = wp.hp;
+    if (enemy.ruptured) delete enemy.ruptured[wp.id];
+  }
+  if (enemy.bladeLock) {
+    for (const blade of ['r', 'l'] as const) {
+      if (enemy.bladeLock[blade] === undefined) continue;
+      delete enemy.bladeLock[blade];
+      world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'rupture', id: jointOfBlade(def, blade), blade, on: false });
+    }
+  }
+  // 쿨다운 절반 — 공격 쿨다운만(혼절 쿨다운은 플레이어 쪽 박자)
+  const mul = wpCfg.phaseShiftCooldownMul;
+  if (enemy.chargeCooldown) enemy.chargeCooldown = Math.round(enemy.chargeCooldown * mul);
+  if (enemy.closeCooldown) enemy.closeCooldown = Math.round(enemy.closeCooldown * mul);
+  if (enemy.volleyCooldown) enemy.volleyCooldown = Math.round(enemy.volleyCooldown * mul);
+  if (enemy.summonCooldown) enemy.summonCooldown = Math.round(enemy.summonCooldown * mul);
+  // 포효 자세로 굳는다 — 포즈 타이머(head_down·skid 와 같은 문)
+  enemy.molting = true;
+  enemy.pose = 'roar';
+  enemy.poseTicks = Math.max(1, Math.round(wpCfg.phaseShiftTicks));
+  enemy.ai = 'recover';
+  enemy.timer = enemy.poseTicks;
+  enemy.recoiled = false;
+  enemy.whiffed = false;
+  enemy.strikeProgress = 0;
+  world.events.emit('boss_phase', {
+    enemyId: enemy.id, enemyType: enemy.type, phase: target, from, skipped: from - target > 1, fromTicks, tick: world.tick,
+    name: after?.name, shiftText: after?.shiftText, x: enemy.x, z: enemy.z,
+  });
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'molt', on: true, ticks: enemy.poseTicks, phase: target, from });
+  // 등갑판 탈락(P3) — 남은 판이 골드 없이 튕겨 나간다(파편은 Stage). 판 hp 풀(B3-3)이 생기면 남은 장수를 거기서 읽는다
+  if (after?.shedPlates && !before?.shedPlates) {
+    world.events.emit('plate_shed', { enemyId: enemy.id, enemyType: enemy.type, count: def.visual?.plates.z.length ?? 0, x: enemy.x, z: enemy.z });
+  }
+}
+
+/** 페이즈 보스가 죽었다 — 마지막 페이즈의 소요 시간을 boss_phase{phase 0, from, fromTicks} 로 한 번 알린다(계측: 페이즈별 시간). 두 번 내지 않는다 */
+function endPhaseOnDeath(world: World, enemy: EnemyState): void {
+  if (enemy.phase === undefined || enemy.phaseSince === undefined) return;
+  const fromTicks = world.tick - enemy.phaseSince;
+  enemy.phaseSince = undefined;
+  world.events.emit('boss_phase', {
+    enemyId: enemy.id, enemyType: enemy.type, phase: 0, from: enemy.phase, skipped: false, fromTicks, tick: world.tick, death: true, x: enemy.x, z: enemy.z,
+  });
+}
+
+/** 포즈 타이머가 다했다(head_down·skid·roar 종료) — 자세로 열려 있던 약점(눈)을 닫고 추격으로 돌아간다. 페이즈 전환(molting)이었으면 molt off.
+ *  기상 발구르기(P2+)는 B3-1 */
 function endPose(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
   const pose = enemy.pose;
+  const molt = enemy.molting === true;
   enemy.poseTicks = 0;
   enemy.pose = undefined;
+  enemy.molting = false;
   if (pose !== undefined) {
-    for (const wp of def.weakPoints ?? []) {
-      if (wp.exposedStates?.includes(pose)) closeExposure(world, enemy, wp.id);
+    if (!molt) {
+      for (const wp of def.weakPoints ?? []) {
+        if (wp.exposedStates?.includes(pose)) closeExposure(world, enemy, wp.id);
+      }
     }
-    world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: pose, on: false });
+    world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: molt ? 'molt' : pose, on: false });
   }
   enemy.ai = 'chase';
   enemy.timer = 0;
@@ -1467,6 +1575,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
 
   // 약점 보스 장부 — 노출·혼절·자세 비추기. 넉백·경직보다 먼저(노출 창은 플레이어의 시간이다). 혼절로 넘어간 틱은 여기서 끝
   if (tickWeakPointStatus(world, enemy, def)) return;
+  // 페이즈(거수, B2-6) — 칸이 비었으면 전환(또는 큐잉). 전환 틱은 아래 포즈 타이머(roar)가 이어받는다
+  tickPhase(world, enemy, def);
 
   // ── 거머리 수직 구간 — 낙하·재상승은 일반 AI 를 덮는다 ──
   const lurk = def.ceilingLurk;
@@ -1793,7 +1903,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         }
         // 들이받기(closeAttack, 거수) — 코앞(maxRange)에 붙은 플레이어는 낫보다 먼저 머리로 밀어낸다.
         // 배 밑에 눌러앉는 플레이 방지. 쿨다운이 돌고 있으면 낫으로 (기획서 §9.2 3번). 슬롯이 없는 적은 옛 경로
-        const close = def.closeAttack;
+        const close = def.closeAttack && attackInPhase(def, enemy, 'close', def.closeAttack);
         if (close && dist <= (close.maxRange ?? def.attackRange) && (enemy.closeCooldown ?? 0) <= 0) {
           enemy.attackMode = 'close';
           enemy.closeCooldown = close.cooldownTicks ?? 0;
@@ -1843,7 +1953,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       }
       // 돌격 — 중거리(minRange~maxRange)에 들어오면 달려들며 내리찍는다.
       // maxRange 가 있는 돌격만 거리로 발동한다 (창병처럼 wantsCharge 로 쓰는 쪽과 구분)
-      const ch = def.chargeAttack;
+      const ch = def.chargeAttack && attackInPhase(def, enemy, 'charge', def.chargeAttack); // 페이즈 쿨다운(P2 360 / P3 300)·피해
       if (
         ch?.maxRange !== undefined &&
         (enemy.chargeCooldown ?? 0) <= 0 &&
@@ -1864,6 +1974,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       // 화살 세례 — 큰 기술이라 쿨다운이 돌고, 붙어 있으면 쓰지 않는다
       if (
         def.volleyAttack &&
+        slotUnlocked(def, enemy, 'volley') && // 페이즈 해금(거수 P2 갑각 떨기, B3-2) — 표가 없는 족장은 늘 열려 있다
         (enemy.volleyCooldown ?? 0) <= 0 &&
         dist >= (def.volleyAttack.minRange ?? 0) &&
         world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
@@ -2592,9 +2703,9 @@ function slowFactor(enemy: EnemyState): number {
   return (enemy.slowTicks ?? 0) > 0 ? (enemy.slowMul ?? 1) : 1;
 }
 
-/** 이동 속도 — 둔화 배율을 곱한다 (공격 리듬은 그대로다). 절뚝(거수 양 낫 잠김)이면 limp.speedMul */
+/** 이동 속도 — 둔화 배율을 곱한다 (공격 리듬은 그대로다). 절뚝(거수 양 낫 잠김)이면 limp.speedMul, 페이즈 표의 speedMul(P3 ×1.2 — 걷기만, 돌격 속도는 그대로) */
 function moveSpeed(enemy: EnemyState, def: ReturnType<typeof enemyDef>): number {
-  return def.speed * slowFactor(enemy) * frenzyMul(enemy, def) * limpMul(enemy);
+  return def.speed * slowFactor(enemy) * frenzyMul(enemy, def) * limpMul(enemy) * (resolvePhase(def, enemy.phase)?.speedMul ?? 1);
 }
 
 /** 절뚝 이속 배율 — 양 낫 잠김이면 balance.weakPoint.limp.speedMul, 아니면 1 */

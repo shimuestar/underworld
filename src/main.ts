@@ -46,7 +46,7 @@ import * as Door from './systems/Door';
 import * as Lever from './systems/Lever';
 import * as Lantern from './systems/Lantern';
 import * as Loot from './systems/Loot';
-import { enemyDef, healthBarState } from './core/Entities';
+import { enemyDef, healthBarState, resolvePhase } from './core/Entities';
 import { ShopUI } from './render/ShopUI';
 import { LootUI } from './render/LootUI';
 import { InventoryUI, quickslotView } from './render/InventoryUI';
@@ -545,6 +545,8 @@ for (const name of [
   'weak_point_broken',
   'exposure_closed',
   'boss_status',
+  'boss_phase',
+  'plate_shed',
   'charge_dodged',
   'pillar_hit',
   'numb_arm_applied',
@@ -3006,6 +3008,23 @@ events.on('boss_status', (payload) => {
     showReaction('두 낫이 다 늘어졌다 — 거수가 절뚝인다', 1800);
   }
 });
+// 페이즈 전환(거수 B2-6, 기획서 §8) — 포효 소리 + 카메라 킥 + 진동 + 전환 문구(phases[].shiftText: "갑각이 갈라진다" / "거수가 광란한다").
+// 균열 발광·분출공 점등·등갑판 탈락·붉은 홍채는 Stage 가 enemy.phase 로 매 프레임 그린다. phase 0 은 사망 신호(계측 전용) — 연출 없음
+events.on('boss_phase', (payload) => {
+  const ph = payload as { enemyId: number; enemyType: string; phase: number; from: number; name?: string; shiftText?: string; x: number; z: number };
+  if (ph.phase <= 0) return;
+  audio.play('boss_roar', panAt(ph.x, ph.z));
+  stage.triggerCameraKick(0.6, 420);
+  padRumble('roar');
+  const bossName = enemyDef(ph.enemyType).name ?? '보스';
+  showReaction(ph.shiftText ? `${ph.shiftText} — ${bossName}${ph.name ? ` · ${ph.name}` : ''}` : `${bossName} — ${ph.name ?? ''}`, 2600);
+});
+// 등갑판 탈락(P3 진입) — 남은 판이 파편으로 튕겨 나간다(골드 없음). 판 숨김은 Stage 가 페이즈 표로
+events.on('plate_shed', (payload) => {
+  const d = payload as { enemyId: number; enemyType: string; x: number; z: number };
+  audio.play('heavy_hit', panAt(d.x, d.z));
+  stage.shedBehemothPlates(d.enemyId, d.enemyType);
+});
 // 돌격 완벽 회피(무적 8틱 안 접촉) — 미끄러지는 소리 + 안내. 관절 노출 소리(joint_open)는 boss_status expose 가 따로 낸다
 events.on('charge_dodged', (payload) => {
   const d = payload as { x: number; z: number };
@@ -4294,7 +4313,9 @@ function render(alpha: number): void {
     // 패링 카운터가 있는 보스(족장)만 스트릭을 보여 준다 — 어미 슬라임은 패링이 없다
     const streak =
       def.parriesToStagger !== undefined ? `  [패링 ${boss.parryStreak ?? 0}/${def.parriesToStagger}]` : '';
-    bossLine = `${def.name ?? '보스'}${stage2} ${bar} ${Math.max(0, Math.round(boss.health))}/${def.health}${streak}\n`;
+    // 페이즈명(거수, B2-6 — "낫뿔 거수 — 오염 갑각"): 게임플레이 페이즈(enemy.phase)를 따른다 — 칸이 비어도 전환(포효)까지는 이전 이름
+    const phaseName = resolvePhase(def, boss.phase)?.name;
+    bossLine = `${def.name ?? '보스'}${phaseName ? ` — ${phaseName}` : ''}${stage2} ${bar} ${Math.max(0, Math.round(boss.health))}/${def.health}${streak}\n`;
   }
   // HP·마나·랜턴은 하단 게이지가 이미 보여 준다 — 위에서 숫자로 겹쳐 읽지 않는다.
   // 연쇄 배율만은 어디에도 안 나오므로 spell 줄로 옮겨 살려 둔다

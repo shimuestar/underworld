@@ -5,15 +5,17 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
-import { enemyDef, weakPointOffset } from '../core/Entities';
+import { enemyDef, resolvePhase, weakPointOffset } from '../core/Entities';
 import {
   BEHEMOTH_TORSO,
   ENEMY_LEAN_JITTER,
   behemothAnchorPos,
   behemothBladeTip,
   behemothEyeDimmed,
+  behemothVentLit,
   buildBehemothRig,
   poseBehemothRig,
+  setBehemothPhaseLook,
   solveNeckToEye,
   stepBehemothRoll,
   styleBehemothWeakPoints,
@@ -60,6 +62,7 @@ const CHARGE = { lean: T.chargeLean, lunge: 0, crouch: -def.height * T.chargeCro
 const STUNNED = { lean: T.stunnedLean, lunge: 0, crouch: -def.height * T.stunnedCrouch };
 const SKID_PIVOT = def.visual!.joints.pos[1] * def.height; // 미끄러짐 굴림 축 = 어깨 높이(syncEnemies 와 같다)
 const SKID = { lean: T.skidLean, lunge: T.skidLunge, crouch: -def.height * T.skidCrouch, roll: T.skidRoll, pivot: SKID_PIVOT };
+const ROAR = { lean: T.roarLean, lunge: 0, crouch: 0 };
 
 describe('약점 구체 = 판정 구체', () => {
   it('구체는 def.weakPoints 마다 하나(wp_<id>), group 소속, 반지름 = wp.radius, 자리 = normal 표', () => {
@@ -123,6 +126,9 @@ describe('약점 구체 = 판정 구체', () => {
       { name: 'stunned', ...STUNNED, pose: { pose: 'stunned' } },
       // 눈멂(B2-5) — 표의 눈 1.2m. 머리 휘저음은 sin(nowMs) 라 nowMs 0 에선 정지 — 휘저음의 어긋남 상한은 아래 별도 검사
       { name: 'blind', ...CHARGE, pose: { pose: 'blind', charging: true } },
+      // 포효(B2-6 페이즈 전환) — 표의 눈 2.9m(치켜든 머리)
+      { name: 'roar', ...ROAR, pose: { pose: 'roar' } },
+      { name: 'roar 0.5', lean: T.roarLean * 0.5, crouch: 0, pose: { pose: 'roar', poseBlend: 0.5 } },
       // 진행 중간에도 구체와 머리가 함께 간다
       { name: 'head_down 0.5', ...HEAD_DOWN, pose: { pose: 'head_down', poseBlend: 0.5 } },
       { name: 'charge coil 0.4', lean: T.chargeLean * 0.4, crouch: -def.height * T.chargeCrouch * 0.4, pose: { pose: 'charge', chargeCoil: 0.4, poseBlend: 0.4 } },
@@ -375,6 +381,10 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
       name: `limp walk ${ph > 0 ? '+' : '-'}`, lean: 0, lunge: 0, crouch: 0, roll: Math.sin(ph) * T.limpRoll,
       pose: { limping: true, bladeLocked: { r: true, l: true }, legPhase: ph, legBlend: 1 },
     })),
+    // B2-6 포효(페이즈 전환 갑각 재생) — 머리 치켜듦(표의 눈 2.9m)·입 벌림·두 낫 벌려 들기(떨림 봉우리)·움찔·진행 중간·잠긴 낫 채로
+    ...peaks.map((nowMs) => ({ name: `roar@${nowMs.toFixed(0)}`, lean: T.roarLean + T.flinchLean, lunge: 0, crouch: 0, pose: { pose: 'roar', nowMs } })),
+    { name: 'roar 0.5', lean: T.roarLean * 0.5, lunge: 0, crouch: 0, pose: { pose: 'roar', poseBlend: 0.5 } },
+    { name: 'roar locked r', ...ROAR, pose: { pose: 'roar', bladeLocked: { r: true, l: false } } },
   ];
 
   it('어깨→위팔→낫을 실제로 지어 모든 자세(떨림·움찔·튕김 흔들림을 더한 최악)에서 꼭대기가 3.8m 아래', () => {
@@ -564,5 +574,121 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
     expect(front).toBeLessThan(rear * 0.5);
     const walk = measureRig(0, 0, 0, { legPhase: Math.PI / 2, legBlend: 1 }).rig;
     expect(Math.abs(walk.legs[0]!.rotation.x)).toBeCloseTo(Math.abs(walk.legs[3]!.rotation.x), 6);
+  });
+});
+
+describe('페이즈 외형(B2-6) — 포효 자세·등갑판 균열·분출공 점등·탈락·붉은 홍채', () => {
+  it('포효(pose roar) — 아래턱이 −0.8rad 벌어지고(진행에 비례), 두 낫이 바깥으로 벌어져 들리며(양쪽 대칭), 눈은 표의 2.9m. 다른 자세에선 턱이 닫힌다', () => {
+    const rest = measureRig(0, 0, 0, {});
+    expect(rest.rig.jaw.rotation.x).toBeCloseTo(0, 6);
+    const roar = measureRig(ROAR.lean, 0, 0, { pose: 'roar' });
+    expect(roar.rig.jaw.rotation.x).toBeCloseTo(-0.8, 6);
+    expect(roar.rig.weakPoints['eye']!.position.y).toBeCloseTo(2.9, 6);
+    const half = measureRig(ROAR.lean * 0.5, 0, 0, { pose: 'roar', poseBlend: 0.5 });
+    expect(half.rig.jaw.rotation.x).toBeCloseTo(-0.4, 6);
+    // 두 낫 — 대기보다 위팔이 들리고 바깥(yaw 부호가 side 와 반대)으로 벌어진다, 좌우 대칭
+    const [r, l] = roar.rig.arms;
+    const [r0] = rest.rig.arms;
+    expect(r!.shoulder.rotation.x).toBeGreaterThan(r0!.shoulder.rotation.x + 0.05);
+    expect(l!.shoulder.rotation.x).toBeCloseTo(r!.shoulder.rotation.x, 6);
+    expect(r!.shoulder.rotation.y).toBeLessThan(-0.3); // 오른팔(side +1): yaw = +1 × (−0.5)
+    expect(l!.shoulder.rotation.y).toBeCloseTo(-r!.shoulder.rotation.y, 6);
+    // 머리가 위로 — 대기보다 머리 메시 눈 자리가 높다. 얼굴은 천장을 본다(faceUp 가지): 눈이 머리 중심보다 위 — 접는 가지였으면 머리·뿔이 눈 위에 쌓여 3.9m 를 넘었다
+    const eyeRest = behemothAnchorPos(rest.rig, 'eye', new THREE.Vector3());
+    const eyeRoar = behemothAnchorPos(roar.rig, 'eye', new THREE.Vector3());
+    expect(eyeRoar.y).toBeGreaterThan(eyeRest.y + 0.4);
+    const headCenter = new THREE.Vector3();
+    let o: THREE.Object3D | null = roar.rig.head;
+    while (o && o !== roar.torso.parent) {
+      o.updateMatrix();
+      headCenter.applyMatrix4(o.matrix);
+      o = o.parent;
+    }
+    expect(eyeRoar.y).toBeGreaterThan(headCenter.y + 0.3);
+    expect(roar.box.max.y).toBeLessThanOrEqual(3.8);
+  });
+
+  it('리그 구성 — 등갑판 3장(plate0~2)·균열 5개(이음새 2 + 실금 3, 자체 발광 재질 하나, flashMaterials 밖, 처음엔 숨김)·홍채(눈 구체의 자식, 숨김)', () => {
+    const { rig, flash } = measureRig(0, 0, 0, {});
+    expect(rig.plates.map((p) => p.name)).toEqual(['plate0', 'plate1', 'plate2']);
+    const n = def.visual!.plates.z.length;
+    expect(rig.cracks).toHaveLength(n - 1 + n);
+    for (const c of rig.cracks) {
+      expect(c.visible).toBe(false);
+      expect(c.material).toBe(rig.crackMat);
+    }
+    expect(flash).not.toContain(rig.crackMat as unknown as THREE.MeshLambertMaterial);
+    expect(rig.iris.visible).toBe(false);
+    expect(rig.iris.parent).toBe(rig.weakPoints['eye']);
+    // 이음새 띠는 뒤 판(plate1·plate2)의 자식으로 그 판의 들린 앞전 위(로컬 +y 윗면, −z 앞쪽)에 — 두 판 사이 중간 높이는 겹친 판 두께 안에 묻힌다
+    const seams = rig.cracks.slice(0, n - 1);
+    expect(seams.map((c) => c.parent)).toEqual([rig.plates[1], rig.plates[2]]);
+    const [, ph, pd] = def.visual!.plates.size;
+    for (const seam of seams) {
+      expect(seam.position.y).toBeGreaterThan((ph * def.height) / 2);
+      expect(seam.position.z).toBeLessThan(0);
+      expect(seam.position.z).toBeGreaterThan(-(pd * def.radius) / 2);
+    }
+    // 실금은 판 위 — torso 소속, 판 높이 위
+    for (const hair of rig.cracks.slice(n - 1)) {
+      expect(hair.parent).toBe(rig.torso);
+      expect(hair.position.y).toBeGreaterThan(def.visual!.plates.y * def.height);
+    }
+    // 판을 숨기면(P3) 자식 이음새도 함께 안 그려진다 — three.js visible 은 하위까지 건너뛴다
+    rig.plates[1]!.visible = false;
+    expect(seams[0]!.parent!.visible).toBe(false);
+  });
+
+  it('setBehemothPhaseLook — P1(표 3)·표 없음: 전부 꺼짐 / P2(표 2, shellPlatesOn): 균열 켜짐·판 보임·홍채 없음·분출공 점등 / P3(표 1, shedPlates): 판·균열 숨김·홍채 켜짐·분출공 점등 유지(누적)', () => {
+    const { rig } = measureRig(0, 0, 0, {});
+    const on = (arr: THREE.Mesh[]): boolean[] => arr.map((m) => m.visible);
+    setBehemothPhaseLook(rig, resolvePhase(def, 3), 0);
+    expect(on(rig.plates)).toEqual([true, true, true]);
+    expect(on(rig.cracks).every((v) => !v)).toBe(true);
+    expect(rig.iris.visible).toBe(false);
+    expect(behemothVentLit(resolvePhase(def, 3))).toBe(false);
+    setBehemothPhaseLook(rig, undefined, 0);
+    expect(on(rig.cracks).every((v) => !v)).toBe(true);
+    expect(behemothVentLit(undefined)).toBe(false);
+    setBehemothPhaseLook(rig, resolvePhase(def, 2), 0);
+    expect(on(rig.plates)).toEqual([true, true, true]);
+    expect(on(rig.cracks).every((v) => v)).toBe(true);
+    expect(rig.iris.visible).toBe(false);
+    expect(behemothVentLit(resolvePhase(def, 2))).toBe(true);
+    // 균열 색 — 오염 녹색(0x39ff88) 계열이 숨쉰다(0.7~1.0 배), 텔레그래프 3색이 아니다
+    const c = rig.crackMat.color;
+    expect(c.g).toBeGreaterThan(c.r);
+    expect(c.g).toBeGreaterThan(c.b);
+    setBehemothPhaseLook(rig, resolvePhase(def, 2), 1400 * 0.25);
+    expect(rig.crackMat.color.g).toBeCloseTo(1.0, 3); // 봉우리
+    setBehemothPhaseLook(rig, resolvePhase(def, 2), 1400 * 0.75);
+    expect(rig.crackMat.color.g).toBeCloseTo(0.7, 3); // 골
+    setBehemothPhaseLook(rig, resolvePhase(def, 1), 0);
+    expect(on(rig.plates)).toEqual([false, false, false]);
+    expect(on(rig.cracks).every((v) => !v)).toBe(true);
+    expect(rig.iris.visible).toBe(true);
+    expect(behemothVentLit(resolvePhase(def, 1))).toBe(true);
+    // 되돌리면(디버그·부활 재스폰) 판이 다시 보인다
+    setBehemothPhaseLook(rig, resolvePhase(def, 3), 0);
+    expect(on(rig.plates)).toEqual([true, true, true]);
+    expect(rig.iris.visible).toBe(false);
+  });
+
+  it('점등(lit) 표시 — 닫힌 분출공이 제 열림색으로 은은하게 빛나되 맥동은 없다(크기 1, 세기 < 열림). 열림이 오면 열림이 이긴다', () => {
+    const { rig } = measureRig(0, 0, 0, {});
+    const vent = rig.weakPoints['vent']!;
+    const mat = vent.material as THREE.MeshLambertMaterial;
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' }));
+    expect(mat.emissive.getHex()).toBe(0x39ff88);
+    expect(mat.color.getHex()).toBe(0x1f3a2e);
+    expect(vent.scale.x).toBeCloseTo(1, 6);
+    const litIntensity = mat.emissiveIntensity;
+    expect(litIntensity).toBeGreaterThan(0);
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'vent', broken: false, flashAgeMs: -1, lit: id === 'vent' }));
+    expect(mat.emissiveIntensity).toBeGreaterThan(litIntensity);
+    expect(vent.scale.x).toBeGreaterThan(1.05); // 맥동 봉우리
+    // 다른 약점은 점등이 없다(닫힘 = 발광 없음)
+    const heart = rig.weakPoints['heart']!.material as THREE.MeshLambertMaterial;
+    expect(heart.emissive.getHex()).toBe(0x000000);
   });
 });

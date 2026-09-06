@@ -53,6 +53,8 @@ charge_dodged     { enemyId, enemyType, x, z }   ← 돌격을 무적 8틱 안�
 pillar_hit        { enemyId, enemyType, row, col, x, z }   ← 거수 돌격이 기둥 P 에 박힘 (전도와 함께 — 내구 −1·붕괴는 B3-5 Arena)
 enemy_whiffed     { enemyId, enemyType, ticks, wall? }   ← 헛침 경직. wall = 돌격이 일반 벽·문에 막힘(거수 wallWhiffRecoverTicks — 박히지 않음)
 boss_staggered    { enemyId, enemyType, cause }   ← cause 'parry'(족장 연속 패링) / 'eye'(거수 눈 누적 66 혼절)
+boss_phase        { enemyId, enemyType, phase, from, skipped, fromTicks, tick, name?, shiftText?, death? }   ← 페이즈 전환(거수 B2-6 — phase = 새 체력 칸 index 3→2→1, from 에 머문 틱 fromTicks, skipped = 한 창에서 두 경계를 넘어 P2 건너뜀). phase 0 = 사망(마지막 페이즈 마감 — 전환으로 세지 않는다)
+plate_shed        { enemyId, enemyType, count, x, z }   ← P3 진입에 남은 등갑판이 골드 없이 탈락(파편만)
 shot_fired      { hitEnemy }
 player_damaged  { amount, health }
 player_died     { tick }

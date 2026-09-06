@@ -2,7 +2,7 @@
 // group이 붙은 개체는 매복 트리거가 활성화할 때까지 스폰하지 않는다 (트리거는 후속 작업).
 
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
+import { enemyDef, healthBarState } from '../core/Entities';
 import { findWallNormal, type BarrelState, type ChestState, type EnemyState, type PropState, type TrapState } from '../core/World';
 import type { Level } from './GridLoader';
 
@@ -65,6 +65,8 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
   };
   if (def.boss) enemy.parryStreak = 0;
   if (def.hearingMul !== undefined) enemy.hearingMul = def.hearingMul; // World 는 def 를 모른다
+  // 페이즈(거수, B2-6) — 첫 칸 index 로 시작한다. Enemies 가 매 틱 healthBarState 와 비교해 칸이 비면 전환한다
+  if (def.phases) enemy.phase = healthBarState(def, def.health).index;
   // 약점 내구(거수 관절) — hp 가 있는 약점만 장부에 올린다. 0 이 되면 파열(판정 닫힘)
   if (def.weakPoints) {
     const hp: Record<string, number> = {};

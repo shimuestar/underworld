@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { equipColor } from '../core/EquipData';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
-import { bladeLocked, currentAttack, enemyDef, healthBarState, shieldLowered, weakPointOffset, weakPointOpen, type EnemyDef } from '../core/Entities';
+import { bladeLocked, currentAttack, enemyDef, healthBarState, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, type EnemyDef, type ResolvedPhase } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN } from '../level/GridLoader';
 import type {
@@ -994,6 +994,9 @@ const BEHEMOTH_COLORS = {
   jointBroken: 0x7a1f3a,
   /** 혼절 쿨다운 중 열린 눈 — 어두운 청록, 맥동 없음("피해만 들어간다"의 표시) */
   eyeDim: 0x1c6e60,
+  /** P2 등갑판 사이 균열 발광(기획서 §2 — 오염 녹색, 분출공 점등과 같은 색) / P3 눈 붉은 홍채(텔레그래프 빨강 #FF3B3B 과 다른 값) */
+  crack: 0x39ff88,
+  iris: 0xd21f2f,
 } as const;
 
 /** 약점 구체의 닫힌 본색·열림 발광색 — id 로 고른다 (모르는 id 는 관절색) */
@@ -1013,6 +1016,10 @@ const BH_WEAK_FLASH_MS = 170;
 const BH_WEAK_FLASH_INTENSITY = 2.6;
 const BH_WEAK_OPEN_INTENSITY = 0.85;
 const BH_WEAK_DIM_INTENSITY = 0.3;
+/** 닫혀 있되 점등된 약점(P2 분출공) — 은은한 발광, 맥동 없음(맥동 = 열림 문법이라 닫힌 구체는 뛰지 않는다) */
+const BH_WEAK_LIT_INTENSITY = 0.4;
+/** P2 균열 발광 숨쉬기 — 밝기 0.7~1.0 을 이 주기로 */
+const BH_CRACK_PULSE_MS = 1400;
 
 /** 거수 몸통 자세(rad·m·height 배) — 인간형 기본값(앞으로 24° 숙임·0.5m 전진)은 4족에겐 앞으로
  *  엎어지는 그림이라 따로 둔다. syncEnemies 와 debug/behemoth.ts 가 같은 값을 쓴다 */
@@ -1053,6 +1060,8 @@ export const BEHEMOTH_TORSO = {
   skidCrouch: 0.033,
   /** 절뚝(limp, 양 낫 잠김) — 걸음마다 몸이 좌우로 절룩이는 굴림 진폭(rad, 발이 축) */
   limpRoll: 0.05,
+  /** 포효(roar — 페이즈 전환 갑각 재생, B3-4 포효 예고) — 몸통은 거의 그대로(뒤로 젖히면 치켜든 머리·뿔이 3.8m 를 넘는다), 머리는 목 IK 가 표의 눈(2.9m)으로 치켜든다 */
+  roarLean: 0.02,
 } as const;
 
 /** syncEnemies 가 자세 위에 더하는 기울임 떨림 진폭(rad) — 섬광 구간 떨림·튕김 흔들림·피탄 움찔.
@@ -1098,6 +1107,11 @@ const BH_COIL_NECK = -0.05;
 const BH_COIL_PITCH = 0.5;
 const BH_NECK_BUTT = 0.6; // 들이받기 — 목을 앞으로 내리꽂는 각(머리 중심 ≈ 1.8m)
 const BH_BUTT_HEAD_COUNTER = 0.45; // 내리꽂을 때 머리를 되들어 뿔이 앞(플레이어)을 겨눈다 (비율)
+// 포효(pose roar, B2-6 페이즈 전환·B3-4) — 아래턱이 벌어지고(기획서 §2 −0.8rad) 두 낫이 바깥으로 벌어져 들린다(높이는 예고와 같아 천장을 못 뚫는다)
+const BH_JAW_ROAR = -0.8;
+const BH_ARM_ROAR = 0.55;
+const BH_ARM_ROAR_YAW = -0.5;
+const BH_BLADE_ROAR = -1.35;
 const BH_TAIL_DROOP = 0.3;
 const BH_TAIL_SWAY = 0.18;
 const BH_TIP_MIN_Y = 0.08; // 낫끝이 바닥을 뚫지 않게 (m)
@@ -1164,6 +1178,13 @@ export interface BehemothRig {
   /** 낫 재질(파랑 예고 전용) · 뿔 재질(돌격 빨강 전용) — 몸의 flashMaterials 와 따로 물든다 */
   bladeMats: THREE.MeshLambertMaterial[];
   hornMats: THREE.MeshLambertMaterial[];
+  /** 등갑판 셋(plate0~2) — P3 진입에 탈락(숨김 + 파편은 Stage.shedBehemothPlates) */
+  plates: THREE.Mesh[];
+  /** P2 균열 — 판 사이 이음새·판 위 실금(얇은 상자, 자체 발광 재질 하나). setBehemothPhaseLook 이 켠다 */
+  cracks: THREE.Mesh[];
+  crackMat: THREE.MeshBasicMaterial;
+  /** P3 붉은 홍채 — 눈 구체의 자식(맥동을 따라간다), 평소엔 숨김 */
+  iris: THREE.Mesh;
   /** 자세 계산용 치수(m) */
   dims: { upperArm: number; blade: number; legH: number };
 }
@@ -1245,12 +1266,40 @@ export function buildBehemothRig(
   // 등갑판 — 앞이 들린 판 세 장(비늘처럼)
   const plateMat = lam(BEHEMOTH_COLORS.plate, true);
   const [pw, ph, pd] = M(v.plates.size);
+  const plates: THREE.Mesh[] = [];
+  const plateY = v.plates.y * H;
+  const tilt = (v.plates.tiltDeg * Math.PI) / 180;
   for (let i = 0; i < v.plates.z.length; i++) {
     const plate = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, pd), plateMat);
     plate.name = `plate${i}`;
-    plate.position.set(0, v.plates.y * H, (v.plates.z[i] ?? 0) * R);
-    plate.rotation.x = (v.plates.tiltDeg * Math.PI) / 180;
+    plate.position.set(0, plateY, (v.plates.z[i] ?? 0) * R);
+    plate.rotation.x = tilt;
     torso.add(plate);
+    plates.push(plate);
+  }
+  // P2 균열(기획서 §2 "판 사이 얇은 Box 균열 0x39ff88") — 판 이음새(앞 판의 뒷전과 뒤 판의 앞전이 비늘처럼 어긋난 틈)에 가로 띠 하나씩,
+  // 판마다 위면에 세로 실금 하나. 자체 발광 재질(MeshBasicMaterial)이라 어두운 방에서도 보이고 flashMaterials 밖이다. 페이즈가 켤 때까지 숨김
+  const crackMat = new THREE.MeshBasicMaterial({ color: BEHEMOTH_COLORS.crack });
+  const cracks: THREE.Mesh[] = [];
+  // 이음새 띠 — 뒤 판(z 큰 쪽)의 들린 앞전 위에 얹는다(판의 자식이라 기울기·숨김을 따라간다). 두 판 사이 중간 높이에 두면 겹친 판 두께 안에 묻혀 안 보인다
+  const byZ = [...plates].sort((a, b) => a.position.z - b.position.z);
+  for (let i = 1; i < byZ.length; i++) {
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(pw * 0.9, ph * 0.16, pd * 0.1), crackMat);
+    seam.name = `crack_seam${i - 1}`;
+    seam.position.set(0, ph / 2 + ph * 0.02, -pd / 2 + pd * 0.08);
+    seam.visible = false;
+    byZ[i]!.add(seam);
+    cracks.push(seam);
+  }
+  for (let i = 0; i < plates.length; i++) {
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(pw * 0.03, ph * 0.3, pd * 0.8), crackMat);
+    hair.name = `crack_hair${i}`;
+    // 판 위면 살짝 위(tilt 를 따라), x 는 판마다 다른 자리 — 한 줄로 늘어선 그림을 피한다
+    hair.position.set(pw * (i === 0 ? -0.22 : i === 1 ? 0.18 : -0.05), plateY + ph * 0.5, (v.plates.z[i] ?? 0) * R);
+    hair.rotation.x = tilt;
+    hair.visible = false;
+    torso.add(hair);
+    cracks.push(hair);
   }
 
   // 목 → 머리 되들기 → 머리 상자. 높이 든 머리(울트라리스크 실루엣) — 돌격 예고에 내려간다
@@ -1385,12 +1434,41 @@ export function buildBehemothRig(
     group.add(mesh);
     weakPoints[wp.id] = mesh;
   }
+  // P3 붉은 홍채(기획서 §2 "P3 상시 붉은 홍채") — 눈 구체 앞면에 붙은 작은 구체(자식이라 맥동·자리를 따라간다). 페이즈가 켤 때까지 숨김.
+  // 눈 구체가 없는 정의라도 리그는 서야 하니 빈 자리에 만들어 둔다
+  const eyeSphere = weakPoints['eye'];
+  const eyeR = def.weakPoints?.find((w) => w.id === 'eye')?.radius ?? 0.26;
+  const iris = new THREE.Mesh(new THREE.SphereGeometry(eyeR * 0.42, 10, 8), new THREE.MeshBasicMaterial({ color: BEHEMOTH_COLORS.iris }));
+  iris.name = 'eye_iris';
+  iris.position.set(0, 0, -eyeR * 0.72);
+  iris.visible = false;
+  (eyeSphere ?? group).add(iris);
 
   return {
     group, torso, neck, headPitch, headShake, head, jaw, arms, legs, tail,
-    weakPoints, anchors, bladeMats, hornMats, def,
+    weakPoints, anchors, bladeMats, hornMats, plates, cracks, crackMat, iris, def,
     dims: { upperArm: upperLen, blade: bll, legH },
   };
+}
+
+/** 페이즈 외형(B2-6, 기획서 §7·§8) — 페이즈 표(Entities.resolvePhase)를 읽어 P2 「오염 갑각」: 등갑판 균열 발광 숨쉬기 / P3 「광란」: 등갑판·균열 숨김(탈락 파편은
+ *  Stage.shedBehemothPlates 가 한 번) + 눈 붉은 홍채. 분출공 점등은 styleBehemothWeakPoints 의 lit 로(같은 기준 shellPlatesOn). 표가 없으면(P1·족장) 전부 꺼진다.
+ *  syncEnemies 와 debug/behemoth.ts 가 같은 함수를 쓴다 */
+export function setBehemothPhaseLook(rig: BehemothRig, phase: ResolvedPhase | undefined, nowMs: number): void {
+  const shed = phase?.shedPlates === true;
+  const cracked = phase?.shellPlatesOn === true && !shed;
+  for (const plate of rig.plates) plate.visible = !shed;
+  for (const crack of rig.cracks) crack.visible = cracked;
+  if (cracked) {
+    const k = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin((nowMs / BH_CRACK_PULSE_MS) * Math.PI * 2));
+    rig.crackMat.color.setHex(BEHEMOTH_COLORS.crack).multiplyScalar(k);
+  }
+  rig.iris.visible = shed;
+}
+
+/** 분출공을 '점등'(닫혀 있되 은은한 발광, 맥동 없음)으로 그릴 페이즈인가 — P2 오염 갑각부터(shellPlatesOn 누적). 열림(B3-2)은 weakPointOpen 이 따로 */
+export function behemothVentLit(phase: ResolvedPhase | undefined): boolean {
+  return phase?.shellPlatesOn === true;
 }
 
 /** torso 쪽 노드의 위치를 group 좌표로 — 부모 행렬을 torso 까지 타고 올라간다(월드 행렬 갱신을 기다리지 않는다) */
@@ -1424,7 +1502,7 @@ export function behemothEyeDimmed(enemy: Pick<EnemyState, 'dazeCooldown' | 'ai' 
 export function styleBehemothWeakPoints(
   rig: BehemothRig,
   nowMs: number,
-  state: (id: string) => { open: boolean; broken: boolean; flashAgeMs: number; dim?: boolean },
+  state: (id: string) => { open: boolean; broken: boolean; flashAgeMs: number; dim?: boolean; lit?: boolean },
 ): void {
   for (const id in rig.weakPoints) {
     const mesh = rig.weakPoints[id]!;
@@ -1450,6 +1528,12 @@ export function styleBehemothWeakPoints(
       mat.emissiveIntensity = BH_WEAK_OPEN_INTENSITY + (BH_WEAK_FLASH_INTENSITY - BH_WEAK_OPEN_INTENSITY) * flash;
       const pulse = 1 + Math.sin((nowMs / BH_WEAK_PULSE_MS) * Math.PI * 2) * BH_WEAK_PULSE_AMP;
       mesh.scale.setScalar(pulse + flash * 0.2);
+    } else if (st.lit) {
+      // 점등(P2 분출공) — 닫혀 있되 제 색으로 은은하게 빛난다, 맥동 없음(맥동은 열림의 표시)
+      mat.color.setHex(colors.base);
+      mat.emissive.setHex(colors.open);
+      mat.emissiveIntensity = BH_WEAK_LIT_INTENSITY + (BH_WEAK_FLASH_INTENSITY - BH_WEAK_LIT_INTENSITY) * flash;
+      mesh.scale.setScalar(1 + flash * 0.2);
     } else {
       mat.color.setHex(colors.base);
       mat.emissive.setHex(flash > 0 ? colors.open : 0x000000);
@@ -1524,11 +1608,12 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     const table = eyeWp ? weakPointOffset(rig.def, eyeWp, tablePose) : undefined;
     if (table && eyeWp) {
       const rest = eyeWp.offset;
+      // 포효는 반대 가지(faceUp) — 얼굴을 위로 치켜든다. 머리를 아래로 접는 가지로 2.9m 눈을 만들면 머리 상자·뿔이 눈 위에 쌓여 3.9m(천장 3.8) 를 넘는다
       const ik = solveNeckToEye(rig, lean, torso.position.y, lunge, {
         x: 0,
         y: rest.y + (table.y - rest.y) * blend,
         z: rest.z + (table.z - rest.z) * blend,
-      });
+      }, tablePose === 'roar');
       neckTarget = ik.neck;
       pitchTarget = ik.pitch;
     }
@@ -1541,7 +1626,9 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
   const sway = tablePose === 'stunned' ? Math.sin(p.nowMs / BH_STUN_SWAY_MS) * BH_STUN_SWAY * blend : thrash * BH_BLIND_ROLL;
   rig.neck.rotation.z = mix(rig.neck.rotation.z, sway);
   rig.neck.rotation.y = mix(rig.neck.rotation.y, thrash * BH_BLIND_SWAY);
-  rig.jaw.rotation.x = mix(rig.jaw.rotation.x, 0);
+  // 포효(pose roar — 페이즈 전환 갑각 재생) — 아래턱이 벌어진다(기획서 §2 −0.8rad)
+  const roarK = tablePose === 'roar' ? blend : 0;
+  rig.jaw.rotation.x = mix(rig.jaw.rotation.x, BH_JAW_ROAR * roarK);
 
   for (const arm of rig.arms) {
     const acting = arm.side === p.bladeSide;
@@ -1596,6 +1683,11 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
       armTarget = BH_ARM_SKID + Math.sin(p.nowMs / 120) * 0.03;
       yaw = BH_ARM_SKID_YAW;
       bladeWorld = BH_BLADE_SKID;
+    } else if (roarK > 0.01) {
+      // 포효(페이즈 전환) — 두 낫을 바깥으로 벌려 들고 부르르 떤다. 높이는 예고(BH_ARM_WINDUP)만큼이라 천장을 못 뚫는다
+      armTarget = BH_ARM_REST + (BH_ARM_ROAR - BH_ARM_REST) * roarK + Math.sin(p.nowMs / 45) * 0.02 * roarK;
+      yaw = BH_ARM_ROAR_YAW * roarK;
+      bladeWorld = BH_BLADE_REST + (BH_BLADE_ROAR - BH_BLADE_REST) * roarK;
     } else if (acting && p.bladeStriking) {
       // 타격 — 위팔은 진행도로 내려오고 낫끝은 판정 거리 그대로 (즉시 반영).
       // 안쪽으로 휩쓸어 끝에서 낫끝이 몸 가운데 선(플레이어 정면)에 온다 — 호 110° 의 그림
@@ -1664,8 +1756,9 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
 }
 
 /** 목 IK — 머리 메시의 눈 자리(anchors.eye)가 group 좌표 target 에 오도록 목(neck.rotation.x)·머리 되들기(headPitch.rotation.x) 각을 푼다.
- *  목 피벗 P → 머리 중심(L1) → 눈(L2) 두 마디의 평면(y·z) 2링크 IK. 두 해 중 "목을 들고 머리를 숙이는" 쪽(대기 자세를 그대로 재현하는 가지)을
- *  고른다 — 낮은 눈은 머리가 목 끝에서 아래로 접혀 바닥을 보는 그림(뿔이 앞을 겨눈다). 닿지 않으면 곧게 뻗어 최대한 가까이.
+ *  목 피벗 P → 머리 중심(L1) → 눈(L2) 두 마디의 평면(y·z) 2링크 IK. 두 해 중 기본은 "목을 들고 머리를 숙이는" 쪽(대기 자세를 그대로 재현하는 가지)
+ *  — 낮은 눈은 머리가 목 끝에서 아래로 접혀 바닥을 보는 그림(뿔이 앞을 겨눈다). faceUp 이면 반대 가지 — 목은 낮게, 머리는 위로 젖혀 얼굴이 천장을
+ *  본다(포효: 높은 눈을 접는 가지로 만들면 머리·뿔이 눈 위에 쌓여 천장을 뚫는다). 닿지 않으면 곧게 뻗어 최대한 가까이.
  *  target 은 group 좌표 — 몸통 기울임(lean)·낮춤(crouchY)·전진(lunge)을 벗겨 torso 좌표로 바꿔 푼다 */
 export function solveNeckToEye(
   rig: BehemothRig,
@@ -1673,6 +1766,7 @@ export function solveNeckToEye(
   crouchY: number,
   lunge: number,
   target: { x: number; y: number; z: number },
+  faceUp = false,
 ): { neck: number; pitch: number } {
   // group → torso 로컬 (위치 빼고 −lean 회전)
   const gy = target.y - crouchY;
@@ -1692,7 +1786,7 @@ export function solveNeckToEye(
   const d = Math.max(Math.abs(L1 - L2) + eps, Math.min(L1 + L2 - eps, Math.hypot(dy, dz)));
   const elevD = Math.atan2(dy, -dz);
   const cosB = Math.max(-1, Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d)));
-  const theta1 = elevD + Math.acos(cosB); // 목 마디를 D 위로 들어 머리가 아래로 접히는 가지
+  const theta1 = faceUp ? elevD - Math.acos(cosB) : elevD + Math.acos(cosB); // 기본: 목 마디를 D 위로 들어 머리가 아래로 접히는 가지 / faceUp: 목은 D 아래, 머리가 위로 젖힘
   const cy = P.y + L1 * Math.sin(theta1);
   const cz = P.z - L1 * Math.cos(theta1);
   // 닿지 않는 표적은 곧게 뻗은 방향으로(클램프한 d 대신 실제 표적을 본다)
@@ -4171,6 +4265,11 @@ export class Stage {
           leanTarget = BEHEMOTH_TORSO.stunnedLean + Math.sin(now / 170) * 0.02;
           lungeTarget = 0;
           crouchTarget = -def2.height * BEHEMOTH_TORSO.stunnedCrouch;
+        } else if (enemy.pose === 'roar') {
+          // 포효(페이즈 전환 갑각 재생, B2-6) — 몸통은 거의 그대로 서서 머리만 치켜든다(목 IK 가 표의 눈 2.9m 로). 입 벌림·낫 들기는 poseBehemothRig
+          leanTarget = BEHEMOTH_TORSO.roarLean;
+          lungeTarget = 0;
+          crouchTarget = 0;
         } else if (chargeCoil) {
           leanTarget = BEHEMOTH_TORSO.chargeLean * windupProgress;
           lungeTarget = 0;
@@ -4397,6 +4496,10 @@ export class Stage {
         const flashMap = this.weakFlashAt;
         const wps = def2.weakPoints ?? [];
         const dimEye = behemothEyeDimmed(enemy);
+        // 페이즈 외형(B2-6) — P2 균열 발광·분출공 점등, P3 등갑판 탈락·붉은 홍채. 표는 로직의 enemy.phase(게임플레이 페이즈 — 전환 순간에 바뀐다)
+        const phaseLook = resolvePhase(def2, enemy.phase);
+        setBehemothPhaseLook(visual.behemoth, phaseLook, now);
+        const ventLit = behemothVentLit(phaseLook);
         styleBehemothWeakPoints(visual.behemoth, now, (id) => {
           const key = `${eid}:${id}`;
           const at = flashMap.get(key);
@@ -4406,7 +4509,7 @@ export class Stage {
           const broken = hp !== undefined && hp <= 0;
           const wp = wps.find((w) => w.id === id);
           const open = wp !== undefined && weakPointOpen(enemy, wp);
-          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye };
+          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye, lit: id === 'vent' && ventLit };
         });
       }
 
@@ -5408,6 +5511,24 @@ export class Stage {
       }
       (s.mesh.material as THREE.MeshBasicMaterial).opacity =
         0.7 * Math.min(1, (cfg.lifeMs - age) / cfg.fadeMs);
+    }
+  }
+
+  /** 등갑판 탈락(거수 P3 진입, plate_shed) — 남은 판마다 몸통색 파편(power 0.6)이 등 뒤로 튕겨 나간다. 판 자체의 숨김은 setBehemothPhaseLook 이 매 프레임
+   *  페이즈 표로 한다(여기선 파편만). 판이 없는(이미 탈락한) 리그면 아무것도 안 한다 */
+  shedBehemothPlates(enemyId: number, enemyType: string): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    const rig = visual?.behemoth;
+    if (!visual || !rig) return;
+    const type = enemyType;
+    const yaw = visual.group.rotation.y;
+    const backX = Math.sin(yaw); // 정면 (−sin, −cos) 의 반대 — 등 뒤
+    const backZ = Math.cos(yaw);
+    const pos = new THREE.Vector3();
+    for (const plate of rig.plates) {
+      if (!plate.visible) continue;
+      plate.getWorldPosition(pos);
+      this.spawnDeathBurst(pos.x, pos.z, type, 0.6, backX, backZ, 1.6);
     }
   }
 

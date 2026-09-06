@@ -1092,6 +1092,15 @@ export interface EnemyState {
   blind?: boolean;
   /** 질주(charging) 중 이동이 막힌 연속 틱 — 기대 이동의 unstick.minProgress 에 못 미친 틱 수. chargeStuckTicks 에 닿으면 지형 충돌 판정 */
   chargeStuck?: number;
+  /** 현재 페이즈 = 체력 칸 index(거수 3 → 2 → 1, Entities.healthBarState 와 같은 수) — def.phases 가 있는 적만 Spawner 가 세운다.
+   *  칸이 비어 표시 index 가 낮아져도 전환(phase_shift)이 실제로 일어나기 전까진 이 값이 그대로다(게임플레이 페이즈). Enemies 가 매 틱 비교한다 */
+  phase?: number;
+  /** 큐잉된 목표 페이즈 — 혼절·머리 내림·미끄러짐·눈멂·처형 넉백 중에 칸이 비면 여기만 갱신하고, 풀리는 틱에 한 번의 전환으로 발동한다(두 경계를 넘었으면 건너뛴다) */
+  phaseTarget?: number;
+  /** 지금 페이즈가 시작된 틱(world.tick) — 깨어난 뒤 첫 틱 / 전환 틱. boss_phase{fromTicks} 계측용 */
+  phaseSince?: number;
+  /** 페이즈 전환(갑각 재생 molt) 중 — pose roar 타이머가 도는 동안 참. 약점 판정이 전부 닫힌다(Entities.weakPointOpen) */
+  molting?: boolean;
   /** 밀착 공격(closeAttack) 재사용 대기 */
   closeCooldown?: number;
   /** 연사 남은 발수 / 재사용 대기 (족장 화살 세례) */

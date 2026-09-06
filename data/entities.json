@@ -341,6 +341,14 @@
                         "perfectDodgeExposes": { "ticks": 40, "joints": ["joint_r", "joint_l"] }, "statusOnHit": "concussion" },
       "_countersNote": "시험방 안내용. rifle 은 미구현이라 넣지 않는다",
       "counters": { "pistol": "best", "bow": "best", "grenade": "poor", "melee": "good", "magic": "good", "deflect": "best" },
+      "_phasesNote": "페이즈(B2-6, 기획서 §8) — bar = 체력 칸 index(healthBarState: 3 → 2 → 1, 칸이 비는 순간 전환). Enemies 가 enemy.phase(현재 칸)와 비교해 낮아지면 phase_shift(갑각 재생 molt: recover balance.weakPoint.phaseShiftTicks + pose roar, 진행 중 공격 취소, 약점 전부 닫힘, 관절 hp 회복·ruptured 삭제·낫 잠김·절뚝 해제, 공격 쿨다운 × phaseShiftCooldownMul, 무적 아님) → boss_phase{phase, from}. 혼절·머리 내림·미끄러짐·눈멂·처형 넉백 중에 칸이 비면 phaseTarget 에 큐잉하고 풀리는 틱에 한 번만 — 한 창에서 두 경계를 넘으면 P2 를 건너 P3(연출은 P3 것). 필드는 누적 적용(Entities.resolvePhase — 낮은 bar 가 이긴다): unlock = 그 페이즈부터 고르는 공격 슬롯(slam·volley·wakeSlam·roar·combo·chainCharge — 슬롯이 아직 없으면 무시, B3), speedMul = 걷기 이속 배율(돌격 속도는 그대로), attackOverrides = 슬롯별 damage·cooldownTicks·aoeRadius 덮어쓰기(Entities.currentAttack 이 합쳐 돌려준다 — 전역 damageMul 없음), poolsOn = 웅덩이(B3-2), shellPlatesOn = 갑각판 hp 풀(B3-3, Stage 는 등갑판 균열 발광·분출공 점등의 기준으로도 읽는다), shedPlates = 남은 등갑판 탈락(plate_shed, 눈 붉은 홍채), firstPick = 복귀 후 첫 선택(B3-4). name 은 HUD 보스 줄 페이즈명, shiftText 는 전환 문구",
+      "phases": [
+        { "bar": 3, "name": "돌각" },
+        { "bar": 2, "name": "오염 갑각", "shiftText": "갑각이 갈라진다", "unlock": ["slam", "volley", "wakeSlam"], "poolsOn": true, "shellPlatesOn": true,
+          "attackOverrides": { "charge": { "cooldownTicks": 360 } } },
+        { "bar": 1, "name": "광란", "shiftText": "거수가 광란한다", "speedMul": 1.2, "unlock": ["roar", "combo", "chainCharge"], "shedPlates": true, "firstPick": "roar",
+          "attackOverrides": { "attack": { "damage": 34 }, "attackAlt": { "damage": 34 }, "close": { "damage": 24 }, "charge": { "damage": 50, "cooldownTicks": 300 }, "slam": { "damage": 28, "aoeRadius": 5.5 } } }
+      ],
       "drops": ["sig_moment"], "dropsOnDeath": true
     },
 

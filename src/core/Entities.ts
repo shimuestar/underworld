@@ -177,6 +177,49 @@ export interface WeakPointDef {
   openMul?: number;
 }
 
+/** 페이즈별 공격 슬롯 덮어쓰기(거수, 기획서 §8) — 슬롯 키(attack·attackAlt·close·charge·slam·volley·roar·combo …)마다 이 셋만 바뀐다.
+ *  전역 damageMul 은 두지 않는다(슬롯별 명시) */
+export interface PhaseAttackOverride {
+  damage?: number;
+  cooldownTicks?: number;
+  aoeRadius?: number;
+}
+
+/** 페이즈 정의(거수, 기획서 §8) — bar 는 체력 칸 index(healthBarState: 3 → 2 → 1). 필드는 누적이다(resolvePhase):
+ *  낮은 bar(뒤 페이즈)가 같은 키를 덮고, unlock 은 합친다 — 한 창에서 두 경계를 넘어 P2 를 건너뛰어도 P3 가 P2 의 해금·덮어쓰기를 다 갖는다 */
+export interface PhaseDef {
+  bar: number;
+  /** HUD 보스 줄 페이즈명("낫뿔 거수 — 오염 갑각") */
+  name?: string;
+  /** 이 페이즈로 들어올 때의 문구("갑각이 갈라진다") — 첫 페이즈엔 없다 */
+  shiftText?: string;
+  /** 이 페이즈부터 고를 수 있는 공격 슬롯(slam·volley·wakeSlam·roar·combo·chainCharge). 어느 페이즈에도 안 적힌 슬롯은 늘 열려 있다(slotUnlocked) */
+  unlock?: string[];
+  /** 걷기 이속 배율(돌격 속도는 그대로) */
+  speedMul?: number;
+  attackOverrides?: Record<string, PhaseAttackOverride>;
+  /** 웅덩이(B3-2) / 갑각판 hp 풀(B3-3 — Stage 는 등갑판 균열 발광·분출공 점등의 기준으로도 읽는다) / 남은 등갑판 탈락(P3 — plate_shed, 눈 붉은 홍채) */
+  poolsOn?: boolean;
+  shellPlatesOn?: boolean;
+  shedPlates?: boolean;
+  /** 전환 복귀 후 첫 선택 슬롯(B3-4 포효) */
+  firstPick?: string;
+}
+
+/** 누적 합친 페이즈 — resolvePhase 의 결과. bar 는 지금 칸 */
+export interface ResolvedPhase {
+  bar: number;
+  name?: string;
+  shiftText?: string;
+  unlock: Set<string>;
+  speedMul: number;
+  attackOverrides: Record<string, PhaseAttackOverride>;
+  poolsOn: boolean;
+  shellPlatesOn: boolean;
+  shedPlates: boolean;
+  firstPick?: string;
+}
+
 export interface EnemyDef {
   /** 표시 이름 (이름표) */
   name?: string;
@@ -366,6 +409,8 @@ export interface EnemyDef {
   /** 양 낫 잠김(절뚝) 중 낫 사거리 안에 붙은 플레이어에게서 물러나 유지하는 거리(m, 기획서 §9.2) — min 안이면 뒤로, min~max 는 제자리,
    *  max 밖은 평소 접근. 없으면 제자리에 선다 */
   retreatWhenDisarmed?: { min: number; max: number };
+  /** 페이즈 표(거수, 기획서 §8) — 칸(healthBars)마다 하나. 없으면 페이즈 없음(옛 경로 — 족장·어미 슬라임의 체력 칸은 표시만) */
+  phases?: PhaseDef[];
 }
 
 /** 낫 쪽 id — 'r' 오른낫(attack) / 'l' 왼낫(attackAlt). EnemyState.lastBlade·bladeLock 이 같은 키를 쓴다 */
@@ -395,16 +440,85 @@ export function bothBladesLocked(enemy: { bladeLock?: Partial<Record<BladeSide, 
   return bladeLocked(enemy, 'r') && bladeLocked(enemy, 'l');
 }
 
-/** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격 */
-export function currentAttack(def: EnemyDef, enemy: { attackMode?: string }): EnemyAttackDef {
-  if (enemy.attackMode === 'summon' && def.summonAttack) return def.summonAttack;
-  if (enemy.attackMode === 'bash' && def.shieldBash) return def.shieldBash;
-  if (enemy.attackMode === 'charge' && def.chargeAttack) return def.chargeAttack;
-  if (enemy.attackMode === 'volley' && def.volleyAttack) return def.volleyAttack;
-  if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
-  if (enemy.attackMode === 'alt' && def.attackAlt) return def.attackAlt;
-  if (enemy.attackMode === 'close' && def.closeAttack) return def.closeAttack;
-  return def.attack;
+/** 페이즈 표 누적 합치기(거수) — 지금 칸(phase) 이상의 bar 를 가진 페이즈를 큰 bar 부터 덮어쓴다: 같은 키는 낮은 bar(뒤 페이즈)가 이기고
+ *  unlock 은 합친다. 한 창에서 두 경계를 넘어 P2 를 건너뛴 P3 도 P2 의 해금·덮어쓰기를 그대로 갖는다(기획서 §8 "unlock 누적").
+ *  phases 가 없거나 phase 가 없으면 undefined(옛 경로). def·phase 별로 한 번만 만들고 캐시한다 — 매 틱·매 프레임 호출된다 */
+const RESOLVED_PHASES = new WeakMap<EnemyDef, Map<number, ResolvedPhase>>();
+export function resolvePhase(def: EnemyDef, phase: number | undefined): ResolvedPhase | undefined {
+  if (!def.phases || phase === undefined) return undefined;
+  let byBar = RESOLVED_PHASES.get(def);
+  if (!byBar) RESOLVED_PHASES.set(def, (byBar = new Map()));
+  const cached = byBar.get(phase);
+  if (cached) return cached;
+  const out: ResolvedPhase = { bar: phase, unlock: new Set(), speedMul: 1, attackOverrides: {}, poolsOn: false, shellPlatesOn: false, shedPlates: false };
+  const applicable = def.phases.filter((ph) => ph.bar >= phase).sort((a, b) => b.bar - a.bar);
+  for (const ph of applicable) {
+    if (ph.name !== undefined) out.name = ph.name;
+    if (ph.bar === phase) out.shiftText = ph.shiftText; // 문구는 들어온 그 페이즈 것(연출은 P3 것)
+    for (const slot of ph.unlock ?? []) out.unlock.add(slot);
+    if (ph.speedMul !== undefined) out.speedMul = ph.speedMul;
+    if (ph.attackOverrides) {
+      for (const slot in ph.attackOverrides) out.attackOverrides[slot] = { ...out.attackOverrides[slot], ...ph.attackOverrides[slot] };
+    }
+    if (ph.poolsOn !== undefined) out.poolsOn = ph.poolsOn;
+    if (ph.shellPlatesOn !== undefined) out.shellPlatesOn = ph.shellPlatesOn;
+    if (ph.shedPlates !== undefined) out.shedPlates = ph.shedPlates;
+    if (ph.firstPick !== undefined) out.firstPick = ph.firstPick;
+  }
+  byBar.set(phase, out);
+  return out;
+}
+
+/** 공격 슬롯 키 — attackMode 를 페이즈 표(attackOverrides·unlock)의 키로: 'melee'(없음) → 'attack', 'alt' → 'attackAlt', 그 외는 그대로(close·charge·volley·ranged·summon·bash·slam …) */
+export function slotOfMode(attackMode: string | undefined): string {
+  if (attackMode === undefined || attackMode === 'melee') return 'attack';
+  if (attackMode === 'alt') return 'attackAlt';
+  return attackMode;
+}
+
+/** 이 슬롯이 지금 페이즈에 열려 있는가 — 어느 페이즈의 unlock 에도 안 적힌 슬롯(attack·attackAlt·close·charge)은 늘 열려 있고,
+ *  적힌 슬롯은 누적 unlock 에 들어온 뒤부터. 페이즈가 없는 적(족장 volley)은 늘 참 */
+export function slotUnlocked(def: EnemyDef, enemy: { phase?: number }, slot: string): boolean {
+  if (!def.phases) return true;
+  const mentioned = def.phases.some((ph) => ph.unlock?.includes(slot));
+  if (!mentioned) return true;
+  const rp = resolvePhase(def, enemy.phase);
+  return rp !== undefined && rp.unlock.has(slot);
+}
+
+/** 슬롯 공격 정의에 페이즈 덮어쓰기(damage·cooldownTicks·aoeRadius)를 합친 것 — 덮어쓸 게 없으면 원본 그대로(같은 객체).
+ *  합친 객체는 def·phase·슬롯별로 캐시한다(호출부가 매 틱·매 프레임 비교·읽기를 한다) */
+const PHASED_ATTACKS = new WeakMap<EnemyAttackDef, Map<string, EnemyAttackDef>>();
+export function attackInPhase(def: EnemyDef, enemy: { phase?: number }, slot: string, attack: EnemyAttackDef): EnemyAttackDef {
+  const rp = resolvePhase(def, enemy.phase);
+  const ov = rp?.attackOverrides[slot];
+  if (!ov) return attack;
+  let bySlot = PHASED_ATTACKS.get(attack);
+  if (!bySlot) PHASED_ATTACKS.set(attack, (bySlot = new Map()));
+  const key = `${rp!.bar}:${slot}`;
+  const cached = bySlot.get(key);
+  if (cached) return cached;
+  const merged: EnemyAttackDef = { ...attack };
+  if (ov.damage !== undefined) merged.damage = ov.damage;
+  if (ov.cooldownTicks !== undefined) merged.cooldownTicks = ov.cooldownTicks;
+  if (ov.aoeRadius !== undefined) merged.aoeRadius = ov.aoeRadius;
+  bySlot.set(key, merged);
+  return merged;
+}
+
+/** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격. 페이즈 표(phases[].attackOverrides)가 있으면 피해·쿨다운·범위를 합쳐 돌려준다(B2-6) */
+export function currentAttack(def: EnemyDef, enemy: { attackMode?: string; phase?: number }): EnemyAttackDef {
+  let base = def.attack;
+  if (enemy.attackMode === 'summon' && def.summonAttack) base = def.summonAttack;
+  else if (enemy.attackMode === 'bash' && def.shieldBash) base = def.shieldBash;
+  else if (enemy.attackMode === 'charge' && def.chargeAttack) base = def.chargeAttack;
+  else if (enemy.attackMode === 'volley' && def.volleyAttack) base = def.volleyAttack;
+  else if (enemy.attackMode === 'ranged' && def.rangedAttack) base = def.rangedAttack;
+  else if (enemy.attackMode === 'alt' && def.attackAlt) base = def.attackAlt;
+  else if (enemy.attackMode === 'close' && def.closeAttack) base = def.closeAttack;
+  if (!def.phases) return base;
+  const slot = base === def.attack ? 'attack' : slotOfMode(enemy.attackMode);
+  return attackInPhase(def, enemy, slot, base);
 }
 
 /** 체력 바 분할 — healthBars 만큼 나눠 표시한다 (보스는 2칸).
@@ -631,13 +745,14 @@ export function weakPointWorldPos(
   return { x: enemy.x + r.x, y: (enemy.jumpY ?? 0) + r.y, z: enemy.z + r.z };
 }
 
-/** 이 약점이 지금 판정을 받는가(기획서 §4.2 "노출 아닐 때는 판정 자체가 없다") — 내구가 0(파열)이면 닫힘.
+/** 이 약점이 지금 판정을 받는가(기획서 §4.2 "노출 아닐 때는 판정 자체가 없다") — 내구가 0(파열)이거나 페이즈 전환(molting) 중이면 닫힘.
  *  열림 = 노출 타이머(enemy.exposure[id] > 0 — 패링·완벽 회피가 연다) 또는 자세 노출(enemy.pose ∈ wp.exposedStates — 눈은 head_down).
  *  혼절(pose stunned) 중 눈이 닫히는 것도 이 규칙에서 나온다(stunned 는 눈의 exposedStates 에 없다). Weapons·Projectiles·Stage 공용 */
 export function weakPointOpen(
-  enemy: { weakHp?: Record<string, number>; exposure?: Record<string, number>; pose?: string },
+  enemy: { weakHp?: Record<string, number>; exposure?: Record<string, number>; pose?: string; molting?: boolean },
   wp: WeakPointDef,
 ): boolean {
+  if (enemy.molting) return false; // 페이즈 전환(갑각 재생) 동안은 약점 전부 닫힘(기획서 §8) — 포효 자세라도 눈은 표적이 아니다
   const hp = enemy.weakHp?.[wp.id];
   if (hp !== undefined && hp <= 0) return false;
   if ((enemy.exposure?.[wp.id] ?? 0) > 0) return true;
@@ -663,7 +778,7 @@ export function rayHitsWeakPoint(
   dy: number,
   dz: number,
   enemy: {
-    x: number; z: number; yaw: number; jumpY?: number; pose?: string;
+    x: number; z: number; yaw: number; jumpY?: number; pose?: string; molting?: boolean;
     weakHp?: Record<string, number>; exposure?: Record<string, number>; feigning?: boolean;
   },
   def: { weakPoints?: WeakPointDef[]; poseOffsets?: Record<string, Record<string, LocalVec3>> },

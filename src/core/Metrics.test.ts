@@ -60,9 +60,14 @@ describe('Metrics', () => {
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'topple', on: true, ticks: 90, cell: 'P' }); // 전도
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'head_down', on: true, ticks: 90, cause: 'topple' }); // 전도의 머리 내림은 따로 세지 않는다
     events.emit('pillar_hit', { enemyId: 1, enemyType: 'scythe_behemoth', row: 3, col: 5, x: 22, z: 14 });
+    // 페이즈(B2-6) — 3 → 2 전환(P1 90초), 2 → 1 (P2 120초), 사망(phase 0 — 전환으로 세지 않고 P3 90초만 쌓는다)
+    events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 2, from: 3, skipped: false, fromTicks: 5400, tick: 5400 });
+    events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 1, from: 2, skipped: false, fromTicks: 7200, tick: 12600 });
+    events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 0, from: 1, skipped: false, fromTicks: 5400, tick: 18000, death: true });
 
     const s = metrics.snapshot(makeWorldStub());
     expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1, chargeDodges: 1, limps: 1, blinds: 1, topples: 1, pillarHits: 1 });
+    expect(s.boss).toEqual({ phaseShifts: 2, phaseSkips: 0, phaseSeconds: { '3': 90, '2': 120, '1': 90 } });
     expect(s.combat.parryAttempts).toBe(4);
     expect(s.derived.perfectParryRatio).toBeCloseTo(0.5);
     expect(s.derived.parrySuccessRatio).toBeCloseTo(0.75);
@@ -77,9 +82,18 @@ describe('Metrics', () => {
     expect(s.session.seconds).toBe(60);
   });
 
+  it('2단 건너뜀(skipped)은 전환 1·건너뜀 1 로 센다 — 머문 시간은 from 페이즈에', () => {
+    const events = new Events();
+    const metrics = new Metrics(events);
+    events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 1, from: 3, skipped: true, fromTicks: 600, tick: 600 });
+    const s = metrics.snapshot(makeWorldStub());
+    expect(s.boss).toEqual({ phaseShifts: 1, phaseSkips: 1, phaseSeconds: { '3': 10 } });
+  });
+
   it('데이터가 없으면 파생 지표는 null (0으로 왜곡하지 않는다)', () => {
     const metrics = new Metrics(new Events());
     const s = metrics.snapshot(makeWorldStub());
+    expect(s.boss).toEqual({ phaseShifts: 0, phaseSkips: 0, phaseSeconds: {} });
     expect(s.derived.perfectParryRatio).toBeNull();
     expect(s.derived.manaWasteRatio).toBeNull();
     expect(s.derived.ammoLeftRatioAtAltar).toBeNull();

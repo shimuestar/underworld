@@ -2,10 +2,10 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
-import { attackReaches, bladeOfJoint, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, jointOfBlade, rayHitsEnemy, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
+import { attackInPhase, attackReaches, bladeOfJoint, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, jointOfBlade, rayHitsEnemy, resolvePhase, slotUnlocked, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { World, type EnemyState } from '../core/World';
+import { World, openExposure, type EnemyState } from '../core/World';
 import { sigilDef } from '../core/SigilData';
 import { Level } from '../level/GridLoader';
 import { isSpawnable, spawnEnemyAt } from '../level/Spawner';
@@ -1289,7 +1289,7 @@ describe('캐스터 재배치 — 아군이 사선을 막을 때', () => {
   });
 });
 
-describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + 왼낫 교대·들이받기(B1-3) + 패링 → 노출·머리 내림·눈 혼절(B2-2) + 파열·낫 잠김·절뚝·완벽 회피(B2-3)', () => {
+describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + 왼낫 교대·들이받기(B1-3) + 패링 → 노출·머리 내림·눈 혼절(B2-2) + 파열·낫 잠김·절뚝·완벽 회피(B2-3) + 페이즈 골격(B2-6)', () => {
   const TYPE = 'scythe_behemoth';
   const def = enemyDef(TYPE);
 
@@ -2794,6 +2794,368 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(w.status.map(w.tag)).toEqual(['expose:eye:true', 'expose:eye:false', 'blind:true', 'blind:false']);
       expect(w.pillars).toHaveLength(0);
       expect(w.hits).toHaveLength(0);
+    });
+  });
+
+  describe('B2-6 페이즈 골격 (기획서 §8 — boss_phase·phaseTarget 큐잉·phase_shift 갑각 재생·phases[] 덮어쓰기)', () => {
+    const wpc = balance.weakPoint;
+    const perBar = def.health / def.healthBars!; // 500
+    type Phase = { phase: number; from: number; skipped: boolean; fromTicks: number; name?: string; shiftText?: string };
+    type Status = { kind: string; on: boolean; id?: string; blade?: string; ticks?: number; phase?: number; from?: number };
+    function watch() {
+      const phases: Phase[] = [];
+      world.events.on('boss_phase', (p) => phases.push(p as Phase));
+      const status: Status[] = [];
+      world.events.on('boss_status', (p) => status.push(p as Status));
+      const sheds: { count: number }[] = [];
+      world.events.on('plate_shed', (p) => sheds.push(p as { count: number }));
+      const closed: { id: string; hits: number }[] = [];
+      world.events.on('exposure_closed', (p) => closed.push(p as { id: string; hits: number }));
+      const hits: { amount: number }[] = [];
+      world.events.on('player_damaged', (p) => hits.push(p as { amount: number }));
+      const tag = (st: Status): string => `${st.kind}${st.id ? ':' + st.id : ''}:${st.on}`;
+      return { phases, status, sheds, closed, hits, tag };
+    }
+    /** 머리 내림(완벽 패링) 창을 연다 — 큐잉 시험의 '창' */
+    function openHeadDown(boss: EnemyState): void {
+      expect(perfectParry(boss)).toBe('perfect');
+      expect(boss.pose).toBe('head_down');
+      expect(boss.poseTicks).toBe(wpc.headDown.stuckTicks);
+    }
+
+    it('데이터 — phases 3칸(bar 3·2·1, 이름 돌각·오염 갑각·광란), P2 해금·돌격 쿨 360, P3 이속 ×1.2·낫 34·들이받기 24·돌격 50/300·발구르기 28/5.5, phaseShiftTicks 90·쿨다운 배율 0.5. 누적 합치기(resolvePhase)·해금 판정(slotUnlocked)·스포너 초기 phase 3, 족장엔 없다', () => {
+      const ph = def.phases!;
+      expect(ph.map((x) => x.bar)).toEqual([3, 2, 1]);
+      expect(ph.map((x) => x.name)).toEqual(['돌각', '오염 갑각', '광란']);
+      expect(ph[1]!.unlock).toEqual(['slam', 'volley', 'wakeSlam']);
+      expect(ph[1]!.poolsOn).toBe(true);
+      expect(ph[1]!.shellPlatesOn).toBe(true);
+      expect(ph[1]!.attackOverrides).toEqual({ charge: { cooldownTicks: 360 } });
+      expect(ph[1]!.shiftText).toBe('갑각이 갈라진다');
+      expect(ph[2]!.speedMul).toBe(1.2);
+      expect(ph[2]!.unlock).toEqual(['roar', 'combo', 'chainCharge']);
+      expect(ph[2]!.shedPlates).toBe(true);
+      expect(ph[2]!.firstPick).toBe('roar');
+      expect(ph[2]!.shiftText).toBe('거수가 광란한다');
+      expect(ph[2]!.attackOverrides).toEqual({
+        attack: { damage: 34 }, attackAlt: { damage: 34 }, close: { damage: 24 }, charge: { damage: 50, cooldownTicks: 300 }, slam: { damage: 28, aoeRadius: 5.5 },
+      });
+      expect(wpc.phaseShiftTicks).toBe(90);
+      expect(wpc.phaseShiftCooldownMul).toBe(0.5);
+      // 누적 — P3 는 P2 의 해금·갑각판을 그대로 갖고 같은 키는 P3 가 덮는다(돌격 쿨 360 → 300)
+      const p1 = resolvePhase(def, 3)!;
+      const p2 = resolvePhase(def, 2)!;
+      const p3 = resolvePhase(def, 1)!;
+      expect(p1.speedMul).toBe(1);
+      expect([...p1.unlock]).toEqual([]);
+      expect(p1.attackOverrides).toEqual({});
+      expect(p1.shellPlatesOn).toBe(false);
+      expect(p2.attackOverrides['charge']).toEqual({ cooldownTicks: 360 });
+      expect(p2.unlock.has('volley')).toBe(true);
+      expect(p2.unlock.has('roar')).toBe(false);
+      expect(p2.shiftText).toBe('갑각이 갈라진다');
+      expect(p3.speedMul).toBe(1.2);
+      expect(p3.unlock.has('volley')).toBe(true);
+      expect(p3.unlock.has('roar')).toBe(true);
+      expect(p3.attackOverrides['charge']).toEqual({ damage: 50, cooldownTicks: 300 });
+      expect(p3.shellPlatesOn).toBe(true);
+      expect(p3.shedPlates).toBe(true);
+      expect(p3.name).toBe('광란');
+      expect(p3.shiftText).toBe('거수가 광란한다');
+      expect(resolvePhase(def, undefined)).toBeUndefined();
+      // 해금 — 어느 페이즈에도 안 적힌 슬롯(attack·charge·close)은 늘 열려 있고 volley 는 P2 부터. 표가 없는 족장은 늘 참
+      expect(slotUnlocked(def, { phase: 3 }, 'volley')).toBe(false);
+      expect(slotUnlocked(def, { phase: 2 }, 'volley')).toBe(true);
+      expect(slotUnlocked(def, { phase: 3 }, 'attack')).toBe(true);
+      expect(slotUnlocked(def, { phase: 3 }, 'charge')).toBe(true);
+      expect(slotUnlocked(def, { phase: 3 }, 'roar')).toBe(false);
+      expect(slotUnlocked(def, { phase: 1 }, 'roar')).toBe(true);
+      expect(slotUnlocked(enemyDef('goblin_chieftain'), {}, 'volley')).toBe(true);
+      // 스포너 — 첫 칸(3)으로 태어난다. 족장·어미 슬라임은 페이즈가 없다(체력 칸은 표시만)
+      expect(spawnEnemyAt(TYPE, 0, 0, 1).phase).toBe(3);
+      expect(enemyDef('goblin_chieftain').phases).toBeUndefined();
+      expect(spawnEnemyAt('goblin_chieftain', 0, 0, 1).phase).toBeUndefined();
+      // 덮어쓰기 없는 슬롯·페이즈는 원본 객체 그대로(항등 비교하는 옛 코드가 있어도 안전)
+      expect(currentAttack(def, { attackMode: 'melee', phase: 3 })).toBe(def.attack);
+      expect(currentAttack(def, { attackMode: 'charge', phase: 3 })).toBe(def.chargeAttack);
+      expect(currentAttack(def, { attackMode: 'charge', phase: 2 })).not.toBe(def.chargeAttack);
+      expect(currentAttack(def, { attackMode: 'charge', phase: 2 }).cooldownTicks).toBe(360);
+      expect(currentAttack(def, { attackMode: 'charge', phase: 2 }).damage).toBe(45);
+      expect(currentAttack(def, { attackMode: 'charge', phase: 2 })).toBe(currentAttack(def, { attackMode: 'charge', phase: 2 })); // 캐시
+      expect(currentAttack(def, { attackMode: 'melee', phase: 1 }).damage).toBe(34);
+      expect(currentAttack(def, { attackMode: 'alt', phase: 1 }).damage).toBe(34);
+      expect(currentAttack(def, { attackMode: 'alt', phase: 1 }).windupTicks).toBe(28); // 나머지 필드는 그대로
+      expect(currentAttack(def, { attackMode: 'close', phase: 1 }).damage).toBe(24);
+      expect(currentAttack(def, { attackMode: 'charge', phase: 1 }).damage).toBe(50);
+      expect(currentAttack(def, { attackMode: 'charge', phase: 1 }).cooldownTicks).toBe(300);
+      const chief = enemyDef('goblin_chieftain');
+      expect(currentAttack(chief, { attackMode: 'melee' })).toBe(chief.attack);
+    });
+
+    it('칸 경계 전환 — 추격 중 체력이 1000(3칸째 비움)에 닿는 틱에 boss_phase{phase 2, from 3} 한 번 + phase_shift: recover 90·pose roar·molting(약점 전부 닫힘), 90틱 뒤 chase 복귀 + molt off. 1001 에선 아무 일도 없다', () => {
+      const boss = makeBehemoth(10);
+      boss.chargeCooldown = 9999; // 돌격이 끼어들지 않게 — 걷기만
+      const w = watch();
+      Enemies.tick(world, DT);
+      expect(boss.phase).toBe(3);
+      expect(boss.phaseSince).toBeDefined();
+      boss.health = perBar * 2 + 1; // 1001 — 아직 3칸째
+      Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(0);
+      expect(boss.phase).toBe(3);
+      expect(boss.phaseTarget).toBeUndefined();
+      expect(resolvePhase(def, boss.phase)!.name).toBe('돌각');
+      // 노출 하나 열어 두고(왼 관절) — 전환이 닫아야 한다
+      openExposure(world, boss, 'joint_l', 50);
+      expect(weakPointOpen(boss, wp('joint_l'))).toBe(true);
+      const t0 = world.tick;
+      boss.health = perBar * 2; // 1000 — 칸이 빈다
+      Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(1);
+      expect(w.phases[0]).toMatchObject({ phase: 2, from: 3, skipped: false, name: '오염 갑각', shiftText: '갑각이 갈라진다' });
+      expect(boss.phase).toBe(2);
+      expect(boss.phaseTarget).toBeUndefined();
+      expect(boss.ai).toBe('recover');
+      expect(boss.pose).toBe('roar');
+      expect(boss.molting).toBe(true);
+      expect(boss.poseTicks).toBe(wpc.phaseShiftTicks - 1); // 전환 틱에 포즈 시계가 한 번 돈다
+      expect(boss.exposure?.['joint_l']).toBeUndefined();
+      expect(w.closed.map((c) => c.id)).toEqual(['joint_l']);
+      expect(w.status.map(w.tag)).toEqual(['expose:joint_l:true', 'expose:joint_l:false', 'molt:true']);
+      expect(w.status[2]).toMatchObject({ kind: 'molt', on: true, ticks: 90, phase: 2, from: 3 });
+      expect(resolvePhase(def, boss.phase)!.name).toBe('오염 갑각');
+      // 약점 전부 닫힘 — 타이머를 억지로 세워도 판정이 없다(포효 자세라도 눈은 표적이 아니다)
+      boss.exposure = { joint_r: 30 };
+      expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+      expect(weakPointOpen(boss, wp('eye'))).toBe(false);
+      delete boss.exposure['joint_r'];
+      // 무적은 아니다 — 몸통 사격이 들어간다
+      const hpBefore = boss.health;
+      shootAt(boss.x, 1.6, boss.z);
+      expect(boss.health).toBeLessThan(hpBefore);
+      // 전환 동안은 움직이지도 공격하지도 않는다
+      const x0 = boss.x;
+      tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      expect(world.tick - t0).toBe(0); // world.tick 은 Loop 이 올린다 — 여기선 틱 수를 poseTicks 로 잰다
+      expect(boss.x).toBe(x0);
+      expect(boss.pose).toBeUndefined();
+      expect(boss.molting).toBe(false);
+      expect(boss.poseTicks ?? 0).toBe(0);
+      expect(w.status.map(w.tag).slice(3)).toEqual(['molt:false']);
+      expect(w.phases).toHaveLength(1);
+      expect(boss.phase).toBe(2);
+      // 복귀 뒤 다시 걷는다
+      Enemies.tick(world, DT);
+      expect(boss.x).toBeLessThan(x0);
+    });
+
+    it('전환은 진행 중 공격을 취소한다 — 낫 예고 중 칸이 비면 그 틱에 예고가 끊기고 포효(attackMode melee·strikeProgress 0), 돌격 예고도 같다(chargeCooldown 은 절반으로)', () => {
+      const boss = makeBehemoth(4.0);
+      const w = watch();
+      tickEnemiesUntil(() => boss.ai === 'windup');
+      boss.health = perBar * 2;
+      Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(1);
+      expect(boss.ai).toBe('recover');
+      expect(boss.pose).toBe('roar');
+      expect(boss.attackMode).toBe('melee');
+      expect(boss.strikeProgress).toBe(0);
+      tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      expect(w.hits).toHaveLength(0); // 끊긴 낫은 닿지 않았다
+      // 돌격 예고 중 — 두 번째 경계(500). 플레이어를 10m 뒤(+x, 경기장 안쪽)로 물린다
+      world.player.x = boss.x + 10;
+      world.player.prevX = world.player.x;
+      boss.closeCooldown = 0;
+      tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'charge', 400);
+      const cdBefore = boss.chargeCooldown!;
+      expect(cdBefore).toBe(360); // P2 돌격 쿨(attackOverrides.charge.cooldownTicks) — 선택 순간에 물린다
+      boss.health = perBar;
+      Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(2);
+      expect(w.phases[1]).toMatchObject({ phase: 1, from: 2, skipped: false });
+      expect(boss.attackMode).toBe('melee');
+      expect(boss.ai).toBe('recover');
+      expect(boss.pose).toBe('roar');
+      expect(boss.chargeCooldown).toBe(Math.round(cdBefore * wpc.phaseShiftCooldownMul) - 1); // 절반, 그 뒤 전환 틱의 감소 1
+      expect(boss.chargeTargetX).toBeUndefined();
+    });
+
+    it('큐잉 — 머리 내림(완벽 패링)·혼절(처형 창)·처형 넉백 중에 칸이 비면 phaseTarget 만 갱신하고 발동하지 않는다(눈 창·처형 창을 빼앗지 않는다). 넉백이 끝나 자유로워지는 틱에 한 번만 전환', () => {
+      const boss = makeBehemoth(4.0);
+      const w = watch();
+      openHeadDown(boss);
+      boss.health = perBar * 2; // 칸이 비었지만 창 안
+      for (let i = 0; i < 20; i++) Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(0);
+      expect(boss.phase).toBe(3);
+      expect(boss.phaseTarget).toBe(2);
+      expect(boss.pose).toBe('head_down'); // 창은 그대로
+      expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+      expect(resolvePhase(def, boss.phase)!.name).toBe('돌각'); // HUD 페이즈명도 아직 이전 것
+      // 눈 66 → 혼절(처형 창) — 여전히 발동하지 않는다
+      shootEye(boss);
+      shootEye(boss);
+      Enemies.tick(world, DT);
+      expect(boss.ai).toBe('staggered');
+      for (let i = 0; i < 30; i++) Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(0);
+      expect(boss.phaseTarget).toBe(2);
+      // 처형 — 240 이 들어가고 6.5m 넉백. 넉백 동안도 발동하지 않고, 넉백이 끝난 뒤 첫 자유 틱에 한 번
+      pressReaction();
+      expect(boss.health).toBeCloseTo(perBar * 2 - 240 - 66, 5); // 눈 33×2 + 처형 240 — 아직 2칸째(694 > 500)
+      expect(boss.kbTicks).toBe(balance.reaction.executeKnockbackTicks);
+      let firedWithKb = false;
+      let ticksToFire = 0;
+      for (let i = 0; i < 200 && w.phases.length === 0; i++) {
+        const kbBefore = (boss.kbTicks ?? 0) > 0;
+        Enemies.tick(world, DT);
+        ticksToFire++;
+        if (w.phases.length > 0 && kbBefore) firedWithKb = true;
+      }
+      expect(w.phases).toHaveLength(1);
+      expect(firedWithKb).toBe(false); // 넉백 마지막 틱까지는 발동하지 않는다
+      expect(boss.kbTicks ?? 0).toBe(0);
+      expect(ticksToFire).toBeGreaterThan(balance.reaction.executeKnockbackTicks); // 처형 연출 정지(executeFocusTicks) + 넉백 뒤
+      expect(w.phases[0]).toMatchObject({ phase: 2, from: 3, skipped: false });
+      expect(boss.phase).toBe(2);
+      expect(boss.phaseTarget).toBeUndefined();
+      expect(boss.pose).toBe('roar');
+      // 혼절 쿨다운(플레이어 쪽 박자)은 절반이 되지 않는다 — 처형 뒤 흐른 틱만큼만 줄었다
+      expect(boss.dazeCooldown!).toBeGreaterThan(wpc.dazeCooldownTicks * wpc.phaseShiftCooldownMul);
+      expect(boss.dazeCooldown!).toBeGreaterThanOrEqual(wpc.dazeCooldownTicks - ticksToFire);
+      tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      expect(w.phases).toHaveLength(1);
+    });
+
+    it('2단 건너뜀 — 한 창(머리 내림) 안에서 두 경계를 넘으면(1500 → 400) 한 번의 전환으로 P3: boss_phase{phase 1, from 3, skipped true}, 연출은 P3 것(plate_shed·문구 광란), P2 의 해금·덮어쓰기도 누적. 이속 ×1.2 는 걷기에만', () => {
+      const boss = makeBehemoth(4.0);
+      const w = watch();
+      openHeadDown(boss);
+      boss.health = perBar - 100; // 400 — 1칸째
+      for (let i = 0; i < 10; i++) Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(0);
+      expect(boss.phaseTarget).toBe(1);
+      tickEnemiesUntil(() => boss.pose === 'roar', 120);
+      expect(w.phases).toHaveLength(1);
+      expect(w.phases[0]).toMatchObject({ phase: 1, from: 3, skipped: true, name: '광란', shiftText: '거수가 광란한다' });
+      expect(boss.phase).toBe(1);
+      expect(w.sheds).toHaveLength(1); // 등갑판 탈락은 P3 연출 — P2 를 건너뛰어도 한 번
+      expect(w.sheds[0]!.count).toBe(def.visual!.plates.z.length);
+      expect(w.status.filter((st) => st.kind === 'molt' && st.on)).toHaveLength(1);
+      // 덮어쓰기 — 낫 34(오른·왼)·들이받기 24·돌격 50/300, 해금은 P2 것까지
+      boss.attackMode = 'melee';
+      expect(currentAttack(def, boss).damage).toBe(34);
+      boss.attackMode = 'alt';
+      expect(currentAttack(def, boss).damage).toBe(34);
+      boss.attackMode = 'close';
+      expect(currentAttack(def, boss).damage).toBe(24);
+      boss.attackMode = 'melee';
+      expect(attackInPhase(def, boss, 'charge', def.chargeAttack!)).toMatchObject({ damage: 50, cooldownTicks: 300 });
+      expect(slotUnlocked(def, boss, 'volley')).toBe(true);
+      expect(slotUnlocked(def, boss, 'roar')).toBe(true);
+      // 걷기 ×1.2 — 복귀 뒤 멀리 선 플레이어(돌격 maxRange 밖)를 향해 3.84 m/s 로 걷는다. 돌격 속도는 데이터 그대로
+      tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      world.player.x = boss.x - 20;
+      world.player.prevX = world.player.x;
+      boss.closeCooldown = 0;
+      const x0 = boss.x;
+      const z0 = boss.z;
+      for (let i = 0; i < 10; i++) Enemies.tick(world, DT);
+      expect(Math.hypot(boss.x - x0, boss.z - z0)).toBeCloseTo((def.speed * 1.2 * 10) / 60, 2);
+      expect(attackInPhase(def, boss, 'charge', def.chargeAttack!).chargeSpeed).toBe(def.chargeAttack!.chargeSpeed);
+    });
+
+    it('갑각 재생(molt) — 파열한 두 관절(hp 0·ruptured·낫 잠김·절뚝)이 전환에 hp 132 로 돌아오고 표식이 지워져 낫 잠김(rupture off ×2)·절뚝(limp off)이 풀린다, 공격 쿨다운 절반. 복귀 뒤 낫이 다시 나가고, 관절이 다시 0 이 되면 다시 파열한다', () => {
+      const boss = makeBehemoth(4.0);
+      const w = watch();
+      boss.weakHp!['joint_r'] = 0;
+      boss.weakHp!['joint_l'] = 0;
+      Enemies.tick(world, DT);
+      expect(boss.ruptured).toEqual({ joint_r: true, joint_l: true });
+      expect(boss.bladeLock).toEqual({ r: wpc.rupture.bladeLockTicks, l: wpc.rupture.bladeLockTicks });
+      expect(boss.limping).toBe(true);
+      boss.timer = 0; // 비틀거림을 끝내 자유 상태로
+      Enemies.tick(world, DT);
+      boss.chargeCooldown = 400;
+      boss.closeCooldown = 200;
+      boss.volleyCooldown = 30;
+      boss.health = perBar * 2;
+      Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(1);
+      expect(boss.weakHp).toEqual({ joint_r: wp('joint_r').hp, joint_l: wp('joint_l').hp });
+      expect(boss.ruptured).toEqual({});
+      expect(boss.bladeLock).toEqual({});
+      // 절반 — 전환 틱의 쿨다운 감소(−1)가 그 뒤에 한 번 돈다
+      expect(boss.chargeCooldown).toBe(Math.round(400 * wpc.phaseShiftCooldownMul) - 1);
+      expect(boss.closeCooldown).toBe(Math.round(200 * wpc.phaseShiftCooldownMul) - 1);
+      expect(boss.volleyCooldown).toBe(Math.round(30 * wpc.phaseShiftCooldownMul) - 1);
+      const tags = w.status.map(w.tag);
+      expect(tags.filter((t) => t === 'rupture:joint_r:false')).toHaveLength(1);
+      expect(tags.filter((t) => t === 'rupture:joint_l:false')).toHaveLength(1);
+      Enemies.tick(world, DT);
+      expect(boss.limping).toBe(false);
+      expect(w.status.map(w.tag)).toContain('limp:false');
+      // 관절 판정이 다시 산다(내구가 돌아왔으니 노출 타이머가 열린다) — 전환이 끝난 뒤
+      tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      openExposure(world, boss, 'joint_r', 30);
+      expect(weakPointOpen(boss, wp('joint_r'))).toBe(true);
+      // 낫이 다시 나간다(pickMeleeMode 가 null 이 아니다)
+      tickEnemiesUntil(() => boss.ai === 'windup', 300);
+      expect(['melee', 'alt']).toContain(boss.attackMode);
+      // 다시 0 → 다시 파열(표식이 지워졌으니) — 오른낫 잠김
+      boss.weakHp!['joint_r'] = 0;
+      Enemies.tick(world, DT);
+      expect(boss.ruptured).toEqual({ joint_r: true });
+      expect(boss.bladeLock).toEqual({ r: wpc.rupture.bladeLockTicks });
+      expect(w.status.map(w.tag).filter((t) => t === 'rupture:joint_r:true')).toHaveLength(2); // 처음 파열 + 재생 뒤 다시 파열
+    });
+
+    it('덮어쓰기가 실제 타격에 적용된다 — P3 낫이 플레이어에게 34(P1 30) 를 넣는다', () => {
+      const boss = makeBehemoth(4.0);
+      const w = watch();
+      boss.health = perBar; // 500 — 1칸째(P3)
+      Enemies.tick(world, DT);
+      expect(boss.phase).toBe(1);
+      tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      tickEnemiesUntil(() => w.hits.length > 0, 400);
+      expect(w.hits[0]!.amount).toBe(34);
+      expect(['melee', 'alt']).toContain(boss.attackMode);
+    });
+
+    it('페이즈 표가 없는 보스(족장, 2칸)는 칸이 비어도 아무 일도 없다 — boss_phase·molt·phase 없음, currentAttack 은 원본 객체 그대로', () => {
+      const chief = spawnEnemyAt('goblin_chieftain', 14, 6, 1);
+      chief.ai = 'chase';
+      world.enemies.push(chief);
+      const w = watch();
+      const cdef = enemyDef('goblin_chieftain');
+      expect(healthBarState(cdef, cdef.health).index).toBe(2);
+      Enemies.tick(world, DT);
+      chief.health = cdef.health / 2; // 2칸째가 빈다
+      for (let i = 0; i < 5; i++) Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(0);
+      expect(w.status.filter((st) => st.kind === 'molt')).toHaveLength(0);
+      expect(chief.phase).toBeUndefined();
+      expect(chief.pose).toBeUndefined();
+      chief.attackMode = 'melee';
+      expect(currentAttack(cdef, chief)).toBe(cdef.attack);
+      chief.attackMode = 'charge';
+      expect(currentAttack(cdef, chief)).toBe(cdef.chargeAttack);
+    });
+
+    it('사망 — 마지막 페이즈의 소요 틱을 boss_phase{phase 0, from, fromTicks, death} 로 한 번만 알린다(계측: 페이즈별 시간)', () => {
+      const boss = makeBehemoth(10);
+      boss.chargeCooldown = 9999;
+      const w = watch();
+      for (let i = 0; i < 30; i++) {
+        Enemies.tick(world, DT);
+        world.tick++;
+      }
+      boss.health = 0;
+      boss.alive = false;
+      Enemies.tick(world, DT);
+      Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(1);
+      expect(w.phases[0]).toMatchObject({ phase: 0, from: 3, fromTicks: 30, death: true });
     });
   });
 });

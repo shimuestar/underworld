@@ -13,7 +13,10 @@
 // rupture(B2-3 — 오른 관절 파열: 구체 어둡게(0x7a1f3a), 오른낫이 축 늘어져 끝이 바닥을 긁는다, 왼낫은 대기 — 오른 옆에서) /
 // limp(B2-3 — 양 낫 잠김 절뚝: 두 낫이 다 끌리고 앞다리 걸음이 짧다, 측면 걸음) /
 // blind(B2-5 — 눈멂 질주: 웅크린 돌격 자세로 내린 머리(표의 눈 1.2m)를 좌우로 휘젓는다, 뿔·몸 빨강, 눈 닫힘 — 정면 살짝 옆) /
-// topple(B2-5 — 돌격이 기둥에 박혀 전도: head_down 자세 + 눈만 열림(관절은 안 열린다), 기둥 참조 상자 앞 — 측면).
+// topple(B2-5 — 돌격이 기둥에 박혀 전도: head_down 자세 + 눈만 열림(관절은 안 열린다), 기둥 참조 상자 앞 — 측면) /
+// roar(B2-6 — 페이즈 전환 갑각 재생: 머리 치켜듦(표의 눈 2.9m)·입 벌림 −0.8rad·두 낫 벌려 들기, P2 진입 연출로 등갑판 균열 발광·분출공 점등, 약점 전부 닫힘 — 정면 아래에서) /
+// p2(B2-6 — 오염 갑각: 정면 normal 자세에 균열 발광·분출공 점등 — 분출공이 머리에 가리지 않는지) / p2-back(같은 P2 를 뒤 위에서 — 등갑판 균열 띠·실금) /
+// p3(B2-6 — 광란: 등갑판 탈락·눈 붉은 홍채 — 뒤 위에서).
 // &pose=charge|head_down|… 을 붙이면 약점 구체와 머리 메시(목 IK)를 그 자세의 poseOffsets 표 자리에 놓는다
 // (안내문에 구체 자리와 머리 메시의 눈 자리(anchor)를 함께 찍는다 — 어긋남이 0 에 가까워야 한다, B2-2).
 // 참조물: 4.4m 기둥(= attackRange, 흰색) · 플레이어 기둥(r0.4 h1.7, 몸 표면이 4.4m) · 천장 4.0m / 낫 상한 3.8m 선.
@@ -21,8 +24,8 @@
 // (src/render/Behemoth.test.ts 의 천장·바닥 검사와 같은 잣대).
 import * as THREE from 'three';
 import { balance } from '../src/core/Balance';
-import { enemyDef } from '../src/core/Entities';
-import { BEHEMOTH_TORSO, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, buildBehemothRig, poseBehemothRig, styleBehemothWeakPoints } from '../src/render/Stage';
+import { enemyDef, resolvePhase } from '../src/core/Entities';
+import { BEHEMOTH_TORSO, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, behemothVentLit, buildBehemothRig, poseBehemothRig, setBehemothPhaseLook, styleBehemothWeakPoints } from '../src/render/Stage';
 
 const def = enemyDef('scythe_behemoth');
 const params = new URLSearchParams(location.search);
@@ -236,6 +239,40 @@ if (view === 'side') {
   styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'eye', broken: false, flashAgeMs: -1 }));
   camera.position.set(8.5, 2.0, -3.0);
   camera.lookAt(0, 1.2, -2.0);
+} else if (view === 'roar') {
+  // 페이즈 전환(B2-6, P1 → P2) — 포효 자세(로직 pose 'roar': 목 IK 가 눈을 표 2.9m 로, 턱 −0.8rad, 두 낫 벌려 들기) + P2 외형(등갑판 균열 발광·분출공 점등).
+  // 약점은 전부 닫힘(molting) — 눈은 표 자리에 있되 발광 없음. 플레이어 눈높이 정면에서 올려다본다
+  torso.rotation.x = BEHEMOTH_TORSO.roarLean;
+  poseBehemothRig(rig, { ...base, pose: 'roar', nowMs: 45 * Math.PI * 0.5 });
+  const p2 = resolvePhase(def, 2);
+  setBehemothPhaseLook(rig, p2, 1400 * 0.25);
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2) }));
+  camera.position.set(1.2, balance.player.eyeHeight, -7.5);
+  camera.lookAt(0, 2.2, -0.6);
+} else if (view === 'p2') {
+  // 오염 갑각(P2) 정면 normal — 등갑판 사이 균열 녹색 발광, 분출공(1.65m, 머리 아래) 점등이 머리에 가리지 않는지
+  poseBehemothRig(rig, base);
+  const p2 = resolvePhase(def, 2);
+  setBehemothPhaseLook(rig, p2, 1400 * 0.25);
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2) }));
+  camera.position.set(0.6, balance.player.eyeHeight, -7.5);
+  camera.lookAt(0, 1.7, -0.5);
+} else if (view === 'p2-back') {
+  // 오염 갑각(P2) 뒤 위 — 등갑판 사이 이음새 띠 2 + 판 위 실금 3 이 녹색으로 빛나는지(정면에선 머리에 가린다)
+  poseBehemothRig(rig, base);
+  const p2 = resolvePhase(def, 2);
+  setBehemothPhaseLook(rig, p2, 1400 * 0.25);
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2) }));
+  camera.position.set(4.5, 4.2, 5.5);
+  camera.lookAt(0, 2.0, -0.8);
+} else if (view === 'p3') {
+  // 광란(P3) — 등갑판·균열 탈락(숨김), 눈 붉은 홍채, 분출공 점등 유지. 뒤 위에서 등을 본다
+  poseBehemothRig(rig, base);
+  const p3 = resolvePhase(def, 1);
+  setBehemothPhaseLook(rig, p3, 0);
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p3) }));
+  camera.position.set(4.5, 4.2, 5.5);
+  camera.lookAt(0, 2.0, -0.8);
 } else if (view === 'stunned') {
   // 혼절(눈 누적 66) — 몸 스태거 금색, 머리가 처져 휘청, 눈은 닫힘(판정 없음) = 처형 창
   torso.rotation.x = BEHEMOTH_TORSO.stunnedLean;
