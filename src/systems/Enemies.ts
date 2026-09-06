@@ -1220,7 +1220,7 @@ function tickGhoulMoan(world: World, enemy: EnemyState): void {
  *  ④ 자세 비추기: staggered ↔ pose 'stunned' / 돌격(예고·질주·타격·헛돌격 경직) ↔ pose 'charge' — 포즈 타이머(head_down)가 없을 때만.
  *  ⑤ 눈 누적: head_down 중·쿨다운 아님·혼절 아님일 때만 weakAccum.eye 가 산다(아니면 매 틱 0 — 쿨다운 중 맞힌 것은 안 쌓인다).
  *     dazeThreshold 에 닿으면 혼절: staggered(reaction.staggerTicks) + pose stunned + boss_staggered{cause 'eye'}, 눈 노출은 닫힌다.
- *  ⑥ 낫 잠김(bladeLock) 감소 → 0 이면 해제(boss_status rupture off). ⑦ 관절 내구 0 이 새로 생겼으면 파열(ruptureJoint).
+ *  ⑥ 낫 잠김(bladeLock) 감소 → 0 이면 해제(boss_status rupture off). ⑦ 관절(낫 짝이 있는 약점) 내구 0 이 새로 생겼으면 파열(ruptureJoint).
  *  ⑧ 절뚝(limping) = 양 낫 잠김 — 바뀌는 틱에 boss_status limp on/off.
  *  약점 정의가 없는 적(족장·잡몹)은 아무것도 하지 않는다. 혼절로 넘어간 틱은 true — 그 틱의 나머지 행동은 건너뛴다
  *  (Reaction 의 패링 스태거와 같이 staggerTicks 가 온전히 남는다) */
@@ -1248,10 +1248,12 @@ function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<ty
       }
     }
   }
-  // ⑦ 관절 파열 — 내구가 0 에 닿은(Weapons/Projectiles 의 hitWeakPoint 가 깎는다) 관절을 처음 보는 틱에 한 번
+  // ⑦ 관절 파열 — 내구가 0 에 닿은(Weapons/Projectiles 의 hitWeakPoint 가 깎는다) 관절을 처음 보는 틱에 한 번.
+  //    낫 짝(bladeOfJoint)이 있는 약점만 — 분출공(vent) 내구 0 은 파열이 아니라 질식(choke, B3-2)이 따로 가른다
   if (enemy.weakHp) {
     for (const wp of def.weakPoints) {
-      if (wp.hp === undefined || (enemy.weakHp[wp.id] ?? 1) > 0 || enemy.ruptured?.[wp.id]) continue;
+      if (wp.hp === undefined || bladeOfJoint(def, wp.id) === undefined) continue;
+      if ((enemy.weakHp[wp.id] ?? 1) > 0 || enemy.ruptured?.[wp.id]) continue;
       ruptureJoint(world, enemy, def, wp.id);
     }
   }
@@ -2066,11 +2068,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       const dodgeExpose = attack.perfectDodgeExposes;
       if (reaches && p.iframeTicks > 0 && dodgeExpose) {
         // 완벽 회피(거수 돌격, 기획서 §9.3) — 몸이 닿은 순간이 회피 무적 안이다. 피해 0, 거수는 헛돌격이 아니라 미끄러져 굳고(pose skid)
-        // 양 어깨 관절이 짧게 열린다(마나 0 — 노출이 보상). 파열한(내구 0) 관절은 열지 않는다. 눈멂(B2-5)보다 우선
+        // 양 어깨 관절이 짧게 열린다(마나 0 — 노출이 보상). 파열한(내구 0) 관절은 openExposure 가 거른다. 눈멂(B2-5)보다 우선
         world.events.emit('charge_dodged', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
-        for (const id of dodgeExpose.joints) {
-          if ((enemy.weakHp?.[id] ?? 1) > 0) openExposure(world, enemy, id, dodgeExpose.ticks);
-        }
+        for (const id of dodgeExpose.joints) openExposure(world, enemy, id, dodgeExpose.ticks);
         beginPose(world, enemy, 'skid', balance.weakPoint.skid.ticks);
         break;
       }

@@ -1133,9 +1133,13 @@ export function hitWeakPoint(
 
 /** 약점 노출 타이머를 연다(거수 관절 — 패링·완벽 회피). 이미 열려 있으면 더 긴 쪽으로 늘리고 장부는 그대로,
  *  새로 열리면 이번 노출의 횟수·누적을 0 으로. boss_status{kind 'expose', on} 발행(기획서 §5 — 소리·문구는 main 이 붙인다).
+ *  파열한(내구 weakHp 0) 약점은 열지 않는다 — 판정(weakPointOpen)이 hp 0 으로 이미 닫혀 있어 타이머를 세우면 문구·소리(expose on)와
+ *  그림·판정이 어긋나고 exposure_closed{hits 0} 가 노출 활용률 분모만 부풀린다. 낫 잠김이 풀린 뒤 그 낫을 패링해도 관절 hp 는
+ *  갑각 재생(B2-6)까지 0 이라 여기서 걸러진다. Reaction(패링)·Enemies(완벽 회피) 두 호출부가 이 한 문을 지난다.
  *  Reaction 이 열고 Enemies 가 깎아 닫는다(closeExposure) */
 export function openExposure(world: World, enemy: EnemyState, id: string, ticks: number): void {
   if (ticks <= 0) return;
+  if ((enemy.weakHp?.[id] ?? 1) <= 0) return;
   enemy.exposure ??= {};
   const was = enemy.exposure[id] ?? 0;
   enemy.exposure[id] = Math.max(was, ticks);

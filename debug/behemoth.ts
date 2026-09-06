@@ -187,7 +187,7 @@ if (view === 'side') {
     camera.lookAt(0, 1.1, -1.0);
   }
 } else if (view === 'skid') {
-  // 미끄러짐(B2-3) — 완벽 회피 직후. 몸통 옆 15°(rotation.z) + 앞으로 밀림·낮춤, 로직 자세 'skid'(표: 눈 2.2·관절 2.4), 양 관절 열림
+  // 미끄러짐(B2-3) — 완벽 회피 직후. 몸통 옆 8°(rotation.z = skidRoll, 어깨 축) + 앞으로 밀림·낮춤, 로직 자세 'skid'(표: 눈 2.2·관절 2.4), 양 관절 열림
   torso.rotation.x = BEHEMOTH_TORSO.skidLean;
   torso.rotation.z = BEHEMOTH_TORSO.skidRoll;
   torso.position.x = Math.sin(BEHEMOTH_TORSO.skidRoll) * def.visual!.joints.pos[1] * def.height; // 굴림 축 = 어깨 높이(syncEnemies 와 같다)

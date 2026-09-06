@@ -248,7 +248,7 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
     { name: 'head_down 0.5', lean: T.headDownLean * 0.5, lunge: 0, crouch: HEAD_DOWN.crouch * 0.5, pose: { pose: 'head_down', poseBlend: 0.5 } },
     { name: 'head_down+flinch', lean: T.headDownLean + T.flinchLean, lunge: 0, crouch: HEAD_DOWN.crouch, pose: { pose: 'head_down' } },
     ...peaks.map((nowMs) => ({ name: `stunned@${nowMs.toFixed(0)}`, lean: T.stunnedLean + 0.02, lunge: 0, crouch: STUNNED.crouch, pose: { pose: 'stunned', nowMs } })),
-    // B2-3 미끄러짐(옆 15° 굴림 + 앞으로 밀림, 두 낫 매달림, 다리 벌려 버팀) — 굴림 양쪽·움찔·진행 중간
+    // B2-3 미끄러짐(어깨 축 옆 8° 굴림 + 앞으로 밀림, 두 낫 매달림, 다리 벌려 버팀) — 굴림 양쪽·움찔·진행 중간
     ...peaks.map((nowMs) => ({ name: `skid@${nowMs.toFixed(0)}`, lean: SKID.lean + T.flinchLean, lunge: SKID.lunge, crouch: SKID.crouch, roll: SKID.roll, pose: { pose: 'skid', nowMs } })),
     { name: 'skid roll-', ...SKID, roll: -SKID.roll, pose: { pose: 'skid' } },
     { name: 'skid 0.5', lean: SKID.lean * 0.5, lunge: SKID.lunge * 0.5, crouch: SKID.crouch * 0.5, roll: SKID.roll * 0.5, pose: { pose: 'skid', poseBlend: 0.5 } },
@@ -420,7 +420,7 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
     expect(tip.y).toBeGreaterThan(0.5);
   });
 
-  it('미끄러짐(B2-3, pose skid) — 몸통이 옆으로 15° 굴러도 네 발은 바닥에 남고(굴림을 되돌려 세운다), 두 낫은 벌어져 매달리고, 눈 구체는 표의 skid 자리(2.2m)', () => {
+  it('미끄러짐(B2-3, pose skid) — 몸통이 어깨 축으로 옆 8° 굴러도 네 발은 바닥에 남고(굴림을 되돌려 세운다), 두 낫은 벌어져 매달리고, 눈 구체는 표의 skid 자리(2.2m)', () => {
     const { rig, group } = measureRig(SKID.lean, SKID.lunge, SKID.crouch, { pose: 'skid' }, SKID.roll);
     group.updateMatrixWorld(true);
     for (const hip of rig.legs) {

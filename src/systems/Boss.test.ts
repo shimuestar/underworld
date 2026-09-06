@@ -2280,6 +2280,54 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect(boss.ruptured).toEqual({ joint_r: true });
   });
 
+  it('파열한 관절은 패링으로 다시 열리지 않는다 — 잠김 600 해제 뒤 그 낫 일반 패링: exposure 에 joint_r 없음·boss_status expose 없음·exposure_closed 없음(hp 는 갑각 재생 B2-6 까지 0). 완벽 패링은 head_down(눈)만 연다', () => {
+    const boss = makeBehemoth(4.0);
+    world.player.health = 1e6; // 관찰 중 죽지 않게 (Enemies 만 돌리므로 밀림은 적용되지 않는다)
+    boss.chargeCooldown = 1e9; // 낫만 본다
+    boss.closeCooldown = 1e9;
+    // 오른낫 예고 중 파열(외부 경로로 내구 0) → 잠김 600 → 해제. 관절 hp 는 그대로 0
+    tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'melee', 60);
+    boss.weakHp!['joint_r'] = 0;
+    Enemies.tick(world, DT);
+    expect(boss.bladeLock).toEqual({ r: 600 });
+    for (let i = 0; i < 600; i++) Enemies.tick(world, DT);
+    expect(boss.bladeLock).toEqual({});
+    expect(boss.weakHp!['joint_r']).toBe(0);
+    // 이제부터 장부를 본다 — 파열 틱의 exposure_closed{joint_r} 는 그 전이다
+    const status: { kind: string; on: boolean; id?: string }[] = [];
+    world.events.on('boss_status', (p) => status.push(p as { kind: string; on: boolean; id?: string }));
+    const closed: { id: string; hits: number }[] = [];
+    world.events.on('exposure_closed', (p) => closed.push(p as { id: string; hits: number }));
+    // 오른낫이 돌아오면 일반 패링 — 패링 자체는 성립(튕김)하지만 관절 노출은 세워지지 않는다
+    tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'melee', 1200);
+    expect(normalParry(boss)).toBe('normal');
+    expect(boss.ai).toBe('recover');
+    expect(boss.recoiled).toBe(true);
+    expect(boss.exposure?.['joint_r']).toBeUndefined();
+    expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+    expect(status.filter((st) => st.kind === 'expose')).toEqual([]);
+    // 36틱이 지나도 닫힘 장부(exposure_closed{hits 0})가 나가지 않는다 — 노출 활용률 분모를 부풀리지 않는다
+    for (let i = 0; i < 40; i++) Enemies.tick(world, DT);
+    expect(closed.filter((c) => c.id === 'joint_r')).toEqual([]);
+    expect(status.filter((st) => st.kind === 'expose')).toEqual([]);
+    // 완벽 패링 — 머리 내림(눈)만 열리고 파열한 관절은 닫힌 채
+    tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'melee', 1200);
+    expect(perfectParry(boss)).toBe('perfect');
+    expect(boss.pose).toBe('head_down');
+    expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+    expect(boss.exposure?.['joint_r']).toBeUndefined();
+    expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+    expect(status.filter((st) => st.kind === 'expose')).toEqual([]);
+    expect(status.filter((st) => st.kind === 'head_down' && st.on)).toHaveLength(1);
+    // 대조군 — 멀쩡한 왼 관절은 왼낫 패링에 평소처럼 열린다(같은 문, hp 132)
+    for (let i = 0; i < 90; i++) Enemies.tick(world, DT);
+    tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'alt', 1200);
+    expect(normalParry(boss)).toBe('normal');
+    expect(boss.exposure?.['joint_l']).toBe(36);
+    expect(weakPointOpen(boss, wp('joint_l'))).toBe(true);
+    expect(status.filter((st) => st.kind === 'expose')).toEqual([expect.objectContaining({ kind: 'expose', id: 'joint_l', on: true, ticks: 36 })]);
+  });
+
   it('양 낫 잠김 → 절뚝(boss_status limp on): 낫이 안 나가고 2.5m 안이면 이속 ×0.65 로 물러나 2.5~6m 를 유지, 돌격 속도 ×0.7. 한쪽이 풀리면 limp off', () => {
     const boss = makeBehemoth(2.0); // 낫 사거리 안·들이받기 3.0m 안
     boss.closeCooldown = 1e9; // 들이받기를 빼고 물러서기만 본다

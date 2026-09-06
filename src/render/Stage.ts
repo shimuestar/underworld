@@ -477,7 +477,7 @@ interface EnemyVisual {
   /** 거수 자세 보간 — 마지막 로직 자세(구체·머리가 향하는 표 자리)와 그 진행 0~1. 자세가 사라지면 0 으로 돌아가며 normal 로 복귀 */
   bhPose?: string;
   bhBlend?: number;
-  /** 거수 몸통 굴림(rad, 보간값) — 미끄러짐 15°·절뚝 절룩. 감전 떨림이 없을 때 torso.rotation.z 에 들어간다 */
+  /** 거수 몸통 굴림(rad, 보간값) — 미끄러짐 8°(skidRoll)·절뚝 절룩. 감전 떨림이 없을 때 torso.rotation.z 에 들어간다 */
   bhRoll?: number;
   /** 시위 당김 0~1 — 놓는 순간 0으로 스냅해 시위가 튕겨 돌아간다 */
   bowDraw?: number;
@@ -4118,7 +4118,7 @@ export class Stage {
           lungeTarget = 0;
           crouchTarget = -def2.height * BEHEMOTH_TORSO.headDownCrouch;
         } else if (enemy.pose === 'skid') {
-          // 미끄러짐(완벽 회피) — 앞으로 밀리며 낮아지고 옆으로 15° 기운다(굴림은 아래 bhRoll). 다리는 poseBehemothRig 가 벌려 버틴다
+          // 미끄러짐(완벽 회피) — 앞으로 밀리며 낮아지고 어깨 축으로 옆 8° 기운다(굴림은 아래 bhRoll, skidRoll). 다리는 poseBehemothRig 가 벌려 버틴다
           leanTarget = BEHEMOTH_TORSO.skidLean;
           lungeTarget = BEHEMOTH_TORSO.skidLunge;
           crouchTarget = -def2.height * BEHEMOTH_TORSO.skidCrouch;

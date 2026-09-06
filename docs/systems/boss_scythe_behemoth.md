@@ -69,7 +69,7 @@
 | 꼬리 | Cylinder r 0.15 h 1.2 | 뒤로 (0, 1.2, +1.9) | 0x3a2d40 | 광란 돌격 선회 시 **빨강** + 휘두름 |
 | 이름표 | 기존 sprite, `plateScale 2.6`(def.boss 자동) | y = h + 0.7 | — | 체력 3칸 자동 |
 
-**자세(Stage `pose`, 로직 `enemy.pose`/`poseTicks`):** `normal` / `charge`(몸통 −12° 웅크림, 머리 내림 → 눈이 1.1m 높이 정면) / `rear`(몸통 +35°, 앞다리 들림 → 배 노출) / `head_down`(몸통 +20° 앞 기울임, 낫끝 바닥 고정, 머리 0.9m) / `skid`(옆으로 15° 기울고 미끄러짐) / `stunned`(머리 흔들림, 혼절) / `roar`(머리 치켜듦·입 벌림 → 눈이 위로 드러남) / `blind`(머리를 좌우로 휘저으며 직진).
+**자세(Stage `pose`, 로직 `enemy.pose`/`poseTicks`):** `normal` / `charge`(몸통 −12° 웅크림, 머리 내림 → 눈이 1.1m 높이 정면) / `rear`(몸통 +35°, 앞다리 들림 → 배 노출) / `head_down`(몸통 +20° 앞 기울임, 낫끝 바닥 고정, 머리 0.9m) / `skid`(어깨 높이를 축으로 옆 8° 굴림 + 앞으로 미끄러짐 — 15° 는 메시가 표 구체에서 0.6m 벌어져 줄임) / `stunned`(머리 흔들림, 혼절) / `roar`(머리 치켜듦·입 벌림 → 눈이 위로 드러남) / `blind`(머리를 좌우로 휘저으며 직진).
 
 **`poseOffsets` — 자세별 약점 5개 전체 좌표표(판정=그림):**
 
@@ -194,7 +194,7 @@
 | 상태 `kind` | 원인 | 지속(틱) — 필드 | 효과 | 표시 |
 |---|---|---|---|---|
 | **관절 노출** `expose` | 일반 패링 / 완벽 패링 / 완벽 회피 / 삼연낫 일반 패링 | 36 / 90 / 40(양쪽) / 30 — `exposeOnParry.*`, `perfectDodgeExposes.ticks`, `comboAttack.exposeOnParry` | 관절 구체 판정 활성 | 백황 맥동 + `joint_open` |
-| **관절 파열** `rupture` | 관절 hp 0 | 비틀거림 60(`rupture.staggerTicks`, recover) → 그 낫 잠김 600(`rupture.bladeLockTicks`) | 잠긴 낫 공격 선택 불가(예측 가능해짐), 잠긴 낫은 축 늘어져 바닥을 긁음 | 관절 어둡게 + 파편 + `joint_crack` |
+| **관절 파열** `rupture` | 관절 hp 0 | 비틀거림 60(`rupture.staggerTicks`, recover) → 그 낫 잠김 600(`rupture.bladeLockTicks`) | 잠긴 낫 공격 선택 불가(예측 가능해짐), 잠긴 낫은 축 늘어져 바닥을 긁음. 잠김이 풀려도 관절 hp 는 0 이라 **그 낫 패링·완벽 회피로 다시 열리지 않는다**(`openExposure` 가 hp 0 을 거름 — 갑각 재생까지). 파열은 낫 짝이 있는 관절만 — 분출공 hp 0 은 질식 | 관절 어둡게 + 파편 + `joint_crack` |
 | **절뚝** `limp` | 양 낫 동시 잠김 | 잠김이 하나라도 풀릴 때까지 | 이속 ×0.65(`limp.speedMul`), 돌격 속도 ×0.7(`limp.chargeSpeedMul`), 낫 없이 들이받기·발구르기·돌격만. 뒤로 물러나 2.5~6m 유지(`retreatWhenDisarmed{min 2.5, max 6}`) | 다리 절룩 애니 |
 | **머리 내림** `head_down` | 낫 박힘(완벽 패링) / 역류 / 전도 / 탈진 | 90 / 60 / 90 / 150 — `headDown.{stuck, backflow, topple, exhaust}Ticks` | 이동·공격 불가, 눈 노출(0.9m), 해머 타격 = 눈 집계(`hammerEyeMul`), 해머 넉백 0. 역류 원인이면 혼절 누적 없음 | `blade_stuck` + 머리 0.9m |
 | **혼절** `daze` | 눈 누적 66(`dazeThreshold`) | 90(`reaction.staggerTicks`) → 이후 600 쿨다운(`dazeCooldownTicks`) | `staggered` — 처형 가능, **눈 판정 닫힘**, 이름표 금색. 해머 3타 날림(5m) 면제(`staggerFlingImmune`, 결정 33) | STAGGER_COLOR + "지금 처형" + `eye_burst` |

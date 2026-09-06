@@ -2970,7 +2970,9 @@ events.on('boss_status', (payload) => {
     showReaction('낫이 바닥에 박혔다 — 눈을 노려라!', 1400);
   } else if (st.kind === 'rupture' && st.on) {
     audio.play('joint_crack', at);
-    showReaction(`관절 파열 — ${st.blade === 'l' ? '왼' : '오른'}낫이 늘어졌다 (10초)`, 1600);
+    // 잠김 시간은 데이터(bladeLockTicks)에서 초로 — 낫 짝(blade)이 있는 관절만 낫 문구
+    const lockSec = Math.round(balance.weakPoint.rupture.bladeLockTicks / balance.loop.tickRate);
+    showReaction(st.blade ? `관절 파열 — ${st.blade === 'l' ? '왼' : '오른'}낫이 늘어졌다 (${lockSec}초)` : `관절 파열 (${lockSec}초)`, 1600);
   } else if (st.kind === 'limp' && st.on) {
     showReaction('두 낫이 다 늘어졌다 — 거수가 절뚝인다', 1800);
   }
