@@ -17,6 +17,7 @@
 //       완벽 = 관절 90틱 + 낫이 바닥에 박혀 머리 내림(pose head_down 90틱, 눈 노출). 혼절은 Enemies 가 눈 누적으로 건다.
 // 팔 저림(numb_arm, B2-4 — 거수 낫을 방패로 막음): 완벽 대역 ×perfectBandMul(0 = 정직하게 일반만), 패링 실패의 마나 소실 면제
 //       (parry_attempt 에 noManaLoss — Mana 가 읽는다), 일반 패링 1회 성립 시 즉시 해제(카운터 0 → Status 가 _ended 를 낸다).
+// 절뚝(hobble, B3-1 — 거수 발구르기 직격): 회피 스태미너 ×dodgeStaminaMul(tryDodge). 회피 거리·무적 틱은 어느 상태도 건드리지 않는다.
 
 import { balance } from '../core/Balance';
 import { attackReaches, currentAttack, enemyDef } from '../core/Entities';
@@ -315,14 +316,16 @@ function pushEnemyBack(
   pushEnemy(enemy, enemy.x - p.x, enemy.z - p.z, distance, ticks);
 }
 
-/** 스태미너를 내고 회피에 들어간다. 모자라면 알리고 false */
+/** 스태미너를 내고 회피에 들어간다. 모자라면 알리고 false.
+ *  절뚝(hobble, B3-1 — 거수 발구르기 직격) 중엔 값이 balance.status.hobble.dodgeStaminaMul 배 — 회피 거리·무적 틱은 그대로("언제나 반응 버튼으로 답할 수 있다") */
 function tryDodge(world: World): boolean {
   const stam = balance.player.stamina;
-  if (world.stamina.value < stam.dodgeCost) {
-    world.events.emit('stamina_blocked', { action: 'dodge', need: stam.dodgeCost });
+  const cost = stam.dodgeCost * ((world.player.hobbleTicks ?? 0) > 0 ? balance.status.hobble.dodgeStaminaMul : 1);
+  if (world.stamina.value < cost) {
+    world.events.emit('stamina_blocked', { action: 'dodge', need: cost });
     return false;
   }
-  if (spendStamina(world.stamina, stam.dodgeCost, stam.regenDelayTicks)) {
+  if (spendStamina(world.stamina, cost, stam.regenDelayTicks)) {
     world.events.emit('stamina_empty', {});
   }
   startDodge(world);

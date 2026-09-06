@@ -436,10 +436,11 @@ export function tick(world: World, dt: number): void {
   wz = (wz / len) * mag;
 
   // 질주 — 스태미너가 있어야 하고, 움직이는 동안만 닳는다 (제자리 쉬프트는 무소모).
-  // 탈진 중에는 아무리 눌러도 평속
+  // 탈진 중에는 아무리 눌러도 평속. 절뚝(hobble, B3-1 — 거수 발구르기 직격) 중에도 질주가 없다(balance.status.hobble.noSprint) — 걷기 속도 그대로
   const st = world.stamina;
   const stam = balance.player.stamina;
-  const sprinting = input.sprint && !st.exhausted && st.value > 0;
+  const hobbled = (p.hobbleTicks ?? 0) > 0 && balance.status.hobble.noSprint;
+  const sprinting = input.sprint && !st.exhausted && st.value > 0 && !hobbled;
   if (sprinting) {
     if (spendStamina(st, stam.sprintDrainPerTick * world.modifiers.sprintDrainMul, stam.regenDelayTicks)) { // 질주 부츠
       world.events.emit('stamina_empty', {});

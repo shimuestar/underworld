@@ -91,6 +91,8 @@ export type SoundName =
   | 'joint_crack'
   | 'charge_dodged'
   | 'behemoth_scream'
+  | 'stomp_ready'
+  | 'vent_gag'
   | 'player_hurt'
   | 'block_hit'
   | 'hammer_heavy'
@@ -157,7 +159,7 @@ const MASTER_GAIN = 0.25;
 
 /** 예고음 버스로 가는 소리 — 덕킹(진탕 concussion 등)을 우회한다. 파랑 예고음 1760/2637Hz 는 판정 단서라 언제나 같은 크기로 들려야 한다.
  *  charge_ready 는 긴 돌격의 빨강 예고를 대신하는 소리(main enemy_charge) */
-const TELEGRAPH_SOUNDS: ReadonlySet<SoundName> = new Set<SoundName>(['telegraph_blue', 'telegraph_red', 'telegraph_purple', 'charge_ready']);
+const TELEGRAPH_SOUNDS: ReadonlySet<SoundName> = new Set<SoundName>(['telegraph_blue', 'telegraph_red', 'telegraph_purple', 'charge_ready', 'stomp_ready']);
 
 /** dB → 선형 게인 (0dB = 1) */
 function dbToGain(db: number): number {
@@ -1247,6 +1249,19 @@ export class GameAudio {
         this.tone(1180, 0.5, 'sawtooth', 0.4, 0.03, 330);
         this.tone(150, 0.6, 'square', 0.3, 0.05, 70);
         this.noise(0.5, 0.45, 1900, 0.04);
+        break;
+      case 'stomp_ready':
+        // 발구르기 예고(B3-1) — 앞발을 들며 땅이 우르릉 울리는 저역 떨림(예고음 버스: 진탕 덕킹을 건너뛴다). 착지는 ground_slam
+        this.tone(46, 0.7, 'sine', 0.9, 0, 58);
+        this.tone(92, 0.5, 'sawtooth', 0.3, 0.05, 74);
+        this.noise(0.6, 0.35, 320, 0.02);
+        break;
+      case 'vent_gag':
+        // 역류(B3-1) — 심장을 맞은 거수가 구역질하며 고꾸라지는 소리: 젖은 컥컥거림 두 번 + 아래로 꺾이는 낮은 신음
+        this.noise(0.09, 0.8, 1100);
+        this.noise(0.1, 0.7, 900, 0.14);
+        this.tone(210, 0.32, 'sawtooth', 0.45, 0.04, 90);
+        this.tone(105, 0.5, 'square', 0.28, 0.12, 48);
         break;
       case 'bow_twang':
         // 활시위 튕김 + 화살 바람 소리

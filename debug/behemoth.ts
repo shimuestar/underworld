@@ -16,7 +16,12 @@
 // topple(B2-5 — 돌격이 기둥에 박혀 전도: head_down 자세 + 눈만 열림(관절은 안 열린다), 기둥 참조 상자 앞 — 측면) /
 // roar(B2-6 — 페이즈 전환 갑각 재생: 머리 치켜듦(표의 눈 2.9m)·입 벌림 −0.8rad·두 낫 벌려 들기, P2 진입 연출로 등갑판 균열 발광·분출공 점등, 약점 전부 닫힘 — 정면 아래에서) /
 // p2(B2-6 — 오염 갑각: 정면 normal 자세에 균열 발광·분출공 점등 — 분출공이 머리에 가리지 않는지) / p2-back(같은 P2 를 뒤 위에서 — 등갑판 균열 띠·실금) /
-// p3(B2-6 — 광란: 등갑판 탈락·눈 붉은 홍채 — 뒤 위에서).
+// p3(B2-6 — 광란: 등갑판 탈락·눈 붉은 홍채 — 뒤 위에서) /
+// rear(B3-1 — 발구르기 앞발 들기: 몸통 +35°(몸통 가운데 축 — behemothRearOffset), 앞다리 들림, 두 낫 앞아래, 머리 치켜듦(표의 눈 3.0m), 배 심장이 표 (0, 1.15, −1.0) 로
+//   나와 진홍 맥동, 앞다리·몸 빨강(발구르기 예고), P2 외형 — 플레이어 눈높이 정면 5m(발구르기 사거리 안)에서 올려다본다) / rear-side(같은 자세 측면 — 뒷발 바닥·앞발 공중·꼬리 되듦) /
+// rear-sealed(B3-1 — 역류 뒤 봉인 600틱의 앞발 들기: 심장이 어둡게(판정 없음), 자세만) /
+// wake-slam(B3-1 — 기상 발구르기 예고: 앞발을 낮게 들고 살짝 뒤로, 심장은 배 밑 그대로(안 보임) — 측면) /
+// backflow(B3-1 — 역류 머리 내림: head_down 자세인데 낫이 박히지 않고 두 낫이 벌어져 매달린 고꾸라짐, 눈 열림(피해만) — 정면 눈높이).
 // &pose=charge|head_down|… 을 붙이면 약점 구체와 머리 메시(목 IK)를 그 자세의 poseOffsets 표 자리에 놓는다
 // (안내문에 구체 자리와 머리 메시의 눈 자리(anchor)를 함께 찍는다 — 어긋남이 0 에 가까워야 한다, B2-2).
 // 참조물: 4.4m 기둥(= attackRange, 흰색) · 플레이어 기둥(r0.4 h1.7, 몸 표면이 4.4m) · 천장 4.0m / 낫 상한 3.8m 선.
@@ -25,7 +30,7 @@
 import * as THREE from 'three';
 import { balance } from '../src/core/Balance';
 import { enemyDef, resolvePhase } from '../src/core/Entities';
-import { BEHEMOTH_TORSO, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, behemothVentLit, buildBehemothRig, poseBehemothRig, setBehemothPhaseLook, styleBehemothWeakPoints } from '../src/render/Stage';
+import { BEHEMOTH_TORSO, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, behemothRearOffset, behemothVentLit, buildBehemothRig, poseBehemothRig, setBehemothPhaseLook, styleBehemothWeakPoints } from '../src/render/Stage';
 
 const def = enemyDef('scythe_behemoth');
 const params = new URLSearchParams(location.search);
@@ -273,6 +278,48 @@ if (view === 'side') {
   styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p3) }));
   camera.position.set(4.5, 4.2, 5.5);
   camera.lookAt(0, 2.0, -0.8);
+} else if (view === 'rear' || view === 'rear-side' || view === 'rear-sealed') {
+  // 발구르기 앞발 들기(B3-1) — 로직 pose 'rear': 몸통 +35° 를 몸통 가운데 축으로(축 보정 전진·상승 = behemothRearOffset, syncEnemies 와 같다), 앞다리 들림(바닥 보정 없음),
+  // 두 낫 앞아래, 머리 치켜듦(목 IK faceUp — 표의 눈 3.0m). 배 심장이 표 (0, 1.15, −1.0) 자리에서 진홍 맥동(sealed 뷰는 역류 뒤 봉인 — 어둡게·판정 없음).
+  // 예고 빨강(앞다리 포함 몸 전체 — 뿔·낫은 물들지 않는다). P2 외형(균열·분출공 점등)
+  const off = behemothRearOffset();
+  torso.rotation.x = off.lean;
+  torso.position.z = off.lunge;
+  torso.position.y = off.rise;
+  poseBehemothRig(rig, { ...base, pose: 'rear' });
+  tint(flash, balance.telegraph.colorUnparryable);
+  const p2 = resolvePhase(def, 2);
+  setBehemothPhaseLook(rig, p2, 1400 * 0.25);
+  const sealed = view === 'rear-sealed';
+  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'heart' && !sealed, broken: false, flashAgeMs: -1, sealed: id === 'heart' && sealed, lit: id === 'vent' && behemothVentLit(p2) }));
+  if (view === 'rear-side') {
+    camera.position.set(9.0, 2.0, -1.0);
+    camera.lookAt(0, 1.6, -0.6);
+  } else {
+    // 플레이어 눈높이 — 발구르기 사거리 안(5m)에서 올려다본다: 들린 배 밑 심장이 보여야 한다
+    camera.position.set(0.4, balance.player.eyeHeight, -(def.slamAttack!.maxRange! - 1.0));
+    camera.lookAt(0, 1.5, -0.8);
+  }
+} else if (view === 'wake-slam') {
+  // 기상 발구르기 예고(B3-1) — 앞발 들기 없이 앞발을 낮게 들고 살짝 뒤로(slamLean). 심장은 배 밑 normal 자리 그대로(닫힘·안 보인다). 예고 빨강. 측면
+  torso.rotation.x = BEHEMOTH_TORSO.slamLean;
+  poseBehemothRig(rig, { ...base, slamCoil: 1 });
+  tint(flash, balance.telegraph.colorUnparryable);
+  const p2 = resolvePhase(def, 2);
+  setBehemothPhaseLook(rig, p2, 1400 * 0.25);
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2) }));
+  camera.position.set(8.5, 2.2, -2.0);
+  camera.lookAt(0, 1.4, -0.6);
+} else if (view === 'backflow') {
+  // 역류 머리 내림(B3-1, head_down cause 'backflow') — 낫이 박힌 게 아니라 두 낫이 벌어져 매달린 고꾸라짐. 눈 열림(청록 맥동 — 피해만, 혼절 누적 없음), 심장 봉인(어둡게)
+  torso.rotation.x = BEHEMOTH_TORSO.headDownLean;
+  torso.position.y = -def.height * BEHEMOTH_TORSO.headDownCrouch;
+  poseBehemothRig(rig, { ...base, pose: 'head_down', poseCause: 'backflow' });
+  const p2 = resolvePhase(def, 2);
+  setBehemothPhaseLook(rig, p2, 1400 * 0.25);
+  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'eye', broken: false, flashAgeMs: -1, dim: id === 'eye', sealed: id === 'heart', lit: id === 'vent' && behemothVentLit(p2) }));
+  camera.position.set(0.5, balance.player.eyeHeight, -(reach + balance.player.radius));
+  camera.lookAt(0, 1.1, -1.0);
 } else if (view === 'stunned') {
   // 혼절(눈 누적 66) — 몸 스태거 금색, 머리가 처져 휘청, 눈은 닫힘(판정 없음) = 처형 창
   torso.rotation.x = BEHEMOTH_TORSO.stunnedLean;
@@ -304,13 +351,17 @@ const eyeMesh = behemothAnchorPos(rig, 'eye', new THREE.Vector3());
 const jrMesh = behemothAnchorPos(rig, 'joint_r', new THREE.Vector3());
 const jlMesh = behemothAnchorPos(rig, 'joint_l', new THREE.Vector3());
 const jl = rig.weakPoints['joint_l']!.position;
+// 배 심장(B3-1) — 앞발 들기(rear)에서 배 메시의 심장 자리(anchor)와 표 구체가 같은 곳이어야 한다(축 보정의 근거)
+const heart = rig.weakPoints['heart']!.position;
+const heartMesh = behemothAnchorPos(rig, 'heart', new THREE.Vector3());
 const f2 = (v: THREE.Vector3): string => `${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}`;
 note =
   `view=${view}${logicPose ? ` pose=${logicPose}` : ''}\n` +
   `blade_${tipSide === 1 ? 'r' : 'l'} tip (x,y,z) = ${f2(tip)}  → 앞 거리 ${(-tip.z).toFixed(2)}m (판정 ${(view.startsWith('strike') ? reach : view.startsWith('windup') ? pullback : NaN).toFixed(2)})\n` +
   `꼭대기 ${bounds.max.y.toFixed(2)}m (낫 상한 3.8 / 천장 4.0)   바닥 ${bounds.min.y.toFixed(2)}m (0 아래 금지)\n` +
   `wp_eye(판정 표) = ${f2(eye)}   머리 메시 눈 자리 = ${f2(eyeMesh)}   어긋남 ${eye.distanceTo(eyeMesh).toFixed(2)}m\n` +
-  `wp_joint_r(판정 표) = ${f2(jr)}   어깨 관절 메시 = ${f2(jrMesh)}   어긋남 r ${jr.distanceTo(jrMesh).toFixed(2)}m / l ${jl.distanceTo(jlMesh).toFixed(2)}m`;
+  `wp_joint_r(판정 표) = ${f2(jr)}   어깨 관절 메시 = ${f2(jrMesh)}   어긋남 r ${jr.distanceTo(jrMesh).toFixed(2)}m / l ${jl.distanceTo(jlMesh).toFixed(2)}m\n` +
+  `wp_heart(판정 표) = ${f2(heart)}   배 메시 심장 자리 = ${f2(heartMesh)}   어긋남 ${heart.distanceTo(heartMesh).toFixed(2)}m`;
 document.getElementById('info')!.textContent = note;
 document.title = note.replace(/\n/g, ' | ');
 

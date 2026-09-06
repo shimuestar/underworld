@@ -18,6 +18,10 @@
 // 진행 중 공격 취소, 약점 전부 닫힘(molting), 갑각 재생 = 관절 hp 회복·ruptured 삭제·낫 잠김·절뚝 해제·공격 쿨다운 × phaseShiftCooldownMul, 무적 아님) → boss_phase.
 // 혼절·포즈 타이머·눈멂·넉백 중이면 phaseTarget 에 큐잉하고 풀리는 틱에 한 번 — 두 경계를 넘었으면 P2 를 건너 P3. 페이즈 표(phases[]) 의 speedMul·attackOverrides 는
 // moveSpeed·Entities.currentAttack/attackInPhase 가 읽고, unlock 은 slotUnlocked 가 가른다.
+// 발구르기(B3-1, 기획서 §7 P2·§9.2): P2 해금 slotUnlocked('slam') — 2.5 < dist ≤ 6·쿨 420 에서 attackMode 'slam'(trySlam), 예고 rearPose 구간엔 pose 'rear'(④ — 배 심장 열림),
+// 그 창 안 심장 누적 heartThreshold → 역류(beginBackflow: 발구르기 취소 + 자해 + head_down backflowTicks(cause 'backflow' — 혼절 누적 없음) + 심장 weakCooldown).
+// 기상 발구르기(wakeSlam): 머리 내림(전 원인)·혼절이 끝나는 자리(endPose·③)에서 wakeSlamPending 을 세우고 다음 추격 틱에 확정(미끄러짐 뒤는 아님, 전환이 끼면 취소).
+// 발구르기 직격은 플레이어 절뚝(statusOnHit 'hobble'), 착지는 ground_slam + slam_landed(웅덩이는 B3-2).
 
 import { balance } from '../core/Balance';
 import { attackInPhase, attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, currentAttack, enemyDef, healthBarState, jointOfBlade, resolvePhase, slotUnlocked, type BladeSide, type EnemyAttackDef } from '../core/Entities';
@@ -26,6 +30,10 @@ import { alertEnemy, alertNearbyAt, beginPose, breakCrackWalls, closeExposure, f
 
 /** 혼절 임계를 재는 약점 id — 기획서 §4.1 "혼절은 눈 누적 66 으로만". 돌격 중 6m 안 노출·눈멂(B2-5)도 같은 눈이다 */
 const DAZE_WEAK_POINT = 'eye';
+/** 역류 임계를 재는 약점 id(B3-1) — 발구르기 앞발 들기(pose rear)에 열리는 배 심장. 임계는 balance.weakPoint.heartThreshold */
+const HEART_WEAK_POINT = 'heart';
+/** 발구르기 앞발 들기 자세 id — slamAttack.rearPose 구간에 ④ 가 비추고, 심장의 exposedStates 가 이 이름을 읽는다 */
+const REAR_POSE = 'rear';
 /** 돌격 중 눈 노출 타이머를 매 틱 되살리는 값 — 장부 ① 이 1 로 깎아도 이 틱 내내 열려 있고, 범위를 벗어나면 그 틱에 닫힌다 (튜닝값 아님) */
 const CHARGE_EYE_REFRESH = 2;
 /** 돌격 지형 충돌 — 막힌 몸의 선두 면을 이만큼 넘어 그 칸의 문자를 읽는 여유(m, Level.blockedAhead 의 SKIN 위 수치 오차 방지 — 튜닝값 아님) */
@@ -1241,6 +1249,8 @@ function tickGhoulMoan(world: World, enemy: EnemyState): void {
 function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): boolean {
   if (!def.weakPoints) return false;
   const wpCfg = balance.weakPoint;
+  // 처형 연출(world.executeFocusTicks) 동안은 tick 이 첫머리에서 돌아가 이 장부도 멈춘다 — 노출 타이머·혼절 쿨다운이 그만큼 늦게 흐른다.
+  // '모든 적이 멈춘다' 규약과 같고 그 동안 플레이어 입력도 막혀 있어 이득은 없다(의도, B2-2 검토)
   // ① 노출 타이머
   if (enemy.exposure) {
     for (const id in enemy.exposure) {
@@ -1248,6 +1258,20 @@ function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<ty
       if (left > 0) enemy.exposure[id] = left;
       else closeExposure(world, enemy, id);
     }
+  }
+  // ⑫ 약점 봉인 쿨다운(역류 뒤 심장, B3-1) — 다하면 지운다. 봉인 중엔 weakPointOpen 이 닫는다(자세 자리에 있어도 판정 없음)
+  if (enemy.weakCooldown) {
+    for (const id in enemy.weakCooldown) {
+      const left = (enemy.weakCooldown[id] ?? 0) - 1;
+      if (left > 0) enemy.weakCooldown[id] = left;
+      else delete enemy.weakCooldown[id];
+    }
+  }
+  // ⑪ 심장 누적 → 역류(B3-1, 기획서 §4.1 heart) — 지난 틱까지 앞발 들기(rear)로 열려 있던 심장의 한 노출 안 누적이 heartThreshold 에 닿았다.
+  //    ④ 가 자세를 갱신하기 전에 본다 — 앞발 들기 마지막 틱에 채운 66 도 역류가 된다. 봉인(쿨다운) 중엔 판정이 없었으니 누적도 없다
+  if (enemy.pose === REAR_POSE && (enemy.weakCooldown?.[HEART_WEAK_POINT] ?? 0) <= 0 && (enemy.weakAccum?.[HEART_WEAK_POINT] ?? 0) >= wpCfg.heartThreshold) {
+    beginBackflow(world, enemy, def);
+    return true;
   }
   // ⑥ 낫 잠김 — 먼저 깎고(파열 틱에 새로 잠긴 낫은 다음 틱부터 줄어 bladeLockTicks 뒤에 풀린다) 0 이면 해제. 관절 hp 는 그대로 0(갑각 재생 B2-6 만 되돌린다)
   if (enemy.bladeLock) {
@@ -1279,10 +1303,11 @@ function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<ty
   }
   // ② 혼절 쿨다운
   if ((enemy.dazeCooldown ?? 0) > 0) enemy.dazeCooldown = (enemy.dazeCooldown ?? 0) - 1;
-  // ③ 혼절 종료 → 쿨다운
+  // ③ 혼절 종료 → 쿨다운. 일어서는 자리라 기상 발구르기(P2+, wakeSlam)를 예약한다 — 시간 만료든 처형이든 같은 문(기획서 §9.2 2번)
   if (enemy.dazed && enemy.ai !== 'staggered') {
     enemy.dazed = false;
     enemy.dazeCooldown = wpCfg.dazeCooldownTicks;
+    if (def.wakeSlam) enemy.wakeSlamPending = true;
     world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'daze', on: false });
   }
   // ④ 자세 비추기 (포즈 타이머가 있으면 그 자세가 우선)
@@ -1299,6 +1324,15 @@ function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<ty
       // 눈먼 질주는 pose blind(머리 휘저음, 표의 눈 1.2m) — 질주가 끝나면 charge(헛돌격 경직의 웅크림)로 돌아온다
       if (charging) enemy.pose = enemy.blind && enemy.ai === 'charging' ? 'blind' : 'charge';
       else if (enemy.pose === 'charge' || enemy.pose === 'blind') enemy.pose = undefined;
+      // 발구르기 앞발 들기(B3-1) — 예고 시작 후 경과 틱이 rearPose 구간(from ≤ t < to)이면 rear(배 심장이 표 자리로 나와 열린다), 벗어나면 닫힌다.
+      // 경과는 이 틱의 예고 감소(아래 windup case)까지 친 값 — "예고 8틱째" 에 이 틱의 사격이 열린 심장을 맞는다. 예고가 끊겨도(경직·전환·넉백) 다음 틱 여기서 닫힌다
+      const slamWindup = enemy.attackMode === 'slam' && enemy.ai === 'windup';
+      const slamAttack = slamWindup ? currentAttack(def, enemy) : undefined;
+      const rp = slamAttack?.rearPose;
+      const elapsed = slamAttack ? slamAttack.windupTicks - enemy.timer + 1 : 0;
+      const rearing = rp !== undefined && elapsed >= rp.from && elapsed < rp.to;
+      if (rearing && enemy.pose !== REAR_POSE) enterRear(world, enemy);
+      else if (!rearing && enemy.pose === REAR_POSE) exitRear(world, enemy);
     }
   }
   // ⑨ 눈멂 안전망 — impact·지형 충돌은 그 자리에서 endBlind 를 부르지만, 다른 경로(넉백·빙결 뒤 상태 바뀜)로 질주가 끊겨도 남지 않게
@@ -1313,9 +1347,10 @@ function tickWeakPointStatus(world: World, enemy: EnemyState, def: ReturnType<ty
   } else {
     endChargeEye(world, enemy);
   }
-  // ⑤ 눈 누적 → 혼절(머리 내림) / 눈멂(돌격 중 6m 안). 포즈 타이머를 깎기 전에 본다 — 머리 내림 마지막 틱에 채운 66 도 혼절이 된다
+  // ⑤ 눈 누적 → 혼절(머리 내림) / 눈멂(돌격 중 6m 안). 포즈 타이머를 깎기 전에 본다 — 머리 내림 마지막 틱에 채운 66 도 혼절이 된다.
+  //    역류(cause 'backflow')로 내려온 머리는 눈 ×3.0 피해만 — 혼절 누적 없음(기획서 §4.1 heart·§5 backflow)
   const eyeCounts =
-    enemy.pose === 'head_down' && (enemy.poseTicks ?? 0) > 0 && (enemy.dazeCooldown ?? 0) <= 0 && enemy.ai !== 'staggered';
+    enemy.pose === 'head_down' && (enemy.poseTicks ?? 0) > 0 && (enemy.dazeCooldown ?? 0) <= 0 && enemy.ai !== 'staggered' && enemy.poseCause !== 'backflow';
   const accum = enemy.weakAccum?.[DAZE_WEAK_POINT] ?? 0;
   if (eyeCounts) {
     if (accum >= wpCfg.dazeThreshold) {
@@ -1445,6 +1480,77 @@ function ruptureJoint(world: World, enemy: EnemyState, def: ReturnType<typeof en
   });
 }
 
+/** 앞발 들기 시작(B3-1) — 발구르기 예고의 rearPose 구간에 들어섰다. pose rear 로 심장이 열리니(exposedStates) 이번 노출의 장부(누적·명중)를 0 부터.
+ *  봉인(쿨다운) 중이면 자세만 서고 판정은 weakPointOpen 이 닫는다(장부는 그대로 0). 발광·맥동은 Stage 가 weakPointOpen 으로 그린다 */
+function enterRear(world: World, enemy: EnemyState): void {
+  enemy.pose = REAR_POSE;
+  const sealed = (enemy.weakCooldown?.[HEART_WEAK_POINT] ?? 0) > 0;
+  enemy.weakAccum ??= {};
+  enemy.weakAccum[HEART_WEAK_POINT] = 0;
+  enemy.exposureHits ??= {};
+  enemy.exposureHits[HEART_WEAK_POINT] = 0;
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: REAR_POSE, on: true, sealed, x: enemy.x, z: enemy.z });
+}
+
+/** 앞발 들기 끝(구간 밖·예고 끊김) — 심장 노출을 닫는다(exposure_closed{heart, hits} — 봉인 중이었으면 판정이 없었으니 장부만 비운다) */
+function exitRear(world: World, enemy: EnemyState): void {
+  enemy.pose = undefined;
+  if ((enemy.weakCooldown?.[HEART_WEAK_POINT] ?? 0) <= 0) closeExposure(world, enemy, HEART_WEAK_POINT);
+  else if (enemy.weakAccum) enemy.weakAccum[HEART_WEAK_POINT] = 0;
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: REAR_POSE, on: false });
+}
+
+/** 역류(B3-1, 기획서 §4.1 heart·§5 backflow) — 앞발 들기 창에 심장 누적이 heartThreshold 에 닿았다. 발구르기 취소(AoE 안 떨어짐 — attackMode 를 비우고
+ *  포즈 타이머가 예고를 덮는다) + 자해 backflow.selfDamage(damage_pop) + 머리 내림 headDown.backflowTicks(cause 'backflow' — 눈 ×3.0 피해만, 혼절 누적 없음)
+ *  + 심장 heartCooldownTicks 봉인(weakCooldown — 어둡게·판정 없음). boss_status{kind 'backflow', on: true} — 몸 들썩·vent_gag 는 Stage/main.
+ *  자해로 죽으면 다른 사망 경로와 같은 enemy_died 하나만 낸다 */
+function beginBackflow(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  const wpCfg = balance.weakPoint;
+  closeExposure(world, enemy, HEART_WEAK_POINT);
+  enemy.weakCooldown ??= {};
+  enemy.weakCooldown[HEART_WEAK_POINT] = wpCfg.heartCooldownTicks;
+  world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: REAR_POSE, on: false });
+  // 발구르기 취소
+  enemy.attackMode = 'melee';
+  enemy.wakeSlam = false;
+  enemy.strikeProgress = 0;
+  // 자해
+  const selfDamage = wpCfg.backflow.selfDamage;
+  enemy.health -= selfDamage;
+  world.events.emit('damage_pop', { enemyId: enemy.id, amount: selfDamage });
+  world.events.emit('boss_status', {
+    enemyId: enemy.id, enemyType: enemy.type, kind: 'backflow', on: true, ticks: wpCfg.headDown.backflowTicks, selfDamage, x: enemy.x, z: enemy.z,
+  });
+  if (enemy.health <= 0) {
+    enemy.health = 0;
+    enemy.alive = false;
+    enemy.pose = undefined;
+    world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
+    return;
+  }
+  beginPose(world, enemy, 'head_down', wpCfg.headDown.backflowTicks, 'backflow');
+  if (!def.flying) enemy.jumpY = 0;
+}
+
+/** 발구르기 선택(B3-1, 기획서 §9.2) — wake 면 기상 발구르기(거리·쿨다운 무관, 슬롯 'wakeSlam' 해금), 아니면 minRange < dist ≤ maxRange 에서 쿨다운이 끝났을 때
+ *  (슬롯 'slam' 해금, 페이즈 덮어쓰기 attackInPhase). 골랐으면 예고에 들어가고 true. 슬롯이 없는 적은 늘 false(옛 경로) */
+function trySlam(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>, dist: number, wake: boolean): boolean {
+  const slam = def.slamAttack;
+  if (!slam || !slotUnlocked(def, enemy, 'slam')) return false;
+  if (wake) {
+    if (!def.wakeSlam || !slotUnlocked(def, enemy, 'wakeSlam')) return false;
+  } else {
+    const a = attackInPhase(def, enemy, 'slam', slam);
+    if ((enemy.slamCooldown ?? 0) > 0 || dist <= (a.minRange ?? 0) || dist > (a.maxRange ?? Infinity)) return false;
+    enemy.slamCooldown = a.cooldownTicks ?? 0;
+  }
+  enemy.attackMode = 'slam';
+  startWindup(world, enemy, currentAttack(def, { ...enemy, wakeSlam: wake }));
+  enemy.wakeSlam = wake;
+  world.events.emit('enemy_slam_start', { enemyId: enemy.id, enemyType: enemy.type, wake, dist });
+  return true;
+}
+
 /** 페이즈 전환을 미뤄야 하는 창(기획서 §8 큐잉) — 혼절(처형 창)·포즈 타이머(머리 내림·미끄러짐·전환 자체)·눈멂 질주·넉백(처형 넉백) 중.
  *  플레이어의 처형·노출 창을 빼앗지 않는다. 그 밖(추격·예고·타격·경직)이면 즉시 전환하고 진행 중 공격은 취소된다 */
 function phaseShiftBlocked(enemy: EnemyState): boolean {
@@ -1481,9 +1587,12 @@ function beginPhaseShift(world: World, enemy: EnemyState, def: ReturnType<typeof
   enemy.phaseTarget = undefined;
   const fromTicks = world.tick - (enemy.phaseSince ?? world.tick);
   enemy.phaseSince = world.tick;
-  // 진행 중 공격 취소 — 예고·타격·질주·연사 어느 것이든 여기서 끊긴다
+  // 진행 중 공격 취소 — 예고·타격·질주·연사 어느 것이든 여기서 끊긴다. endBlind 는 안전망(도달 불가 — 눈멂은 phaseShiftBlocked 가 막아 여기 오지 않는다)
   endBlind(world, enemy);
+  if (enemy.pose === REAR_POSE) exitRear(world, enemy); // 발구르기 앞발 들기 중이었으면 심장 노출을 닫는다(B3-1)
   enemy.attackMode = 'melee';
+  enemy.wakeSlam = false;
+  enemy.wakeSlamPending = false; // 일어서며 예약한 기상 발구르기도 전환이 삼킨다(P3 복귀 첫 선택은 포효, B3-4)
   enemy.volleyLeft = 0;
   enemy.chargeHealthRef = undefined;
   enemy.chargeStuck = 0;
@@ -1513,6 +1622,7 @@ function beginPhaseShift(world: World, enemy: EnemyState, def: ReturnType<typeof
   if (enemy.closeCooldown) enemy.closeCooldown = Math.round(enemy.closeCooldown * mul);
   if (enemy.volleyCooldown) enemy.volleyCooldown = Math.round(enemy.volleyCooldown * mul);
   if (enemy.summonCooldown) enemy.summonCooldown = Math.round(enemy.summonCooldown * mul);
+  if (enemy.slamCooldown) enemy.slamCooldown = Math.round(enemy.slamCooldown * mul);
   // 포효 자세로 굳는다 — 포즈 타이머(head_down·skid 와 같은 문)
   enemy.molting = true;
   enemy.pose = 'roar';
@@ -1544,12 +1654,15 @@ function endPhaseOnDeath(world: World, enemy: EnemyState): void {
 }
 
 /** 포즈 타이머가 다했다(head_down·skid·roar 종료) — 자세로 열려 있던 약점(눈)을 닫고 추격으로 돌아간다. 페이즈 전환(molting)이었으면 molt off.
- *  기상 발구르기(P2+)는 B3-1 */
+ *  머리 내림(모든 원인 — 낫 박힘·역류·전도·탈진)이 끝나 일어서는 자리면 기상 발구르기(P2+, wakeSlam)를 예약한다 — 미끄러짐(skid) 뒤는 아니다(기획서 §9.2 2번).
+ *  역류 원인이었으면 boss_status backflow off 도 함께 */
 function endPose(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
   const pose = enemy.pose;
+  const cause = enemy.poseCause;
   const molt = enemy.molting === true;
   enemy.poseTicks = 0;
   enemy.pose = undefined;
+  enemy.poseCause = undefined;
   enemy.molting = false;
   if (pose !== undefined) {
     if (!molt) {
@@ -1558,6 +1671,8 @@ function endPose(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDe
       }
     }
     world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: molt ? 'molt' : pose, on: false });
+    if (cause === 'backflow') world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'backflow', on: false });
+    if (pose === 'head_down' && def.wakeSlam) enemy.wakeSlamPending = true;
   }
   enemy.ai = 'chase';
   enemy.timer = 0;
@@ -1698,6 +1813,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   if ((enemy.summonCooldown ?? 0) > 0) enemy.summonCooldown = (enemy.summonCooldown ?? 0) - 1;
   if ((enemy.chargeCooldown ?? 0) > 0) enemy.chargeCooldown = (enemy.chargeCooldown ?? 0) - 1;
   if ((enemy.closeCooldown ?? 0) > 0) enemy.closeCooldown = (enemy.closeCooldown ?? 0) - 1;
+  if ((enemy.slamCooldown ?? 0) > 0) enemy.slamCooldown = (enemy.slamCooldown ?? 0) - 1;
 
   // 새끼 분리 — 타이머 구동 (2026-09-01): 전투에 들어오면 즉시 5마리, 그 뒤로는
   // 10초 박자(cooldownTicks)마다 살아 있는 새끼를 빼고 부족분만 시전 없이 충원한다.
@@ -1867,6 +1983,13 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     case 'chase': {
       enemy.yaw = Math.atan2(-distX, -distZ);
 
+      // 기상 발구르기(거수 P2+, B3-1) — 머리 내림·혼절이 끝나 일어서는 첫 추격 틱에 거리·쿨다운 무관하게 확정(기획서 §9.2 2번).
+      // 예약은 여기서 소모된다 — P1(슬롯 미해금)이면 조용히 지워지고 평소 선택으로
+      if (enemy.wakeSlamPending) {
+        enemy.wakeSlamPending = false;
+        if (trySlam(world, enemy, def, dist, true)) break;
+      }
+
       if (def.behavior === 'caster_kite') {
         // 너무 가까우면 물러나고, 시야가 트이면 시전
         if (dist < (def.kiteMinRange ?? 0) && dist > 0) {
@@ -1912,7 +2035,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         }
         const bladeMode = pickMeleeMode(def, enemy);
         if (bladeMode === null) {
-          // 양 낫 잠김(절뚝) — 낫이 없다. 들이받기(위)·돌격(아래 거리 조건)만 남으니 붙은 플레이어에게서 물러나 거리를 유지한다(기획서 §9.2)
+          // 양 낫 잠김(절뚝) — 낫이 없다. 들이받기(위)·발구르기(P2+, 2.5m 밖)·돌격(아래 거리 조건)만 남으니 붙은 플레이어에게서 물러나 거리를 유지한다(기획서 §9.2)
+          if (trySlam(world, enemy, def, dist, false)) break;
           holdDisarmedRange(world, enemy, def, distX, distZ, dist, dt);
           break;
         }
@@ -1920,6 +2044,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         startWindup(world, enemy, currentAttack(def, enemy));
         break;
       }
+      // 발구르기(거수 P2+, B3-1, 기획서 §9.2 5번) — 낫 사거리 밖 2.5 < dist ≤ 6, 쿨 420. 돌격(4.5~15)보다 먼저 본다
+      if (trySlam(world, enemy, def, dist, false)) break;
       // (새끼 분리는 AI 선택이 아니라 10초 박자 타이머가 돈다 — 위 beatBrood 블록)
       // 굶주림(구울) — 생명 입자가 플레이어보다 가까우면 먹으러 간다.
       // 처치가 구울 곁에서 나면 입자를 놓고 플레이어와 경쟁하게 된다
@@ -2400,6 +2526,11 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           radius: attack.aoeRadius,
           dist: Math.hypot(p.x - enemy.x, p.z - enemy.z),
         });
+        // 발구르기 착지(거수 B3-1) — 착지점 웅덩이(B3-2 Hazards)가 이 이벤트를 받는다. 기상 발구르기도 같다
+        if (enemy.attackMode === 'slam') {
+          world.events.emit('slam_landed', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, radius: attack.aoeRadius, wake: enemy.wakeSlam === true, hit: connected });
+          enemy.wakeSlam = false;
+        }
       }
 
       // 헛쳤으면 긴 경직 — 마지막 동작 그대로 굳어 무방비가 된다 (반격 창)
@@ -2968,6 +3099,7 @@ function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): v
   enemy.timer = Math.max(1, Math.round(attack.windupTicks / frenzyMul(enemy, enemyDef(enemy.type))));
   enemy.whiffed = false;
   enemy.recoiled = false;
+  enemy.wakeSlam = false; // 기상 발구르기 표식은 trySlam 이 이 뒤에 세운다 — 다른 공격이 시작되면 지워진다
   enemy.strikeProgress = 0;
   enemy.weaponTipDist = fullReach(enemyDef(enemy.type), attack) * balance.parrySpace.pullbackRatio;
   world.events.emit('enemy_windup', {

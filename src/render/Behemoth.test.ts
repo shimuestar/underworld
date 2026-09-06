@@ -12,6 +12,7 @@ import {
   behemothAnchorPos,
   behemothBladeTip,
   behemothEyeDimmed,
+  behemothRearOffset,
   behemothVentLit,
   buildBehemothRig,
   poseBehemothRig,
@@ -63,6 +64,22 @@ const STUNNED = { lean: T.stunnedLean, lunge: 0, crouch: -def.height * T.stunned
 const SKID_PIVOT = def.visual!.joints.pos[1] * def.height; // 미끄러짐 굴림 축 = 어깨 높이(syncEnemies 와 같다)
 const SKID = { lean: T.skidLean, lunge: T.skidLunge, crouch: -def.height * T.skidCrouch, roll: T.skidRoll, pivot: SKID_PIVOT };
 const ROAR = { lean: T.roarLean, lunge: 0, crouch: 0 };
+/** 앞발 들기(B3-1) — 몸통 +35° 를 몸통 가운데 축으로(behemothRearOffset: 축 보정 전진·상승), syncEnemies 와 같은 값 */
+const REAR_OFF = behemothRearOffset();
+const REAR = { lean: REAR_OFF.lean, lunge: REAR_OFF.lunge, crouch: REAR_OFF.rise };
+const SLAM_COIL = { lean: T.slamLean, lunge: 0, crouch: 0 };
+const SLAM_LAND = { lean: T.slamLandLean, lunge: 0, crouch: -def.height * T.slamLandCrouch };
+/** 발 높이(group 좌표) — 다리 원기둥 밑면 중심 */
+function footY(rig: ReturnType<typeof buildBehemothRig>, hip: THREE.Group): number {
+  const foot = new THREE.Vector3(0, -rig.dims.legH * (hip.children[0]!.scale.y), 0);
+  let o: THREE.Object3D | null = hip;
+  while (o && o !== rig.torso.parent) {
+    o.updateMatrix();
+    foot.applyMatrix4(o.matrix);
+    o = o.parent;
+  }
+  return foot.y;
+}
 
 describe('약점 구체 = 판정 구체', () => {
   it('구체는 def.weakPoints 마다 하나(wp_<id>), group 소속, 반지름 = wp.radius, 자리 = normal 표', () => {
@@ -306,6 +323,10 @@ describe('약점 구체 = 판정 구체', () => {
     expect(behemothEyeDimmed({ dazeCooldown: 600, ai: 'windup', attackMode: 'charge' })).toBe(true); // 예고 중엔 눈이 안 열리지만 규칙은 질주만 예외
     expect(behemothEyeDimmed({ dazeCooldown: 0, ai: 'recover' })).toBe(false);
     expect(behemothEyeDimmed({ ai: 'charging', attackMode: 'charge' })).toBe(false);
+    // 역류(B3-1) 머리 내림 — 쿨다운 0 이라도 어둡게(피해만, 혼절 누적 없음). 낫 박힘·전도 머리 내림은 밝게
+    expect(behemothEyeDimmed({ dazeCooldown: 0, ai: 'recover', pose: 'head_down', poseCause: 'backflow' })).toBe(true);
+    expect(behemothEyeDimmed({ dazeCooldown: 0, ai: 'recover', pose: 'head_down' })).toBe(false);
+    expect(behemothEyeDimmed({ dazeCooldown: 0, ai: 'recover', pose: 'head_down', poseCause: 'topple' })).toBe(false);
   });
 });
 
@@ -314,7 +335,7 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
   const FLOOR = -0.08; // 기운 원기둥 발의 테두리(r 0.22)가 살짝 잠기는 만큼만 허용 — 배치 1 메모 (c) 돌격 −0.46m 는 안 된다
   // 떨림은 sin(nowMs/12)·sin(nowMs/11) 진폭 — 봉우리 근처를 몇 점 찍는다
   const peaks = [0, 12 * Math.PI * 0.5, 11 * Math.PI * 0.5, 100, 1234];
-  const cases: { name: string; lean: number; lunge: number; crouch: number; pose: Partial<BehemothPose>; roll?: number; pivot?: number }[] = [
+  const cases: { name: string; lean: number; lunge: number; crouch: number; pose: Partial<BehemothPose>; roll?: number; pivot?: number; liftedFront?: boolean }[] = [
     { name: 'rest', lean: 0, lunge: 0, crouch: 0, pose: {} },
     { name: 'rest+flinch', lean: T.flinchLean, lunge: 0, crouch: 0, pose: {} },
     { name: 'walk', lean: 0, lunge: 0, crouch: 0, pose: { legPhase: Math.PI / 2, legBlend: 1 } },
@@ -385,6 +406,19 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
     ...peaks.map((nowMs) => ({ name: `roar@${nowMs.toFixed(0)}`, lean: T.roarLean + T.flinchLean, lunge: 0, crouch: 0, pose: { pose: 'roar', nowMs } })),
     { name: 'roar 0.5', lean: T.roarLean * 0.5, lunge: 0, crouch: 0, pose: { pose: 'roar', poseBlend: 0.5 } },
     { name: 'roar locked r', ...ROAR, pose: { pose: 'roar', bladeLocked: { r: true, l: false } } },
+    // B3-1 앞발 들기(rear — 몸통 +35°, 앞다리 들림·낫 앞아래·머리 치켜듦) — 떨림 봉우리·움찔·진행 중간·잠긴 낫 채로. 앞발은 공중(liftedFront)
+    ...peaks.map((nowMs) => ({ name: `rear+tremble+flinch@${nowMs.toFixed(0)}`, ...REAR, lean: REAR.lean + J.tremble + T.flinchLean, pose: { pose: 'rear', trembling: true, nowMs }, liftedFront: true })),
+    { name: 'rear', ...REAR, pose: { pose: 'rear' }, liftedFront: true },
+    { name: 'rear 0.5', lean: REAR.lean * 0.5, lunge: REAR.lunge * 0.5, crouch: REAR.crouch * 0.5, pose: { pose: 'rear', poseBlend: 0.5 }, liftedFront: true },
+    { name: 'rear locked r', ...REAR, pose: { pose: 'rear', bladeLocked: { r: true, l: false } }, liftedFront: true },
+    // B3-1 발구르기 예고(앞발 들기 밖·기상 발구르기 — 앞발 낮게) / 착지(내리찍음)
+    ...peaks.map((nowMs) => ({ name: `slam coil+tremble+flinch@${nowMs.toFixed(0)}`, ...SLAM_COIL, lean: SLAM_COIL.lean + J.tremble + T.flinchLean, pose: { slamCoil: 1, trembling: true, nowMs } })),
+    { name: 'slam coil 0.5', lean: T.slamLean * 0.5, lunge: 0, crouch: 0, pose: { slamCoil: 0.5 } },
+    { name: 'slam land', ...SLAM_LAND, pose: { slamming: true } },
+    { name: 'slam land+flinch', ...SLAM_LAND, lean: SLAM_LAND.lean + T.flinchLean, pose: { slamming: true } },
+    // B3-1 역류 머리 내림(cause backflow) — 두 낫이 벌어져 매달린 고꾸라짐(박힌 낫 아님)
+    { name: 'head_down backflow', ...HEAD_DOWN, pose: { pose: 'head_down', poseCause: 'backflow' } },
+    { name: 'head_down backflow+flinch', ...HEAD_DOWN, lean: HEAD_DOWN.lean + T.flinchLean, pose: { pose: 'head_down', poseCause: 'backflow', nowMs: 100 } },
   ];
 
   it('어깨→위팔→낫을 실제로 지어 모든 자세(떨림·움찔·튕김 흔들림을 더한 최악)에서 꼭대기가 3.8m 아래', () => {
@@ -394,22 +428,16 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
     }
   });
 
-  it('바닥(B2-2, 배치 1 메모 c) — 모든 자세에서 발·낫끝이 바닥을 뚫지 않는다: 기울임·낮춤만큼 다리를 늘이고 접어 발이 바닥에 남는다', () => {
+  it('바닥(B2-2, 배치 1 메모 c) — 모든 자세에서 발·낫끝이 바닥을 뚫지 않는다: 기울임·낮춤만큼 다리를 늘이고 접어 발이 바닥에 남는다(앞발 들기의 든 앞발만 예외)', () => {
     for (const c of cases) {
       const { box, rig } = measureRig(c.lean, c.lunge, c.crouch, c.pose, c.roll ?? 0, c.pivot ?? 0);
       expect(box.min.y, `${c.name} 바닥 ${box.min.y.toFixed(2)}m`).toBeGreaterThanOrEqual(FLOOR);
-      // 발끝(다리 원기둥 밑면 중심)이 바닥 근처
-      for (const hip of rig.legs) {
-        const foot = new THREE.Vector3(0, -rig.dims.legH * (hip.children[0]!.scale.y), 0);
-        let o: THREE.Object3D | null = hip;
-        while (o && o !== rig.torso.parent) {
-          o.updateMatrix();
-          foot.applyMatrix4(o.matrix);
-          o = o.parent;
-        }
-        expect(foot.y, `${c.name} 발 ${foot.y.toFixed(2)}`).toBeGreaterThanOrEqual(-0.02);
-        expect(foot.y, `${c.name} 발 ${foot.y.toFixed(2)}`).toBeLessThanOrEqual(0.35); // 걸음·긁기의 들림 이상으로 뜨지 않는다
-      }
+      // 발끝(다리 원기둥 밑면 중심)이 바닥 근처 — 앞발 들기(rear)의 앞다리(0·1)는 공중이라 위 한계를 재지 않는다(별도 검사)
+      rig.legs.forEach((hip, i) => {
+        const y = footY(rig, hip);
+        expect(y, `${c.name} 발 ${y.toFixed(2)}`).toBeGreaterThanOrEqual(-0.02);
+        if (!(c.liftedFront && i < 2)) expect(y, `${c.name} 발 ${y.toFixed(2)}`).toBeLessThanOrEqual(0.35); // 걸음·긁기의 들림 이상으로 뜨지 않는다
+      });
     }
     // 대기·돌격 웅크림에서 발이 정확히 바닥
     for (const c of [cases[0]!, { name: 'charging', ...CHARGE, pose: { pose: 'charge', charging: true } }]) {
@@ -565,6 +593,79 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
     }
     expect(rig.weakPoints['eye']!.position.y).toBeCloseTo(2.2, 6);
     expect(rig.weakPoints['joint_r']!.position.y).toBeCloseTo(2.4, 6);
+  });
+
+  it('앞발 들기(B3-1, pose rear) — 몸통 +35°(축 보정 앞·위)에 배 심장 메시 자리 = 표 구체 (0, 1.15, −1.0)(≤ 0.03m), 눈도 표(3.0m, ≤ 0.06), 관절 ≤ 0.2; 앞발은 공중(≥ 0.5m) 뒷발은 바닥, 두 낫은 앞아래(끝 0.5~1.5m), 꼬리·몸 어디도 바닥 아래 없음, 꼭대기 3.8 아래. 진행 중간도 심장이 따라간다', () => {
+    const heartWp = def.weakPoints!.find((wp) => wp.id === 'heart')!;
+    const table = weakPointOffset(def, heartWp, 'rear');
+    expect(table).toEqual({ x: 0, y: 1.15, z: -1.0 });
+    // 축 보정 — 표의 심장이 normal (0.6, −0.4) 에서 35° 돌아 나온 자리(수직이등분선 위의 축): 앞으로 ≈1.02·위로 ≈0.43
+    expect(REAR_OFF.lean).toBeCloseTo((35 * Math.PI) / 180, 2);
+    expect(REAR_OFF.lunge).toBeLessThan(-0.9);
+    expect(REAR_OFF.rise).toBeGreaterThan(0.35);
+    const full = measureRig(REAR.lean, REAR.lunge, REAR.crouch, { pose: 'rear' });
+    const heartA = behemothAnchorPos(full.rig, 'heart', new THREE.Vector3());
+    const heartS = full.rig.weakPoints['heart']!.position;
+    expect([heartS.x, heartS.y, heartS.z]).toEqual([table.x, table.y, table.z]);
+    expect(heartA.distanceTo(heartS), `심장 어긋남 ${heartA.distanceTo(heartS).toFixed(3)}`).toBeLessThanOrEqual(0.03);
+    expect(behemothAnchorPos(full.rig, 'eye', new THREE.Vector3()).distanceTo(full.rig.weakPoints['eye']!.position)).toBeLessThanOrEqual(0.06);
+    expect(full.rig.weakPoints['eye']!.position.y).toBeCloseTo(3.0, 6);
+    for (const id of ['joint_r', 'joint_l']) {
+      expect(behemothAnchorPos(full.rig, id, new THREE.Vector3()).distanceTo(full.rig.weakPoints[id]!.position), id).toBeLessThanOrEqual(0.2);
+    }
+    // 앞발 공중·뒷발 바닥
+    expect(footY(full.rig, full.rig.legs[0]!)).toBeGreaterThan(0.5);
+    expect(footY(full.rig, full.rig.legs[1]!)).toBeGreaterThan(0.5);
+    expect(Math.abs(footY(full.rig, full.rig.legs[2]!))).toBeLessThan(0.03);
+    expect(Math.abs(footY(full.rig, full.rig.legs[3]!))).toBeLessThan(0.03);
+    // 두 낫 — 앞아래, 좌우 대칭
+    for (const side of [1, -1] as const) {
+      const tip = behemothBladeTip(full.rig, side, new THREE.Vector3());
+      expect(tip.y, `side ${side} 낫끝 ${tip.y.toFixed(2)}`).toBeGreaterThan(0.5);
+      expect(tip.y).toBeLessThan(1.5);
+      expect(-tip.z).toBeGreaterThan(2.0);
+    }
+    expect(full.box.min.y).toBeGreaterThanOrEqual(-0.02); // 꼬리도 되들었다
+    expect(full.box.max.y).toBeLessThanOrEqual(3.8);
+    // 진행 중간 — 심장 구체와 배 메시가 함께 간다
+    const half = measureRig(REAR.lean * 0.5, REAR.lunge * 0.5, REAR.crouch * 0.5, { pose: 'rear', poseBlend: 0.5 });
+    const hA = behemothAnchorPos(half.rig, 'heart', new THREE.Vector3());
+    expect(hA.distanceTo(half.rig.weakPoints['heart']!.position)).toBeLessThanOrEqual(0.08);
+    // 앞발 들기 밖의 발구르기 예고(기상 발구르기) — 앞발이 낮게(≤ 0.35) 들리고 심장은 배 밑 normal 자리 그대로(안 보인다)
+    const coil = measureRig(SLAM_COIL.lean, 0, 0, { slamCoil: 1 });
+    expect(footY(coil.rig, coil.rig.legs[0]!)).toBeGreaterThan(0.08);
+    expect(footY(coil.rig, coil.rig.legs[0]!)).toBeLessThanOrEqual(0.35);
+    expect(Math.abs(footY(coil.rig, coil.rig.legs[2]!))).toBeLessThan(0.03);
+    expect(coil.rig.weakPoints['heart']!.position.y).toBeCloseTo(0.6, 6);
+    // 착지 — 앞발이 다시 바닥
+    const land = measureRig(SLAM_LAND.lean, 0, SLAM_LAND.crouch, { slamming: true, slamCoil: 1 });
+    expect(Math.abs(footY(land.rig, land.rig.legs[0]!))).toBeLessThan(0.03);
+  });
+
+  it('역류 머리 내림(B3-1, head_down cause backflow) — 낫이 박히지 않는다: 두 낫이 벌어져 매달리고(끝이 바닥 위 0.2m 이상, 바깥), 눈은 표(0.9m). 봉인(sealed) 심장은 어두운 본색·발광 없음·맥동 없음', () => {
+    const bf = measureRig(HEAD_DOWN.lean, 0, HEAD_DOWN.crouch, { pose: 'head_down', poseCause: 'backflow' });
+    for (const side of [1, -1] as const) {
+      const tip = behemothBladeTip(bf.rig, side, new THREE.Vector3());
+      expect(tip.y, `side ${side} 낫끝 ${tip.y.toFixed(2)}`).toBeGreaterThan(0.2);
+      expect(Math.sign(tip.x)).toBe(side);
+    }
+    const stuck = measureRig(HEAD_DOWN.lean, 0, HEAD_DOWN.crouch, { pose: 'head_down' });
+    expect(behemothBladeTip(stuck.rig, 1, new THREE.Vector3()).y).toBeLessThanOrEqual(0.25); // 대조 — 낫 박힘은 그대로 바닥에 꽂힌다
+    expect(bf.rig.weakPoints['eye']!.position.y).toBeCloseTo(0.9, 6);
+    expect(behemothAnchorPos(bf.rig, 'eye', new THREE.Vector3()).distanceTo(bf.rig.weakPoints['eye']!.position)).toBeLessThanOrEqual(0.06);
+    // 봉인 표시
+    const { rig } = measureRig(0, 0, 0, {});
+    const mat = rig.weakPoints['heart']!.material as THREE.MeshLambertMaterial;
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'heart', broken: false, flashAgeMs: -1, sealed: id === 'heart' }));
+    expect(mat.emissive.getHex()).toBe(0);
+    expect(rig.weakPoints['heart']!.scale.x).toBe(1);
+    const sealedColor = mat.color.getHex();
+    styleBehemothWeakPoints(rig, 640 / 4, () => ({ open: false, broken: false, flashAgeMs: -1 }));
+    expect(sealedColor).not.toBe(mat.color.getHex()); // 닫힘 본색(0x7a1f3a)보다 어둡다
+    expect(sealedColor).toBeLessThan(mat.color.getHex());
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'heart', broken: false, flashAgeMs: -1 }));
+    expect(mat.emissive.getHex()).toBe(0xff2e63); // 열림이면 진홍 맥동
+    expect(rig.weakPoints['heart']!.scale.x).toBeCloseTo(1.12, 3);
   });
 
   it('절뚝(B2-3, limping) — 앞다리 걸음이 뒷다리보다 짧다(절룩), 잠기지 않았으면 대칭', () => {

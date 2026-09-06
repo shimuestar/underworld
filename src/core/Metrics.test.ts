@@ -60,13 +60,17 @@ describe('Metrics', () => {
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'topple', on: true, ticks: 90, cell: 'P' }); // 전도
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'head_down', on: true, ticks: 90, cause: 'topple' }); // 전도의 머리 내림은 따로 세지 않는다
     events.emit('pillar_hit', { enemyId: 1, enemyType: 'scythe_behemoth', row: 3, col: 5, x: 22, z: 14 });
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'backflow', on: true, ticks: 60, selfDamage: 45 }); // 역류(B3-1)
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'backflow', on: false });
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'rear', on: true }); // 앞발 들기 자세는 세지 않는다
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'head_down', on: true, ticks: 60, cause: 'backflow' });
     // 페이즈(B2-6) — 3 → 2 전환(P1 90초), 2 → 1 (P2 120초), 사망(phase 0 — 전환으로 세지 않고 P3 90초만 쌓는다)
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 2, from: 3, skipped: false, fromTicks: 5400, tick: 5400 });
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 1, from: 2, skipped: false, fromTicks: 7200, tick: 12600 });
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 0, from: 1, skipped: false, fromTicks: 5400, tick: 18000, death: true });
 
     const s = metrics.snapshot(makeWorldStub());
-    expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1, chargeDodges: 1, limps: 1, blinds: 1, topples: 1, pillarHits: 1 });
+    expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1, chargeDodges: 1, limps: 1, blinds: 1, topples: 1, pillarHits: 1, backflows: 1 });
     expect(s.boss).toEqual({ phaseShifts: 2, phaseSkips: 0, phaseSeconds: { '3': 90, '2': 120, '1': 90 } });
     expect(s.combat.parryAttempts).toBe(4);
     expect(s.derived.perfectParryRatio).toBeCloseTo(0.5);

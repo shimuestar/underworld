@@ -114,6 +114,10 @@ describe('Status.ts — 카운터·상한·이벤트 (기획서 §6)', () => {
     expect(CFG.maxConcurrent).toBe(2);
     expect(CFG.numbArm).toEqual({ ticks: 240, perfectBandMul: 0, blockSpeedMul: 0.25, noManaLossOnFail: true });
     expect(CFG.concussion).toEqual({ ticks: 360, aimShakeAmp: 0.02, tiltDeg: 3, duckDb: -6, potionCures: true });
+    expect(CFG.hobble).toEqual({ ticks: 300, dodgeStaminaMul: 2, noSprint: true }); // B3-1 절뚝 — 물약이 지우지 않는다(potionCures 없음)
+    expect(PLAYER_STATUS_KINDS).toEqual(['numb_arm', 'concussion', 'hobble']);
+    expect(def.slamAttack!.statusOnHit).toBe('hobble');
+    expect(def.slamAttack!.statusOnBlock).toBeUndefined(); // 막으면 절뚝 없음
     expect(CFG.numbArm.blockSpeedMul).toBeLessThan(balance.block.speedMul); // 저림 중 방어가 더 느리다
     expect(def.attack.statusOnBlock).toBe('numb_arm');
     expect(def.attackAlt!.statusOnBlock).toBe('numb_arm');

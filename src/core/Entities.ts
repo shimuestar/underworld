@@ -115,6 +115,9 @@ export interface EnemyAttackDef {
   statusOnHit?: PlayerStatusKind;
   /** 방패로 막았을 때 남기는 상태(거수 낫 → 팔 저림 'numb_arm'). 칩 피해·방어 경직은 기존대로 */
   statusOnBlock?: PlayerStatusKind;
+  /** 예고 중 앞발 들기 구간(거수 발구르기, 기획서 §4.1 heart·§7 P2) — 예고 시작 후 경과 틱이 from ≤ t < to 인 동안 enemy.pose 가 'rear'
+   *  (몸통 +35°·앞다리 들림 → poseOffsets.rear 로 배 심장이 앞·위로 나와 열린다). Enemies 가 매 틱 비춘다. 없으면 자세 없음(기상 발구르기) */
+  rearPose?: { from: number; to: number };
 }
 
 /** 세 성분 좌표·치수 — [x, y, z]. x·z 는 def.radius 배, y 는 def.height 배 (Stage 가 곱한다) */
@@ -369,6 +372,12 @@ export interface EnemyDef {
   attackAlt?: EnemyAttackDef;
   /** 밀착 공격 — maxRange 안에 붙은 플레이어를 cooldownTicks 마다 낫보다 먼저 밀어낸다(거수 들이받기). attackMode 'close' */
   closeAttack?: EnemyAttackDef;
+  /** 발구르기 — minRange 초과·maxRange 이하에서 cooldownTicks 마다, 원형 aoeRadius(각 무시)·패링 불가(거수 P2, 슬롯 'slam' 해금). attackMode 'slam'.
+   *  rearPose 구간에 배 심장이 열린다(B3-1) */
+  slamAttack?: EnemyAttackDef;
+  /** 기상 발구르기(거수 P2, 슬롯 'wakeSlam' 해금) — 머리 내림·혼절이 끝나 일어서는 첫 추격 틱에 확정. slamAttack 을 그대로 쓰되 예고만 이 값이고
+   *  rearPose 가 없다(앞발을 낮게 들어 심장 안 보임 — wakeSlamAttack). 없으면 기상 발구르기 없음 */
+  wakeSlam?: { windupTicks: number };
   /** 완벽 패링만 받는다 — 일반 대역(guardDepth)에서 눌러도 성립하지 않는다.
    *  이르게 누른 입력은 버퍼로 살아남아 무기 끝이 완벽 대역에 들어오는 순간 성립한다 */
   perfectParryOnly?: boolean;
@@ -506,9 +515,24 @@ export function attackInPhase(def: EnemyDef, enemy: { phase?: number }, slot: st
   return merged;
 }
 
-/** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격. 페이즈 표(phases[].attackOverrides)가 있으면 피해·쿨다운·범위를 합쳐 돌려준다(B2-6) */
-export function currentAttack(def: EnemyDef, enemy: { attackMode?: string; phase?: number }): EnemyAttackDef {
+/** 기상 발구르기 정의(거수 B3-1) — slamAttack 에 wakeSlam.windupTicks 만 덮고 rearPose 를 뺀 것(앞발을 낮게 들어 심장이 안 보인다). def 별로 한 번 만들어
+ *  캐시한다(currentAttack 이 매 틱 항등 비교·읽기를 한다). slamAttack 이나 wakeSlam 이 없으면 undefined */
+const WAKE_SLAM_ATTACKS = new WeakMap<EnemyDef, EnemyAttackDef>();
+export function wakeSlamAttack(def: EnemyDef): EnemyAttackDef | undefined {
+  if (!def.slamAttack || !def.wakeSlam) return undefined;
+  const cached = WAKE_SLAM_ATTACKS.get(def);
+  if (cached) return cached;
+  const merged: EnemyAttackDef = { ...def.slamAttack, windupTicks: def.wakeSlam.windupTicks };
+  delete merged.rearPose;
+  WAKE_SLAM_ATTACKS.set(def, merged);
+  return merged;
+}
+
+/** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격. 페이즈 표(phases[].attackOverrides)가 있으면 피해·쿨다운·범위를 합쳐 돌려준다(B2-6).
+ *  발구르기('slam')는 enemy.wakeSlam 이면 기상 발구르기 정의(슬롯 'wakeSlam' — 페이즈 덮어쓰기를 받지 않는다) */
+export function currentAttack(def: EnemyDef, enemy: { attackMode?: string; phase?: number; wakeSlam?: boolean }): EnemyAttackDef {
   let base = def.attack;
+  let slot: string | undefined;
   if (enemy.attackMode === 'summon' && def.summonAttack) base = def.summonAttack;
   else if (enemy.attackMode === 'bash' && def.shieldBash) base = def.shieldBash;
   else if (enemy.attackMode === 'charge' && def.chargeAttack) base = def.chargeAttack;
@@ -516,9 +540,17 @@ export function currentAttack(def: EnemyDef, enemy: { attackMode?: string; phase
   else if (enemy.attackMode === 'ranged' && def.rangedAttack) base = def.rangedAttack;
   else if (enemy.attackMode === 'alt' && def.attackAlt) base = def.attackAlt;
   else if (enemy.attackMode === 'close' && def.closeAttack) base = def.closeAttack;
+  else if (enemy.attackMode === 'slam' && def.slamAttack) {
+    const wake = enemy.wakeSlam ? wakeSlamAttack(def) : undefined;
+    if (wake) {
+      base = wake;
+      slot = 'wakeSlam';
+    } else {
+      base = def.slamAttack;
+    }
+  }
   if (!def.phases) return base;
-  const slot = base === def.attack ? 'attack' : slotOfMode(enemy.attackMode);
-  return attackInPhase(def, enemy, slot, base);
+  return attackInPhase(def, enemy, slot ?? (base === def.attack ? 'attack' : slotOfMode(enemy.attackMode)), base);
 }
 
 /** 체력 바 분할 — healthBars 만큼 나눠 표시한다 (보스는 2칸).
@@ -745,16 +777,18 @@ export function weakPointWorldPos(
   return { x: enemy.x + r.x, y: (enemy.jumpY ?? 0) + r.y, z: enemy.z + r.z };
 }
 
-/** 이 약점이 지금 판정을 받는가(기획서 §4.2 "노출 아닐 때는 판정 자체가 없다") — 내구가 0(파열)이거나 페이즈 전환(molting) 중이면 닫힘.
- *  열림 = 노출 타이머(enemy.exposure[id] > 0 — 패링·완벽 회피가 연다) 또는 자세 노출(enemy.pose ∈ wp.exposedStates — 눈은 head_down).
+/** 이 약점이 지금 판정을 받는가(기획서 §4.2 "노출 아닐 때는 판정 자체가 없다") — 내구가 0(파열)이거나 페이즈 전환(molting) 중이거나
+ *  봉인 쿨다운(enemy.weakCooldown[id] > 0 — 역류 뒤 심장 600틱, B3-1)이면 닫힘.
+ *  열림 = 노출 타이머(enemy.exposure[id] > 0 — 패링·완벽 회피가 연다) 또는 자세 노출(enemy.pose ∈ wp.exposedStates — 눈은 head_down, 심장은 rear).
  *  혼절(pose stunned) 중 눈이 닫히는 것도 이 규칙에서 나온다(stunned 는 눈의 exposedStates 에 없다). Weapons·Projectiles·Stage 공용 */
 export function weakPointOpen(
-  enemy: { weakHp?: Record<string, number>; exposure?: Record<string, number>; pose?: string; molting?: boolean },
+  enemy: { weakHp?: Record<string, number>; exposure?: Record<string, number>; pose?: string; molting?: boolean; weakCooldown?: Record<string, number> },
   wp: WeakPointDef,
 ): boolean {
   if (enemy.molting) return false; // 페이즈 전환(갑각 재생) 동안은 약점 전부 닫힘(기획서 §8) — 포효 자세라도 눈은 표적이 아니다
   const hp = enemy.weakHp?.[wp.id];
   if (hp !== undefined && hp <= 0) return false;
+  if ((enemy.weakCooldown?.[wp.id] ?? 0) > 0) return false; // 봉인 — 자세로 열리는 자리에 있어도 판정이 없다(어둡게 그린다)
   if ((enemy.exposure?.[wp.id] ?? 0) > 0) return true;
   return enemy.pose !== undefined && (wp.exposedStates?.includes(enemy.pose) ?? false);
 }
@@ -779,7 +813,7 @@ export function rayHitsWeakPoint(
   dz: number,
   enemy: {
     x: number; z: number; yaw: number; jumpY?: number; pose?: string; molting?: boolean;
-    weakHp?: Record<string, number>; exposure?: Record<string, number>; feigning?: boolean;
+    weakHp?: Record<string, number>; exposure?: Record<string, number>; feigning?: boolean; weakCooldown?: Record<string, number>;
   },
   def: { weakPoints?: WeakPointDef[]; poseOffsets?: Record<string, Record<string, LocalVec3>> },
   pad: number,

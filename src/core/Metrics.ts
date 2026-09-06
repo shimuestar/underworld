@@ -31,8 +31,8 @@ export interface MetricsSnapshot {
   };
   kills: { weapon: number; execution: number; spell: number; friendlyFire: number; total: number };
   /** 약점(거수) — 명중 수 / 약점 피해 합 / 파열 수 / 닫힌 노출 창 수와 그 안의 명중 합(노출 활용률 = hits/closed) / 혼절 수 /
-   *  돌격 완벽 회피 수 / 절뚝(양 낫 잠김) 진입 수 / 눈멂 유도 수 / 전도 수 / 기둥 충돌 수 (기획서 boss_scythe_behemoth §12) */
-  weakPoints: { hits: number; damage: number; broken: number; exposuresClosed: number; exposureHits: number; dazes: number; chargeDodges: number; limps: number; blinds: number; topples: number; pillarHits: number };
+   *  돌격 완벽 회피 수 / 절뚝(양 낫 잠김) 진입 수 / 눈멂 유도 수 / 전도 수 / 기둥 충돌 수 / 역류(심장 66 — 발구르기 취소) 수 (기획서 boss_scythe_behemoth §12) */
+  weakPoints: { hits: number; damage: number; broken: number; exposuresClosed: number; exposureHits: number; dazes: number; chargeDodges: number; limps: number; blinds: number; topples: number; pillarHits: number; backflows: number };
   /** 페이즈 보스(거수, B2-6) — 전환 수 / 두 경계를 한 번에 넘은(P2 건너뜀) 수 / 페이즈별 소요 초(체력 칸 index 키 '3'·'2'·'1' — 사망까지 포함, 목표 P1 90s / P2 120s / P3 90s) */
   boss: { phaseShifts: number; phaseSkips: number; phaseSeconds: Record<string, number> };
   pickups: { potions: number; healed: number; gold: number; xp: number };
@@ -87,6 +87,7 @@ export class Metrics {
   private blinds = 0;
   private topples = 0;
   private pillarHits = 0;
+  private backflows = 0;
   private bossPhaseShifts = 0;
   private bossPhaseSkips = 0;
   private bossPhaseTicks: Record<string, number> = {};
@@ -166,6 +167,7 @@ export class Metrics {
       if (st.kind === 'limp') this.limps++;
       else if (st.kind === 'blind') this.blinds++;
       else if (st.kind === 'topple') this.topples++;
+      else if (st.kind === 'backflow') this.backflows++; // 역류(B3-1) — 심장 66 으로 발구르기를 취소시킨 수(탐욕 노선 성공률)
     });
     events.on('pillar_hit', () => this.pillarHits++);
     // 페이즈 전환(거수) — from 페이즈에 머문 틱을 쌓는다. phase 0 은 사망(마지막 페이즈 마감)이라 전환으로 세지 않는다
@@ -306,7 +308,7 @@ export class Metrics {
       weakPoints: {
         hits: this.weakPointHits, damage: this.weakPointDamage, broken: this.weakPointsBroken,
         exposuresClosed: this.exposuresClosed, exposureHits: this.exposureHits, dazes: this.dazes,
-        chargeDodges: this.chargeDodges, limps: this.limps, blinds: this.blinds, topples: this.topples, pillarHits: this.pillarHits,
+        chargeDodges: this.chargeDodges, limps: this.limps, blinds: this.blinds, topples: this.topples, pillarHits: this.pillarHits, backflows: this.backflows,
       },
       boss: {
         phaseShifts: this.bossPhaseShifts,

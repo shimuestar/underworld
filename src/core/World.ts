@@ -91,17 +91,19 @@ export interface PlayerState {
   numbArmTicks?: number;
   /** 진탕(concussion, 거수 돌격 직격) 잔여 틱 — 조준 흔들림·화면 기울기·오디오 덕킹. 체력 물약이 지운다 */
   concussionTicks?: number;
+  /** 절뚝(hobble, 거수 발구르기 직격, B3-1) 잔여 틱 — 회피 스태미너 ×2·질주 불가(회피 거리·무적은 그대로). 시간으로만 풀린다 */
+  hobbleTicks?: number;
   /** 걸린 순서(오래된 것부터) — Status.ts 가 상한(balance.status.maxConcurrent)을 넘기면 맨 앞을 해제한다. Status 만 쓴다 */
   statusOrder?: PlayerStatusKind[];
 }
 
 /** 플레이어 상태이상 종류(기획서 §6) — 이벤트는 `${kind}_applied/_ended`. 카운터 필드·balance.status 키는 아래 표 */
-export type PlayerStatusKind = 'numb_arm' | 'concussion';
-export const PLAYER_STATUS_KINDS: readonly PlayerStatusKind[] = ['numb_arm', 'concussion'];
+export type PlayerStatusKind = 'numb_arm' | 'concussion' | 'hobble';
+export const PLAYER_STATUS_KINDS: readonly PlayerStatusKind[] = ['numb_arm', 'concussion', 'hobble'];
 /** 상태 → PlayerState 카운터 필드 */
-export const PLAYER_STATUS_FIELD = { numb_arm: 'numbArmTicks', concussion: 'concussionTicks' } as const satisfies Record<PlayerStatusKind, keyof PlayerState>;
+export const PLAYER_STATUS_FIELD = { numb_arm: 'numbArmTicks', concussion: 'concussionTicks', hobble: 'hobbleTicks' } as const satisfies Record<PlayerStatusKind, keyof PlayerState>;
 /** 상태 → balance.status 블록 키 (지속 틱 등은 호출부가 balance 에서 읽는다 — World 는 데이터를 읽지 않는다) */
-export const PLAYER_STATUS_CFG = { numb_arm: 'numbArm', concussion: 'concussion' } as const satisfies Record<PlayerStatusKind, string>;
+export const PLAYER_STATUS_CFG = { numb_arm: 'numbArm', concussion: 'concussion', hobble: 'hobble' } as const satisfies Record<PlayerStatusKind, string>;
 
 /** 상태 잔여 틱 (없으면 0) */
 export function playerStatusTicks(player: PlayerState, kind: PlayerStatusKind): number {
@@ -1056,8 +1058,21 @@ export interface EnemyState {
   frostStacks?: number;
   /** 보스 전용 — 연속 패링 누적 (parriesToStagger 도달 시 스태거) */
   parryStreak?: number;
-  /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지). 'alt' = 교대 근접(거수 왼낫), 'close' = 밀착 공격(거수 들이받기) */
-  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley' | 'summon' | 'alt' | 'close';
+  /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지). 'alt' = 교대 근접(거수 왼낫), 'close' = 밀착 공격(거수 들이받기), 'slam' = 발구르기(거수 P2) */
+  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley' | 'summon' | 'alt' | 'close' | 'slam';
+  /** 이번 발구르기가 기상 발구르기인가(거수 B3-1) — attackMode 'slam' 과 함께. 예고가 짧고 앞발 들기(rear)가 없다(Entities.currentAttack → wakeSlamAttack) */
+  wakeSlam?: boolean;
+  /** 기상 발구르기 예약 — 머리 내림(모든 원인)·혼절이 끝날 때 Enemies 가 세우고, 다음 추격 틱에 P2+ 이면 확정 발구르기로 소모한다(미끄러짐 뒤엔 세우지 않는다).
+   *  페이즈 전환이 끼면 지워진다 */
+  wakeSlamPending?: boolean;
+  /** 발구르기 재사용 대기(거수) */
+  slamCooldown?: number;
+  /** 약점 봉인 쿨다운 id → 남은 틱(거수) — 이 동안 그 약점은 자세로 열리는 자리에 있어도 판정이 없다(Entities.weakPointOpen, Stage 는 어둡게).
+   *  역류 뒤 심장(heartCooldownTicks, B3-1). Enemies 가 매 틱 깎아 0 이 되면 지운다 */
+  weakCooldown?: Record<string, number>;
+  /** 포즈 타이머의 원인(beginPose 의 cause — head_down: 없으면 낫 박힘, 'topple' 전도, 'backflow' 역류). 역류 원인이면 눈 누적(혼절)이 없고
+   *  Stage 는 박힌 낫 대신 고꾸라진 그림을 그린다. endPose 가 지운다 */
+  poseCause?: string;
   /** 마지막으로 휘두른 낫(거수 교대) — 'r' 오른낫(attack) / 'l' 왼낫(attackAlt). 없으면 다음은 오른낫 */
   lastBlade?: 'r' | 'l';
   /** 약점 내구 잔량 id → hp (거수 관절) — weakPoints[].hp 가 있는 것만, Spawner 가 def 에서 복사한다.
@@ -1231,6 +1246,7 @@ export function closeExposure(world: World, enemy: EnemyState, id: string): void
  *  cause 는 같은 자세의 원인을 가른다(head_down: 없으면 낫 박힘, 'topple' 은 돌격이 기둥·균열벽에 박힘 — main 이 소리·문구를 나눈다) */
 export function beginPose(world: World, enemy: EnemyState, pose: string, ticks: number, cause?: string): void {
   enemy.pose = pose;
+  enemy.poseCause = cause;
   enemy.poseTicks = Math.max(1, Math.round(ticks));
   enemy.ai = 'recover';
   enemy.timer = enemy.poseTicks;

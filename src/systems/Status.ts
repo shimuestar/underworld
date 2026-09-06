@@ -1,6 +1,6 @@
-// 플레이어 상태이상 — docs/systems/boss_scythe_behemoth.md §6 (B2-4: 팔 저림·진탕).
+// 플레이어 상태이상 — docs/systems/boss_scythe_behemoth.md §6 (B2-4: 팔 저림·진탕, B3-1: 절뚝).
 //
-// 소유 규약(stunTicks 와 같다): 카운터는 PlayerState 옵셔널(numbArmTicks·concussionTicks). 다른 시스템은
+// 소유 규약(stunTicks 와 같다): 카운터는 PlayerState 옵셔널(numbArmTicks·concussionTicks·hobbleTicks). 다른 시스템은
 // 값을 **세우기만** 한다(Enemies impact → setPlayerStatus / Reaction 일반 패링 → 0 / Items 물약 → 0).
 // 감소·상한·`${kind}_applied/_ended` 이벤트는 전부 여기서만 낸다 — 그래서 "누가 지웠든" 해제 문구는 한 곳에서 나온다.
 //
@@ -11,6 +11,7 @@
 //   numb_arm  — Reaction(완벽 대역 ×perfectBandMul·실패 마나 소실 면제·일반 패링 시 해제), PlayerMove(방어 이속 blockSpeedMul)
 //   concussion — 조준 흔들림은 여기서 박쥐 aimShake 채널에 싣는다(PlayerMove 가 소비), 화면 기울기·오디오 덕킹·HUD 는 main 이 카운터를 읽는다,
 //                Items.drink(체력 물약이 0 으로) / Inventory.isUseful(지울 상태가 있으면 유용)
+//   hobble    — Reaction.tryDodge(회피 스태미너 ×dodgeStaminaMul), PlayerMove(질주 불가 noSprint). 시간으로만 풀린다(물약 없음)
 //
 // 실행 순서: Reaction 뒤 — 같은 틱의 일반 패링 해제·impact 부여를 이 틱 안에 이벤트로 낸다.
 
@@ -48,7 +49,9 @@ export function tick(world: World, _dt: number): void {
   }
 
   // 3) 진탕 — 조준 흔들림을 박쥐 aimShake 채널에 싣는다(PlayerMove 가 이미 이번 틱 분을 소비했으니 남은 진탕 틱으로 다시 채운다).
-  //    위상이 남은 틱에서 나오므로 잔여 틱과 같게 두어야 떨림이 계속 돈다. 더 긴 흔들림이 돌고 있으면(사실상 없다) 그쪽을 존중한다
+  //    위상이 남은 틱에서 나오므로 잔여 틱과 같게 두어야 떨림이 계속 돈다. 더 긴 흔들림이 돌고 있으면 그쪽을 존중한다 —
+  //    진탕과 박쥐 비명(shakeAmp 0.012·55틱)이 겹치면 더 긴 흔들림의 진폭이 이긴다(채널 재사용의 의도된 트레이드오프, B2-4 검토): 진탕 잔여가 길면
+  //    비명이 진탕 진폭에 묻히고, 비명이 더 길면 그 구간은 비명 진폭으로 약해진다. 판정·회피와는 무관
   const concussion = playerStatusTicks(p, 'concussion');
   if (concussion > 0 && (p.aimShakeTicks ?? 0) <= concussion) {
     p.aimShakeTicks = concussion;

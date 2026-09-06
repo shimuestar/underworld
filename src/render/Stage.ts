@@ -481,6 +481,8 @@ interface EnemyVisual {
   bhRoll?: number;
   /** 거수 굴림 축 높이(m, 보간값) — 미끄러짐은 어깨(joints.pos y), 그 외 0(발). bhRoll 과 같은 계수로 풀려 torso.position.x 가 튀지 않는다(stepBehemothRoll) */
   bhRollPivot?: number;
+  /** 거수 역류(backflow) 몸 들썩 — 이 시각(ms)까지 몸통 기울임에 잔떨림을 얹는다(Stage.lurchBehemoth) */
+  bhLurchUntil?: number;
   /** 시위 당김 0~1 — 놓는 순간 0으로 스냅해 시위가 튕겨 돌아간다 */
   bowDraw?: number;
   /** 머리 위 이름표 + HP 바 */
@@ -1062,7 +1064,34 @@ export const BEHEMOTH_TORSO = {
   limpRoll: 0.05,
   /** 포효(roar — 페이즈 전환 갑각 재생, B3-4 포효 예고) — 몸통은 거의 그대로(뒤로 젖히면 치켜든 머리·뿔이 3.8m 를 넘는다), 머리는 목 IK 가 표의 눈(2.9m)으로 치켜든다 */
   roarLean: 0.02,
+  /** 발구르기 앞발 들기(pose rear, B3-1) — 몸통 +35°(기획서 §2). 회전축은 발이 아니라 몸통 가운데 조금 뒤·위(rearPivotY/Z, m): 표(poseOffsets.rear)의 심장
+   *  (0, 1.15, −1.0) 은 normal (0, 0.6, −0.4) 에서 앞·위로 0.81m 나온 자리라, 두 점을 잇는 35° 회전의 축(수직이등분선 위, 심장까지 1.36m)이 여기다 —
+   *  발을 축으로 젖히면 배가 뒤로 물러나 심장 구체가 몸 밖에 뜬다. torso.position 은 축 보정 P − R·P(behemothRearOffset: 앞으로 ≈1.02·위로 ≈0.43).
+   *  앞다리는 poseBehemothRig 가 들고(BH_LEG_REAR_LIFT, 바닥 보정 없음) 뒷다리는 바닥에 남는다. 머리는 목 IK faceUp 가지(접는 가지는 머리·뿔이 눈 위에 쌓여 천장을 넘는다) */
+  rearLean: 0.6109,
+  rearPivotY: 1.83,
+  rearPivotZ: 0.17,
+  /** 발구르기 예고(앞발 들기 구간 밖·기상 발구르기) — 앞발을 낮게 들며 몸통이 살짝 뒤로(심장은 배 밑 그대로 — 안 보인다) */
+  slamLean: 0.1,
+  /** 발구르기 착지(impact·recover) — 앞으로 짧게 내리찍으며 낮아진다 */
+  slamLandLean: -0.14,
+  slamLandCrouch: 0.03,
+  /** 역류(head_down cause 'backflow') 몸 들썩 — 기울임에 얹는 잔떨림 진폭(rad). 시간은 Stage.lurchBehemoth(BH_LURCH_MS) */
+  lurchAmp: 0.05,
 } as const;
+
+/** 앞발 들기(rear) 몸통 변환 — 축(rearPivotY/Z)을 도는 rearLean 회전을 발 원점 회전 + 평행이동으로: position = P − R·P.
+ *  syncEnemies·Behemoth.test·debug/behemoth.ts 가 같은 값을 쓴다. lunge 는 torso.position.z(앞이 −), rise 는 torso.position.y(위가 +) */
+export function behemothRearOffset(): { lean: number; lunge: number; rise: number } {
+  const T = BEHEMOTH_TORSO;
+  const c = Math.cos(T.rearLean);
+  const s = Math.sin(T.rearLean);
+  return {
+    lean: T.rearLean,
+    rise: T.rearPivotY - (T.rearPivotY * c - T.rearPivotZ * s),
+    lunge: T.rearPivotZ - (T.rearPivotY * s + T.rearPivotZ * c),
+  };
+}
 
 /** syncEnemies 가 자세 위에 더하는 기울임 떨림 진폭(rad) — 섬광 구간 떨림·튕김 흔들림·피탄 움찔.
  *  거수 천장 검사(Boss.test)는 자세마다 이 합만큼 더 젖힌 최악의 경우를 잰다 */
@@ -1131,6 +1160,17 @@ const BH_LIMP_FRONT_MUL = 0.45;
 const BH_LIMP_REAR_MUL = 1.15;
 const BH_POSE_BLEND_K = 0.35; // 자세 표 보간 계수(프레임당) — 머리 내림·혼절이 서고 풀릴 때 구체와 머리가 함께 옮겨 간다
 const BH_ROLL_BLEND_K = 0.25; // 몸통 굴림(각·축 높이) 보간 계수(프레임당) — 미끄러짐·절뚝이 서고 풀릴 때
+// 발구르기(B3-1) — 앞발 들기(rear)는 앞다리를 크게 들어 접고(발이 공중, 바닥 보정 없음), 기상 발구르기·앞발 들기 밖 예고는 낮게(slamCoil). 두 낫은 앞아래로 낮게 뻗는다 —
+// 어깨가 2.9m 로 솟은 rear 에서 대기 각(0.45)이면 위팔 끝이 4.3m 로 천장을 뚫는다(월드 각 고정 BH_ARM_REAR). 역류(head_down cause backflow)는 박힌 낫이 아니라
+// 두 낫이 벌어져 매달린 고꾸라짐(skid 팔 자세 재사용)
+const BH_LEG_REAR_LIFT = 1.15;
+const BH_LEG_PAW_LIFT = 0.45;
+const BH_ARM_REAR = -0.25;
+const BH_ARM_REAR_YAW = -0.2;
+const BH_BLADE_REAR = -1.1;
+const BH_LURCH_MS = 520;
+/** 봉인(역류 뒤 심장 쿨다운) 구체 — 본색을 이만큼 어둡게(발광 없음·맥동 없음): "판정 없음"의 표시. 파열색(0x7a1f3a)은 심장 본색과 같아 쓰지 않는다 */
+const BH_WEAK_SEALED_MUL = 0.45;
 
 /** 거수 몸통 굴림 한 프레임 — 굴림각(bhRoll)과 굴림 축 높이(bhRollPivot)를 같은 계수로 보간하고 torso.position.x 에 넣을 되밀기
  *  sin(roll)·pivotY 를 돌려준다(Rz 가 (0, pivotY) 를 x = −pivotY·sin 으로 보내니 그만큼 되밀면 축이 그 높이에 온다). 축까지 보간하는 이유:
@@ -1224,6 +1264,12 @@ export interface BehemothPose {
   bladeLocked?: { r: boolean; l: boolean };
   /** 절뚝(양 낫 잠김) — 걸음이 절룩인다(앞다리 짧게·뒷다리 크게). 몸 굴림은 syncEnemies 가 torso.rotation.z 로 */
   limping?: boolean;
+  /** 발구르기 예고 진행도 0~1(B3-1) — 앞발 들기(pose rear) 밖·기상 발구르기에서 앞다리를 낮게 든다. rear 자세면 표의 큰 들기가 우선 */
+  slamCoil?: number;
+  /** 발구르기 착지 중(impact·recover) — 앞다리가 내리찍힌 채(들기 0), 몸통 낮춤은 syncEnemies */
+  slamming?: boolean;
+  /** 포즈 타이머의 원인(enemy.poseCause) — head_down 이 'backflow'(역류)면 박힌 낫 대신 두 낫이 벌어져 매달린 고꾸라짐 */
+  poseCause?: string;
 }
 
 
@@ -1493,16 +1539,18 @@ export function behemothAnchorPos(rig: BehemothRig, id: string, out: THREE.Vecto
 
 /** 약점 구체 표시 — 열림: 발광 + 크기 맥동 ±12% / 닫힘: 어두운 본색 / 파열: 어둡게 / 명중 직후(flashAgeMs ≥ 0): 밝게 번쩍.
  *  텔레그래프 3색·스태거 금색은 쓰지 않는다(기획서 §2). syncEnemies 와 debug/behemoth.ts 가 같은 함수를 쓴다 */
-/** 눈 구체를 '어두운 청록(피해만, 누적 없음)' 으로 그릴지 — 혼절 쿨다운(dazeCooldown) 중 머리 내림의 눈.
- *  돌격 질주 중 6m 눈(Enemies ⑩)은 쿨다운과 무관하게 눈멂 누적이 유효하므로 밝은 청록 그대로(판정 = 그림, B2-5 검토) */
-export function behemothEyeDimmed(enemy: Pick<EnemyState, 'dazeCooldown' | 'ai' | 'attackMode'>): boolean {
+/** 눈 구체를 '어두운 청록(피해만, 누적 없음)' 으로 그릴지 — 혼절 쿨다운(dazeCooldown) 중 머리 내림의 눈, 그리고 역류(poseCause 'backflow')로 내려온 머리의 눈
+ *  (기획서 §4.1 heart "머리 내림 60 — 눈 ×3.0 피해만, 혼절 누적 없음", B3-1). 돌격 질주 중 6m 눈(Enemies ⑩)은 쿨다운과 무관하게 눈멂 누적이 유효하므로
+ *  밝은 청록 그대로(판정 = 그림, B2-5 검토) */
+export function behemothEyeDimmed(enemy: Pick<EnemyState, 'dazeCooldown' | 'ai' | 'attackMode' | 'pose' | 'poseCause'>): boolean {
+  if (enemy.pose === 'head_down' && enemy.poseCause === 'backflow') return true;
   return (enemy.dazeCooldown ?? 0) > 0 && !(enemy.ai === 'charging' && enemy.attackMode === 'charge');
 }
 
 export function styleBehemothWeakPoints(
   rig: BehemothRig,
   nowMs: number,
-  state: (id: string) => { open: boolean; broken: boolean; flashAgeMs: number; dim?: boolean; lit?: boolean },
+  state: (id: string) => { open: boolean; broken: boolean; flashAgeMs: number; dim?: boolean; lit?: boolean; sealed?: boolean },
 ): void {
   for (const id in rig.weakPoints) {
     const mesh = rig.weakPoints[id]!;
@@ -1512,6 +1560,12 @@ export function styleBehemothWeakPoints(
     const flash = st.flashAgeMs >= 0 && st.flashAgeMs < BH_WEAK_FLASH_MS ? 1 - st.flashAgeMs / BH_WEAK_FLASH_MS : 0;
     if (st.broken) {
       mat.color.setHex(BEHEMOTH_COLORS.jointBroken);
+      mat.emissive.setHex(0x000000);
+      mat.emissiveIntensity = 1;
+      mesh.scale.setScalar(1);
+    } else if (st.sealed) {
+      // 봉인(역류 뒤 심장 쿨다운, B3-1) — 본색을 어둡게, 발광·맥동 없음: 자세 자리에 나와 있어도 판정이 없다는 표시
+      mat.color.setHex(colors.base).multiplyScalar(BH_WEAK_SEALED_MUL);
       mat.emissive.setHex(0x000000);
       mat.emissiveIntensity = 1;
       mesh.scale.setScalar(1);
@@ -1566,9 +1620,13 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
   const frontMul = p.limping ? BH_LIMP_FRONT_MUL : 1;
   const rearMul = p.limping ? BH_LIMP_REAR_MUL : 1;
   const skid = tablePose === 'skid' ? blend : 0;
+  // 앞발 들기(B3-1) — rear 자세는 앞다리를 크게 접어 든다(발이 공중), 그 밖의 발구르기 예고(기상 발구르기)는 slamCoil 만큼 낮게. 착지(slamming)는 0
+  const rearing = tablePose === 'rear' ? blend : 0;
+  const paw = p.slamming ? 0 : Math.max(0, Math.min(1, p.slamCoil ?? 0));
+  const frontLift = rearing * BH_LEG_REAR_LIFT + (1 - rearing) * paw * BH_LEG_PAW_LIFT;
   const legTargets = [
-    (swing + scrape) * frontMul + BH_LEG_SKID_FRONT * skid,
-    (-swing - scrape) * frontMul + BH_LEG_SKID_FRONT * skid,
+    (swing + scrape) * frontMul + BH_LEG_SKID_FRONT * skid + frontLift,
+    (-swing - scrape) * frontMul + BH_LEG_SKID_FRONT * skid + frontLift,
     -swing * rearMul + BH_LEG_SKID_REAR * skid,
     swing * rearMul + BH_LEG_SKID_REAR * skid,
   ];
@@ -1579,7 +1637,9 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     // 엉덩이의 group 높이 — torso 회전 순서(XYZ = z 굴림을 먼저, x 기울임을 나중에 적용)를 그대로 따른다
     const rolledY = hip.position.x * Math.sin(roll) + hip.position.y * Math.cos(roll);
     const hipY = torso.position.y + rolledY * Math.cos(lean) - hip.position.z * Math.sin(lean);
-    const scale = Math.max(BH_LEG_SCALE_MIN, Math.min(BH_LEG_SCALE_MAX, hipY / rig.dims.legH));
+    // 든 앞발은 바닥을 딛지 않는다 — 길이 보정 없이 제 길이(1) 그대로 공중에 접힌다
+    const lifted = i < 2 && frontLift > 0.05;
+    const scale = lifted ? 1 : Math.max(BH_LEG_SCALE_MIN, Math.min(BH_LEG_SCALE_MAX, hipY / rig.dims.legH));
     const leg = hip.children[0];
     if (leg) {
       leg.scale.y = mix(leg.scale.y, scale);
@@ -1587,9 +1647,9 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     }
   }
 
-  // 꼬리 — 느린 좌우 흔들림, 달릴 때 뒤로 뻗친다
+  // 꼬리 — 느린 좌우 흔들림, 달릴 때 뒤로 뻗친다. 앞발 들기(rear)엔 몸통이 35° 젖혀지니 그만큼 되들어 꼬리가 바닥을 뚫지 않게(월드 각 ≈ 살짝 처짐)
   rig.tail.rotation.y = mix(rig.tail.rotation.y, Math.sin(p.nowMs / 900) * BH_TAIL_SWAY);
-  rig.tail.rotation.x = mix(rig.tail.rotation.x, p.charging ? BH_TAIL_DROOP * 0.3 : BH_TAIL_DROOP);
+  rig.tail.rotation.x = mix(rig.tail.rotation.x, p.charging ? BH_TAIL_DROOP * 0.3 : BH_TAIL_DROOP - rearing * (lean + BH_TAIL_DROOP * 0.6));
 
   // 머리 — 표 자세(charge·head_down·stunned …)면 목 IK 로 머리 메시의 눈을 약점 표의 눈 자리(구체)에 맞춘다(보이는 눈 = 판정 구체,
   // 배치 1 메모 (d)). 들이받기는 손 각: 예고에 목을 뒤로 홱 젓고(1 − (1−t)³ — 앞부분에서 확 젖혀 끝에서 버틴다, 뿔이 하늘을 본다)
@@ -1608,12 +1668,12 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     const table = eyeWp ? weakPointOffset(rig.def, eyeWp, tablePose) : undefined;
     if (table && eyeWp) {
       const rest = eyeWp.offset;
-      // 포효는 반대 가지(faceUp) — 얼굴을 위로 치켜든다. 머리를 아래로 접는 가지로 2.9m 눈을 만들면 머리 상자·뿔이 눈 위에 쌓여 3.9m(천장 3.8) 를 넘는다
+      // 포효·앞발 들기는 반대 가지(faceUp) — 얼굴을 위로 치켜든다. 머리를 아래로 접는 가지로 2.9m·3.0m 눈을 만들면 머리 상자·뿔이 눈 위에 쌓여 3.9m(천장 3.8) 를 넘는다
       const ik = solveNeckToEye(rig, lean, torso.position.y, lunge, {
         x: 0,
         y: rest.y + (table.y - rest.y) * blend,
         z: rest.z + (table.z - rest.z) * blend,
-      }, tablePose === 'roar');
+      }, tablePose === 'roar' || tablePose === 'rear');
       neckTarget = ik.neck;
       pitchTarget = ik.pitch;
     }
@@ -1678,11 +1738,16 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
       // 몸통 굴림(절뚝·미끄러짐)은 바깥으로 벌어진 낫끝(옆으로 2m 남짓)을 그만큼 더 내리니 그 몫을 띄운다 — 바닥을 뚫지 않게
       const rollDrop = Math.abs(Math.sin(roll)) * (shoulderX + (rig.dims.upperArm + rig.dims.blade) * Math.abs(Math.sin(yaw)));
       bladeWorld = -Math.asin(Math.max(-1, Math.min(1, (elbowY - (BH_LOCKED_TIP_Y + rollDrop)) / rig.dims.blade)));
-    } else if (tablePose === 'skid' && blend > 0.01) {
-      // 미끄러짐(완벽 회피) — 두 낫이 바깥으로 벌어진 채 매달려 흔들린다
+    } else if ((tablePose === 'skid' || (tablePose === 'head_down' && p.poseCause === 'backflow')) && blend > 0.01) {
+      // 미끄러짐(완벽 회피)·역류 고꾸라짐(B3-1) — 두 낫이 바깥으로 벌어진 채 매달려 흔들린다(역류는 낫이 박힌 게 아니다)
       armTarget = BH_ARM_SKID + Math.sin(p.nowMs / 120) * 0.03;
       yaw = BH_ARM_SKID_YAW;
       bladeWorld = BH_BLADE_SKID;
+    } else if (rearing > 0.01) {
+      // 앞발 들기(B3-1) — 어깨가 2.9m 로 솟으니 두 낫을 앞아래로 낮게 뻗는다(월드 각 고정, 살짝 바깥). 낫끝은 바닥 위(≈0.9m)
+      armTarget = BH_ARM_REST + (BH_ARM_REAR - lean - BH_ARM_REST) * rearing;
+      yaw = BH_ARM_REAR_YAW * rearing;
+      bladeWorld = BH_BLADE_REST + (BH_BLADE_REAR - BH_BLADE_REST) * rearing;
     } else if (roarK > 0.01) {
       // 포효(페이즈 전환) — 두 낫을 바깥으로 벌려 들고 부르르 떤다. 높이는 예고(BH_ARM_WINDUP)만큼이라 천장을 못 뚫는다
       armTarget = BH_ARM_REST + (BH_ARM_ROAR - BH_ARM_REST) * roarK + Math.sin(p.nowMs / 45) * 0.02 * roarK;
@@ -4250,11 +4315,29 @@ export class Stage {
       if (visual.behemoth) {
         const chargeMode = enemy.attackMode === 'charge';
         const closeMode = enemy.attackMode === 'close';
+        const slamMode = enemy.attackMode === 'slam';
+        // 발구르기 착지(B3-1) — impact 와 그 뒤 후딜(recover, 튕김·헛침 아님) 동안 내리찍은 자세로
+        const slamLanding = slamMode && enemy.pose === undefined && (enemy.ai === 'impact' || (enemy.ai === 'recover' && !recoiled && !frozenWhiff));
         if (enemy.pose === 'head_down') {
           // 머리 내림 — 낫이 박혀 앞으로 기울고 앞다리가 접힌다. 머리·구체는 poseBehemothRig 가 표(눈 0.9m)로
           leanTarget = BEHEMOTH_TORSO.headDownLean;
           lungeTarget = 0;
           crouchTarget = -def2.height * BEHEMOTH_TORSO.headDownCrouch;
+        } else if (enemy.pose === 'rear') {
+          // 앞발 들기(B3-1) — 몸통 +35°, 축은 몸통 가운데(배 심장이 표 (0, 1.15, −1.0) 로 앞·위로 나온다). 앞다리 들기·낫·머리는 poseBehemothRig
+          const rear = behemothRearOffset();
+          leanTarget = rear.lean;
+          lungeTarget = rear.lunge;
+          crouchTarget = rear.rise;
+        } else if (slamMode && inWindup) {
+          // 발구르기 예고(앞발 들기 밖·기상 발구르기) — 앞발을 낮게 들며 살짝 뒤로(심장은 배 밑 그대로)
+          leanTarget = BEHEMOTH_TORSO.slamLean * windupProgress;
+          lungeTarget = 0;
+          crouchTarget = 0;
+        } else if (slamLanding) {
+          leanTarget = BEHEMOTH_TORSO.slamLandLean;
+          lungeTarget = 0;
+          crouchTarget = -def2.height * BEHEMOTH_TORSO.slamLandCrouch;
         } else if (enemy.pose === 'skid') {
           // 미끄러짐(완벽 회피) — 앞으로 미끄러지며 살짝 뒤로 젖혀 버티고 낮아진다, 어깨 축으로 옆 8° 기운다(굴림은 아래 stepBehemothRoll). 다리는 poseBehemothRig 가 벌려 버틴다
           leanTarget = BEHEMOTH_TORSO.skidLean;
@@ -4315,7 +4398,9 @@ export class Stage {
       // 둘을 합친 값이 여유를 넘으면 같은 비율로 함께 줄인다
       const forwardLean = leanTarget < 0 ? def2.height * 0.8 * Math.sin(-leanTarget) : 0;
       const desired = Math.max(0, -lungeTarget) + forwardLean;
-      if (desired > maxAdvance) {
+      // 거수 앞발 들기(rear)는 예외 — 축 보정 전진(≈1.02)은 몸통을 뒤로 젖힌 만큼 되미는 값이라 실제 몸 앞끝은 대기보다 0.3m 도 안 나간다.
+      // 제한하면 심장 구체(표)와 배 메시가 갈린다
+      if (desired > maxAdvance && !(visual.behemoth && enemy.pose === 'rear')) {
         const k = desired > 0 ? maxAdvance / desired : 0;
         if (lungeTarget < 0) lungeTarget *= k;
         if (leanTarget < 0) leanTarget *= k;
@@ -4362,6 +4447,10 @@ export class Stage {
       // 굳은 동안 힘겹게 버티는 미세 떨림 (완전 정지는 프리즈처럼 보인다)
       if (frozenWhiff) leanTarget += Math.sin(now / 55) * 0.012;
       if (recoiled) leanTarget += (visual.behemoth ? BEHEMOTH_TORSO.recoilLean : 0.5) + Math.sin(now / 40) * ENEMY_LEAN_JITTER.recoilShake; // 뒤로 크게 젖힘 (4족은 작게)
+      // 거수 역류(B3-1) — 심장을 맞고 고꾸라지는 순간 몸이 들썩인다(lurchBehemoth 가 준 시간 동안 사그라드는 잔떨림)
+      if (visual.behemoth && (visual.bhLurchUntil ?? 0) > now) {
+        leanTarget += Math.sin(now / 38) * BEHEMOTH_TORSO.lurchAmp * Math.min(1, ((visual.bhLurchUntil ?? 0) - now) / BH_LURCH_MS);
+      }
       // 빙결 — 보간 계수를 0으로 두면 지금 자세(달리던·찌르던 중간)가 그대로 굳는다
       const solidIce = (enemy.freezeTicks ?? 0) > 0;
       const snap = solidIce ? 0 : striking ? 0.55 : 0.3; // 타격은 빠르게, 복귀는 부드럽게
@@ -4443,8 +4532,9 @@ export class Stage {
       if (visual.behemoth) {
         const chargeMode = enemy.attackMode === 'charge';
         const closeMode = enemy.attackMode === 'close';
-        // 낫 공격(오른 'melee'·왼 'alt')만 낫이 나간다 — 돌격·들이받기는 뿔이 무기라 낫을 접는다
-        const bladeMode = isMelee && !chargeMode && !closeMode;
+        const slamMode = enemy.attackMode === 'slam';
+        // 낫 공격(오른 'melee'·왼 'alt')만 낫이 나간다 — 돌격·들이받기는 뿔이, 발구르기는 앞발이 무기라 낫을 접는다
+        const bladeMode = isMelee && !chargeMode && !closeMode && !slamMode;
         const bladeStriking = bladeMode && striking;
         const headbutting = closeMode && striking;
         // 자세 보간 — 로직 자세(enemy.pose)가 서면 표 자리로, 사라지면 normal 로. 돌격 예고는 예고 진행도 그대로(머리가 내려가는 만큼
@@ -4489,6 +4579,10 @@ export class Stage {
           poseBlend: visual.bhBlend ?? 0,
           bladeLocked: { r: bladeLocked(enemy, 'r'), l: bladeLocked(enemy, 'l') },
           limping: enemy.limping === true,
+          // 발구르기(B3-1) — 예고 진행도로 앞발을 낮게 들고(앞발 들기 rear 자세는 표가 우선), 착지(impact·후딜)엔 내리찍은 채
+          slamCoil: slamMode && inWindup ? windupProgress : 0,
+          slamming: slamMode && (enemy.ai === 'impact' || (enemy.ai === 'recover' && enemy.pose === undefined)),
+          poseCause: enemy.poseCause,
         });
         // 약점 구체 — 열림(노출 타이머·자세, Entities.weakPointOpen — 판정과 같은 규칙)·파열·명중 플래시·혼절 쿨다운(눈 어두운 청록).
         // 플래시 시각은 Stage.weakFlashAt(적 id:약점 id)
@@ -4509,7 +4603,9 @@ export class Stage {
           const broken = hp !== undefined && hp <= 0;
           const wp = wps.find((w) => w.id === id);
           const open = wp !== undefined && weakPointOpen(enemy, wp);
-          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye, lit: id === 'vent' && ventLit };
+          // 봉인(역류 뒤 심장 쿨다운, B3-1) — 자세 자리에 나와 있어도 어둡게(판정 없음 = weakPointOpen 도 false)
+          const sealed = (enemy.weakCooldown?.[id] ?? 0) > 0;
+          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye, lit: id === 'vent' && ventLit, sealed };
         });
       }
 
@@ -5516,6 +5612,13 @@ export class Stage {
 
   /** 등갑판 탈락(거수 P3 진입, plate_shed) — 남은 판마다 몸통색 파편(power 0.6)이 등 뒤로 튕겨 나간다. 판 자체의 숨김은 setBehemothPhaseLook 이 매 프레임
    *  페이즈 표로 한다(여기선 파편만). 판이 없는(이미 탈락한) 리그면 아무것도 안 한다 */
+  /** 역류(B3-1, boss_status backflow) — 심장을 맞고 고꾸라지는 거수의 몸이 잠깐 들썩인다(syncEnemies 가 BH_LURCH_MS 동안 기울임에 잔떨림). 거수가 아니면 무시 */
+  lurchBehemoth(enemyId: number): void {
+    const visual = this.enemyVisuals.get(enemyId);
+    if (!visual?.behemoth) return;
+    visual.bhLurchUntil = performance.now() + BH_LURCH_MS;
+  }
+
   shedBehemothPlates(enemyId: number, enemyType: string): void {
     const visual = this.enemyVisuals.get(enemyId);
     const rig = visual?.behemoth;

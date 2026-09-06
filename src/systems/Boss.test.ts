@@ -2,19 +2,21 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
-import { attackInPhase, attackReaches, bladeOfJoint, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, jointOfBlade, rayHitsEnemy, resolvePhase, slotUnlocked, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
+import { attackInPhase, attackReaches, bladeOfJoint, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, jointOfBlade, rayHitsEnemy, resolvePhase, slotUnlocked, wakeSlamAttack, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { World, openExposure, type EnemyState } from '../core/World';
+import { World, openExposure, playerStatusTicks, setPlayerStatus, type EnemyState } from '../core/World';
 import { sigilDef } from '../core/SigilData';
 import { Level } from '../level/GridLoader';
 import { isSpawnable, spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
 import * as Exit from './Exit';
 import * as Mana from './Mana';
+import * as PlayerMove from './PlayerMove';
 import * as Projectiles from './Projectiles';
 import * as Reaction from './Reaction';
 import * as Sigils from './Sigils';
+import * as Status from './Status';
 import * as Weapons from './Weapons';
 
 const DT = 1 / 60;
@@ -3156,6 +3158,463 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       Enemies.tick(world, DT);
       expect(w.phases).toHaveLength(1);
       expect(w.phases[0]).toMatchObject({ phase: 0, from: 3, fromTicks: 30, death: true });
+    });
+  });
+
+  describe('B3-1 P2 발구르기·심장 역류·기상 발구르기·절뚝 (기획서 §4.1 heart·§5 backflow·§6 hobble·§7 P2·§9.2)', () => {
+    const wpc = balance.weakPoint;
+    const slam = def.slamAttack!;
+    const perBar = def.health / def.healthBars!; // 500
+    type Status = { kind: string; on: boolean; id?: string; ticks?: number; cause?: string; sealed?: boolean; selfDamage?: number };
+    function watch() {
+      const status: Status[] = [];
+      world.events.on('boss_status', (p) => status.push(p as Status));
+      const hits: { amount: number; blocked?: boolean }[] = [];
+      world.events.on('player_damaged', (p) => hits.push(p as { amount: number; blocked?: boolean }));
+      const slams: { radius: number; dist: number }[] = [];
+      world.events.on('ground_slam', (p) => slams.push(p as { radius: number; dist: number }));
+      const landed: { radius: number; wake: boolean; hit: boolean }[] = [];
+      world.events.on('slam_landed', (p) => landed.push(p as { radius: number; wake: boolean; hit: boolean }));
+      const starts: { wake: boolean; dist: number }[] = [];
+      world.events.on('enemy_slam_start', (p) => starts.push(p as { wake: boolean; dist: number }));
+      const windups: { telegraph: string }[] = [];
+      world.events.on('enemy_windup', (p) => windups.push(p as { telegraph: string }));
+      const closed: { id: string; hits: number }[] = [];
+      world.events.on('exposure_closed', (p) => closed.push(p as { id: string; hits: number }));
+      const weakHits: { id: string; damage: number }[] = [];
+      world.events.on('weak_point_hit', (p) => weakHits.push(p as { id: string; damage: number }));
+      const pops: { enemyId: number; amount: number }[] = [];
+      world.events.on('damage_pop', (p) => pops.push(p as { enemyId: number; amount: number }));
+      const staggers: unknown[] = [];
+      world.events.on('boss_staggered', (p) => staggers.push(p));
+      const tag = (st: Status): string => `${st.kind}${st.id ? ':' + st.id : ''}:${st.on}`;
+      return { status, hits, slams, landed, starts, windups, closed, weakHits, pops, staggers, tag };
+    }
+    /** P2 로 둔다(게임플레이 페이즈 = 체력 칸 index 2). 체력은 그대로 — tickPhase 는 칸이 phase 보다 낮아질 때만 전환하니 그대로 P2 에 머문다 */
+    function toP2(boss: EnemyState): void {
+      boss.phase = 2;
+    }
+    /** 발구르기 예고까지 돌린다(돌격은 쿨다운으로 막는다 — 4.5m 밖에서 돌격이 먼저 나간다) */
+    function untilSlamWindup(boss: EnemyState, maxTicks = 300): void {
+      boss.chargeCooldown = 9999;
+      tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'slam', maxTicks);
+    }
+    /** 심장 구체 중심을 권총으로 쏜다 */
+    function shootHeart(boss: EnemyState): void {
+      const c = weakPointWorldPos(boss, def, wp('heart'));
+      shootAt(c.x, c.y, c.z);
+    }
+
+    it('데이터 — slamAttack(contact·aoe 5.0·46틱·24·4m·2.5 < d ≤ 6·쿨 420·패링 불가·빨강·rearPose 8~36·statusOnHit hobble·막으면 없음), wakeSlam 30, P2 unlock slam·wakeSlam, balance heart 66/600·backflow 60/45·status.hobble 300/×2/noSprint. currentAttack: P2 발구르기 = 정의, P3 28/5.5, 기상 발구르기 = 예고 30·rearPose 없음·P3 에서도 24/5.0(슬롯 wakeSlam)·캐시. 족장엔 없다', () => {
+      expect(slam).toMatchObject({ type: 'contact', aoeRadius: 5.0, windupTicks: 46, damage: 24, playerKnockback: 4.0, minRange: 2.5, maxRange: 6, cooldownTicks: 420, parryable: false, telegraph: 'red', statusOnHit: 'hobble' });
+      expect(slam.rearPose).toEqual({ from: 8, to: 36 });
+      expect(slam.rearPose!.to - slam.rearPose!.from).toBe(28); // 기획서 "28틱 안 66"
+      expect(slam.statusOnBlock).toBeUndefined(); // 막으면 칩만, 절뚝 없음
+      expect(slam.arcDeg).toBeUndefined(); // 원형 — 각 무시
+      expect(slam.aoeRadius!).toBeLessThan(balance.reaction.dodgeDistance + 2.0); // 뒤 대시는 항상 나간다(최소 거리 2.0 + 3.5 = 5.5 > 5.0)
+      expect(def.wakeSlam).toEqual({ windupTicks: 30 });
+      expect(resolvePhase(def, 2)!.unlock.has('slam')).toBe(true);
+      expect(resolvePhase(def, 2)!.unlock.has('wakeSlam')).toBe(true);
+      expect(slotUnlocked(def, { phase: 3 }, 'slam')).toBe(false);
+      expect(slotUnlocked(def, { phase: 3 }, 'wakeSlam')).toBe(false);
+      expect(wpc.heartThreshold).toBe(66);
+      expect(wpc.heartCooldownTicks).toBe(600);
+      expect(wpc.headDown.backflowTicks).toBe(60);
+      expect(wpc.backflow.selfDamage).toBe(45);
+      expect(balance.status.hobble).toEqual({ ticks: 300, dodgeStaminaMul: 2, noSprint: true });
+      expect(wp('heart').exposedStates).toEqual(['rear']);
+      expect(wp('heart').damageMul).toBe(3.0);
+      // 공격 정의 — P2 그대로 / P3 덮어쓰기 / 기상 발구르기
+      expect(currentAttack(def, { attackMode: 'slam', phase: 2 })).toBe(slam);
+      expect(currentAttack(def, { attackMode: 'slam', phase: 1 })).toMatchObject({ damage: 28, aoeRadius: 5.5, windupTicks: 46 });
+      const wake = wakeSlamAttack(def)!;
+      expect(wake.windupTicks).toBe(30);
+      expect(wake.rearPose).toBeUndefined();
+      expect(wake).toMatchObject({ aoeRadius: 5.0, damage: 24, playerKnockback: 4.0, statusOnHit: 'hobble', telegraph: 'red', parryable: false });
+      expect(slam.rearPose).toBeDefined(); // 원본은 건드리지 않는다
+      expect(currentAttack(def, { attackMode: 'slam', phase: 2, wakeSlam: true })).toBe(wake);
+      expect(currentAttack(def, { attackMode: 'slam', phase: 1, wakeSlam: true })).toBe(wake); // 슬롯 'wakeSlam' 엔 P3 덮어쓰기가 없다(표: 24/24)
+      expect(wakeSlamAttack(def)).toBe(wake); // 캐시
+      expect(wakeSlamAttack(enemyDef('goblin_chieftain'))).toBeUndefined();
+      expect(enemyDef('goblin_chieftain').slamAttack).toBeUndefined();
+      expect(enemyDef('goblin_chieftain').wakeSlam).toBeUndefined();
+    });
+
+    it('P1 에선 발구르기가 나오지 않고(5m — 걸어온다), P2 에선 5m 에서 발구르기: attackMode slam·예고 46·빨강·쿨 420·enemy_slam_start{wake false}. 양 낫 잠김이라 낫이 없어도 4m 에서 발구르기(물러서기보다 먼저)', () => {
+      const boss = makeBehemoth(5.0); // 낫 4.4 밖·돌격 minRange 4.5 안쪽이 아니라 밖이지만 돌격은 쿨다운으로 막는다
+      boss.chargeCooldown = 9999;
+      const w = watch();
+      const x0 = boss.x;
+      for (let i = 0; i < 20; i++) Enemies.tick(world, DT);
+      expect(boss.attackMode ?? 'melee').not.toBe('slam');
+      expect(boss.x).toBeLessThan(x0); // 걸어온다
+      expect(w.starts).toHaveLength(0);
+      // P2
+      world.enemies.length = 0;
+      const b2 = makeBehemoth(5.0);
+      toP2(b2);
+      untilSlamWindup(b2, 5);
+      expect(b2.timer).toBe(slam.windupTicks);
+      expect(b2.wakeSlam).toBe(false);
+      expect(b2.slamCooldown).toBe(slam.cooldownTicks);
+      expect(w.windups.at(-1)).toMatchObject({ telegraph: 'red' });
+      expect(w.starts).toEqual([expect.objectContaining({ wake: false, dist: 5.0 })]);
+      // 양 낫 잠김 — 낫 사거리 안(4m)이라도 낫이 없으니 발구르기(2.5 밖)가 물러서기보다 먼저
+      world.enemies.length = 0;
+      const b3 = makeBehemoth(4.0);
+      toP2(b3);
+      b3.bladeLock = { r: 600, l: 600 };
+      b3.closeCooldown = 9999;
+      untilSlamWindup(b3, 5);
+      expect(b3.limping).toBe(true);
+      // 2.5m 안에선 안 나온다(minRange) — 들이받기(≤ 3.0)와 물러서기의 영역
+      world.enemies.length = 0;
+      const b4 = makeBehemoth(2.4);
+      toP2(b4);
+      b4.closeCooldown = 9999;
+      b4.chargeCooldown = 9999;
+      for (let i = 0; i < 5; i++) Enemies.tick(world, DT);
+      expect(b4.attackMode ?? 'melee').not.toBe('slam');
+    });
+
+    it('예고 8~36틱 앞발 들기 — pose rear 는 예고 경과 8 ≤ t < 36 의 28틱만: 그 동안 심장이 표 (0, 1.15, −1.0) 자리에서 열리고(weakPointOpen), 밖에선 닫혀 normal 자리. 들면 boss_status rear on(+joint_open 문구는 main), 내리면 rear off + exposure_closed{heart, hits 0}. 눈·관절은 열리지 않는다', () => {
+      const boss = makeBehemoth(5.0);
+      toP2(boss);
+      const w = watch();
+      untilSlamWindup(boss, 5);
+      const rearTicks: number[] = [];
+      let sawHeartOpen = false;
+      for (let k = 1; k <= slam.windupTicks; k++) {
+        Enemies.tick(world, DT);
+        const elapsed = slam.windupTicks - boss.timer;
+        expect(elapsed).toBe(k);
+        if (boss.pose === 'rear') {
+          rearTicks.push(elapsed);
+          expect(weakPointOpen(boss, wp('heart'))).toBe(true);
+          const c = weakPointWorldPos(boss, def, wp('heart'));
+          expect(c.y).toBeCloseTo(1.15, 6);
+          expect(Math.hypot(c.x - boss.x, c.z - boss.z)).toBeCloseTo(1.0, 6); // 앞으로 1.0
+          sawHeartOpen = true;
+        } else {
+          expect(weakPointOpen(boss, wp('heart'))).toBe(false);
+          expect(weakPointWorldPos(boss, def, wp('heart')).y).toBeCloseTo(0.6, 6);
+        }
+        expect(weakPointOpen(boss, wp('eye'))).toBe(false);
+        expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+        if (boss.ai !== 'windup') break;
+      }
+      expect(sawHeartOpen).toBe(true);
+      expect(rearTicks).toHaveLength(slam.rearPose!.to - slam.rearPose!.from); // 28
+      expect(rearTicks[0]).toBe(slam.rearPose!.from);
+      expect(rearTicks.at(-1)).toBe(slam.rearPose!.to - 1);
+      expect(w.status.map(w.tag)).toEqual(['rear:true', 'rear:false']);
+      expect(w.status[0]).toMatchObject({ kind: 'rear', on: true, sealed: false });
+      expect(w.closed).toEqual([expect.objectContaining({ id: 'heart', hits: 0 })]);
+      expect(boss.pose).toBeUndefined();
+    });
+
+    it('착지 — 예고 46틱 뒤 impact: 반경 5.0 안 24 + 밀림 4m/14틱 + 절뚝 300(hobbleTicks — Status 가 hobble_applied), ground_slam{radius 5} + slam_landed{radius 5, wake false, hit true}, 헛침 아닌 recover 40. 막으면 칩 7.2·절뚝 없음. 5.5m 밖(뒤 대시 뒤)은 안 맞고 땅만 울린다(hit false)', () => {
+      const boss = makeBehemoth(5.0);
+      toP2(boss);
+      const w = watch();
+      const applied: { kind: string; ticks: number }[] = [];
+      world.events.on('hobble_applied', (p) => applied.push(p as { kind: string; ticks: number }));
+      untilSlamWindup(boss, 5);
+      tickEnemiesUntil(() => boss.ai === 'recover', 60);
+      expect(w.hits).toEqual([expect.objectContaining({ amount: 24, blocked: false })]);
+      expect(world.player.health).toBe(76);
+      expect(world.player.kbTicks).toBe(slam.playerKnockbackTicks);
+      expect(Math.hypot(world.player.kbX!, world.player.kbZ!) * slam.playerKnockbackTicks!).toBeCloseTo(slam.playerKnockback!, 5);
+      expect(world.player.hobbleTicks).toBe(balance.status.hobble.ticks);
+      expect(world.player.concussionTicks ?? 0).toBe(0);
+      Status.tick(world, DT);
+      expect(applied).toEqual([{ kind: 'hobble', ticks: 300 }]);
+      expect(w.slams).toEqual([expect.objectContaining({ radius: 5.0 })]);
+      expect(w.landed).toEqual([expect.objectContaining({ radius: 5.0, wake: false, hit: true })]);
+      expect(boss.whiffed).toBe(false);
+      expect(boss.timer).toBe(slam.recoverTicks);
+      expect(boss.wakeSlam).toBe(false);
+      // 막기 — 칩 30% 만, 절뚝 없음, 밀림은 blockedMul
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.hobbleTicks = 0;
+      world.player.kbTicks = 0;
+      const b2 = makeBehemoth(5.0);
+      toP2(b2);
+      untilSlamWindup(b2, 5);
+      world.player.blocking = true; // 플레이어(+X 를 봄)의 정면
+      tickEnemiesUntil(() => b2.ai === 'recover', 60);
+      world.player.blocking = false;
+      expect(w.hits).toHaveLength(2);
+      expect(w.hits[1]).toMatchObject({ blocked: true });
+      expect(w.hits[1]!.amount).toBeCloseTo(24 * balance.block.chipDamageRatio, 5);
+      expect(world.player.hobbleTicks ?? 0).toBe(0);
+      expect(world.player.stunTicks).toBeGreaterThan(0); // 방어 경직은 기존대로
+      // 반경 밖 — 뒤 대시 뒤(5.5m): 안 맞고 땅만 울린다
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.stunTicks = 0;
+      const b3 = makeBehemoth(5.0);
+      toP2(b3);
+      untilSlamWindup(b3, 5);
+      world.player.x = b3.x - 5.5;
+      world.player.prevX = world.player.x;
+      tickEnemiesUntil(() => b3.ai === 'recover', 60);
+      expect(w.hits).toHaveLength(2);
+      expect(world.player.health).toBe(100);
+      expect(w.slams).toHaveLength(3);
+      expect(w.landed[2]).toMatchObject({ hit: false });
+      expect(b3.whiffed).toBe(false); // whiffRecoverTicks 가 없다 — 땅은 어차피 울렸다
+      expect(b3.timer).toBe(slam.recoverTicks);
+    });
+
+    it('역류 — 앞발 들기 중 심장 66(권총 2발 ×3.0 = 33×2) → 다음 틱: 발구르기 취소(AoE·ground_slam 없음, attackMode melee) + 자해 45(damage_pop) + head_down 60 cause backflow + 심장 봉인 600(weakCooldown — 판정 없음·rear 라도 닫힘) + exposure_closed{heart, hits 2}. 봉인 중엔 심장을 쏴도 몸통 0.8×. 머리 내림 중 눈 66 은 혼절이 아니다(피해만). 60틱 뒤 일어서며 기상 발구르기 확정(예고 30·rear 없음·심장 안 열림·slam_landed{wake true}). 봉인은 600틱 뒤 풀린다', () => {
+      const boss = makeBehemoth(5.0);
+      toP2(boss);
+      const w = watch();
+      untilSlamWindup(boss, 5);
+      tickEnemiesUntil(() => boss.pose === 'rear', 20);
+      const hpBefore = boss.health;
+      shootHeart(boss);
+      shootHeart(boss);
+      expect(w.weakHits).toEqual([
+        expect.objectContaining({ id: 'heart', damage: balance.weapons.pistol.damage * 3.0 }),
+        expect.objectContaining({ id: 'heart', damage: balance.weapons.pistol.damage * 3.0 }),
+      ]);
+      expect(boss.weakAccum!['heart']).toBeCloseTo(66, 5);
+      expect(boss.ai).toBe('windup'); // 아직 — Enemies 가 다음 틱에 본다
+      Enemies.tick(world, DT);
+      // 역류
+      expect(boss.attackMode).toBe('melee');
+      expect(boss.pose).toBe('head_down');
+      expect(boss.poseCause).toBe('backflow');
+      expect(boss.poseTicks).toBe(wpc.headDown.backflowTicks);
+      expect(boss.ai).toBe('recover');
+      expect(boss.health).toBeCloseTo(hpBefore - 66 - wpc.backflow.selfDamage, 5);
+      expect(w.pops.filter((p) => p.amount === wpc.backflow.selfDamage)).toHaveLength(1);
+      expect(boss.weakCooldown).toEqual({ heart: wpc.heartCooldownTicks });
+      expect(weakPointOpen(boss, wp('heart'))).toBe(false);
+      expect(weakPointOpen(boss, wp('eye'))).toBe(true); // 머리 내림 — 눈은 열려 있다(피해만)
+      expect(w.closed).toEqual([expect.objectContaining({ id: 'heart', hits: 2 })]);
+      expect(w.status.map(w.tag)).toEqual(['rear:true', 'rear:false', 'backflow:true', 'head_down:true']);
+      expect(w.status[2]).toMatchObject({ kind: 'backflow', on: true, ticks: 60, selfDamage: 45 });
+      expect(w.status[3]).toMatchObject({ kind: 'head_down', on: true, ticks: 60, cause: 'backflow' });
+      expect(w.slams).toHaveLength(0); // AoE 는 안 떨어졌다
+      expect(w.hits).toHaveLength(0);
+      // (봉인 중 심장 사격 = 몸통 0.8× 는 다음 테스트 — 머리 내림 자세에선 정면 사선이 열린 눈(0.9m)을 먼저 지난다)
+      // 머리 내림 중 눈 66 — 혼절 없음(역류 원인은 누적이 없다), 피해는 ×3.0 그대로
+      const hp3 = boss.health;
+      shootEye(boss);
+      shootEye(boss);
+      expect(boss.health).toBeCloseTo(hp3 - 66, 5);
+      Enemies.tick(world, DT);
+      expect(boss.ai).toBe('recover');
+      expect(boss.pose).toBe('head_down');
+      expect(w.staggers).toHaveLength(0);
+      expect(boss.weakAccum!['eye']).toBe(0); // 누적은 매 틱 비워진다
+      // 60틱이 다하면 backflow off·head_down off → 일어서며 기상 발구르기
+      tickEnemiesUntil(() => boss.ai === 'chase', 70);
+      expect(w.status.map(w.tag).slice(4)).toEqual(['head_down:false', 'backflow:false']);
+      expect(boss.wakeSlamPending).toBe(true);
+      expect(boss.poseCause).toBeUndefined();
+      Enemies.tick(world, DT);
+      expect(boss.ai).toBe('windup');
+      expect(boss.attackMode).toBe('slam');
+      expect(boss.wakeSlam).toBe(true);
+      expect(boss.wakeSlamPending).toBe(false);
+      expect(boss.timer).toBe(def.wakeSlam!.windupTicks);
+      expect(currentAttack(def, boss).rearPose).toBeUndefined();
+      expect(w.starts.at(-1)).toMatchObject({ wake: true });
+      // 기상 발구르기 예고 내내 앞발 들기(rear)·심장 열림이 없다
+      for (let i = 0; i < def.wakeSlam!.windupTicks && boss.ai === 'windup'; i++) {
+        Enemies.tick(world, DT);
+        expect(boss.pose).toBeUndefined();
+        expect(weakPointOpen(boss, wp('heart'))).toBe(false);
+      }
+      tickEnemiesUntil(() => boss.ai === 'recover', 5);
+      expect(w.landed).toEqual([expect.objectContaining({ radius: 5.0, wake: true })]);
+      expect(boss.wakeSlam).toBe(false);
+      // 봉인 — 600틱이 다하면 지워지고 다음 앞발 들기에 다시 열린다
+      const left = boss.weakCooldown!['heart']!;
+      expect(left).toBeGreaterThan(0);
+      expect(left).toBeLessThan(wpc.heartCooldownTicks);
+      for (let i = 0; i < left; i++) Enemies.tick(world, DT);
+      expect(boss.weakCooldown?.['heart']).toBeUndefined();
+    });
+
+    it('봉인(쿨다운) 중의 앞발 들기 — 자세는 서되(boss_status rear{sealed true}) 심장은 열리지 않고(표 자리를 쏘면 약점 장부 없이 몸통 0.8×) exposure_closed 도 없다. 페이즈 전환이 앞발 들기 중 끼면 심장 노출을 닫고 포효로', () => {
+      const boss = makeBehemoth(5.0);
+      toP2(boss);
+      boss.weakCooldown = { heart: 5000 };
+      const w = watch();
+      untilSlamWindup(boss, 5);
+      tickEnemiesUntil(() => boss.pose === 'rear', 20);
+      expect(weakPointOpen(boss, wp('heart'))).toBe(false);
+      expect(w.status.at(-1)).toMatchObject({ kind: 'rear', on: true, sealed: true });
+      // 봉인된 심장 자리(표 1.15m — 눈은 3.0m 로 사선 밖)를 쏘면 약점이 아니라 몸통 0.8×
+      const hp0 = boss.health;
+      shootHeart(boss);
+      expect(w.weakHits).toHaveLength(0);
+      expect(boss.health).toBeCloseTo(hp0 - balance.weapons.pistol.damage * balance.weapons.pistol.hitZones.bodyMul, 5);
+      tickEnemiesUntil(() => boss.pose !== 'rear', 40);
+      expect(w.closed).toHaveLength(0);
+      expect(w.status.map(w.tag)).toEqual(['rear:true', 'rear:false']);
+      // 전환이 끼면 — 열린 심장 노출을 닫고(exposure_closed) 포효
+      world.enemies.length = 0;
+      const b2 = makeBehemoth(5.0);
+      toP2(b2);
+      untilSlamWindup(b2, 5);
+      tickEnemiesUntil(() => b2.pose === 'rear', 20);
+      b2.health = perBar; // 1칸째 — P3
+      Enemies.tick(world, DT);
+      expect(b2.pose).toBe('roar');
+      expect(b2.attackMode).toBe('melee');
+      expect(w.closed).toEqual([expect.objectContaining({ id: 'heart' })]);
+      expect(w.slams).toHaveLength(0);
+    });
+
+    it('기상 발구르기 — 머리 내림(완벽 패링 90)이 끝나는 첫 추격 틱에 거리(4m)·쿨다운(9999) 무관 확정; 혼절이 시간으로 끝나도, 처형 넉백 뒤에도; 미끄러짐(완벽 회피) 뒤엔 없다; P1 에선 없다', () => {
+      // (a) 낫 박힘 → 90틱 → 일어서며
+      const boss = makeBehemoth(4.0);
+      toP2(boss);
+      boss.slamCooldown = 9999;
+      const w = watch();
+      expect(perfectParry(boss)).toBe('perfect');
+      expect(boss.pose).toBe('head_down');
+      tickEnemiesUntil(() => boss.ai === 'chase', 120);
+      expect(boss.wakeSlamPending).toBe(true);
+      Enemies.tick(world, DT);
+      expect(boss.ai).toBe('windup');
+      expect(boss.attackMode).toBe('slam');
+      expect(boss.wakeSlam).toBe(true);
+      expect(boss.timer).toBe(30);
+      expect(boss.slamCooldown).toBeGreaterThan(9000); // 기상 발구르기는 쿨다운을 물지 않는다(그 사이 흐른 틱만큼만 줄었다 — 420 으로 다시 세우지 않는다)
+      expect(w.starts).toEqual([expect.objectContaining({ wake: true })]);
+      tickEnemiesUntil(() => boss.ai === 'recover', 40);
+      expect(w.hits).toEqual([expect.objectContaining({ amount: 24 })]); // 4m — 반경 안. 머리에 붙어 있던 근접 플레이어의 벌칙
+      expect(world.player.hobbleTicks).toBe(300);
+      // (b) 혼절 → 시간 만료 → recover → chase 에 확정
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.kbTicks = 0;
+      world.player.hobbleTicks = 0;
+      const b2 = makeBehemoth(4.0);
+      toP2(b2);
+      expect(perfectParry(b2)).toBe('perfect');
+      shootEye(b2);
+      shootEye(b2);
+      Enemies.tick(world, DT);
+      expect(b2.ai).toBe('staggered');
+      tickEnemiesUntil(() => b2.ai === 'chase', 300);
+      expect(b2.wakeSlamPending).toBe(true);
+      Enemies.tick(world, DT);
+      expect(b2.attackMode).toBe('slam');
+      expect(b2.wakeSlam).toBe(true);
+      // (c) 혼절 → 처형 → 넉백 → chase 에 확정 (처형 연출 정지 32틱 동안은 Enemies 가 멈춘다)
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.kbTicks = 0;
+      const b3 = makeBehemoth(4.0);
+      toP2(b3);
+      expect(perfectParry(b3)).toBe('perfect');
+      shootEye(b3);
+      shootEye(b3);
+      Enemies.tick(world, DT);
+      expect(b3.ai).toBe('staggered');
+      pressReaction();
+      expect(b3.kbTicks).toBe(balance.reaction.executeKnockbackTicks);
+      tickEnemiesUntil(() => b3.ai === 'chase', 300);
+      expect(b3.wakeSlamPending).toBe(true);
+      Enemies.tick(world, DT);
+      expect(b3.attackMode).toBe('slam');
+      expect(b3.wakeSlam).toBe(true);
+      // (d) 미끄러짐 뒤엔 없다 — 돌격을 무적 안에 받아 skid 90 → chase 로 돌아와도 예약이 없다
+      world.enemies.length = 0;
+      world.player.health = 100;
+      world.player.kbTicks = 0;
+      world.player.x = 6;
+      world.player.prevX = 6;
+      const b4 = makeBehemoth(10);
+      toP2(b4);
+      tickEnemiesUntil(() => b4.ai === 'charging', 300);
+      const cd = Enemies.contactDist(def);
+      tickEnemiesUntil(() => Math.hypot(b4.x - world.player.x, b4.z - world.player.z) <= cd + 1.0, 300);
+      world.player.iframeTicks = 1e9;
+      tickEnemiesUntil(() => b4.pose === 'skid', 60);
+      world.player.iframeTicks = 0;
+      tickEnemiesUntil(() => b4.ai === 'chase', 120);
+      expect(b4.wakeSlamPending ?? false).toBe(false);
+      Enemies.tick(world, DT);
+      expect(b4.attackMode === 'slam' && b4.wakeSlam === true).toBe(false);
+      // (e) P1 — 머리 내림이 끝나도 예약이 조용히 지워지고 평소 선택(낫)으로
+      world.enemies.length = 0;
+      world.player.kbTicks = 0;
+      const b5 = makeBehemoth(4.0);
+      expect(b5.phase).toBe(3);
+      expect(perfectParry(b5)).toBe('perfect');
+      tickEnemiesUntil(() => b5.ai === 'chase', 120);
+      Enemies.tick(world, DT);
+      expect(b5.attackMode).not.toBe('slam');
+      expect(b5.wakeSlamPending).toBe(false);
+    });
+
+    it('절뚝(hobble, 기획서 §6) — 300틱·시간으로만(Status 가 깎고 hobble_applied/_ended), 질주 불가(sprint 입력에도 걷기 속도·스태미너 안 닳음), 회피 스태미너 ×2(30 — 29 면 stamina_blocked{need 30}), 회피 거리(3.5m)·무적(8)·대시 틱(6)은 그대로', () => {
+      const p = world.player;
+      p.x = 12; // 뒤 대시(−x 3.5m)가 서쪽 벽(x 4)에 닿지 않게 경기장 안쪽으로
+      p.prevX = 12;
+      const ended: { kind: string; reason: string }[] = [];
+      world.events.on('hobble_ended', (e) => ended.push(e as { kind: string; reason: string }));
+      const blocked: { need: number }[] = [];
+      world.events.on('stamina_blocked', (e) => blocked.push(e as { need: number }));
+      world.stamina.value = 100;
+      // 대조 — 절뚝 전 질주: 9 m/s 로 움직이고 스태미너가 닳는다
+      world.input = { ...Input.emptySnapshot(), moveForward: 1, sprint: true };
+      const x0 = p.x;
+      PlayerMove.tick(world, DT);
+      expect(p.x - x0).toBeCloseTo((balance.player.sprintSpeed / 60), 3);
+      expect(world.stamina.value).toBeLessThan(100);
+      world.stamina.value = 100;
+      world.stamina.regenDelay = 0;
+      // 절뚝
+      setPlayerStatus(p, 'hobble', balance.status.hobble.ticks);
+      Status.tick(world, DT);
+      expect(playerStatusTicks(p, 'hobble')).toBe(299);
+      const x1 = p.x;
+      PlayerMove.tick(world, DT);
+      expect(p.x - x1).toBeCloseTo(balance.player.moveSpeed / 60, 3); // 걷기 속도
+      expect(world.stamina.value).toBe(100); // 질주가 아니니 안 닳는다
+      world.input = Input.emptySnapshot();
+      // 회피 — 스태미너 ×2
+      world.stamina.value = 29;
+      world.input = { ...Input.emptySnapshot(), dodgePressed: true };
+      Reaction.tick(world, DT);
+      expect(blocked).toEqual([{ action: 'dodge', need: balance.player.stamina.dodgeCost * 2 }]);
+      expect(p.dodgeTicks).toBe(0);
+      world.stamina.value = 100;
+      Reaction.tick(world, DT);
+      world.input = Input.emptySnapshot();
+      expect(world.stamina.value).toBe(100 - balance.player.stamina.dodgeCost * 2);
+      expect(p.dodgeTicks).toBe(balance.reaction.dodgeDashTicks);
+      expect(p.iframeTicks).toBe(balance.reaction.dodgeIFrameTicks);
+      expect(p.dodgeDistMul).toBe(1); // 뒤 대시(이동 입력 없음)
+      const dx0 = p.x;
+      for (let i = 0; i < balance.reaction.dodgeDashTicks; i++) Reaction.tick(world, DT);
+      expect(Math.abs(p.x - dx0)).toBeCloseTo(balance.reaction.dodgeDistance, 3); // 거리는 그대로
+      // 대조 — 절뚝이 풀리면 값 15
+      setPlayerStatus(p, 'hobble', 0);
+      Status.tick(world, DT);
+      expect(ended).toEqual([{ kind: 'hobble', reason: 'cured' }]);
+      world.stamina.value = 100;
+      p.dodgeTicks = 0;
+      world.input = { ...Input.emptySnapshot(), dodgePressed: true };
+      Reaction.tick(world, DT);
+      world.input = Input.emptySnapshot();
+      expect(world.stamina.value).toBe(100 - balance.player.stamina.dodgeCost);
+      // 시간 경과 — 300틱이면 expired
+      setPlayerStatus(p, 'hobble', balance.status.hobble.ticks);
+      for (let i = 0; i < balance.status.hobble.ticks; i++) Status.tick(world, DT);
+      expect(playerStatusTicks(p, 'hobble')).toBe(0);
+      expect(ended.at(-1)).toEqual({ kind: 'hobble', reason: 'expired' });
     });
   });
 });

@@ -553,6 +553,10 @@ for (const name of [
   'numb_arm_ended',
   'concussion_applied',
   'concussion_ended',
+  'hobble_applied',
+  'hobble_ended',
+  'enemy_slam_start',
+  'slam_landed',
   'enemy_split',
   'grave_dropped',
   'slime_ate',
@@ -2982,8 +2986,8 @@ events.on('boss_status', (payload) => {
     // 돌격 중 6m 안 눈(B2-5)도 같은 노출 타이머다 — 문구만 다르다
     showReaction(st.id === 'eye' ? '눈이 다가온다 — 쏴서 눈멀게 하라!' : '어깨 관절이 벌어졌다 — 쏴라!', 900);
   } else if (st.kind === 'head_down' && st.on) {
-    // 전도(topple)로 내려온 머리는 topple 이 소리·문구를 냈다 — 낫 박힘만 여기서
-    if (st.cause !== 'topple') {
+    // 전도(topple)·역류(backflow)로 내려온 머리는 그쪽 이벤트가 소리·문구를 냈다 — 낫 박힘만 여기서
+    if (st.cause !== 'topple' && st.cause !== 'backflow') {
       audio.play('blade_stuck', at);
       showReaction('낫이 바닥에 박혔다 — 눈을 노려라!', 1400);
     }
@@ -3006,7 +3010,26 @@ events.on('boss_status', (payload) => {
     showReaction(st.blade ? `관절 파열 — ${st.blade === 'l' ? '왼' : '오른'}낫이 늘어졌다 (${lockSec}초)` : `관절 파열 (${lockSec}초)`, 1600);
   } else if (st.kind === 'limp' && st.on) {
     showReaction('두 낫이 다 늘어졌다 — 거수가 절뚝인다', 1800);
+  } else if (st.kind === 'rear' && st.on) {
+    // 앞발 들기(B3-1, 발구르기 예고 8~36틱) — 배 심장이 보인다(진홍 맥동은 Stage). 봉인(역류 쿨다운) 중이면 어둡고 판정이 없으니 문구도 없다
+    if (!(st as { sealed?: boolean }).sealed) {
+      audio.play('joint_open', at);
+      showReaction('앞발을 들었다 — 배 심장을 쏴라!', 700);
+    }
+  } else if (st.kind === 'backflow' && st.on) {
+    // 역류(B3-1) — 심장 66: 발구르기가 무너지고(AoE 없음) 자해 + 머리 내림(눈 피해만). 구역질 소리 + 몸 들썩(Stage) + 안내
+    audio.play('vent_gag', at);
+    stage.lurchBehemoth(st.enemyId);
+    padRumble('weakPoint');
+    showReaction('역류 — 발구르기가 무너졌다, 머리가 내려온다 (혼절은 안 된다)', 1600);
   }
+});
+// 발구르기 예고 시작(거수 B3-1) — 예고음(telegraph_red)은 enemy_windup 이 냈다. 여기선 땅울림(stomp_ready, 예고음 버스)과 안내만.
+// 기상 발구르기(wake)는 머리 내림·혼절이 끝나며 확정으로 나오는 벌칙 — 문구를 나눈다
+events.on('enemy_slam_start', (payload) => {
+  const s = payload as { enemyId: number; enemyType: string; wake: boolean; dist: number };
+  audio.play('stomp_ready', panOf(payload));
+  showReaction(s.wake ? '일어서며 발을 구른다 — 물러나라!' : '발구르기 — 반경 밖으로 나가거나 막아라 (앞발 들 때 심장)', 1200);
 });
 // 페이즈 전환(거수 B2-6, 기획서 §8) — 포효 소리 + 카메라 킥 + 진동 + 전환 문구(phases[].shiftText: "갑각이 갈라진다" / "거수가 광란한다").
 // 균열 발광·분출공 점등·등갑판 탈락·붉은 홍채는 Stage 가 enemy.phase 로 매 프레임 그린다. phase 0 은 사망 신호(계측 전용) — 연출 없음
@@ -3052,6 +3075,12 @@ events.on('concussion_ended', (payload) => {
   const reason = (payload as { reason: string }).reason;
   showReaction(reason === 'cured' ? '물약 — 진탕이 가라앉았다' : '진탕이 가라앉았다', 1400);
 });
+// 절뚝(B3-1, 거수 발구르기 직격) — 회피 스태미너 ×2·질주 불가. 회피 거리는 그대로라 "막거나 걸어 나가라" 는 안내
+events.on('hobble_applied', (payload) => {
+  audio.play('grunt');
+  showReaction(`절뚝 — ${statusSeconds(payload)}초 동안 질주 불가·회피 스태미너 ×${balance.status.hobble.dodgeStaminaMul}. 발구르기는 막거나 걸어 나가라`, 2800);
+});
+events.on('hobble_ended', () => showReaction('다리가 풀렸다 — 절뚝이 끝났다', 1200));
 // 이제 exit_opened 는 "보스 없는(또는 이미 딴) 층" 의 로드 직후 신호다 — 조용히 안내만
 events.on('exit_opened', () => {
   showReaction('내려가는 계단 — E 로 내려간다', 2200);
@@ -3642,6 +3671,17 @@ buffConcussionEl.insertAdjacentHTML(
 );
 const buffConcussionCd = buffConcussionEl.querySelector<HTMLElement>('.buff-cd')!;
 const buffConcussionSec = buffConcussionEl.querySelector<HTMLElement>('.buff-sec')!;
+// 절뚝 디버프 아이콘(B3-1, 거수 발구르기 직격) — 꺾인 다리 + 발밑 충격선
+const buffHobbleEl = document.getElementById('buff-hobble')!;
+buffHobbleEl.insertAdjacentHTML(
+  'afterbegin',
+  '<svg width="22" height="22" viewBox="0 0 22 22">' +
+    '<path d="M8 3 L9.5 10 L6 15.5 L11 18.5" stroke="#ff8fa6" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M13 3 L14.5 10 L16.5 18.5" stroke="#ff8fa6" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M2.5 20.5 h5 M14.5 20.5 h5" stroke="#ffd0da" stroke-width="1.6" stroke-linecap="round"/></svg>',
+);
+const buffHobbleCd = buffHobbleEl.querySelector<HTMLElement>('.buff-cd')!;
+const buffHobbleSec = buffHobbleEl.querySelector<HTMLElement>('.buff-sec')!;
 /** 디버프 아이콘 깜빡임 — 상태가 다시 시작됐다. 클래스를 떼고 리플로우로 애니메이션을 처음부터 다시 돌린다 */
 function flashBuffIcon(el: HTMLElement): void {
   el.classList.remove('refresh');
@@ -4156,6 +4196,7 @@ function render(alpha: number): void {
   // 팔 저림·진탕(B2-4) — 같은 틀. 카운터는 Status.ts 가 줄인다
   syncDotIcon(buffNumbEl, buffNumbCd, buffNumbSec, statusIconArg(p.numbArmTicks, balance.status.numbArm.ticks));
   syncDotIcon(buffConcussionEl, buffConcussionCd, buffConcussionSec, statusIconArg(p.concussionTicks, balance.status.concussion.ticks));
+  syncDotIcon(buffHobbleEl, buffHobbleCd, buffHobbleSec, statusIconArg(p.hobbleTicks, balance.status.hobble.ticks)); // 절뚝(B3-1)
   // 랜턴 — HP·마나 바 아래의 얇은 실선 게이지. 오른쪽에 % 와 예비 전지 개수
   const battFrac = Math.max(0, Math.min(1, world.lantern.battery / balance.lantern.batteryMax));
   const battPct = Math.round(battFrac * 100);
