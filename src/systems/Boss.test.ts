@@ -2479,15 +2479,15 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       shootEye(boss);
       shootEye(boss);
     }
-    /** 보스가 (bossX, 14) 에서 질주에 들어가게 — 예고 시작은 visibleX 에서(시야선), 예고가 끝나기 전에 플레이어를 targetX 로 옮겨 그 자리를 겨누게 한다
-     *  (돌격 목표는 예고 종료 좌표에 고정 — 기존 규칙). 겨눈 선이 (row 3, col 5) 칸을 지나게 하는 데 쓴다 */
-    function chargeToward(boss: EnemyState, visibleX: number, targetX: number): void {
-      placePlayer(visibleX, 14);
+    /** 보스가 (bossX, z) 에서 질주에 들어가게 — 예고 시작은 visibleX 에서(시야선), 예고가 끝나기 전에 플레이어를 targetX 로 옮겨 그 자리를 겨누게 한다
+     *  (돌격 목표는 예고 종료 좌표에 고정 — 기존 규칙). 겨눈 선(z 14)이 (row 3, col 5) 칸을 지나게 하는 데 쓴다 — z 를 주면 그 줄로 */
+    function chargeToward(boss: EnemyState, visibleX: number, targetX: number, z = 14): void {
+      placePlayer(visibleX, z);
       tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'charge', 300);
-      placePlayer(targetX, 14);
+      placePlayer(targetX, z);
       tickEnemiesUntil(() => boss.ai === 'charging', 300);
       expect(boss.chargeTargetX).toBe(targetX);
-      expect(boss.chargeTargetZ).toBe(14);
+      expect(boss.chargeTargetZ).toBe(z);
     }
 
     it('데이터 — blindRangeM 6·blindThreshold 66(권총 33×2)·blindOverrunTicks 40·chargeStuckTicks 2·headDown.toppleTicks 90, 돌격 wallWhiffRecoverTicks 60 < 헛돌격 90, 전도 튕김은 내려온 눈 구체가 벽면에서 사람 하나(0.8m) 이상 떨어지게. 족장·잡몹엔 없다(옛 경로)', () => {
@@ -2645,9 +2645,30 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       }
     });
 
-    it('벽이 아닌 것(소품 AABB — 아군·잔해도 같다)에 막혀 선 질주는 뒤 기둥에 박힌 것으로 오판하지 않는다 — 탐침은 몸 반경 + 이 틱 기대 이동 안의 벽만 본다(전도·pillar_hit·벽 헛돌격 없음, 질주 시간이 다한 뒤 보통 헛돌격 90)', () => {
+    it('기둥 모서리를 0.2m 만 스쳐 막힌 질주(레인 z 16 + 1.4 = 17.4, 몸 z 15.8~19 vs 기둥 z 12~16)도 전도 — 선두 면 너머를 몸 폭 전체로 읽는다(pillar_hit·topple·head_down 90). 레이 몇 줄 탐침은 기둥 옆을 지나 벽을 못 찾고 질주 시간이 다할 때까지 굳어 있었다(2026-09-06 검토)', () => {
       world = makeWorld(laneGrid('P'));
-      // 기둥 동쪽 면(x 24) 앞 0.2m 에 두께 0.5m 소품 — 몸은 소품에 막혀 x 26.3 에 서고, 진행 방향 2.3m 앞에 기둥 면이 있다(옛 탐지 폭 반경 + 반 칸 3.6m 안)
+      const boss = placeBoss(40, 17.4);
+      const w = watch();
+      chargeToward(boss, 26, 18, 17.4); // 겨눈 선 z 17.4 — 몸 남쪽 가장자리(15.8)가 기둥(z ≤ 16)을 0.2m 겹친다
+      tickEnemiesUntil(() => boss.ai !== 'charging', 200);
+      expect(boss.x).toBeCloseTo(24 + def.radius, 1); // 기둥 면(x 24) 앞 몸 반경에 막혔다
+      expect(boss.z).toBeCloseTo(17.4, 6);
+      expect(boss.pose).toBe('head_down');
+      expect(boss.poseTicks).toBe(wpc.headDown.toppleTicks);
+      expect(boss.ai).toBe('recover');
+      expect(boss.whiffed).toBe(false);
+      expect(w.pillars).toEqual([{ enemyId: boss.id, enemyType: TYPE, row: 3, col: 5, x: 22, z: 14 }]);
+      expect(w.status.map(w.tag)).toEqual(['topple:true', 'head_down:true']);
+      expect(w.status[0]).toMatchObject({ cell: 'P', row: 3, col: 5, ticks: 90 });
+      expect(w.status[1]).toMatchObject({ cause: 'topple', ticks: 90 });
+      expect(w.whiffs).toHaveLength(0);
+      expect(w.cracks).toHaveLength(0);
+      expect(boss.kbTicks).toBe(wpc.headDown.toppleReboundTicks); // 튕김 — 기둥 모서리에서도 같다
+    });
+
+    it('벽이 아닌 것(소품 AABB — 아군·잔해도 같다)에 막혀 선 질주는 뒤 기둥에 박힌 것으로 오판하지 않는다 — 선두 면 바로 너머(SKIN + 0.01m)의 칸만 읽으니 소품 두께만큼 먼 기둥은 없다(전도·pillar_hit·벽 헛돌격 없음, 질주 시간이 다한 뒤 보통 헛돌격 90)', () => {
+      world = makeWorld(laneGrid('P'));
+      // 기둥 동쪽 면(x 24) 앞 0.2m 에 두께 0.5m 소품 — 몸은 소품에 막혀 x 26.3 에 서고, 진행 방향 2.3m 앞에 기둥 면이 있다(옛 레이 탐지 폭 반경 + 반 칸 3.6m 안)
       world.level.props.push({ minX: 24.2, maxX: 24.7, minZ: 12, maxZ: 16 });
       const boss = placeBoss(40, 14);
       const w = watch();

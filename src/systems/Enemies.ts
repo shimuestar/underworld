@@ -24,9 +24,7 @@ import { alertEnemy, alertNearbyAt, beginPose, breakCrackWalls, closeExposure, f
 const DAZE_WEAK_POINT = 'eye';
 /** 돌격 중 눈 노출 타이머를 매 틱 되살리는 값 — 장부 ① 이 1 로 깎아도 이 틱 내내 열려 있고, 범위를 벗어나면 그 틱에 닫힌다 (튜닝값 아님) */
 const CHARGE_EYE_REFRESH = 2;
-/** 돌격 지형 충돌 탐침 — 진행 방향으로 몸 가운데와 양옆(반지름 × 이 비율) 세 줄의 레이. 기둥 모서리를 스친 몸도 잡는다 (기하 상수, 튜닝값 아님) */
-const CHARGE_PROBE_SIDE = 0.7;
-/** 부딛힌 면을 살짝 넘어 그 칸의 문자를 읽는 여유(m, 수치 오차 방지 — 튜닝값 아님) */
+/** 돌격 지형 충돌 — 막힌 몸의 선두 면을 이만큼 넘어 그 칸의 문자를 읽는 여유(m, Level.blockedAhead 의 SKIN 위 수치 오차 방지 — 튜닝값 아님) */
 const CHARGE_PROBE_EPS = 0.01;
 
 let nextProjectileId = 100000; // 적 투사체 id 대역 (플레이어 투사체와 구분)
@@ -1370,11 +1368,13 @@ function endBlind(world: World, enemy: EnemyState): void {
   world.events.emit('boss_status', { enemyId: enemy.id, enemyType: enemy.type, kind: 'blind', on: false });
 }
 
-/** 돌격 지형 충돌(B2-5, 기획서 §9.3) — 진행 방향으로 몸 폭 안 세 줄(가운데·양옆 CHARGE_PROBE_SIDE)의 레이를 쏘아 가장 가까운 벽 셀을 읽는다.
+/** 돌격 지형 충돌(B2-5, 기획서 §9.3) — 막힌 몸의 진행 축 선두 면 바로 너머를 몸 폭(AABB 반폭 def.radius) 전체로 읽어(Level.blockedAhead — slideMove 와
+ *  같은 기하) 부딛힌 셀 문자를 고른다: 몸 중심이 든 칸이 막혔으면 그 칸, 아니면 모서리를 스친 칸(기둥 P 를 0.2m 만 겹쳐도 전도 — 레이 몇 줄은 이 틈을 놓쳐
+ *  몸은 막혔는데 벽은 못 찾고 질주 시간이 다할 때까지 굳어 있었다, 2026-09-06 검토).
  *  기둥 P·균열벽 C → 전도: head_down toppleTicks(눈 0.9m 노출·혼절 누적 가능, cause 'topple') + toppleReboundM 튕김 + pillar_hit{row, col}(내구 −1 은 B3 Arena) /
  *  균열벽은 World.breakCrackWalls 로 그 칸만 개방(crack_wall_broken). 그 외(일반 벽 #·문·문설주) → wallWhiffRecoverTicks 헛돌격 — 박히지 않고
- *  눈도 안 열린다(enemy_whiffed{wall: true}). 벽 탐지 폭은 몸 반경 + 이 틱 기대 이동(step) — 막은 것이 벽이라면 벽면은 반경(+SKIN) 안에 있고,
- *  아군·소품·잔해에 막혀 섰다면 그 몸통 두께만큼 벽이 멀어 이 안에 없다(있어도 뒤 기둥에 '박힌' 것으로 오판하지 않는다) → false, 질주는 계속 */
+ *  눈도 안 열린다(enemy_whiffed{wall: true}). 벽이 아닌 것(아군·소품·잔해)에 막혀 섰다면 면 너머에 막힌 칸이 없다(그 몸통 두께만큼 벽이 멀다) → false,
+ *  질주는 계속 — 뒤 기둥에 '박힌' 것으로 오판하지 않는다 */
 function chargeCollide(
   world: World,
   enemy: EnemyState,
@@ -1382,23 +1382,13 @@ function chargeCollide(
   attack: EnemyAttackDef,
   dirX: number,
   dirZ: number,
-  step: number,
 ): boolean {
   const level = world.level;
   const cs = level.cellSize;
-  const reach = def.radius + step;
-  let best: { t: number; ox: number; oz: number } | null = null;
-  for (const k of [0, CHARGE_PROBE_SIDE, -CHARGE_PROBE_SIDE]) {
-    const ox = enemy.x - dirZ * def.radius * k;
-    const oz = enemy.z + dirX * def.radius * k;
-    const t = level.wallRayT(ox, oz, dirX, dirZ);
-    if (t <= reach && (best === null || t < best.t)) best = { t, ox, oz };
-  }
+  const hit = level.blockedAhead(enemy, def.radius, dirX, dirZ, CHARGE_PROBE_EPS);
   enemy.chargeStuck = 0;
-  if (!best) return false;
-  const col = Math.floor((best.ox + dirX * (best.t + CHARGE_PROBE_EPS)) / cs);
-  const row = Math.floor((best.oz + dirZ * (best.t + CHARGE_PROBE_EPS)) / cs);
-  const ch = level.charAt(col, row);
+  if (!hit) return false;
+  const { col, row, ch } = hit;
   endBlind(world, enemy);
   endChargeEye(world, enemy);
   if (!def.flying) enemy.jumpY = 0;
@@ -2079,7 +2069,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       if (def.weakPoints && running && (enemy.flinchTicks ?? 0) <= 0) {
         const moved = Math.hypot(enemy.x - enemy.prevX, enemy.z - enemy.prevZ);
         enemy.chargeStuck = moved < step * balance.enemyAi.unstick.minProgress ? (enemy.chargeStuck ?? 0) + 1 : 0;
-        if ((enemy.chargeStuck ?? 0) >= balance.weakPoint.chargeStuckTicks && chargeCollide(world, enemy, def, attack, dirX, dirZ, step)) break;
+        if ((enemy.chargeStuck ?? 0) >= balance.weakPoint.chargeStuckTicks && chargeCollide(world, enemy, def, attack, dirX, dirZ)) break;
       }
       // 겨눈 자리에 닿았거나(몸 반경 — 눈멂이면 겨눈 자리가 없다: 시간이 다하거나 부딛칠 때까지), 플레이어가 그대로 서 있어 이미 사거리거나,
       // 시간이 다하면 친다. hitOnContact(구울 물어뜯기)는 사거리가 아니라 몸이 부딛친 순간이다 — 옆을 스쳐 지나가면 물지 않는다

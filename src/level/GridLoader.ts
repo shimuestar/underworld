@@ -384,6 +384,50 @@ export class Level {
     body.z = nz;
   }
 
+  /** 진행 방향 선두 면 바로 너머에서 몸(AABB, 반폭 radius)을 막고 있는 것 — moveAxis 와 같은 기하로 읽는다(거수 돌격 지형 충돌, Enemies.chargeCollide).
+   *  |dx|·|dz| 중 큰 축(막힌 질주는 그 축에 거의 정면이다 — 비스듬하면 미끄러져 막히지 않는다)의 면(몸 ± radius)을 SKIN + eps 만큼 넘은 줄의 칸을
+   *  가로 범위 [c − radius, c + radius] 전부에서 보고, SOLID 인 칸 중 몸이 가장 넓게 겹친 칸의 문자를 돌려준다 — 몸 중심이 든 칸이 막혔으면 그 칸,
+   *  아니면 모서리를 스친 칸(레이 몇 줄로는 AABB 가장자리 스침을 놓쳐 몸은 막혔는데 벽은 못 찾는 틈이 난다 — 2026-09-06 검토).
+   *  격자 칸이 없으면 레이 차단 상자(문설주 — 돌)가 면에 닿아 있는지 보고 그 상자가 든 칸을 돌려준다. 이동만 막는 소품(props — 통·상자·제단 발자국)은
+   *  벽이 아니다 → null. moveAxis 가 막았을 때 면은 벽에서 SKIN 만큼 떨어져 있으므로 eps 는 그 위의 수치 여유(호출자가 준다) */
+  blockedAhead(
+    body: { x: number; z: number },
+    radius: number,
+    dx: number,
+    dz: number,
+    eps: number,
+  ): { col: number; row: number; ch: string } | null {
+    if (dx === 0 && dz === 0) return null;
+    const cs = this.cellSize;
+    const alongX = Math.abs(dx) >= Math.abs(dz);
+    const sign = (alongX ? dx : dz) > 0 ? 1 : -1;
+    const face = (alongX ? body.x : body.z) + sign * radius;
+    const lane = Math.floor((face + sign * (SKIN + eps)) / cs);
+    const cMin = (alongX ? body.z : body.x) - radius;
+    const cMax = (alongX ? body.z : body.x) + radius;
+    let best: { col: number; row: number; overlap: number } | null = null;
+    for (let i = Math.floor(cMin / cs); i <= Math.floor(cMax / cs); i++) {
+      const col = alongX ? lane : i;
+      const row = alongX ? i : lane;
+      if (!this.solidAt(col, row)) continue;
+      const overlap = Math.min(cMax, (i + 1) * cs) - Math.max(cMin, i * cs);
+      if (best === null || overlap > best.overlap) best = { col, row, overlap };
+    }
+    if (best) return { col: best.col, row: best.row, ch: this.charAt(best.col, best.row) };
+    // 문설주 — 격자는 열렸지만 돌기둥이 몸도 레이도 막는다. 가로로 겹치고 면이 맞닿은(SKIN + eps 안) 상자만
+    for (const rect of this.rayBlockers) {
+      const lo = alongX ? rect.minZ : rect.minX;
+      const hi = alongX ? rect.maxZ : rect.maxX;
+      if (hi <= cMin || lo >= cMax) continue;
+      const rectFace = alongX ? (sign > 0 ? rect.minX : rect.maxX) : sign > 0 ? rect.minZ : rect.maxZ;
+      if (Math.abs(rectFace - face) > SKIN + eps) continue;
+      const col = Math.floor((rect.minX + rect.maxX) / 2 / cs);
+      const row = Math.floor((rect.minZ + rect.maxZ) / 2 / cs);
+      return { col, row, ch: this.charAt(col, row) };
+    }
+    return null;
+  }
+
   /** 스폰 칸의 격자 좌표 — 계단 벽감이 그 옆 칸에 파인다 */
   findSpawnCell(): { col: number; row: number } {
     return this.findChar('S') ?? { col: 0, row: 0 };
