@@ -7,8 +7,8 @@ import { balance } from '../core/Balance';
 import { enemyDef, implementedEnemyTypes } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { addItem, initInventory, isUseful } from '../core/Inventory';
-import { PLAYER_STATUS_KINDS, World, playerStatusTicks, setPlayerStatus, type PlayerStatusKind } from '../core/World';
+import { addItem, curableStatuses, initInventory, isUseful, itemDef } from '../core/Inventory';
+import { ITEM_KINDS, PLAYER_STATUS_KINDS, World, playerStatusTicks, setPlayerStatus, type PlayerStatusKind } from '../core/World';
 import { Level } from '../level/GridLoader';
 import { spawnEnemyAt } from '../level/Spawner';
 import * as Enemies from './Enemies';
@@ -122,6 +122,15 @@ describe('Status.ts — 카운터·상한·이벤트 (기획서 §6)', () => {
     expect(def.chargeAttack!.statusOnBlock).toBeUndefined(); // 막으면 진탕 없음
     expect(def.closeAttack!.statusOnHit).toBeUndefined();
     expect(def.closeAttack!.statusOnBlock).toBeUndefined();
+    // 물약이 지우는 상태는 데이터(items.kinds.*.cures) — 체력 물약 둘만 진탕, 고기·마나 물약은 목록이 없다. 목록의 이름은 전부 아는 상태여야 한다
+    expect(itemDef('potion').cures).toEqual(['concussion']);
+    expect(itemDef('potion_large').cures).toEqual(['concussion']);
+    expect(itemDef('food').cures).toBeUndefined();
+    expect(itemDef('mana').cures).toBeUndefined();
+    expect(itemDef('mana_large').cures).toBeUndefined();
+    for (const kind of ITEM_KINDS) {
+      for (const c of itemDef(kind).cures ?? []) expect(PLAYER_STATUS_KINDS).toContain(c);
+    }
     // 기존 적은 어느 공격에도 상태가 없다 — 새 필드는 전부 옵셔널(없으면 옛 경로)
     for (const type of implementedEnemyTypes()) {
       if (type === TYPE) continue;
@@ -236,6 +245,42 @@ describe('Status.ts — 카운터·상한·이벤트 (기획서 §6)', () => {
     Status.tick(world, DT);
     expect(rec.ended).toHaveLength(0);
     expect(Status.isActive(world, 'numb_arm')).toBe(false);
+  });
+
+  it('clearAll 은 진탕이 빌린 aimShake 채널도 놓는다 — 부활·층 이동 뒤 PlayerMove 가 시선을 흔들지 않는다', () => {
+    setPlayerStatus(world.player, 'concussion', CFG.concussion.ticks);
+    for (let i = 0; i < 30; i++) {
+      PlayerMove.tick(world, DT);
+      Status.tick(world, DT);
+    }
+    expect(world.player.aimShakeTicks).toBe(world.player.concussionTicks); // 채널이 실려 있다
+    expect(world.player.aimShakeTicks).toBeGreaterThan(300);
+
+    Status.clearAll(world);
+    expect(world.player.concussionTicks).toBe(0);
+    expect(world.player.aimShakeTicks).toBe(0); // 카운터만 0 이고 채널이 남으면 남은 틱 내내 조준이 흔들린다
+
+    const yaw0 = world.player.yaw;
+    const pitch0 = world.player.pitch;
+    for (let i = 0; i < 30; i++) {
+      world.input = Input.emptySnapshot();
+      PlayerMove.tick(world, DT);
+      expect(world.player.yaw).toBe(yaw0);
+      expect(world.player.pitch).toBe(pitch0);
+      Status.tick(world, DT);
+      expect(world.player.aimShakeTicks ?? 0).toBe(0); // Status 가 다시 싣지도 않는다
+    }
+  });
+
+  it('clearAll 은 남의 aimShake(박쥐·포자 진폭)는 건드리지 않는다 — 진폭이 우리 값일 때만 채널을 놓는다', () => {
+    const otherAmp = CFG.concussion.aimShakeAmp * 3;
+    world.player.aimShakeTicks = 40;
+    world.player.aimShakeAmp = otherAmp;
+    setPlayerStatus(world.player, 'numb_arm', CFG.numbArm.ticks);
+    Status.tick(world, DT);
+    Status.clearAll(world);
+    expect(world.player.aimShakeTicks).toBe(40);
+    expect(world.player.aimShakeAmp).toBe(otherAmp);
   });
 
   it('어느 상태도 회피 거리·무적 틱을 건드리지 않는다', () => {
@@ -408,11 +453,28 @@ describe('진탕 concussion — 거수 돌격 직격', () => {
     initInventory(world);
     world.mana.value = balance.mana.max;
     expect(isUseful(world, 'potion')).toBe(false); // 만피 — 평소엔 버리는 것
+    expect(curableStatuses(world, 'potion')).toEqual([]); // 걸린 게 없으면 지울 것도 없다
     setPlayerStatus(world.player, 'concussion', CFG.concussion.ticks);
     Status.tick(world, DT);
+    expect(curableStatuses(world, 'potion')).toEqual(['concussion']);
+    expect(curableStatuses(world, 'potion_large')).toEqual(['concussion']);
     expect(isUseful(world, 'potion')).toBe(true); // 지울 상태가 있다
     expect(isUseful(world, 'potion_large')).toBe(true);
     expect(isUseful(world, 'mana')).toBe(false); // 마나 물약은 진탕과 무관
+    expect(curableStatuses(world, 'mana')).toEqual([]);
+    // 팔 저림은 물약이 지우는 상태가 아니다(일반 패링이 푼다) — 진탕이 없고 저림만 있으면 물약은 만피에 그냥 버리는 것
+    world = makeWorld();
+    initInventory(world);
+    setPlayerStatus(world.player, 'numb_arm', CFG.numbArm.ticks);
+    Status.tick(world, DT);
+    expect(curableStatuses(world, 'potion')).toEqual([]);
+    expect(isUseful(world, 'potion')).toBe(false);
+
+    world = makeWorld();
+    initInventory(world);
+    world.mana.value = balance.mana.max;
+    setPlayerStatus(world.player, 'concussion', CFG.concussion.ticks);
+    Status.tick(world, DT);
 
     const rec = recordStatus();
     addItem(world, 'potion'); // 첫 습득은 빈 퀵슬롯 1 에 자동 등록
@@ -428,5 +490,35 @@ describe('진탕 concussion — 거수 돌격 직격', () => {
     expect(world.player.concussionTicks).toBe(0);
     Status.tick(world, DT);
     expect(rec.ended).toEqual([{ kind: 'concussion', reason: 'cured' }]);
+  });
+
+  it('말린 고기(heal 5)는 진탕을 지우지 않는다 — cures 목록이 없다. isUseful 도 진탕으로 켜지지 않고, 먹어도 concussion 그대로', () => {
+    initInventory(world);
+    world.foodRegenTicks = 1; // 지속 회복이 돌고 있고 만피 — 고기가 유용할 이유가 하나도 없는 상태
+    expect(isUseful(world, 'food')).toBe(false);
+    setPlayerStatus(world.player, 'concussion', CFG.concussion.ticks);
+    Status.tick(world, DT);
+    expect(curableStatuses(world, 'food')).toEqual([]);
+    expect(isUseful(world, 'food')).toBe(false); // 진탕이 걸려도 고기는 켜지지 않는다 (물약은 켜진다 — 위 케이스)
+    expect(isUseful(world, 'potion')).toBe(true);
+
+    const rec = recordStatus();
+    addItem(world, 'food');
+    expect(world.quickslots[0]).toBe('food');
+    const used: { cured?: string[]; healed: number }[] = [];
+    world.events.on('item_used', (p) => used.push(p as { cured?: string[]; healed: number }));
+    world.player.health = 50; // 먹을 수 있게 — 판정은 heal 이 아니라 cures 로 갈라야 한다
+    world.input = { ...Input.emptySnapshot(), useSlot: 1 };
+    Items.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(world.itemChannel).not.toBeNull();
+    for (let i = 0; i < balance.items.channelTicks; i++) Items.tick(world, DT);
+    expect(used).toHaveLength(1);
+    expect(used[0]!.healed).toBeGreaterThan(0); // 회복은 됐지만
+    expect(used[0]!.cured).toEqual([]); // 지운 것은 없다
+    expect(world.player.concussionTicks).toBeGreaterThan(0);
+    expect(world.player.aimShakeTicks).toBeGreaterThan(0); // 흔들림도 그대로
+    for (let i = 0; i < 3; i++) Status.tick(world, DT);
+    expect(rec.ended).toHaveLength(0);
   });
 });

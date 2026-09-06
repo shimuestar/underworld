@@ -7,7 +7,17 @@
 // 다시 주우면 그대로 쓸 수 있다. 칸을 기억하면 물약 하나 쓸 때마다 Tab 을 열어야 한다.
 
 import { balance } from './Balance';
-import { findFreeSpot, ITEM_KINDS, type InventorySlot, type ItemKind, type World } from './World';
+import {
+  findFreeSpot,
+  ITEM_KINDS,
+  PLAYER_STATUS_CFG,
+  PLAYER_STATUS_KINDS,
+  playerStatusTicks,
+  type InventorySlot,
+  type ItemKind,
+  type PlayerStatusKind,
+  type World,
+} from './World';
 
 export interface ItemDef {
   name: string;
@@ -22,6 +32,9 @@ export interface ItemDef {
   overTime?: { instantRatio: number; durationTicks: number };
   /** 퀵슬롯 칸의 짧은 이름 (없으면 이름 앞 두 글자) */
   short?: string;
+  /** 마시면 지워지는 플레이어 상태(PlayerStatusKind 이름) — 체력 물약의 진탕(기획서 §6 결정 22). JSON 추론 타입이라 문자열로 두고
+   *  curableStatuses 가 PLAYER_STATUS_KINDS 와 대조한다. heal 이 있다고 지우는 게 아니다(말린 고기는 지우지 않는다) */
+  cures?: readonly string[];
 }
 
 export function itemDef(kind: ItemKind): ItemDef {
@@ -301,11 +314,29 @@ export function isUseful(world: World, kind: ItemKind): boolean {
   if (kind === 'sigil' || kind === 'equip') return true; // 흐리게 그리지 않는다 — 마시는 값어치가 아니라 새기는/걸치는 것
   const def = itemDef(kind);
   if (def.heal > 0 && world.player.health < balance.player.healthMax) return true;
-  // 지울 상태가 있으면 유용 — 체력 물약은 만피여도 진탕(concussion)을 지운다(기획서 §6, balance.status.concussion.potionCures)
-  if (def.heal > 0 && balance.status.concussion.potionCures && (world.player.concussionTicks ?? 0) > 0) return true;
+  // 지울 상태가 있으면 유용 — 체력 물약은 만피여도 진탕(concussion)을 지운다(기획서 §6 결정 22, def.cures × potionCures)
+  if (curableStatuses(world, kind).length > 0) return true;
   if (def.restore > 0 && world.mana.value < balance.mana.max) return true;
   if (def.regen && world.foodRegenTicks <= 0) return true; // 지속 회복은 만피여도 값어치가 있다
   return false;
+}
+
+/** 이 종류를 지금 마시면 지워지는 플레이어 상태 — 정의의 cures 목록에 있고, 그 상태의 balance.status.<kind>.potionCures 가 켜져 있고,
+ *  지금 걸려 있는 것만. isUseful('지울 상태가 있으면 유용')과 Items.drink(실제 해제)가 같은 판정을 쓴다.
+ *  heal 로 판정하지 않는다 — 말린 고기(heal 5)가 물약 노릇을 하면 안 된다 */
+export function curableStatuses(world: World, kind: ItemKind): PlayerStatusKind[] {
+  if (kind === 'sigil' || kind === 'equip') return [];
+  const cures = itemDef(kind).cures;
+  if (!cures || cures.length === 0) return [];
+  const out: PlayerStatusKind[] = [];
+  for (const status of PLAYER_STATUS_KINDS) {
+    if (!cures.includes(status)) continue;
+    // 상태 블록마다 필드가 다르다(numbArm 엔 potionCures 가 없다) — 공통인 ticks 로 묶어 옵셔널로 읽는다
+    const cfg: { ticks: number; potionCures?: boolean } = balance.status[PLAYER_STATUS_CFG[status]];
+    if (cfg.potionCures !== true) continue;
+    if (playerStatusTicks(world.player, status) > 0) out.push(status);
+  }
+  return out;
 }
 
 /** 종류별 소지 수 — HUD·계측용 */

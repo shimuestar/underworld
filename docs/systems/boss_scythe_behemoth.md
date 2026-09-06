@@ -220,7 +220,7 @@
 |---|---|---|---|---|
 | `numb_arm` **팔 저림** | 낫 공격을 **방패로 막음**(칩 30%·경직 10틱은 기존대로) | **완벽 패링 불가**(대역 0 — 정직하게 "저림 중엔 일반만") · 방어 이속 0.35→0.25. 패링 버퍼는 그대로(8). 저림 중 패링 실패의 마나 소실 면제(`numbArm.noManaLossOnFail`) | 240 | 시간 경과 **또는 일반 패링 1회 성립 시 즉시** — "패링하면 풀린다" |
 | `hobble` **절뚝** | 발구르기 직격(막으면 안 걸림) | 회피 스태미너 ×2 · 질주 불가 (회피 거리는 그대로) | 300 | 시간 경과 |
-| `concussion` **진탕** | 돌격 **직격**(막으면 안 걸림 — 막기는 이미 60% 피해·7m 밀림으로 충분히 벌받는다) | 조준 흔들림(`aimShake` amp 0.02, 박쥐 채널 재사용) · 화면 기울기 3° · **예고음 외** 오디오 덕킹 −6dB(`concussion.duckDb`; 텔레그래프 버스는 우회 — 로패스 없음, 파랑 예고음 1760/2637Hz 보존) | 360 | 시간 경과 또는 체력 물약(결정 22) |
+| `concussion` **진탕** | 돌격 **직격**(막으면 안 걸림 — 막기는 이미 60% 피해·7m 밀림으로 충분히 벌받는다) | 조준 흔들림(`aimShake` amp 0.02, 박쥐 채널 재사용) · 화면 기울기 3° · **예고음 외** 오디오 덕킹 −6dB(`concussion.duckDb`; 텔레그래프 버스는 우회 — 로패스 없음, 파랑 예고음 1760/2637Hz 보존) | 360 | 시간 경과 또는 체력 물약(결정 22 — 물약 정의의 `cures: ['concussion']` × `concussion.potionCures`; 말린 고기는 지우지 않는다) |
 | `corrosive` **오염 진액** (P2+) | 진액 웅덩이 위 / 진액 구슬 직격(막아도 붙음, 거미줄처럼) | 이속 ×0.6 · DoT 2/30틱(`corrosive_tick`, player_damaged 안 냄 — 도트 규약) · **오염 대기 +1 / 60틱**(전투당 상한 +8, 카운터는 보스 `EnemyState.fightPendingIn` 에, 부활 시 리셋) · 부착 중 분출공 정화 ×2 | 웅덩이 위 + 30(`lingerTicks`) | 웅덩이에서 나감. 웅덩이는 **불**(화염구·불붙은 기름) 즉시 증발 / 질식 시 전부 / 자연 480틱 |
 | `cowed` **위압** (P3) | 포효 12m 안(피해 없음, 방어 판정 없음, 무적 8틱이면 안 걸림) | **일반 패링이 관절을 열지 못함**(완벽만) · 일반 패링 마나 11→5 | 360 | 시간 경과 또는 **완벽 패링 1회** |
 
@@ -462,6 +462,7 @@ Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검�
 | `World.attackMode` | 기존 `'summon'|'bash'|'charge'|'volley'|'ranged'` + `'alt'|'close'|'slam'|'roar'|'combo'` |
 | `World.EnemyState` | `weakHp{id → hp}`, `exposure{id → ticks}`, `exposureHits`, `weakAccum`, `dazeCooldown`, `dazed`, `pose`/`poseTicks`, `bladeLock{r?, l?}`, `ruptured{id → true}`(파열 처리 표식 — Enemies 는 지우지 않고 **갑각 재생이 `weakHp` 회복과 함께 지운다**), `limping` |
 | `balance.status` | `maxConcurrent 2`, `numbArm{ticks 240, perfectBandMul 0, blockSpeedMul 0.25, noManaLossOnFail true}`, `hobble{ticks 300, dodgeStaminaMul 2, noSprint true}`, `concussion{ticks 360, aimShakeAmp 0.02, tiltDeg 3, duckDb −6, potionCures true}`, `corrosive{moveSpeedMul 0.6, dotPerTick 2, dotIntervalTicks 30, lingerTicks 30, pendingPerTicks 60, pendingCap 8}`, `cowed{ticks 360, normalParryOpensJoint false, normalParryMana 5}` |
+| `balance.items.kinds.*` | `cures?: PlayerStatusKind[]` — 마시면 지워지는 상태. `potion`·`potion_large` 에 `['concussion']`(B2-4). `Inventory.curableStatuses` 가 `cures` × `status.<kind>.potionCures` × 지금 걸림 으로 판정하고 `isUseful`·`Items.drink` 가 같은 판정을 쓴다 — `heal` 로 판정하지 않는다(말린 고기 heal 5 는 물약 노릇을 못 한다) |
 | `balance.weakPoint` | `dazeThreshold 66, dazeCooldownTicks 600, blindThreshold 66, blindRangeM 6, blindOverrunTicks 40, heartTrigger 66, heartCooldownTicks 600, roarCancelThreshold 66, ventGagThreshold 66, ventOpenMul 3.0, ventCleanseCap 6, headDown{stuckTicks 90, backflowTicks 60, toppleTicks 90, exhaustTicks 150}, backflow{selfDamage 45}, rupture{staggerTicks 60, bladeLockTicks 600}, limp{speedMul 0.65, chargeSpeedMul 0.7}, skid{ticks 90}, choke{sealTicks 1800, windupPenalty 10}, phaseShiftTicks 90, chargeStuckTicks 2` |
 | `balance.hazards` | `pools{blade{radius 1.6, ticks 480}, stomp{2.0, 480}, orb{1.2, 480}, skid{1.6, 480}}, poolMax 12` |
 | `balance.arena` | `pillarHp 3, pillarStunTicks 30, anticampNoLosTicks 300, anticampFarTicks 480, anticampFarM 12, anticampSpeedMul 1.5, rubbleHalf 1.7` |
@@ -534,7 +535,7 @@ Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검�
 19. **포효와 회피** — ★ 무적 8틱이면 위압이 안 걸린다(빨강 = 회피 문법 유지) + 눈 66 취소. 대안: 포효는 iframe 무시(취소·완벽 패링 해제만).
 20. **절망의 포효(≤20%, 끌림 4m → 발구르기 연계)** — ★ 채택. 대안: 미채택.
 21. **넉다운 상태** — ★ 미채택(진탕으로 대체). 대안: 돌격 직격 넉다운 72틱.
-22. **체력 물약이 진탕 해제** — ★ 채택(`Inventory.isUseful` 에 '지울 상태가 있으면 유용' 분기 + `Items.drink`). 대안: 물약은 회복만.
+22. **체력 물약이 진탕 해제** — ★ 채택(`Inventory.isUseful` 에 '지울 상태가 있으면 유용' 분기 + `Items.drink`; 어느 아이템이 지우는지는 `items.kinds.*.cures` 데이터 — 체력 물약·대형 체력 물약만, 말린 고기는 아니다). 대안: 물약은 회복만.
 23. **진탕 오디오 표현** — ★ 예고음 버스 우회 덕킹 −6dB(로패스 없음 — 파랑 예고음 보존). 대안: 오디오 무변경(aimShake+기울기만).
 24. **패드 조준 보조 약점 반경 ×1.35** — ★ 옵션 채택(기본 켬). 대안: 보조 없음.
 25. **관문 봉쇄 조건** — ★ "각성 && 플레이어가 bounds 안" + 밖에서 깨우면 홈 대기, 입구는 D(레버 불필요). 대안: D 안쪽 첫 칸 진입 트리거 = 각성 + 봉쇄 한 이벤트.

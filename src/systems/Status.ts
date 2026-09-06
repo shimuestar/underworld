@@ -56,9 +56,11 @@ export function tick(world: World, _dt: number): void {
   }
 }
 
-/** 전부 해제 — 부활·층 이동·시험방 진입(main.loadFloor). 이벤트 없이 조용히 (HUD·덕킹·기울기는 카운터를 매 프레임 읽어 스스로 꺼진다) */
+/** 전부 해제 — 부활·층 이동·시험방 진입(main.loadFloor). 이벤트 없이 조용히 (HUD·덕킹·기울기는 카운터를 매 프레임 읽어 스스로 꺼진다).
+ *  진탕이 빌려 쓴 aimShake 채널도 여기서 놓는다 — 안 놓으면 카운터는 0 인데 남은 틱 내내 조준만 계속 흔들린다 */
 export function clearAll(world: World): void {
   const p = world.player;
+  releaseConcussionShake(p);
   for (const kind of PLAYER_STATUS_KINDS) setTicks(p, kind, 0);
   p.statusOrder = [];
 }
@@ -73,13 +75,17 @@ function setTicks(p: World['player'], kind: PlayerStatusKind, ticks: number): vo
   p[PLAYER_STATUS_FIELD[kind]] = ticks;
 }
 
+/** 진탕이 빌려 쓴 조준 흔들림 채널을 놓는다 — 물약·상한으로 일찍 끝났거나 clearAll 로 지워질 때 남은 틱만큼 계속 흔들리면 안 된다.
+ *  진폭이 우리 값이면 우리가 쥔 채널이다(박쥐·포자는 제 진폭을 쓴다) — 남의 흔들림은 건드리지 않는다 */
+function releaseConcussionShake(p: World['player']): void {
+  if (p.aimShakeAmp === balance.status.concussion.aimShakeAmp) p.aimShakeTicks = 0;
+}
+
 function end(world: World, order: PlayerStatusKind[], kind: PlayerStatusKind, reason: 'cured' | 'expired' | 'displaced'): void {
   const p = world.player;
   const at = order.indexOf(kind);
   if (at >= 0) order.splice(at, 1);
   setTicks(p, kind, 0);
-  // 진탕이 끝나면 빌려 쓴 조준 흔들림 채널도 놓는다 — 물약·상한으로 일찍 끝났을 때 남은 틱만큼 계속 흔들리면 안 된다.
-  // 진폭이 우리 값이면 우리가 쥔 채널이다(박쥐·포자는 제 진폭을 쓴다)
-  if (kind === 'concussion' && p.aimShakeAmp === balance.status.concussion.aimShakeAmp) p.aimShakeTicks = 0;
+  if (kind === 'concussion') releaseConcussionShake(p);
   world.events.emit(`${kind}_ended`, { kind, reason });
 }

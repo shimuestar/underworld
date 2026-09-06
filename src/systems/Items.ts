@@ -7,7 +7,7 @@
 // 즉발로 두면 "위험할 때 아무 때나 부어 버리면 그만"이라 안전한 자리를 만들 이유가 없다.
 
 import { balance } from '../core/Balance';
-import { countOf, isUseful, itemDef, takeItem } from '../core/Inventory';
+import { countOf, curableStatuses, isUseful, itemDef, takeItem } from '../core/Inventory';
 import { setPlayerStatus, type ItemKind, type World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
@@ -112,16 +112,17 @@ function drink(world: World, kind: ItemKind, index: number): void {
     if (ot) queueRegen(world.potionRegen.mp, restoreTotal - now, ot.durationTicks);
   }
   if (def.regen) world.foodRegenTicks = def.regen.durationTicks; // 겹치면 갱신 — 중첩 없음
-  // 체력 물약은 진탕(concussion)을 지운다(기획서 §6 결정 22, balance.status.concussion.potionCures) — 0 만 세우고 _ended 는 Status 가 낸다
-  const cured = def.heal > 0 && balance.status.concussion.potionCures && (p.concussionTicks ?? 0) > 0;
-  if (cured) setPlayerStatus(p, 'concussion', 0);
+  // 정의의 cures 목록(체력 물약 → 진탕, 기획서 §6 결정 22)에 있고 potionCures 가 켜진 상태를 지운다 — isUseful 과 같은 판정(curableStatuses).
+  // 0 만 세우고 _ended 는 Status 가 낸다. heal 로 판정하지 않는다 — 말린 고기(heal 5)는 지우지 않는다
+  const cured = curableStatuses(world, kind);
+  for (const status of cured) setPlayerStatus(p, status, 0);
   world.events.emit('item_used', {
     kind,
     index,
     healed: p.health - hpBefore,
     restored: world.mana.value - manaBefore,
     left: countOf(world, kind),
-    cured: cured ? ['concussion'] : [],
+    cured,
   });
 }
 
