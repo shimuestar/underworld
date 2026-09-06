@@ -1332,6 +1332,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   if ((enemy.volleyCooldown ?? 0) > 0) enemy.volleyCooldown = (enemy.volleyCooldown ?? 0) - 1;
   if ((enemy.summonCooldown ?? 0) > 0) enemy.summonCooldown = (enemy.summonCooldown ?? 0) - 1;
   if ((enemy.chargeCooldown ?? 0) > 0) enemy.chargeCooldown = (enemy.chargeCooldown ?? 0) - 1;
+  if ((enemy.closeCooldown ?? 0) > 0) enemy.closeCooldown = (enemy.closeCooldown ?? 0) - 1;
 
   // 새끼 분리 — 타이머 구동 (2026-09-01): 전투에 들어오면 즉시 5마리, 그 뒤로는
   // 10초 박자(cooldownTicks)마다 살아 있는 새끼를 빼고 부족분만 시전 없이 충원한다.
@@ -1527,7 +1528,16 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           circleAround(world, enemy, def, distX, distZ, dist, dt);
           break;
         }
-        enemy.attackMode = 'melee';
+        // 들이받기(closeAttack, 거수) — 코앞(maxRange)에 붙은 플레이어는 낫보다 먼저 머리로 밀어낸다.
+        // 배 밑에 눌러앉는 플레이 방지. 쿨다운이 돌고 있으면 낫으로 (기획서 §9.2 3번). 슬롯이 없는 적은 옛 경로
+        const close = def.closeAttack;
+        if (close && dist <= (close.maxRange ?? def.attackRange) && (enemy.closeCooldown ?? 0) <= 0) {
+          enemy.attackMode = 'close';
+          enemy.closeCooldown = close.cooldownTicks ?? 0;
+          startWindup(world, enemy, close);
+          break;
+        }
+        enemy.attackMode = pickMeleeMode(def, enemy);
         startWindup(world, enemy, currentAttack(def, enemy));
         break;
       }
@@ -2487,6 +2497,15 @@ function advanceStrike(
   const rest = reach * balance.parrySpace.pullbackRatio;
   enemy.strikeProgress = progress;
   enemy.weaponTipDist = rest + (reach - rest) * progress;
+}
+
+/** 근접 모드 선택 — attackAlt.alternate(거수 두 낫)가 있으면 오른낫('melee' = attack)·왼낫('alt' = attackAlt)을 번갈아
+ *  낸다. 마지막으로 휘두른 낫은 enemy.lastBlade 가 기억한다(첫 낫은 오른낫). 잠긴 낫 건너뛰기는 B2-3 몫.
+ *  슬롯·플래그가 없는 적은 예전처럼 늘 'melee' */
+function pickMeleeMode(def: ReturnType<typeof enemyDef>, enemy: EnemyState): 'melee' | 'alt' {
+  if (!def.attackAlt?.alternate) return 'melee';
+  enemy.lastBlade = enemy.lastBlade === 'r' ? 'l' : 'r';
+  return enemy.lastBlade === 'l' ? 'alt' : 'melee';
 }
 
 function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {

@@ -1,9 +1,9 @@
-// M7 검증 — warden(방어막·시전·반사), 보스(족장: 완벽 패링 3연속 → 스태거 → 처형 / 낫뿔 거수 배치 1 뼈대), 출구 잠금/클리어.
+// M7 검증 — warden(방어막·시전·반사), 보스(족장: 완벽 패링 3연속 → 스태거 → 처형 / 낫뿔 거수 배치 1 뼈대 + 왼낫 교대·들이받기), 출구 잠금/클리어.
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
-import { attackReaches, enemyDef, healthBarState, implementedEnemyTypes, rayHitsEnemy } from '../core/Entities';
+import { attackReaches, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, rayHitsEnemy } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World, type EnemyState } from '../core/World';
@@ -1297,7 +1297,7 @@ describe('캐스터 재배치 — 아군이 사선을 막을 때', () => {
   });
 });
 
-describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만으로 낫·돌격·처형', () => {
+describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만으로 낫·돌격·처형 + B1-3 왼낫 교대·들이받기', () => {
   const TYPE = 'scythe_behemoth';
   const def = enemyDef(TYPE);
 
@@ -1516,7 +1516,7 @@ describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만�
     const base: BehemothPose = {
       nowMs: 0, legPhase: 0, legBlend: 0, bladeSide: 1, bladeWindup: 0, bladeStriking: false,
       strikeProgress: 0, tipDist: pullback, recoiled: false, chargeCoil: 0, charging: false,
-      trembling: false, snap: 1,
+      headbuttCoil: 0, headbutting: false, trembling: false, snap: 1,
     };
     const group = new THREE.Group();
     const torso = new THREE.Group();
@@ -1532,7 +1532,7 @@ describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만�
     group.traverse((o) => {
       if (o instanceof THREE.Mesh) box.union(new THREE.Box3().setFromObject(o, true)); // precise — 기운 원뿔의 헐거운 AABB 가 아니라 정점으로
     });
-    const tip = behemothBladeTip(rig, 1, new THREE.Vector3());
+    const tip = behemothBladeTip(rig, pose.bladeSide ?? 1, new THREE.Vector3()); // 휘두르는 쪽 낫끝
     return { rig, box, tip, flash, group, reach, pullback };
   }
 
@@ -1567,6 +1567,23 @@ describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만�
         pose: { chargeCoil: 1, trembling: true, nowMs },
       })),
       { name: 'charging', lean: T.chargeLean, lunge: 0, crouch: -def.height * T.chargeCrouch, pose: { charging: true } },
+      // B1-3 들이받기 — 예고에 목을 뒤로 젓으면 뿔끝(3.49m)이 솟는다. 중간 진행·떨림·움찔까지 / 타격(내리꽂음)
+      ...[0.25, 0.5, 0.75, 1].map((c) => ({
+        name: `headbutt coil ${c}+flinch`,
+        lean: T.headbuttLean * c + T.flinchLean, lunge: 0, crouch: 0,
+        pose: { headbuttCoil: c },
+      })),
+      ...peaks.map((nowMs) => ({
+        name: `headbutt coil+tremble+flinch@${nowMs.toFixed(0)}`,
+        lean: T.headbuttLean + J.tremble + T.flinchLean, lunge: 0, crouch: 0,
+        pose: { headbuttCoil: 1, trembling: true, nowMs },
+      })),
+      { name: 'headbutt strike', lean: T.headbuttStrikeLean, lunge: T.headbuttLunge, crouch: 0, pose: { headbutting: true } },
+      { name: 'headbutt strike+flinch', lean: T.headbuttStrikeLean + T.flinchLean, lunge: T.headbuttLunge, crouch: 0, pose: { headbutting: true } },
+      // B1-3 왼낫(bladeSide −1) — 리그는 좌우 대칭이지만 실제로 잰다
+      { name: 'left windup+tremble+flinch', lean: T.windupLean + J.tremble + T.flinchLean, lunge: 0, crouch: 0, pose: { bladeSide: -1, bladeWindup: 1, tipDist: pullback, trembling: true, nowMs: 100 } },
+      { name: 'left strike 0', lean: T.windupLean + J.tremble, lunge: T.strikeLunge, crouch: 0, pose: { bladeSide: -1, bladeStriking: true, strikeProgress: 0, tipDist: pullback } },
+      { name: 'left recoil+flinch', lean: T.recoilLean + J.recoilShake + T.flinchLean, lunge: 0, crouch: 0, pose: { bladeSide: -1, recoiled: true } },
     ];
     for (const c of cases) {
       const { box } = measureRig(c.lean, c.lunge, c.crouch, c.pose);
@@ -1594,6 +1611,52 @@ describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만�
     expect(-windup.tip.z).toBeCloseTo(pullback, 1);
   });
 
+  it('왼낫(B1-3, bladeSide −1) — 같은 규칙이 왼팔에: 왼 낫끝이 tipDist 와 맞고 끝에선 중심선, 오른낫은 제자리(+x)에 쉰다', () => {
+    const reach = def.attackRange * def.attackAlt!.impactRangeMul;
+    const pullback = reach * balance.parrySpace.pullbackRatio;
+    for (const sp of [0, 0.5, 1]) {
+      const tipDist = pullback + (reach - pullback) * sp;
+      const left = measureRig(BEHEMOTH_TORSO.strikeLean, BEHEMOTH_TORSO.strikeLunge, 0, {
+        bladeSide: -1, bladeStriking: true, strikeProgress: sp, tipDist,
+      });
+      expect(-left.tip.z, `left strike ${sp}`).toBeCloseTo(tipDist, 1);
+      if (sp === 0) expect(left.tip.x).toBeLessThan(-0.5); // 시작은 왼쪽(−x) 어깨 옆
+      if (sp === 1) expect(Math.abs(left.tip.x)).toBeLessThan(0.15); // 끝은 정면 중심선
+      const restRight = behemothBladeTip(left.rig, 1, new THREE.Vector3());
+      expect(restRight.x).toBeGreaterThan(0.5); // 오른낫은 오른쪽(+x)에 그대로
+    }
+    // 왼낫 예고 — 왼 어깨가 솟고(위팔 각이 대기보다 크다) 오른 어깨는 대기
+    const w = measureRig(BEHEMOTH_TORSO.windupLean, 0, 0, { bladeSide: -1, bladeWindup: 1, tipDist: pullback });
+    const rest = measureRig(0, 0, 0, {});
+    const armL = w.rig.arms.find((a) => a.side === -1)!;
+    const armR = w.rig.arms.find((a) => a.side === 1)!;
+    const restL = rest.rig.arms.find((a) => a.side === -1)!;
+    expect(armL.shoulder.rotation.x).toBeGreaterThan(restL.shoulder.rotation.x + 0.02);
+    expect(Math.abs(armR.shoulder.rotation.x - restL.shoulder.rotation.x)).toBeLessThan(0.05);
+    expect(-w.tip.z).toBeCloseTo(pullback, 1);
+  });
+
+  it('들이받기 자세(B1-3) — 예고에 목이 뒤로(+) 젖혀져 눈이 뒤·위로, 타격엔 앞으로(−) 내리꽂혀 눈이 앞·아래로. 낫은 대기 그대로', () => {
+    const rest = measureRig(0, 0, 0, {});
+    const eyeRest = rest.rig.weakPoints['eye']!.position.clone();
+    const coil = measureRig(BEHEMOTH_TORSO.headbuttLean, 0, 0, { headbuttCoil: 1 });
+    expect(coil.rig.neck.rotation.x).toBeGreaterThan(0.3);
+    const eyeCoil = coil.rig.weakPoints['eye']!.position;
+    expect(eyeCoil.y).toBeGreaterThan(eyeRest.y + 0.15);
+    expect(eyeCoil.z).toBeGreaterThan(eyeRest.z + 0.15); // 뒤로
+    const restLeaned = measureRig(BEHEMOTH_TORSO.headbuttLean, 0, 0, {}); // 같은 몸통 기울임의 대기 — 목만 움직였는지 본다
+    expect(coil.tip.z).toBeCloseTo(restLeaned.tip.z, 2); // 낫은 안 움직인다
+    // 반쯤 진행에서도 이미 크게 젖혀 있다 — "홱" (1 − (1−t)³)
+    const half = measureRig(BEHEMOTH_TORSO.headbuttLean * 0.5, 0, 0, { headbuttCoil: 0.5 });
+    expect(half.rig.neck.rotation.x).toBeGreaterThan(coil.rig.neck.rotation.x * 0.8);
+    const butt = measureRig(BEHEMOTH_TORSO.headbuttStrikeLean, BEHEMOTH_TORSO.headbuttLunge, 0, { headbutting: true });
+    expect(butt.rig.neck.rotation.x).toBeLessThan(-0.5);
+    const eyeButt = butt.rig.weakPoints['eye']!.position;
+    expect(eyeButt.y).toBeLessThan(eyeRest.y - 0.3);
+    expect(eyeButt.z).toBeLessThan(eyeRest.z - 0.2); // 앞으로
+    expect(eyeButt.y).toBeGreaterThan(1.0); // 머리가 바닥에 박히지는 않는다 (앞다리가 기울임만큼 살짝 잠기는 건 다른 자세와 같다)
+  });
+
   it('리그 구성(B1-2) — 약점 구체 5개는 group 소속·flashMaterials 밖, 낫·뿔 재질도 밖, 머리 부속(상자·뿔·턱·눈 자리)은 헤드샷 젖힘 노드 아래 한 덩어리', () => {
     const { rig, flash, group } = measureRig(0, 0, 0, {});
     for (const id of ['wp_eye', 'wp_joint_r', 'wp_joint_l', 'wp_heart', 'wp_vent']) {
@@ -1611,6 +1674,140 @@ describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만�
     expect(horns).toHaveLength(2);
     // 자세(headPitch)와 헤드샷(headShake)은 다른 노드 — 서로 덮어쓰지 않는다
     expect(rig.headShake.parent).toBe(rig.headPitch);
+  });
+
+  it('B1-3 정의 — attackAlt(왼낫: 오른낫과 같되 예고 28틱·alternate)·closeAttack(들이받기: contact·hitOnContact·패링 불가·빨강·22틱·22·3.5m·3.0m·쿨 240), 다른 적은 슬롯 없음', () => {
+    const alt = def.attackAlt!;
+    const close = def.closeAttack!;
+    expect(alt.alternate).toBe(true);
+    expect(alt.windupTicks).toBe(28);
+    expect(def.attack.windupTicks).toBe(32);
+    // 예고 길이·교대 플래그 말고는 오른낫과 같다
+    const { windupTicks: _wl, alternate: _al, ...altRest } = alt;
+    const { windupTicks: _wr, ...rightRest } = def.attack;
+    expect(altRest).toEqual(rightRest);
+    expect(close).toMatchObject({
+      type: 'contact', hitOnContact: true, parryable: false, telegraph: 'red',
+      windupTicks: 22, damage: 22, playerKnockback: 3.5, maxRange: 3.0, cooldownTicks: 240,
+    });
+    // 판정 사거리 = maxRange — 붙어 있던 자리(3.0m 안)까지 닿는다
+    expect(def.attackRange * close.impactRangeMul).toBeCloseTo(close.maxRange!, 2);
+    // currentAttack 이 모드를 슬롯으로 잇는다 — 슬롯이 없는 적은 기본 공격으로 떨어진다
+    expect(currentAttack(def, { attackMode: 'alt' })).toBe(alt);
+    expect(currentAttack(def, { attackMode: 'close' })).toBe(close);
+    expect(currentAttack(def, { attackMode: 'melee' })).toBe(def.attack);
+    const chief = enemyDef('goblin_chieftain');
+    expect(chief.attackAlt).toBeUndefined();
+    expect(chief.closeAttack).toBeUndefined();
+    expect(currentAttack(chief, { attackMode: 'alt' })).toBe(chief.attack);
+    expect(currentAttack(chief, { attackMode: 'close' })).toBe(chief.attack);
+    expect(enemyDef('slime_mother').attackAlt).toBeUndefined();
+    expect(enemyDef('slime_mother').closeAttack).toBeUndefined();
+  });
+
+  /** 예고가 열릴 때마다 (attackMode, 예고 틱, 몇 틱째) 를 기록하며 n 번의 예고를 본다 */
+  function recordWindups(enemy: EnemyState, n: number, maxTicks = 3000): { mode: string; windup: number; tick: number }[] {
+    const seen: { mode: string; windup: number; tick: number }[] = [];
+    let wasWindup = false;
+    for (let i = 0; i < maxTicks && seen.length < n; i++) {
+      Enemies.tick(world, DT);
+      const now = enemy.ai === 'windup';
+      if (now && !wasWindup) seen.push({ mode: enemy.attackMode ?? '?', windup: enemy.timer, tick: i });
+      wasWindup = now;
+    }
+    return seen;
+  }
+
+  it('두 낫이 교대로 나온다 — 오른낫(melee·32틱) → 왼낫(alt·28틱) → 오른낫 → 왼낫, lastBlade 가 기억한다', () => {
+    const boss = makeBehemoth(4.0); // 낫 사거리(4.4) 안 · 들이받기(3.0) 밖 · 돌격(4.5) 밖
+    world.player.iframeTicks = 1e9; // 전부 헛치게 두고 순서만 본다 (Reaction 을 안 돌리니 무적이 유지된다)
+    const seen = recordWindups(boss, 4);
+    expect(seen.map((s) => s.mode)).toEqual(['melee', 'alt', 'melee', 'alt']);
+    expect(seen.map((s) => s.windup)).toEqual([32, 28, 32, 28]);
+    expect(boss.lastBlade).toBe('l');
+    expect(boss.closeCooldown ?? 0).toBe(0); // 들이받기는 한 번도 안 나갔다
+  });
+
+  it('왼낫도 같은 패링 파이프 — 오른낫·왼낫을 이어 완벽 패링하면 2연속으로 스태거(임시 parriesToStagger 2)', () => {
+    const boss = makeBehemoth(4.0);
+    expect(perfectParry(boss)).toBe('perfect');
+    expect(boss.attackMode).toBe('melee');
+    expect(boss.ai).toBe('recover');
+    expect(perfectParry(boss)).toBe('perfect');
+    expect(boss.attackMode).toBe('alt'); // 둘째는 왼낫이었다
+    expect(boss.ai).toBe('staggered');
+  });
+
+  it('3.0m 안에서는 들이받기(close·22틱)가 낫보다 먼저 나온다 — 쿨다운 240 이 도는 동안은 낫 교대, 끝나면 다시 들이받기', () => {
+    const close = def.closeAttack!;
+    const boss = makeBehemoth(2.5);
+    world.player.iframeTicks = 1e9;
+    const seen = recordWindups(boss, 6);
+    expect(seen[0]).toMatchObject({ mode: 'close', windup: 22 });
+    // 쿨다운 중엔 낫 — 교대는 들이받기와 무관하게 이어진다
+    expect(seen[1]!.mode).toBe('melee');
+    expect(seen[2]!.mode).toBe('alt');
+    const again = seen.findIndex((s, i) => i > 0 && s.mode === 'close');
+    expect(again).toBeGreaterThan(0);
+    expect(seen[again]!.tick - seen[0]!.tick).toBeGreaterThanOrEqual(close.cooldownTicks!);
+    for (let i = 1; i < again; i++) expect(['melee', 'alt']).toContain(seen[i]!.mode);
+    // 들이받기 뒤에도 교대 순서는 그대로 이어진다 (alt 다음은 melee)
+    expect(seen[again + 1]!.mode).toBe('melee');
+  });
+
+  it('들이받기는 패링 대상이 아니다 — 판정 창 없이 예고 → 즉시 타격. 반응은 조기 입력(fail)이거나 허공, 22 피해·3.5m/12틱 밀림', () => {
+    const close = def.closeAttack!;
+    const boss = makeBehemoth(2.5);
+    const parries: string[] = [];
+    world.events.on('parry_attempt', (p) => parries.push((p as { result: string }).result));
+    const hits: { amount: number; blocked: boolean }[] = [];
+    world.events.on('player_damaged', (p) => hits.push(p as { amount: number; blocked: boolean }));
+
+    tickEnemiesUntil(() => boss.ai === 'windup');
+    expect(boss.attackMode).toBe('close');
+    expect(boss.closeCooldown).toBe(close.cooldownTicks);
+    expect(attackReaches(def, boss, close, world.player.x, world.player.z)).toBe(true);
+    // 예고 중 누르면 조기 입력 실패 — 성립할 판정 창이 없다
+    pressReaction();
+    expect(parries).toEqual(['fail']);
+    world.player.stunTicks = 0; // 실패 경직은 치우고 계속 본다
+    // 예고가 끝나면 active_perfect/active_normal 을 거치지 않고 바로 impact
+    const states: string[] = [];
+    while (boss.ai === 'windup') {
+      Enemies.tick(world, DT);
+      states.push(boss.ai);
+    }
+    expect(states[states.length - 1]).toBe('impact');
+    expect(states).not.toContain('active_perfect');
+    expect(states).not.toContain('active_normal');
+    // 타격 틱에 눌러도 패링은 없고 타격은 그대로 들어간다
+    pressReaction();
+    expect(parries).toEqual(['fail']);
+    Enemies.tick(world, DT);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.amount).toBe(22);
+    expect(hits[0]!.blocked).toBe(false);
+    expect(world.player.health).toBe(100 - 22);
+    expect(world.player.kbTicks).toBe(close.playerKnockbackTicks);
+    const flung = Math.hypot(world.player.kbX!, world.player.kbZ!) * world.player.kbTicks!;
+    expect(flung).toBeCloseTo(close.playerKnockback!, 3);
+    expect(boss.ai).toBe('recover');
+    expect(boss.timer).toBe(close.recoverTicks);
+    // 3.0m 밖(3.3m)에 선 플레이어에게는 닿지 않는다 — 뒤 대시 한 번이면 나간다
+    const far = spawnEnemyAt(TYPE, 6 + 3.3, 6, 7);
+    far.yaw = Math.atan2(-(6 - far.x), -(6 - far.z));
+    expect(attackReaches(def, far, close, 6, 6)).toBe(false);
+  });
+
+  it('교대 플래그·밀착 슬롯이 없는 적은 예전 그대로 — 족장은 붙어도 매번 melee, lastBlade·closeCooldown 은 생기지 않는다', () => {
+    const chief = spawnEnemyAt('goblin_chieftain', 6 + 3.0, 6, 1);
+    chief.ai = 'chase';
+    world.enemies.push(chief);
+    world.player.iframeTicks = 1e9;
+    const seen = recordWindups(chief, 3);
+    expect(seen.map((s) => s.mode)).toEqual(['melee', 'melee', 'melee']);
+    expect(chief.lastBlade).toBeUndefined();
+    expect(chief.closeCooldown).toBeUndefined();
   });
 
   it('보스 포효 기상 반경 — alertRadius(18) 밖의 잠든 적은 함께 깨지 않는다', () => {

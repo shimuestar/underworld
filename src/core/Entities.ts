@@ -98,6 +98,8 @@ export interface EnemyAttackDef {
   cooldownTicks?: number;
   /** 착탄 시 광역 효과 (없으면 단일 대상) */
   splash?: ProjectileSplashDef;
+  /** 교대 — attackAlt 슬롯에 두면 기본 attack 과 번갈아 나간다(거수 오른낫·왼낫). 없으면 attackAlt 는 선택되지 않는다 */
+  alternate?: boolean;
 }
 
 /** 세 성분 좌표·치수 — [x, y, z]. x·z 는 def.radius 배, y 는 def.height 배 (Stage 가 곱한다) */
@@ -277,6 +279,10 @@ export interface EnemyDef {
   summonAttack?: EnemyAttackDef;
   /** 방패 밀쳐내기 — 연타를 멈추지 않는 상대를 떼어낸다 (창병) */
   shieldBash?: EnemyAttackDef;
+  /** 교대 근접 — attack 과 번갈아 나가는 둘째 팔(거수 왼낫). attackMode 'alt'. alternate 플래그가 참일 때만 골라진다 */
+  attackAlt?: EnemyAttackDef;
+  /** 밀착 공격 — maxRange 안에 붙은 플레이어를 cooldownTicks 마다 낫보다 먼저 밀어낸다(거수 들이받기). attackMode 'close' */
+  closeAttack?: EnemyAttackDef;
   /** 완벽 패링만 받는다 — 일반 대역(guardDepth)에서 눌러도 성립하지 않는다.
    *  이르게 누른 입력은 버퍼로 살아남아 무기 끝이 완벽 대역에 들어오는 순간 성립한다 */
   perfectParryOnly?: boolean;
@@ -308,6 +314,8 @@ export function currentAttack(def: EnemyDef, enemy: { attackMode?: string }): En
   if (enemy.attackMode === 'charge' && def.chargeAttack) return def.chargeAttack;
   if (enemy.attackMode === 'volley' && def.volleyAttack) return def.volleyAttack;
   if (enemy.attackMode === 'ranged' && def.rangedAttack) return def.rangedAttack;
+  if (enemy.attackMode === 'alt' && def.attackAlt) return def.attackAlt;
+  if (enemy.attackMode === 'close' && def.closeAttack) return def.closeAttack;
   return def.attack;
 }
 

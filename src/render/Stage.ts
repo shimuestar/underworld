@@ -994,6 +994,11 @@ export const BEHEMOTH_TORSO = {
   recoilLean: 0.12,
   /** 피탄 움찔 — 인간형(ENEMY_LEAN_JITTER.flinch 0.16)은 4족엔 과하고, 낫 예고 중 맞으면 들린 위팔이 3.8m 를 넘는다 */
   flinchLean: 0.05,
+  /** 들이받기 예고 — 머리를 홱 뒤로 젓는 동안 몸통은 거의 그대로(몸까지 젖히면 솟은 뿔끝이 3.8m 에 닿는다) */
+  headbuttLean: 0.03,
+  /** 들이받기 — 머리를 내리꽂으며 몸통이 짧게 앞으로 실린다. 헛친 경직도 이 자세로 굳는다 */
+  headbuttStrikeLean: -0.08,
+  headbuttLunge: -0.35,
 } as const;
 
 /** syncEnemies 가 자세 위에 더하는 기울임 떨림 진폭(rad) — 섬광 구간 떨림·튕김 흔들림·피탄 움찔.
@@ -1022,6 +1027,9 @@ const BH_LEG_SWING = 0.32; // 걸음 진폭
 const BH_PAW_SCRAPE = 0.3; // 돌격 예고 앞발 긁기 진폭
 const BH_NECK_DOWN = 1.0; // 돌격 예고 머리 내림(목 회전) — 눈이 정면 1.1m 부근으로
 const BH_HEAD_COUNTER = 0.7; // 목을 내리는 만큼 머리는 되들어 정면을 본다 (비율)
+const BH_NECK_BACK = 0.42; // 들이받기 예고 — 목을 뒤로 홱 젓는 각. 뿔끝(3.49m·z −1.8)이 솟으므로 3.8m 아래를 Boss.test 천장 검사가 잰다
+const BH_NECK_BUTT = 0.85; // 들이받기 — 목을 앞으로 내리꽂는 각
+const BH_BUTT_HEAD_COUNTER = 0.45; // 내리꽂을 때 머리를 되들어 뿔이 앞(플레이어)을 겨눈다 (비율)
 const BH_TAIL_DROOP = 0.3;
 const BH_TAIL_SWAY = 0.18;
 const BH_TIP_MIN_Y = 0.08; // 낫끝이 바닥을 뚫지 않게 (m)
@@ -1076,6 +1084,9 @@ export interface BehemothPose {
   /** 돌격 예고 진행도 0~1 (머리 내림·앞발 긁기·낫 접기) / 달리는 중 */
   chargeCoil: number;
   charging: boolean;
+  /** 들이받기 예고 진행도 0~1 — 머리를 홱 뒤로 젓는다(앞부분에서 확, 끝에서 버팀) / 들이받는 중(내리꽂음, 헛친 경직 포함) */
+  headbuttCoil: number;
+  headbutting: boolean;
   /** 섬광 구간 떨림 */
   trembling: boolean;
   /** 보간 계수 — 1 이면 즉시(타격·디버그), 0 이면 굳음(빙결) */
@@ -1308,10 +1319,22 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
   rig.tail.rotation.y = mix(rig.tail.rotation.y, Math.sin(p.nowMs / 900) * BH_TAIL_SWAY);
   rig.tail.rotation.x = mix(rig.tail.rotation.x, p.charging ? BH_TAIL_DROOP * 0.3 : BH_TAIL_DROOP);
 
-  // 머리 — 돌격 예고·질주에 목을 내리고 머리는 되들어 눈이 정면 낮은 곳을 본다
+  // 머리 — 돌격 예고·질주에 목을 내리고 머리는 되들어 눈이 정면 낮은 곳을 본다.
+  // 들이받기는 예고에 목을 뒤로 홱 젓고(1 − (1−t)³ — 앞부분에서 확 젖혀 끝에서 버틴다, 뿔이 하늘을 본다)
+  // 타격에 앞으로 내리꽂는다(머리는 반쯤 되들어 뿔이 플레이어를 겨눈다)
   const down = p.charging ? 1 : p.chargeCoil;
-  rig.neck.rotation.x = mix(rig.neck.rotation.x, -BH_NECK_DOWN * down);
-  rig.headPitch.rotation.x = mix(rig.headPitch.rotation.x, BH_NECK_DOWN * BH_HEAD_COUNTER * down);
+  let neckTarget = -BH_NECK_DOWN * down;
+  let pitchTarget = BH_NECK_DOWN * BH_HEAD_COUNTER * down;
+  if (p.headbuttCoil > 0) {
+    const c = 1 - Math.pow(1 - Math.min(1, p.headbuttCoil), 3);
+    neckTarget = BH_NECK_BACK * c;
+    pitchTarget = 0;
+  } else if (p.headbutting) {
+    neckTarget = -BH_NECK_BUTT;
+    pitchTarget = BH_NECK_BUTT * BH_BUTT_HEAD_COUNTER;
+  }
+  rig.neck.rotation.x = mix(rig.neck.rotation.x, neckTarget);
+  rig.headPitch.rotation.x = mix(rig.headPitch.rotation.x, pitchTarget);
   rig.jaw.rotation.x = mix(rig.jaw.rotation.x, 0);
 
   for (const arm of rig.arms) {
@@ -3676,13 +3699,13 @@ export class Stage {
         material.emissive.set(emissive);
         material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
       }
-      // 낫뿔 거수 — 낫은 낫 공격(파랑)에만, 뿔은 돌격(빨강)에만 물든다. 예고가 아닌 상태색
-      // (피격 섬광·화상·서리·스태거)은 둘 다 받는다. 약점 구체는 어느 쪽에도 없다(비활성)
+      // 낫뿔 거수 — 낫은 낫 공격(오른·왼, 파랑)에만, 뿔은 뿔이 무기인 공격(돌격·들이받기, 빨강)에만 물든다.
+      // 예고가 아닌 상태색(피격 섬광·화상·서리·스태거)은 둘 다 받는다. 약점 구체는 어느 쪽에도 없다(비활성)
       if (visual.behemoth) {
         const telegraphing = flashing || enemy.ai === 'windup';
-        const chargeMode = enemy.attackMode === 'charge';
-        const bladeEmissive = telegraphing && chargeMode ? 0x000000 : emissive;
-        const hornEmissive = telegraphing && !chargeMode ? 0x000000 : emissive;
+        const hornMode = enemy.attackMode === 'charge' || enemy.attackMode === 'close';
+        const bladeEmissive = telegraphing && hornMode ? 0x000000 : emissive;
+        const hornEmissive = telegraphing && !hornMode ? 0x000000 : emissive;
         for (const material of visual.behemoth.bladeMats) {
           material.emissive.set(bladeEmissive);
           material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
@@ -3852,6 +3875,7 @@ export class Stage {
       // 돌격 예고는 머리를 내리고 몸통을 −12° 웅크린다(기획서 §7)
       if (visual.behemoth) {
         const chargeMode = enemy.attackMode === 'charge';
+        const closeMode = enemy.attackMode === 'close';
         if (chargeCoil) {
           leanTarget = BEHEMOTH_TORSO.chargeLean * windupProgress;
           lungeTarget = 0;
@@ -3860,6 +3884,16 @@ export class Stage {
           leanTarget = BEHEMOTH_TORSO.chargeLean + (charging ? Math.sin(now / 70) * 0.03 : 0);
           lungeTarget = 0;
           crouchTarget = -def2.height * BEHEMOTH_TORSO.chargeCrouch;
+        } else if (closeMode && striking) {
+          // 들이받기 — 머리를 내리꽂으며 몸통이 짧게 앞으로 실린다 (헛친 경직도 그 자세로 굳는다)
+          leanTarget = BEHEMOTH_TORSO.headbuttStrikeLean;
+          lungeTarget = BEHEMOTH_TORSO.headbuttLunge;
+          crouchTarget = 0;
+        } else if (closeMode && inWindup) {
+          // 들이받기 예고 — 머리가 뒤로 젖혀지는 동안 몸통은 거의 그대로 (머리는 poseBehemothRig 의 headbuttCoil)
+          leanTarget = BEHEMOTH_TORSO.headbuttLean * windupProgress;
+          lungeTarget = 0;
+          crouchTarget = 0;
         } else if (striking && isMelee && !chargeMode) {
           leanTarget = BEHEMOTH_TORSO.strikeLean;
           lungeTarget = BEHEMOTH_TORSO.strikeLunge;
@@ -4014,21 +4048,27 @@ export class Stage {
       // 그대로 따라간다 (보이는 낫끝 = 판정 낫끝). 돌격은 낫이 아니라 몸 접촉이라 낫을 접는다
       if (visual.behemoth) {
         const chargeMode = enemy.attackMode === 'charge';
-        const bladeStriking = isMelee && striking && !chargeMode;
+        const closeMode = enemy.attackMode === 'close';
+        // 낫 공격(오른 'melee'·왼 'alt')만 낫이 나간다 — 돌격·들이받기는 뿔이 무기라 낫을 접는다
+        const bladeMode = isMelee && !chargeMode && !closeMode;
+        const bladeStriking = bladeMode && striking;
+        const headbutting = closeMode && striking;
         poseBehemothRig(visual.behemoth, {
           nowMs: now,
           legPhase: visual.legPhase ?? 0,
           legBlend: visual.legBlend ?? 0,
-          bladeSide: 1, // 배치 1 — 오른낫만 (왼낫 교대는 B1-3)
-          bladeWindup: isMelee && inWindup && !chargeCoil ? windupProgress : 0,
+          bladeSide: enemy.attackMode === 'alt' ? -1 : 1, // 왼낫 교대(B1-3) — 'alt' 면 왼팔이 나간다
+          bladeWindup: bladeMode && inWindup && !chargeCoil ? windupProgress : 0,
           bladeStriking,
           strikeProgress: enemy.strikeProgress ?? 0,
           tipDist: enemy.weaponTipDist ?? 0,
-          recoiled: recoiled && !chargeMode,
+          recoiled: recoiled && bladeMode,
           chargeCoil: chargeCoil ? windupProgress : 0,
           charging: charging || (frozenWhiff && chargeMode),
+          headbuttCoil: closeMode && inWindup ? windupProgress : 0,
+          headbutting,
           trembling,
-          snap: solidIce ? 0 : bladeStriking ? 1 : 0.25,
+          snap: solidIce ? 0 : bladeStriking ? 1 : headbutting ? 0.6 : 0.25,
         });
       }
 

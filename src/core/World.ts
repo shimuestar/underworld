@@ -1009,8 +1009,12 @@ export interface EnemyState {
   frostStacks?: number;
   /** 보스 전용 — 연속 패링 누적 (parriesToStagger 도달 시 스태거) */
   parryStreak?: number;
-  /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지) */
-  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley' | 'summon';
+  /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지). 'alt' = 교대 근접(거수 왼낫), 'close' = 밀착 공격(거수 들이받기) */
+  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley' | 'summon' | 'alt' | 'close';
+  /** 마지막으로 휘두른 낫(거수 교대) — 'r' 오른낫(attack) / 'l' 왼낫(attackAlt). 없으면 다음은 오른낫 */
+  lastBlade?: 'r' | 'l';
+  /** 밀착 공격(closeAttack) 재사용 대기 */
+  closeCooldown?: number;
   /** 연사 남은 발수 / 재사용 대기 (족장 화살 세례) */
   volleyLeft?: number;
   volleyCooldown?: number;

@@ -129,7 +129,7 @@
 
 - [x] **B1-1** 정의·스포너·테스트 — `scythe_behemoth`(attack 오른낫 파랑 + chargeAttack 빨강 hitOnContact 72틱, 임시 parriesToStagger 2 + executeDamage 240, hitBox·alertRadius·chargeOnKnockback), Spawner IMPLEMENTED, Boss.test describe
 - [x] **B1-2** 외형 — Stage behemoth 분기(몸통·다리·높은 머리·뿔·낫 2자루 리그·등갑판·약점 구체 5개 장식), `debug/behemoth` 스크린샷 6장(기본 정면·측면·낫 예고·낫 타격 측면/정면·돌격 예고 + 튕김) + 시험방 3장 — rear/head_down/roar/P2 정면/P3 는 해당 자세가 생기는 B2/B3 에서
-- [ ] **B1-3** 왼낫 교대·들이받기 — `attackAlt`/`closeAttack`, attackMode 'alt'|'close'
+- [x] **B1-3** 왼낫 교대·들이받기 — `attackAlt`(왼낫 28틱, `alternate`)/`closeAttack`(들이받기 3.0m 안 우선·쿨 240·패링 불가·빨강), attackMode 'alt'|'close', Enemies 교대 선택(`lastBlade`)·`pickMeleeMode`, Stage 왼팔 연출·머리 뒤로 젓기+뿔 빨강, `debug/behemoth` windup-left/headbutt/headbutt-strike 뷰
 - [ ] **B2-1** 약점 판정 코어 — `rayVsSphere`, `weakPoints[]`/`poseOffsets`/`rayHitsWeakPoint`, hitZonesImmune, 권총·화살 약점 우선. Stage: `poseBehemothRig` 끝의 anchors 추종 루프 제거 → `poseOffsets` 표로 구체 배치(현재 앵커 추종은 표와 어긋남 — 돌격 예고 눈 (0,1.02,−2.32) vs 표 (0,1.1,−1.95))
 - [ ] **B2-2** 패링 → 노출·머리 내림·눈 혼절 — `parryOutcome expose`, 눈 66 → staggered, 임시 parriesToStagger 제거. `BH_NECK_DOWN`·neck 피벗(visual.neck)·chargeCrouch 를 표의 charge 눈 (0,1.1,−1.95)/head_down 눈 (0,0.9,−1.9) 에 맞춰 재조정(구체만 표로 옮기면 내려간 머리 메시와 떨어진다), `debug/behemoth` 스크린샷(head_down)
 - [ ] **B2-3** 관절 파열·낫 잠김·절뚝·완벽 회피
