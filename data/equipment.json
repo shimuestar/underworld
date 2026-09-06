@@ -1,6 +1,7 @@
 {
   "_comment": "장비 (2026-09-04 사용자 기획, A안). 7칸: head 투구 · body 갑옷 · feet 부츠 · ring 반지×2(ring1/ring2) · neck 목걸이 · pack 짐칸(벨트 또는 가방, 하나만). 효과는 규칙 수정 위주 — *Mul 은 곱, perfectBandBonus·bagSlots·shopDiscount 는 더한다(core/Modifiers). 각인과 달리 오염이 없다. 가방 칸 = items.cols×rows(5×3=15) + pack 의 bagSlots. 벨트는 칸을 조금 늘리고 물약을 빨리 마시게(itemChannelMul), 가방은 칸을 많이 늘리되 큰 것은 무겁다(moveSpeedMul)",
   "_effectKeys": "damageTakenMul(받는 피해) trapDamageMul(함정 피해, 추가 곱) moveSpeedMul sprintDrainMul(질주 스태미나) dodgeDistanceMul manaRegenMul goldMul perfectBandBonus(m, 완벽 패링 대역) stunMul(플레이어 경직) shopDiscount(0~1) itemChannelMul(마시는 시간) potionHealMul bagSlots",
+  "_uniqueNote": "unique: true 인 장비는 무작위 풀(처치 주머니 Loot.rollLoot·보물상자 Chest.rollEquip)에서 빠지고 보스 정의의 equipDrops 로만 나온다(핏 없음 — 확정). sellable: false 면 제단에서 팔 수 없다(Equipment.sellFromBag 거부 + equip_sell_denied). price 0 은 상점가가 없다는 뜻(상점에 진열되지 않는다). 낫뿔 반지(ring_scythe_horn, 거수 B3-6, docs/systems/boss_scythe_behemoth.md §11): 기존 효과 키만 쓴다 — Modifiers 무변경",
   "slotLabels": { "head": "투구", "body": "갑옷", "feet": "부츠", "ring": "반지", "neck": "목걸이", "pack": "짐칸" },
   "items": {
     "helm_leather": { "name": "가죽 투구", "slot": "head", "tier": 1, "color": "#a0785a", "price": 60, "desc": "완벽 패링 대역이 조금 넓다", "effects": { "perfectBandBonus": 0.1 } },
@@ -20,6 +21,7 @@
     "belt_large": { "name": "큰 벨트", "slot": "pack", "packKind": "belt", "tier": 2, "color": "#8a5a30", "price": 140, "desc": "가방 +5칸. 물약을 아주 빨리 마신다", "effects": { "bagSlots": 5, "itemChannelMul": 0.65 } },
     "bag_small": { "name": "작은 가방", "slot": "pack", "packKind": "bag", "tier": 1, "color": "#5a6b3a", "price": 70, "desc": "가방 +5칸", "effects": { "bagSlots": 5 } },
     "bag_medium": { "name": "중간 가방", "slot": "pack", "packKind": "bag", "tier": 2, "color": "#4a6b4a", "price": 110, "desc": "가방 +8칸", "effects": { "bagSlots": 8 } },
-    "bag_large": { "name": "큰 가방", "slot": "pack", "packKind": "bag", "tier": 3, "color": "#3a5a4a", "price": 160, "desc": "가방 +10칸. 무겁다", "effects": { "bagSlots": 10, "moveSpeedMul": 0.97 } }
+    "bag_large": { "name": "큰 가방", "slot": "pack", "packKind": "bag", "tier": 3, "color": "#3a5a4a", "price": 160, "desc": "가방 +10칸. 무겁다", "effects": { "bagSlots": 10, "moveSpeedMul": 0.97 } },
+    "ring_scythe_horn": { "name": "낫뿔 반지", "slot": "ring", "tier": 3, "color": "#d9cfa0", "price": 0, "unique": true, "sellable": false, "desc": "거수의 뿔을 깎아 만든 반지 — 완벽 패링 대역이 넓고 회피가 멀리 간다", "effects": { "perfectBandBonus": 0.12, "dodgeDistanceMul": 1.15 } }
   }
 }

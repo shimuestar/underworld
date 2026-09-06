@@ -87,6 +87,8 @@ export function equipPopup(world: World, equipId: string, where = '', at?: Equip
   const def = equipDef(equipId);
   const lines: string[] = [def.desc];
   for (const [k, v] of Object.entries(def.effects)) lines.push(describeEffect(k, v));
+  // 유일 장비(거수 낫뿔 반지, B3-6) — 보스 처치 주머니에만 나오고 제단에서 팔 수 없다
+  if (def.unique) lines.push(def.sellable === false ? '유일 장비 — 보스만 떨구며 팔 수 없다' : '유일 장비 — 보스만 떨군다');
   // at = 이미 걸친 칸(인형 팝업). 없으면 걸칠 칸 — 빈 칸 먼저, 다 차 있으면 첫 칸과 맞바꾼다
   const target = at ?? slotsFor(def.slot).find((s) => world.equipment[s] === null) ?? slotsFor(def.slot)[0]!;
   const worn = at ? null : world.equipment[target];

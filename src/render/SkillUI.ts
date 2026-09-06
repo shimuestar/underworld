@@ -80,7 +80,7 @@ export class SkillUI {
     const title = document.createElement('div');
     title.textContent =
       (this.altarMode ? '제단 — 스킬' : '스킬') +
-      `  (오염 대기 +${world.corruption.pending} · 확정 ${world.corruption.applied}/${balance.corruption.max})`;
+      `  (오염 대기 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} · 확정 ${world.corruption.applied}/${balance.corruption.max})`; // 정화로 음수면 '−4'(main HUD 와 같은 꼴 — B3-2 잔여 메모 → B3-6)
     title.style.cssText = 'color:#9fe870;margin-bottom:12px;font-size:15px;';
     panel.appendChild(title);
 

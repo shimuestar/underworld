@@ -48,7 +48,7 @@ import * as Door from './systems/Door';
 import * as Lever from './systems/Lever';
 import * as Lantern from './systems/Lantern';
 import * as Loot from './systems/Loot';
-import { enemyDef, healthBarState, resolvePhase } from './core/Entities';
+import { VENT_WEAK_POINT, enemyDef, healthBarState, resolvePhase } from './core/Entities';
 import { ShopUI } from './render/ShopUI';
 import { LootUI } from './render/LootUI';
 import { InventoryUI, quickslotView } from './render/InventoryUI';
@@ -1707,10 +1707,11 @@ events.on('weak_point_hit', (payload) => {
   audio.play('weak_point_hit');
   padRumble('weakPoint');
 });
-// 약점 파열(관절 내구 0) — 무거운 파열음 + 착탄점에서 몸통색 파편(소형). 낫 잠김·비틀거림의 소리·문구는 boss_status rupture 가 낸다
+// 약점 파열(관절 내구 0) — 착탄점에서 몸통색 파편(소형)만. 소리는 다음 틱 boss_status rupture 의 joint_crack 하나다(기획서 §5 표시 열 — 옛 heavy_hit 이중음 제거, B2-3 잔여 메모 → B3-6).
+// 분출공 내구 0 은 파열이 아니라 질식(choke) — 소리·문구는 boss_status choke 가 낸다(파편·파열음 없음, B3-2 잔여 메모 → B3-6)
 events.on('weak_point_broken', (payload) => {
-  const b = payload as { x: number; z: number; enemyType: string };
-  audio.play('heavy_hit', panAt(b.x, b.z));
+  const b = payload as { x: number; z: number; enemyType: string; id: string };
+  if (b.id === VENT_WEAK_POINT) return;
   stage.spawnDeathBurst(b.x, b.z, b.enemyType, 0.4);
 });
 events.on('damage_pop', (payload) => {
@@ -2757,6 +2758,12 @@ events.on('equip_sold', (payload) => {
   audio.play('pickup_gold');
   showReaction(`${equipDef(d.id).name} 을(를) 팔았다 — ◆ +${d.gold} (소지 ◆ ${d.total})`, 2000);
 });
+// 유일 장비(낫뿔 반지, B3-6)는 제단에서 팔 수 없다 — 거부 소리 + 안내만, 가방에 그대로
+events.on('equip_sell_denied', (payload) => {
+  const d = payload as { id: string; reason: string };
+  audio.play('shop_deny');
+  showReaction(`${equipDef(d.id).name} — 유일한 장비는 팔 수 없다`, 2200);
+});
 events.on('equip_denied', (payload) => {
   const d = payload as { id: string; reason: string };
   showReaction(`${equipDef(d.id).name} — 가방을 비워야 한다 (칸이 줄어들어 든 것이 안 들어간다)`, 2600);
@@ -3291,9 +3298,18 @@ events.on('corrosive_tick', (payload) => {
   showDamageTaken((payload as { amount: number }).amount, 'poison');
 });
 events.on('corrosive_ended', () => showReaction('진액이 씻겼다', 1200));
-// 분출공 정화(B3-2, 기획서 §11) — 명중마다 오염 대기가 줄어든다(부착 중 ×2, 전투당 상한). 소리는 weak_point_hit 이 냈다
+// 정화(기획서 §11) — source 'vent': 분출공 명중마다 오염 대기가 줄어든다(부착 중 ×2, 전투당 상한 — 소리는 weak_point_hit 이 냈다, B3-2).
+// 'boss_death'/'boss_execute'(B3-6): 보스가 죽으며 고인 오염이 흩어진다 — 처형으로 마무리했으면 더 크게(−15). 팡파르는 enemy_died 가 낸다
 events.on('corruption_cleansed', (payload) => {
-  const c = payload as { amount: number; total: number };
+  const c = payload as { amount: number; total: number; source: string };
+  if (c.source === 'boss_execute') {
+    showReaction(`처형 마무리 — 고인 오염이 흩어진다: 오염 대기 −${c.amount} (지금 ${world.corruption.pending})`, 3000);
+    return;
+  }
+  if (c.source === 'boss_death') {
+    showReaction(`고인 오염이 흩어진다 — 오염 대기 −${c.amount} (지금 ${world.corruption.pending})`, 3000);
+    return;
+  }
   const cap = balance.corruption.ventCleanseCap;
   showReaction(`분출공 명중 — 오염 대기 −${c.amount} (이번 전투 ${c.total}/${cap})`, 900);
 });

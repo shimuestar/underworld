@@ -1,7 +1,7 @@
 // 플레이어 시선 회전 + WASD 이동. 충돌은 Level.slideMove(축 분리 스윕 AABB).
 
 import { balance } from '../core/Balance';
-import { enemyDef } from '../core/Entities';
+import { enemyDef, weakPointOpen, weakPointRadius, weakPointWorldPos } from '../core/Entities';
 import { spendStamina, type EnemyState, type World } from '../core/World';
 
 /** 질주 보폭 카운터 — 뛰는 동안만 차고, 멈추면 리셋된다 */
@@ -55,33 +55,48 @@ function switchLockTarget(
   return best ? best.e : null;
 }
 
+/** 에임 어시스트 후보 하나 — 몸 실루엣(weakPointId 없음) 또는 노출 중인 약점 구체(weakPointId, B3-6) */
+export interface AimAssistTarget {
+  enemyId: number;
+  /** 약점 구체 후보면 그 약점 id(거수 눈·관절·심장·분출공 — 노출 중인 것만). 몸 실루엣 후보는 없다 */
+  weakPointId?: string;
+  offYaw: number;
+  offPitch: number;
+  off: number;
+  /** 조준점에서 실루엣(또는 키운 약점 구체) 가장자리까지 — 이미 그 위면 0 */
+  edgeOff: number;
+  angRadius: number;
+  pullYaw: number;
+  pullPitch: number;
+}
+
 /** 에임 어시스트 표적 — 조준점에서 각도상 가장 가까운 적 (사거리·시야선 안).
  *  죽은 척 구울만 제외(시체처럼 보여야 한다) — 천장 거머리는 눈에 보이는 표적이라
  *  잠복 중에도 어시스트가 걸린다 (2026-09-01 사용자 지시. 높이는 jumpY 가 안다).
  *  각크기(atan(반지름/거리))를 원뿔에 더해 가까운 적일수록 후하게 잡는다.
  *  pullYaw/pullPitch 는 몸 실루엣 '가장자리'까지의 끌림 — 조준점이 이미 몸 위에
  *  있으면 0 이다. 자석은 붙을 때까지만 돕고, 몸 안에서 머리/몸통을 고르는 건
- *  플레이어 몫이어야 한다 (덩치 큰 적 헤드샷이 중심 끌림과 싸우던 문제) */
+ *  플레이어 몫이어야 한다 (덩치 큰 적 헤드샷이 중심 끌림과 싸우던 문제).
+ *  약점 구체(거수 B3-6, 기획서 §4.2 결정 24): 노출 중인(판정이 있는 — Entities.weakPointOpen) 약점 구체를 몸 실루엣과 함께 후보에 넣는다.
+ *  각반지름은 실제 판정 반지름(weakPointRadius) × aimAssist.weakPointRadiusMul — 작은 구체를 조금 후하게, 자석은 그 (키운) 구체 가장자리까지만.
+ *  조준점에 각도상 더 가까운 쪽(몸 중심 vs 구체 중심)이 이긴다 — 구체 근처를 겨누면 구체로, 멀면 몸 실루엣으로. 배율 0 이면 끔(몸만) */
 export function padAimAssist(
   world: World,
   coneDeg?: number, // 기본은 aimAssist.coneDeg — 겨누기 시작 스냅은 자기 원뿔(snap.coneDeg)로 찾는다
   byEdge = false, // true: 몸통 중심이 아니라 실루엣 '가장자리'까지의 각거리(edgeOff)로 거르고 고른다 — 십자에 걸린 적만
-): {
-  enemyId: number;
-  offYaw: number;
-  offPitch: number;
-  off: number;
-  /** 조준점에서 실루엣 가장자리까지 — 이미 몸 위면 0 */
-  edgeOff: number;
-  angRadius: number;
-  pullYaw: number;
-  pullPitch: number;
-} | null {
+): AimAssistTarget | null {
   const aa = balance.input.gamepad.aimAssist;
   const cone = ((coneDeg ?? aa.coneDeg) * Math.PI) / 180;
   const p = world.player;
   const eyeY = p.y + balance.player.eyeHeight;
-  let best: ReturnType<typeof padAimAssist> = null;
+  const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a)); // -π..π 로 감는다
+  // 몸: 중심 기준(마찰·자석)은 원뿔에 각반지름을 더해 가까운 적일수록 후하게, 가장자리 기준(스냅)은 원뿔 그대로.
+  // 약점 구체: 언제나 (키운) 구체 가장자리까지의 각거리 — 몸 중심과 겨루면 구체가 그 반지름만큼 이긴다("작은 구체를 조금 후하게"):
+  // 구체 가장자리 안팎 가까이를 겨누면 구체가, 몸 가운데 쪽을 겨누면 몸이 후보다. 원뿔 안 여부도 같은 자로
+  const measure = (c: AimAssistTarget): number => (c.weakPointId !== undefined || byEdge ? c.edgeOff : c.off);
+  const inCone = (c: AimAssistTarget): boolean => measure(c) <= (c.weakPointId !== undefined || byEdge ? cone : cone + c.angRadius);
+  const weakMul = aa.weakPointRadiusMul ?? 0;
+  let best: AimAssistTarget | null = null;
   for (const e of world.enemies) {
     if (!e.alive || e.feigning) continue;
     const dx = e.x - p.x;
@@ -89,8 +104,7 @@ export function padAimAssist(
     const dist = Math.hypot(dx, dz);
     if (dist < 1 || dist > aa.range) continue;
     const def = enemyDef(e.type);
-    let offYaw = Math.atan2(-dx, -dz) - p.yaw;
-    offYaw = Math.atan2(Math.sin(offYaw), Math.cos(offYaw)); // -π..π 로 감는다
+    const offYaw = wrap(Math.atan2(-dx, -dz) - p.yaw);
     const targetY = (e.jumpY ?? 0) + def.height * 0.55;
     const offPitch = Math.atan2(targetY - eyeY, dist) - p.pitch;
     const off = Math.hypot(offYaw, offPitch);
@@ -103,12 +117,36 @@ export function padAimAssist(
     const halfW = Math.atan2(def.radius * 0.9, dist);
     const pullYaw = Math.abs(offYaw) <= halfW ? 0 : offYaw - Math.sign(offYaw) * halfW;
     const edgeOff = Math.hypot(pullYaw, pullPitch);
-    // 중심 기준(마찰·자석)은 원뿔에 각반지름을 더해 가까운 적일수록 후하게, 가장자리 기준(스냅)은 원뿔 그대로
-    const measure = byEdge ? edgeOff : off;
-    if (measure > (byEdge ? cone : cone + angRadius)) continue;
+    const cands: AimAssistTarget[] = [];
+    const body: AimAssistTarget = { enemyId: e.id, offYaw, offPitch, off, edgeOff, angRadius, pullYaw, pullPitch };
+    if (inCone(body)) cands.push(body);
+    // 약점 구체 후보 — 노출 중인 것만(닫힌 구체는 판정도 없으니 보조도 없다). 판정 반지름 × weakPointRadiusMul 을 각반지름으로
+    if (weakMul > 0 && def.weakPoints) {
+      for (const wp of def.weakPoints) {
+        if (!weakPointOpen(e, wp)) continue;
+        const c = weakPointWorldPos(e, def, wp);
+        const wdx = c.x - p.x;
+        const wdz = c.z - p.z;
+        const wdist = Math.hypot(wdx, wdz);
+        if (wdist < 1) continue;
+        const wYaw = wrap(Math.atan2(-wdx, -wdz) - p.yaw);
+        const wPitch = Math.atan2(c.y - eyeY, wdist) - p.pitch;
+        const wOff = Math.hypot(wYaw, wPitch);
+        const wAng = Math.atan2(weakPointRadius(e, wp) * weakMul, Math.hypot(wdist, c.y - eyeY));
+        // 자석은 (키운) 구체 가장자리까지만 — 이미 구체 위면 0 (몸 안에서 머리/몸통을 고르는 규약 그대로)
+        const k = wOff <= wAng ? 0 : (wOff - wAng) / wOff;
+        const cand: AimAssistTarget = {
+          enemyId: e.id, weakPointId: wp.id, offYaw: wYaw, offPitch: wPitch, off: wOff,
+          edgeOff: Math.max(0, wOff - wAng), angRadius: wAng, pullYaw: wYaw * k, pullPitch: wPitch * k,
+        };
+        if (inCone(cand)) cands.push(cand);
+      }
+    }
+    if (cands.length === 0) continue;
     if (!world.level.hasLineOfSight(p.x, p.z, e.x, e.z)) continue;
-    if (best && measure >= (byEdge ? best.edgeOff : best.off)) continue;
-    best = { enemyId: e.id, offYaw, offPitch, off, edgeOff, angRadius, pullYaw, pullPitch };
+    for (const c of cands) {
+      if (!best || measure(c) < measure(best)) best = c;
+    }
   }
   return best;
 }
@@ -257,7 +295,7 @@ export function tick(world: World, dt: number): void {
       p.aimSnapYaw = target.offYaw * scale;
       p.aimSnapPitch = target.pullPitch * scale;
       p.aimSnapTicks = Math.max(1, snap.ticks);
-      world.events.emit('aim_snapped', { enemyId: target.enemyId, deg: (off * scale * 180) / Math.PI });
+      world.events.emit('aim_snapped', { enemyId: target.enemyId, weakPointId: target.weakPointId, deg: (off * scale * 180) / Math.PI });
     }
   }
   p.padAimingPrev = input.padAiming;

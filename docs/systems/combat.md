@@ -274,6 +274,8 @@ gap ≤ parrySpace.guardDepth  → 일반    (가드 안까지 들어옴)
 > 후딜 → 다시 패링 3연속뿐이다. 되살리려면 git 이력의 `armoredAttack`·`armorHealth`·
 > `phases` 와 `Enemies.staggered` 의 전환 블록, `Stage.armorPlates` 를 참조.
 
+> **4층 보스 「낫뿔 거수」(`scythe_behemoth`, 2026-09-04 ~ 09-07)** 는 다른 문법이다 — 패링(완벽·일반 둘 다)이 스태거가 아니라 **약점을 열고**, 혼절은 **눈 약점 누적 66** 으로만 온다(`parryOutcome 'expose'`, 약점 구체 5·보스 상태 12·플레이어 상태 5·3페이즈·아레나 봉쇄·유일 반지·오염 정화). 구현 스펙 전체는 `docs/systems/boss_scythe_behemoth.md`.
+
 ## 3.1 족장 거리별 행동
 
 거리에 따라 셋 중 하나를 고른다 — 멀면 던지고, 중거리면 달려들고, 붙으면 해머다.

@@ -1844,12 +1844,20 @@ function trySlam(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDe
 
 /** 페이즈 전환을 미뤄야 하는 창(기획서 §8 큐잉) — 혼절(처형 창)·포즈 타이머(머리 내림·미끄러짐·전환 자체)·눈멂 질주·넉백(처형 넉백) 중.
  *  플레이어의 처형·노출 창을 빼앗지 않는다. 그 밖(추격·예고·타격·경직)이면 즉시 전환하고 진행 중 공격은 취소된다 */
-function phaseShiftBlocked(enemy: EnemyState): boolean {
-  return enemy.ai === 'staggered' || (enemy.poseTicks ?? 0) > 0 || enemy.blind === true || (enemy.kbTicks ?? 0) > 0;
+function phaseShiftBlocked(enemy: EnemyState, def: ReturnType<typeof enemyDef>): boolean {
+  if (enemy.ai === 'staggered' || (enemy.poseTicks ?? 0) > 0 || enemy.blind === true || (enemy.kbTicks ?? 0) > 0) return true;
+  // 관절 타이머 노출(일반 패링 36·삼연낫 30/60 — 낫 짝이 있는 약점만, B2-6 잔여 메모 → B3-6): 방금 얻은 패링 보상을 전환이 exposure_closed 로 빼앗지 않게 그 창도 막는다.
+  // 돌격 중 눈·갑각 떨기 중 분출공의 되살리는 타이머(VENT_OPEN_REFRESH 문)는 관절이 아니라 여기 들지 않는다 — 질주·연사 중 전환(공격 취소)은 그대로
+  if (enemy.exposure && def.weakPoints) {
+    for (const wp of def.weakPoints) {
+      if (bladeOfJoint(def, wp.id) !== undefined && (enemy.exposure[wp.id] ?? 0) > 0) return true;
+    }
+  }
+  return false;
 }
 
 /** 페이즈 훅(B2-6, 기획서 §8) — 매 틱 healthBarState.index 를 enemy.phase(게임플레이 페이즈)와 비교한다. 낮아졌으면(칸이 비었으면) 목표 index 를
- *  phaseTarget 에 두고, 막는 창이 아니면 그 틱에 beginPhaseShift. 창 안에서 두 경계를 넘으면 목표만 더 낮아져 한 번의 전환으로 P3 까지 간다.
+ *  phaseTarget 에 두고, 막는 창(staggered·포즈 타이머·blind·넉백 + 관절 타이머 노출 — B3-6)이 아니면 그 틱에 beginPhaseShift. 창 안에서 두 경계를 넘으면 목표만 더 낮아져 한 번의 전환으로 P3 까지 간다.
  *  페이즈 표가 없는 적(족장·어미 슬라임 — 체력 칸은 표시만)은 아무것도 하지 않는다. 잠든 보스는 깨어난 뒤부터(phaseSince 도 그때 찍는다) */
 function tickPhase(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
   if (!def.phases || enemy.ai === 'idle') return;
@@ -1861,7 +1869,7 @@ function tickPhase(world: World, enemy: EnemyState, def: ReturnType<typeof enemy
     enemy.phaseTarget = undefined;
     return;
   }
-  if (phaseShiftBlocked(enemy)) return;
+  if (phaseShiftBlocked(enemy, def)) return;
   beginPhaseShift(world, enemy, def, enemy.phaseTarget);
 }
 

@@ -17,6 +17,10 @@ export interface EquipDef {
   price: number;
   desc: string;
   effects: Record<string, number>;
+  /** 유일 장비(거수 B3-6) — 무작위 풀(처치 주머니·보물상자)에서 빠지고 보스 정의의 equipDrops 로만 나온다 */
+  unique?: boolean;
+  /** false 면 제단에서 팔 수 없다(Equipment.sellFromBag 거부). 없으면 판다 */
+  sellable?: boolean;
 }
 
 export function equipDef(id: string): EquipDef {
@@ -27,6 +31,16 @@ export function equipDef(id: string): EquipDef {
 
 export function allEquipIds(): string[] {
   return Object.keys(equipmentJson.items);
+}
+
+/** 무작위로 뽑을 수 있는 장비 — 유일 장비(unique)는 뺀다. Loot.rollLoot(처치 주머니)·Chest.rollEquip(보물상자) 두 풀이 이걸 쓴다 */
+export function randomEquipIds(): string[] {
+  return allEquipIds().filter((id) => equipDef(id).unique !== true);
+}
+
+/** 제단에서 팔 수 있는가 — sellable: false(유일 장비)만 아니다 */
+export function equipSellable(id: string): boolean {
+  return equipDef(id).sellable !== false;
 }
 
 /** Three.js·CSS 양쪽에서 쓰게 숫자로 (sigilColor 와 같은 규약) */

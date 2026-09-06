@@ -30,15 +30,23 @@ export interface MetricsSnapshot {
     lifeMotesExpired: number;
   };
   kills: { weapon: number; execution: number; spell: number; friendlyFire: number; total: number };
-  /** 약점(거수) — 명중 수 / 약점 피해 합 / 파열 수 / 닫힌 노출 창 수와 그 안의 명중 합(노출 활용률 = hits/closed) / 혼절 수 /
+  /** 약점(거수) — 명중 수 / 약점 피해 합 / 파열 수(관절만 — 분출공 내구 0 은 질식 hazards.chokes, B3-6) / 닫힌 노출 창 수와 그 안의 명중 합(노출 활용률 = hits/closed — derived.weakPointExposureUseRatio) / 혼절 수 /
    *  돌격 완벽 회피 수 / 절뚝(양 낫 잠김) 진입 수 / 눈멂 유도 수 / 전도 수 / 기둥 충돌 수 / 역류(심장 66 — 발구르기 취소) 수 (기획서 boss_scythe_behemoth §12) */
   weakPoints: { hits: number; damage: number; broken: number; exposuresClosed: number; exposureHits: number; dazes: number; chargeDodges: number; limps: number; blinds: number; topples: number; pillarHits: number; backflows: number };
   /** 페이즈 보스(거수, B2-6) — 전환 수 / 두 경계를 한 번에 넘은(P2 건너뜀) 수 / 페이즈별 소요 초(체력 칸 index 키 '3'·'2'·'1' — 사망까지 포함, 목표 P1 90s / P2 120s / P3 90s) /
    *  갑각판 파괴 수(P2 heavy 타격, B3-3 — 최대 3)와 그 골드 합(기획서 §12 "갑각판 파괴 수") /
    *  P3 기술(B3-4): 포효 발동 수·위압에 걸린 수(boss_roar_hit — 회피로 피한 비율 = 1 − roarHits/roars) / 삼연낫 시작 수·탈진 수(3연속 완벽 — 숙련 지표) / 광란 돌격 선회 수(첫 질주를 완벽 회피하지 못한 수) */
-  boss: { phaseShifts: number; phaseSkips: number; phaseSeconds: Record<string, number>; platesBroken: number; plateGold: number; roars: number; roarHits: number; combos: number; exhausts: number; chainTurns: number };
+  boss: {
+    phaseShifts: number; phaseSkips: number; phaseSeconds: Record<string, number>; platesBroken: number; plateGold: number; roars: number; roarHits: number; combos: number; exhausts: number; chainTurns: number;
+    /** 보스 처치 수(enemy_died — def.boss, 소환수 제외)와 그중 처형으로 마무리한 수(execution — 기획서 §12 "처형 마무리 여부"), 보스 사망·처형 정화가 오염 대기에서 깎은 합(§11 −10/−15 — 분출공 정화 hazards.ventCleanse 와 별개, B3-6) */
+    kills: number; executeFinishes: number; cleansed: number;
+    /** 보스 상태이상 부여 횟수 — boss_status{kind, on true} 를 kind 별로(12종: expose·head_down·daze·rupture·limp·skid·blind·topple·backflow·choke·exhaust·molt + rear·roar 자세, §12 "상태이상 부여 횟수") */
+    statusOn: Record<string, number>;
+    /** 플레이어 상태이상 부여 횟수 — ${kind}_applied 를 kind 별로(numb_arm·concussion·hobble·corrosive·cowed; 팔 저림 = 막기 = 튜토리얼 미이해 신호) */
+    playerStatus: Record<string, number>;
+  };
   /** 진액 웅덩이·오염 진액·분출공(거수 P2+, B3-2) — 생긴 웅덩이 수 / 자연 소멸이 아닌 증발 수(불·질식·상한) / 오염 진액이 붙은 횟수 / 오염 진액 도트 피해 합 /
-   *  오염 진액이 오염 대기에 더한 양 / 분출공 명중이 오염 대기에서 깎은 양(정화) / 질식 수. 순 오염 변화 = pendingIn − ventCleanse (기획서 §11.1 장부) */
+   *  오염 진액이 오염 대기에 더한 양 / 분출공 명중이 오염 대기에서 깎은 양(정화 — source 'vent' 만) / 질식 수. 순 오염 변화 = pendingIn − ventCleanse − boss.cleansed (기획서 §11.1 장부) */
   hazards: { pools: number; evaporated: number; corrosiveApplied: number; corrosiveDamage: number; pendingIn: number; ventCleanse: number; chokes: number };
   /** 보스 아레나(거수 4층, B3-5) — 봉쇄 수(입장·재입장) / 기둥 붕괴 수(기획서 §12 "기둥 붕괴 수") / 반캠핑 자발 돌격 수(숨기 플레이 신호) / 반캠핑 접근 가속 수(원거리 캠핑 신호) / 폭발로 치운 잔해 수 */
   arena: { seals: number; pillarCollapses: number; anticampCharges: number; anticampFar: number; rubbleBroken: number };
@@ -62,6 +70,8 @@ export interface MetricsSnapshot {
     manaWasteRatio: number | null;
     chainTier3ReachRatio: number | null;
     shotAccuracy: number | null;
+    /** 약점 노출 활용률 = 닫힌 노출 창 안의 명중 합 / 닫힌 창 수(거수 §12 — 0 에 가까우면 열린 약점을 못 쏘고 있다) */
+    weakPointExposureUseRatio: number | null;
   };
   targets: typeof balance.metrics.targets;
 }
@@ -110,6 +120,11 @@ export class Metrics {
   private combos = 0;
   private exhausts = 0;
   private chainTurns = 0;
+  private bossKills = 0;
+  private bossExecuteFinishes = 0;
+  private bossCleansed = 0;
+  private bossStatusOn: Record<string, number> = {};
+  private playerStatusApplied: Record<string, number> = {};
   private poolsSpawned = 0;
   private poolsEvaporated = 0;
   private corrosiveApplied = 0;
@@ -178,7 +193,10 @@ export class Metrics {
       this.weakPointHits++;
       this.weakPointDamage += (payload as { damage: number }).damage;
     });
-    events.on('weak_point_broken', () => this.weakPointsBroken++);
+    // 파열은 관절만 — 분출공(vent) 내구 0 은 질식(boss_status choke → hazards.chokes)이라 섞지 않는다(B3-2 잔여 메모 → B3-6)
+    events.on('weak_point_broken', (payload) => {
+      if ((payload as { id: string }).id !== 'vent') this.weakPointsBroken++;
+    });
     events.on('exposure_closed', (payload) => {
       this.exposuresClosed++;
       this.exposureHits += (payload as { hits: number }).hits;
@@ -190,6 +208,7 @@ export class Metrics {
     events.on('boss_status', (payload) => {
       const st = payload as { kind: string; on: boolean };
       if (!st.on) return;
+      this.bossStatusOn[st.kind] = (this.bossStatusOn[st.kind] ?? 0) + 1; // 상태이상 부여 횟수(§12) — 12종 + 자세(rear·roar) 전부 kind 별로
       if (st.kind === 'limp') this.limps++;
       else if (st.kind === 'blind') this.blinds++;
       else if (st.kind === 'topple') this.topples++;
@@ -225,7 +244,22 @@ export class Metrics {
       this.lastDamageWasTrap = false;
     });
     events.on('corrosive_pending', (payload) => { this.corrosivePendingIn += (payload as { amount: number }).amount; });
-    events.on('corruption_cleansed', (payload) => { this.ventCleanse += (payload as { amount: number }).amount; });
+    // 정화 — 분출공(source 'vent')은 hazards.ventCleanse, 보스 사망·처형(boss_death·boss_execute, B3-6)은 boss.cleansed
+    events.on('corruption_cleansed', (payload) => {
+      const c = payload as { amount: number; source?: string };
+      if (c.source === 'boss_death' || c.source === 'boss_execute') this.bossCleansed += c.amount;
+      else this.ventCleanse += c.amount;
+    });
+    // 보스 처치·처형 마무리(B3-6) — def.boss 는 시스템이 알지만 Metrics 는 데이터를 읽지 않는다: enemy_died 의 boss 플래그 대신 boss_phase{phase 0, death} 가 페이즈 보스의 사망을,
+    // enemy_died{execution} 가 마무리 방식을 알린다. 처치 수는 사망 boss_phase 로(페이즈 없는 족장은 kills.execution/weapon 에 이미 있다)
+    events.on('enemy_died', (payload) => {
+      const d = payload as { execution?: boolean; noLoot?: boolean; boss?: boolean };
+      if (d.execution && d.boss) this.bossExecuteFinishes++;
+    });
+    // 플레이어 상태이상 부여(5종 × _applied) — 팔 저림·진탕·절뚝·오염 진액·위압
+    for (const kind of ['numb_arm', 'concussion', 'hobble', 'corrosive', 'cowed'] as const) {
+      events.on(`${kind}_applied`, () => { this.playerStatusApplied[kind] = (this.playerStatusApplied[kind] ?? 0) + 1; });
+    }
     // 페이즈 전환(거수) — from 페이즈에 머문 틱을 쌓는다. phase 0 은 사망(마지막 페이즈 마감)이라 전환으로 세지 않는다
     events.on('boss_phase', (payload) => {
       const ph = payload as { phase: number; from: number; fromTicks: number; skipped?: boolean };
@@ -234,6 +268,8 @@ export class Metrics {
       if (ph.phase > 0) {
         this.bossPhaseShifts++;
         if (ph.skipped) this.bossPhaseSkips++;
+      } else {
+        this.bossKills++; // 사망 마감(phase 0) = 페이즈 보스 처치 한 번
       }
     });
     // 갑각판 파괴(거수 P2, B3-3) — 장수와 골드 합. 탈락(plate_shed)은 골드가 없어 세지 않는다
@@ -382,6 +418,11 @@ export class Metrics {
         combos: this.combos,
         exhausts: this.exhausts,
         chainTurns: this.chainTurns,
+        kills: this.bossKills,
+        executeFinishes: this.bossExecuteFinishes,
+        cleansed: this.bossCleansed,
+        statusOn: { ...this.bossStatusOn },
+        playerStatus: { ...this.playerStatusApplied },
       },
       arena: {
         seals: this.arenaSeals,
@@ -440,6 +481,7 @@ export class Metrics {
         manaWasteRatio: round2(ratio(this.manaDecayed, this.manaGained)),
         chainTier3ReachRatio: round2(ratio(this.tier3Encounters, this.encounters)),
         shotAccuracy: round2(ratio(this.shotsHit, this.shotsFired)),
+        weakPointExposureUseRatio: round2(ratio(this.exposureHits, this.exposuresClosed)),
       },
       targets: balance.metrics.targets,
     };

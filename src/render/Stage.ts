@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { equipColor } from '../core/EquipData';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
-import { bladeLocked, bladeOfJoint, currentAttack, enemyDef, headDownPose, healthBarState, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, type EnemyDef, type ResolvedPhase } from '../core/Entities';
+import { bladeLocked, bladeOfJoint, currentAttack, enemyDef, headDownPose, healthBarState, jointOfBlade, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, weakPointScaleMul, type EnemyDef, type ResolvedPhase, type WeakPointDef } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, COLOR_PILLAR, DOOR_OPEN_HEIGHT, DOOR_OPEN_WIDTH, STAIR_STONE } from '../level/GridLoader';
 import type {
@@ -1024,8 +1024,7 @@ function behemothWeakColors(id: string): { base: number; open: number } {
 /** 약점 구체 연출 상수(시각값) — 열림 맥동 ±12%(기획서 §2)·주기, 명중 플래시 길이·세기, 열림 발광 세기 */
 const BH_WEAK_PULSE_AMP = 0.12;
 const BH_WEAK_PULSE_MS = 640;
-/** 분출공이 열렸을 때(갑각 떨기 예고·시전, 탈진) 구체 크기 배율(기획서 §2 "크기 ×1.4") — 맥동은 이 위에 곱한다. 판정 반지름은 그대로(그림만 커진다 — 표적 강조) */
-export const BH_VENT_OPEN_SCALE = 1.4;
+/** 분출공 열림 크기 ×1.4 는 데이터(entities weakPoints[vent].openRadiusMul — 판정 Entities.weakPointRadius 와 같은 값, B3-6)다 — 옛 Stage 상수 BH_VENT_OPEN_SCALE 폐지(그림만 키워 판정 r0.30 과 40% 어긋났다) */
 /** 부서진 등갑판 자리의 실금(B3-3) — 판이 사라진 몸 윗면으로 내려와 이만큼 넓게 벌어진다("판 밑 균열이 커져"). 분출공 크기는 로직의 ventScale(판정 = 그림) */
 export const BH_CRACK_GROW = 4;
 /** 갑각 떨기 예고·시전 중 등갑판 덜그럭 — 판마다 위상이 다른 잘게 떠는 굴림(rad)·들썩(m)·주기(ms). 튜닝값 아님(연출) */
@@ -1139,6 +1138,9 @@ const BH_LEG_SWING = 0.32; // 걸음 진폭
 const BH_PAW_SCRAPE = 0.3; // 돌격 예고 앞발 긁기 진폭
 // 머리 내림(돌격 예고·질주, head_down, stunned …)은 손 각이 아니라 목 IK — 약점 표(poseOffsets)의 눈 자리에 머리 메시의 눈을 맞춘다
 // (poseBehemothRig.solveNeckToEye). 보이는 눈 = 판정 구체. 들이받기만 손 각(BH_NECK_BACK/BUTT)이다
+/** 어깨 피벗(관절 메시)을 poseOffsets 표의 관절 자리로 옮기는 표 자세 — 포효(B3-4)에 쓴 방식을 머리 내림·탈진·혼절에도(B3-6 — head_down·exhaust 는 몸통 기울임이
+ *  어깨를 앞아래로 0.44m 보내 열린 관절 구체가 메시에서 떨어져 보였다). 나머지 자세(charge·rear·skid·blind)는 어깨가 몸통을 따라간다(관절이 닫혀 있거나 skid 는 굴림 보정으로 ≤ 0.2) */
+const BH_SHOULDER_ALIGN_POSES: ReadonlySet<string> = new Set(['roar', 'head_down', 'exhaust', 'stunned']);
 const BH_ARM_STUCK = -0.12; // head_down — 박힌 낫의 위팔 월드 각(수평 조금 아래). 낫은 곧게 바닥까지
 const BH_ARM_STUCK_YAW = 0.35; // 박힌 낫은 안쪽으로 휩쓴 채 — 플레이어 앞 바닥에 꽂혀 있다
 const BH_STUN_SWAY = 0.12; // 혼절 — 목이 좌우로 휘청이는 각
@@ -1622,11 +1624,13 @@ export function behemothEyeDimmed(enemy: Pick<EnemyState, 'dazeCooldown' | 'ai' 
   return true;
 }
 
-/** 약점 구체의 크기 배율 — 분출공(vent)은 갑각판이 부서진 만큼(ventScale — 로직 enemy.ventScale, 판정 Entities.weakPointRadius 와 같은 값, B3-3) 늘 크고,
- *  열리면 그 위에 ×BH_VENT_OPEN_SCALE(갑각 떨기 예고·시전·탈진, 기획서 §2 — 그림만). 다른 약점은 1. syncEnemies·debug/behemoth 가 같은 규칙 */
-export function behemothWeakScaleMul(id: string, open: boolean, ventScale = 1): number {
-  if (id !== 'vent') return 1;
-  return ventScale * (open ? BH_VENT_OPEN_SCALE : 1);
+/** 약점 구체의 크기 배율 — 판정(Entities.weakPointRadius)과 같은 함수(weakPointScaleMul)를 읽는다: 분출공(vent)은 갑각판이 부서진 만큼(ventScale — 로직 enemy.ventScale, B3-3) 늘 크고,
+ *  열리면 그 위에 ×wp.openRadiusMul(데이터 — 분출공 1.4, B3-6). 다른 약점은 1(정의에 배율이 없다). wps 는 그 적의 weakPoints 정의 — syncEnemies·debug/behemoth·테스트가 넘긴다.
+ *  "보이는 크기 = 맞는 크기": 이 함수와 판정이 다른 값을 읽는 순간 규약이 깨진다 */
+export function behemothWeakScaleMul(id: string, open: boolean, ventScale: number, wps: readonly WeakPointDef[] | undefined): number {
+  const wp = wps?.find((w) => w.id === id);
+  if (!wp) return 1;
+  return weakPointScaleMul({ ventScale }, wp, open);
 }
 
 export function styleBehemothWeakPoints(
@@ -1804,6 +1808,23 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     let shoulderLift = 0; // 어깨 들림(m, torso 축) — 포효에 관절이 솟는다
     let yaw = 0; // 세운 축 회전(rad) — + 면 낫끝이 몸 가운데 쪽으로 (side 로 부호를 준다)
     let direct = false;
+    // 어깨 피벗 정렬(BH_SHOULDER_ALIGN_POSES — 포효 B3-4, 머리 내림·탈진·혼절 B3-6) — 표 자세에서 어깨 피벗을 poseOffsets 표의 관절 자리로 옮겨
+    // 관절 메시 = 구체(어긋남 0). group 좌표 표를 torso 로컬로 벗겨 넣는다. 낫끝 풀이(elbowY)는 옮긴 어깨(shoulderYAligned)에서 잰다 — 어깨를 되올린 만큼 낫끝이 뜨지 않게
+    const alignK = tablePose !== undefined && BH_SHOULDER_ALIGN_POSES.has(tablePose) ? blend : 0;
+    if (alignK > 0) {
+      const jointId = jointOfBlade(rig.def, arm.side === 1 ? 'r' : 'l');
+      const jointWp = rig.def.weakPoints?.find((wp) => wp.id === jointId);
+      if (jointWp) {
+        const t = weakPointOffset(rig.def, jointWp, tablePose);
+        const gy = t.y - torso.position.y;
+        const gz = t.z - lunge;
+        const ty = gy * Math.cos(lean) + gz * Math.sin(lean);
+        const tz = -gy * Math.sin(lean) + gz * Math.cos(lean);
+        shoulderLift = (ty - syRest) * alignK;
+        shoulderShift = (szRest - tz) * alignK;
+      }
+    }
+    const shoulderYAligned = shoulderY + shoulderLift * Math.cos(lean) + shoulderShift * Math.sin(lean);
     /** 위팔 각·휩쓸기 각이 정해진 뒤, 낫끝의 앞 거리가 tipDist 에 오도록 낫 각을 푼다.
      *  휩쓸기(yaw)는 팔 전체의 앞 성분을 cos 배로 줄이므로 세로면에서는 그만큼 더 뻗어야 한다.
      *  위팔+낫으로도 못 닿으면 낫을 수평으로 두고 어깨를 민다 */
@@ -1833,7 +1854,7 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
       // 걸을 때 끌리는 낫이 조금 흔들린다. 공격·예고·튕김보다 먼저 — 이 팔은 무기가 아니다
       armTarget = BH_ARM_LOCKED - lean;
       yaw = BH_ARM_LOCKED_YAW + Math.sin(p.legPhase) * BH_LOCKED_DRAG * p.legBlend;
-      const elbowY = shoulderY + rig.dims.upperArm * Math.sin(BH_ARM_LOCKED);
+      const elbowY = shoulderYAligned + rig.dims.upperArm * Math.sin(BH_ARM_LOCKED);
       // 몸통 굴림(절뚝·미끄러짐)은 바깥으로 벌어진 낫끝(옆으로 2m 남짓)을 그만큼 더 내리니 그 몫을 띄운다 — 바닥을 뚫지 않게
       const rollDrop = Math.abs(Math.sin(roll)) * (shoulderX + (rig.dims.upperArm + rig.dims.blade) * Math.abs(Math.sin(yaw)));
       bladeWorld = -Math.asin(Math.max(-1, Math.min(1, (elbowY - (BH_LOCKED_TIP_Y + rollDrop)) / rig.dims.blade)));
@@ -1846,7 +1867,7 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
       // 탈진(B3-4) — 삼연낫 3연속 완벽 패링에 양낫이 다 바닥에 박혔다(머리 내림의 박힌 낫 자세를 두 팔에). 헐떡임은 syncEnemies 의 몸통 잔떨림
       armTarget = BH_ARM_STUCK - lean;
       yaw = BH_ARM_STUCK_YAW;
-      const elbowY = shoulderY + rig.dims.upperArm * Math.sin(BH_ARM_STUCK);
+      const elbowY = shoulderYAligned + rig.dims.upperArm * Math.sin(BH_ARM_STUCK);
       bladeWorld = -Math.asin(Math.max(-1, Math.min(1, (elbowY - BH_TIP_MIN_Y) / rig.dims.blade)));
     } else if (rearing > 0.01) {
       // 앞발 들기(B3-1) — 어깨가 2.9m 로 솟으니 두 낫을 앞아래로 낮게 뻗는다(월드 각 고정, 살짝 바깥). 낫끝은 바닥 위(≈0.9m)
@@ -1855,20 +1876,10 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
       bladeWorld = BH_BLADE_REST + (BH_BLADE_REAR - BH_BLADE_REST) * rearing;
     } else if (roarK > 0.01) {
       // 포효(페이즈 전환·포효 예고) — 두 낫을 바깥으로 벌려 들고 부르르 떤다. 높이는 예고(BH_ARM_WINDUP)만큼이라 천장을 못 뚫는다.
-      // 어깨(관절)가 솟는다 — 어깨 피벗을 표(poseOffsets.roar 의 관절 자리)로 옮겨 관절 메시 = 구체(B2-6 검토 0.31m 어긋남 → 0). group 좌표 표를 torso 로컬로 벗겨 넣는다
+      // 어깨(관절)가 솟는다 — 어깨 피벗 정렬(위 공용 블록)이 표(poseOffsets.roar 의 관절 자리)로 옮겨 관절 메시 = 구체(B2-6 검토 0.31m 어긋남 → 0)
       armTarget = BH_ARM_REST + (BH_ARM_ROAR - BH_ARM_REST) * roarK + Math.sin(p.nowMs / 45) * 0.02 * roarK;
       yaw = BH_ARM_ROAR_YAW * roarK;
       bladeWorld = BH_BLADE_REST + (BH_BLADE_ROAR - BH_BLADE_REST) * roarK;
-      const jointWp = rig.def.weakPoints?.find((wp) => wp.id === (arm.side === 1 ? 'joint_r' : 'joint_l'));
-      if (jointWp) {
-        const t = weakPointOffset(rig.def, jointWp, 'roar');
-        const gy = t.y - torso.position.y;
-        const gz = t.z - lunge;
-        const ty = gy * Math.cos(lean) + gz * Math.sin(lean);
-        const tz = -gy * Math.sin(lean) + gz * Math.cos(lean);
-        shoulderLift = (ty - syRest) * roarK;
-        shoulderShift = (szRest - tz) * roarK;
-      }
     } else if (acting && p.bladeStriking) {
       // 타격 — 위팔은 진행도로 내려오고 낫끝은 판정 거리 그대로 (즉시 반영).
       // 안쪽으로 휩쓸어 끝에서 낫끝이 몸 가운데 선(플레이어 정면)에 온다 — 호 110° 의 그림
@@ -1878,10 +1889,10 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
       solveBlade(armTarget, p.tipDist);
       direct = true;
     } else if (acting && tablePose === 'head_down' && blend > 0.01) {
-      // 머리 내림 — 완벽 패링에 낫이 바닥에 박혔다. 위팔은 수평 조금 아래로 앞에, 낫은 곧게 내려 끝이 바닥(BH_TIP_MIN_Y)에 꽂힌다
+      // 머리 내림 — 완벽 패링에 낫이 바닥에 박혔다. 위팔은 수평 조금 아래로 앞에, 낫은 곧게 내려 끝이 바닥(BH_TIP_MIN_Y)에 꽂힌다(어깨는 표 자리로 옮겨져 있다)
       armTarget = BH_ARM_STUCK - lean;
       yaw = BH_ARM_STUCK_YAW;
-      const elbowY = shoulderY + rig.dims.upperArm * Math.sin(BH_ARM_STUCK);
+      const elbowY = shoulderYAligned + rig.dims.upperArm * Math.sin(BH_ARM_STUCK);
       bladeWorld = -Math.asin(Math.max(-1, Math.min(1, (elbowY - BH_TIP_MIN_Y) / rig.dims.blade)));
     } else if (acting && p.recoiled) {
       // 튕김 — 팔이 들리며 바깥으로 벌어지고 낫이 매달린다. 높이는 예고와 같아 천장을 못 뚫는다
@@ -4880,8 +4891,8 @@ export class Stage {
           const open = wp !== undefined && weakPointOpen(enemy, wp);
           // 봉인(역류 뒤 심장 쿨다운, B3-1) — 자세 자리에 나와 있어도 어둡게(판정 없음 = weakPointOpen 도 false)
           const sealed = (enemy.weakCooldown?.[id] ?? 0) > 0 || choked;
-          // 분출공 크기 — 갑각판이 부서진 만큼(enemy.ventScale, 판정과 같은 값) × 열림 1.4
-          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye, lit: id === 'vent' && ventLit, sealed, scaleMul: behemothWeakScaleMul(id, open, enemy.ventScale ?? 1) };
+          // 분출공 크기 — 갑각판이 부서진 만큼(enemy.ventScale) × 열림 openRadiusMul — 판정 weakPointRadius 와 같은 함수(B3-6)
+          return { open, broken, flashAgeMs: age, dim: id === 'eye' && dimEye, lit: id === 'vent' && ventLit, sealed, scaleMul: behemothWeakScaleMul(id, open, enemy.ventScale ?? 1, wps) };
         });
       }
 

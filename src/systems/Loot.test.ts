@@ -8,6 +8,7 @@ import { Input } from '../core/Input';
 import { addItem, countOf, initInventory } from '../core/Inventory';
 import { World, type GroundItemState, type LootEntry } from '../core/World';
 import { enemyDef } from '../core/Entities';
+import { allEquipIds, randomEquipIds } from '../core/EquipData';
 import { Level } from '../level/GridLoader';
 import * as Loot from './Loot';
 import * as Sigils from './Sigils';
@@ -109,6 +110,37 @@ describe('처치 전리품 굴림 (rollLoot)', () => {
   it('일반 적은 pickups.equip.dropChance 밖이면 장비를 떨구지 않는다', () => {
     const entries = Loot.rollLoot('goblin_runner', () => 0.01);
     expect(kindsOf(entries)).not.toContain('equip'); // dropChance 0
+  });
+
+  it('유일 장비(unique — 낫뿔 반지, B3-6)는 무작위 풀에 없다: randomEquipIds 가 빼고, 족장 주머니의 무작위 장비가 어느 rng 에서도 반지가 아니다', () => {
+    expect(allEquipIds()).toContain('ring_scythe_horn');
+    expect(randomEquipIds()).not.toContain('ring_scythe_horn');
+    expect(randomEquipIds()).toHaveLength(allEquipIds().length - 1); // 유일 장비는 지금 하나
+    for (let i = 0; i <= 100; i++) {
+      const eq = Loot.rollLoot('goblin_chieftain', () => i / 100).filter((e) => e.kind === 'equip');
+      expect(eq).toHaveLength(1);
+      expect(eq[0]!.equipId).not.toBe('ring_scythe_horn');
+    }
+  });
+
+  it('거수(equipDrops) 주머니에는 낫뿔 반지가 확정으로 든다 — 무작위 장비 1개와 별개(장비 두 줄), 어느 rng 에서도. 정의에 equipDrops 가 없는 족장은 반지가 없다', () => {
+    expect(enemyDef('scythe_behemoth').equipDrops).toEqual(['ring_scythe_horn']);
+    expect(enemyDef('goblin_chieftain').equipDrops).toBeUndefined();
+    for (const r of [0, 0.37, 0.99]) {
+      const entries = Loot.rollLoot('scythe_behemoth', () => r);
+      const eq = entries.filter((e) => e.kind === 'equip');
+      expect(eq).toHaveLength(2);
+      expect(eq.find((e) => e.equipId === 'ring_scythe_horn')).toMatchObject({ kind: 'equip', count: 1 });
+      expect(eq.filter((e) => e.equipId === 'ring_scythe_horn')).toHaveLength(1); // 한 줄만(병합)
+      expect(kindsOf(entries)).toEqual(expect.arrayContaining(['potion', 'mana', 'potion_large', 'gold', 'equip']));
+    }
+    // 실제 처치 → 주머니(보스 등급, '낫뿔 거수의 주머니')에 반지가 든다
+    Loot.init(world);
+    world.events.emit('enemy_died', { enemyId: 1, enemyType: 'scythe_behemoth', x: 14, z: 10, execution: true });
+    const pouch = world.groundItems.find((g) => g.kind === 'pouch')!;
+    expect(pouch.pouchTier).toBe('boss');
+    expect(pouch.pouchOwner).toBe('scythe_behemoth');
+    expect(pouch.pouchItems!.some((e) => e.kind === 'equip' && e.equipId === 'ring_scythe_horn')).toBe(true);
   });
 });
 

@@ -43,7 +43,9 @@
         "_snapNote": "겨누기 시작 스냅 — LT 를 누르는 순간 한 번, 원뿔(coneDeg) 안 가장 가까운 적으로 ticks 에 나눠 돌린다 (가로는 몸통 중심, 세로는 실루엣 안에 들 만큼만 — 자석과 같은 규약). 원뿔은 조준점에서 적 실루엣 '가장자리'까지의 각거리(중심이 아니다 — 키 작은 적은 가슴 중심이 몇 도 아래라 중심 기준으론 십자에 걸려도 못 잡는다). coneDeg 는 조준 십자(반지름 ≈12px ≈ 0.7~1.1°)보다 아주 조금 큰 값 — 9° 는 너무 넓었다(2026-09-04 사용자). 한 번에 maxDeg 까지만. 누른 채로는 다시 하지 않고, 락온 중·마우스에는 없다",
         "snap": { "coneDeg": 2.0, "maxDeg": 9, "ticks": 4 },
         "_swayFadeNote": "활 당김 흔들림(aimSwayAmp)이 클수록 어시스트(마찰·자석·스냅)가 옅어진다 — 흔들림이 최대 폭의 swayFadeAtFrac 에 이르면 0. 오래 당겨 손이 떨리면 자동 조준도 함께 사라지고, 빨리 당겨 쏘면 온전하다 (2026-09-04)",
-        "swayFadeAtFrac": 0.85
+        "swayFadeAtFrac": 0.85,
+        "_weakPointNote": "약점 조준 보조(거수 B3-6, 기획서 §4.2 결정 24) — 노출 중(판정이 있는) 약점 구체를 몸 실루엣과 함께 마찰·자석·스냅 후보에 넣는다. 구체 반지름 × weakPointRadiusMul 을 각반지름으로 써 작은 구체를 조금 후하게 잡고, 자석은 그 (키운) 구체 가장자리까지만 끈다 — 몸 안에서 머리/몸통을 고르는 규약 그대로. 0 이면 끔(몸 실루엣만)",
+        "weakPointRadiusMul": 1.35
       },
       "_rumbleNote": "패드 진동 (dual-rumble, 크롬/엣지 + 엑박). 근접은 몸에 닿는 순간(명중·강타·처치), 원거리는 손에서 나가는 순간(발사·시위·시전) — 원거리가 적 피격에 울리면 컨셉이 이상하다 (2026-09-01 사용자 지시). 방패 챙(block)·패링(parry)도 울린다. 미지원 패드에선 조용히 무시",
       "rumble": {
@@ -657,6 +659,9 @@
     "ventHitCleanse": 1,
     "ventCleanseCap": 6,
     "corrosiveCleanseMul": 2,
+    "_bossCleanseNote": "보스 사망 정화(거수 B3-6, 기획서 §11) — 보스(def.boss, 소환수 noLoot 제외)가 죽으면 오염 대기 −bossCleansePending, 처형(execution)으로 마무리했으면 대신 −bossExecuteCleanse(둘 중 하나). Corruption.ts 가 enemy_died{execution} 를 구독해 corruption_cleansed{amount, source 'boss_death'|'boss_execute'} 를 내고 같은 구독이 pending 만 깎는다 — applied 불변, 음수 허용",
+    "bossCleansePending": 10,
+    "bossExecuteCleanse": 15,
     "slotCost": {
       "eye": 8,
       "spine": 10,

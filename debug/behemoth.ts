@@ -28,7 +28,7 @@
 // backflow(B3-1 — 역류 머리 내림: head_down 자세인데 낫이 박히지 않고 두 낫이 벌어져 매달린 고꾸라짐, 눈 열림(피해만) — 정면 눈높이) /
 // shake(B3-2 — 갑각 떨기 예고: 등갑판 덜그럭(shaking)·몸 보라 텔레그래프(낫·뿔은 물들지 않음)·분출공 열림 ×1.4 오염 녹색 맥동(텔레그래프 보라가 아니다), P2 외형 — 플레이어 눈높이 정면 6m(minRange)) /
 // choke(B3-2 — 질식: 분출공 꺼짐(sealed — 어두운 본색·발광 없음), P2 외형 — 정면 눈높이).
-// plates(B3-3 — 갑각판 파괴: &broken=1|2|3(기본 1) 장이 앞 판부터 사라지고 그 자리 실금이 몸 윗면으로 내려와 벌어진다(BH_CRACK_GROW), 분출공(점등)은 ×1.15^broken 으로 커진다(판정 = 그림),
+// plates(B3-3 — 갑각판 파괴: &broken=1|2|3(기본 1) 장이 앞 판부터 사라지고 그 자리 실금이 몸 윗면으로 내려와 벌어진다(BH_CRACK_GROW), 분출공(점등)은 ×1.15^broken 으로 커진다(판정 = 그림); &cam=back 이면 등 뒤 위에서 실금 세 줄을 본다(B3-6),
 //   P2 외형 — 앞 위 3/4 에서 등(판)과 가슴(분출공)을 함께 본다).
 // &pose=charge|head_down|… 을 붙이면 약점 구체와 머리 메시(목 IK)를 그 자세의 poseOffsets 표 자리에 놓는다
 // (안내문에 구체 자리와 머리 메시의 눈 자리(anchor)를 함께 찍는다 — 어긋남이 0 에 가까워야 한다, B2-2).
@@ -395,7 +395,7 @@ if (view === 'side') {
   tint(flash, balance.telegraph.colorProjectile);
   const p2 = resolvePhase(def, 2);
   setBehemothPhaseLook(rig, p2, 1400 * 0.25);
-  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'vent', broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2), scaleMul: behemothWeakScaleMul(id, id === 'vent') }));
+  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'vent', broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2), scaleMul: behemothWeakScaleMul(id, id === 'vent', 1, def.weakPoints) }));
   camera.position.set(0.4, balance.player.eyeHeight, -(def.volleyAttack!.minRange! + balance.player.radius));
   camera.lookAt(0, 1.7, -0.5);
 } else if (view === 'plates') {
@@ -404,9 +404,15 @@ if (view === 'side') {
   poseBehemothRig(rig, base);
   const p2 = resolvePhase(def, 2);
   setBehemothPhaseLook(rig, p2, 1400 * 0.25, plateCount - platesBroken);
-  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2), scaleMul: behemothWeakScaleMul(id, false, plateVentScale) }));
-  camera.position.set(5.2, 4.8, -6.2);
-  camera.lookAt(0, 1.9, -0.3);
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p2), scaleMul: behemothWeakScaleMul(id, false, plateVentScale, def.weakPoints) }));
+  if (params.get('cam') === 'back') {
+    // &cam=back — 등 뒤 위에서: 부서진 앞 판 자리의 벌어진 실금(×BH_CRACK_GROW)이 머리 상자·어깨 관절에 가리지 않고 세 줄 다 보인다(B3-3 잔여 메모 → B3-6)
+    camera.position.set(-4.5, 5.0, 5.5);
+    camera.lookAt(0, 2.2, -0.3);
+  } else {
+    camera.position.set(5.2, 4.8, -6.2);
+    camera.lookAt(0, 1.9, -0.3);
+  }
 } else if (view === 'choke') {
   // 질식(B3-2) — 분출공 내구 0: 구체가 꺼진다(sealed — 어두운 본색·발광·맥동 없음, 파열색이 아니다). 갑각 떨기 봉인·웅덩이 증발은 로직. P2 외형, 정면 눈높이
   poseBehemothRig(rig, base);
@@ -442,7 +448,7 @@ const eye = rig.weakPoints['eye']!.position;
 const jr = rig.weakPoints['joint_r']!.position;
 // 머리 메시 위의 눈 자리(anchor) — 구체(판정 표)와 얼마나 어긋나는지. 대기 자세에선 0, 돌격 예고·들이받기에선 벌어진다(B2-2 가 메시를 표에 맞춘다)
 const eyeMesh = behemothAnchorPos(rig, 'eye', new THREE.Vector3());
-// 어깨 관절 메시(위팔 피벗) 자리 — 구체(표)와의 어긋남. 대기 0, 미끄러짐은 굴림이 어깨를 갈라 ≤ 0.2m(Behemoth.test), 돌격 예고·머리 내림은 표가 메시를 안 따라가 더 크다
+// 어깨 관절 메시(위팔 피벗) 자리 — 구체(표)와의 어긋남. 대기·포효·머리 내림·탈진·혼절 0(어깨 피벗을 표로 옮긴다 — B3-4/B3-6), 미끄러짐은 굴림이 어깨를 갈라 ≤ 0.2m(Behemoth.test), 돌격 예고는 관절이 닫혀 있어 그림만
 const jrMesh = behemothAnchorPos(rig, 'joint_r', new THREE.Vector3());
 const jlMesh = behemothAnchorPos(rig, 'joint_l', new THREE.Vector3());
 const jl = rig.weakPoints['joint_l']!.position;

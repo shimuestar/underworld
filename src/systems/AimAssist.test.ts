@@ -276,3 +276,70 @@ describe('당김 흔들림과 어시스트 (2026-09-04)', () => {
     expect(yawOffTo(e.x, e.z)).toBeCloseTo(off0, 9);
   });
 });
+
+describe('약점 조준 보조 (거수 B3-6, 기획서 §4.2 결정 24 — aimAssist.weakPointRadiusMul)', () => {
+  const eyeH = balance.player.eyeHeight;
+  /** 거수를 정면 8m 에 플레이어를 마주 보게 놓는다(yaw π/2 → 정면 −X). pose 를 주면 그 자세(head_down 이면 눈이 (14.1, 0.9, 10) 에 열린다) */
+  function behemoth(pose?: string): EnemyState {
+    const b = add('scythe_behemoth', 16, 10);
+    b.yaw = Math.PI / 2;
+    b.pose = pose;
+    return b;
+  }
+  /** 월드 점을 겨눈 pitch(눈높이 기준) */
+  const pitchTo = (x: number, y: number, z: number): number => Math.atan2(y - eyeH, Math.hypot(x - 8, z - 10));
+
+  it('데이터 — weakPointRadiusMul 1.35(기본 켬)', () => {
+    expect(AA.weakPointRadiusMul).toBe(1.35);
+  });
+
+  it('노출 중인 약점 구체가 후보에 든다 — 머리 내림(눈 0.9m)의 눈 근처를 겨누면 padAimAssist 가 몸 대신 눈(weakPointId eye)을 고르고, 몸 중심 쪽을 겨누면 몸(weakPointId 없음)', () => {
+    behemoth('head_down');
+    world.player.pitch = pitchTo(14.1, 0.9, 10) + 0.02; // 눈 조금 위
+    const onEye = PlayerMove.padAimAssist(world);
+    expect(onEye?.weakPointId).toBe('eye');
+    expect(onEye!.angRadius).toBeCloseTo(Math.atan2(0.26 * AA.weakPointRadiusMul, Math.hypot(6.1, 0.9 - eyeH)), 3); // 판정 반지름 × 1.35 를 각반지름으로
+    world.player.pitch = 0; // 몸 가운데(1.65m) 쪽
+    const onBody = PlayerMove.padAimAssist(world);
+    expect(onBody).not.toBeNull();
+    expect(onBody!.weakPointId).toBeUndefined();
+  });
+
+  it('닫힌 약점은 후보가 아니다 — 대기 자세(눈 닫힘)에서 normal 눈 자리(2.35m)를 겨눠도 몸만. 노출 타이머로 열린 관절은 후보', () => {
+    const b = behemoth();
+    world.player.pitch = pitchTo(14.12, 2.35, 10);
+    expect(PlayerMove.padAimAssist(world)!.weakPointId).toBeUndefined();
+    b.exposure = { joint_r: 36 }; // 일반 패링 보상 — 오른 관절(플레이어 기준 왼쪽 (15.2, 2.5, 8.85))
+    world.player.pitch = pitchTo(15.2, 2.5, 8.85);
+    world.player.yaw = -Math.PI / 2 + Math.atan2(1.15, 7.2) * 0.9; // 관절 쪽으로 거의 다 돌린다
+    expect(PlayerMove.padAimAssist(world)!.weakPointId).toBe('joint_r');
+  });
+
+  it('자석은 (키운) 구체 가장자리까지만 끈다 — 눈 위쪽에서 스틱을 젓는 동안 pitch 가 눈 쪽으로 내려오다 가장자리에서 멈춘다(중심까지 가지 않는다)', () => {
+    behemoth('head_down');
+    world.player.padAimingPrev = true; // 스냅 없이 자석만
+    const eyePitch = pitchTo(14.1, 0.9, 10);
+    const ang = Math.atan2(0.26 * AA.weakPointRadiusMul, Math.hypot(6.1, 0.9 - eyeH));
+    world.player.pitch = eyePitch + ang + 0.02; // 구체 가장자리 위 0.02rad(≈ 1.1°) — 자석 원뿔 안, 몸 중심(1.65m)보다 구체 가장자리가 가깝다
+    for (let i = 0; i < 60; i++) {
+      world.input = { ...Input.emptySnapshot(), padMoveActive: true, padAiming: true };
+      PlayerMove.tick(world, DT);
+    }
+    expect(world.player.pitch).toBeLessThan(eyePitch + ang + 0.005); // 가장자리까지 내려왔다
+    expect(world.player.pitch).toBeGreaterThan(eyePitch + ang * 0.5); // 중심으로 빨려 들지 않는다
+  });
+
+  it('weakPointRadiusMul 0 이면 끔 — 같은 자리에서 몸 실루엣만 후보', () => {
+    behemoth('head_down');
+    world.player.pitch = pitchTo(14.1, 0.9, 10) + 0.02;
+    const saved = AA.weakPointRadiusMul;
+    (AA as { weakPointRadiusMul: number }).weakPointRadiusMul = 0;
+    try {
+      const t = PlayerMove.padAimAssist(world);
+      expect(t).not.toBeNull();
+      expect(t!.weakPointId).toBeUndefined();
+    } finally {
+      (AA as { weakPointRadiusMul: number }).weakPointRadiusMul = saved;
+    }
+  });
+});

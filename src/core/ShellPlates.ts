@@ -5,7 +5,10 @@
 // 분출공 구체가 ×ventScalePerPlate 커진다(enemy.ventScale — 판정 Entities.weakPointRadius 와 그림 Stage 가 같은 값). 총·화살·마법 직격은 무관.
 //
 // heavy 의 분류는 호출부다 — breakCrackWalls 를 부르는 "폭발 계열"(수류탄·화염구·폭발통) + 해머의 마무리 타(combo.finisherStep, Weapons 의 heavy) +
-// 낙석(Traps.fireRockfall). 데이터에 별도 분류 필드를 두지 않았다(기존 규약 그대로: 균열벽을 부수는 곳이 곧 폭발이다).
+// 낙석(Traps.fireRockfall·Arena 기둥 붕괴). 데이터에 별도 분류 필드를 두지 않았다(기존 규약 그대로: 균열벽을 부수는 곳이 곧 폭발이다).
+// hitShellPlates 호출 목록(새 폭발·낙하 피해 경로를 더할 때 여기 한 줄과 호출 한 줄을 함께 — 빠뜨리면 조용히 판이 안 깎인다, B3-3 잔여 메모 → B3-6):
+//   ① Weapons.resolveHammerHit — 해머 마무리 타(heavy)  ② Projectiles — 화염구 폭발 광역(직격 대상 제외)·수류탄 폭발  ③ core/Explosion.explodeAt — 폭발통·기믹
+//   ④ Traps.fireRockfall — 낙석 함정(hurtEnemy heavy)  ⑤ Arena.collapsePillar — 기둥 붕괴 낙석(rockfallEnemyDamage × traps.bossDamageMul)
 // hitWeakPoint 처럼 피해 자체는 호출부가 체력에 넣고, 여기는 판 장부만 적는다. P1·P3(shedPlates)·족장은 아무 일도 없다(Entities.shellPlatesActive).
 
 import { enemyDef, shellPlatesActive } from './Entities';

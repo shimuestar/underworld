@@ -1,7 +1,7 @@
 // 보물상자 — 상호작용 조건(반경·시선), 골드 무더기, 각인 1개, 1회성.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { allEquipIds } from '../core/EquipData';
+import { allEquipIds, randomEquipIds } from '../core/EquipData';
 import sigilsJson from '../../data/sigils.json';
 import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
@@ -222,6 +222,23 @@ describe('전리품 — 상자 속(chestItems)', () => {
     interact(w3);
     expect(chest3.chestItems!.some((e) => e.kind === 'equip')).toBe(false);
     vi.restoreAllMocks();
+  });
+
+  it('유일 장비(unique — 낫뿔 반지, B3-6)는 상자 풀에 없다 — randomEquipIds 가 빼므로 rng 어느 값(첫·끝)에서도 반지가 나오지 않는다', () => {
+    expect(randomEquipIds()).not.toContain('ring_scythe_horn');
+    expect(allEquipIds()).toContain('ring_scythe_horn');
+    // 끝 인덱스 — 옛 allEquipIds 풀이었으면 마지막 항목(반지)이 나왔을 자리
+    for (const r of [0, 0.5, 0.9999]) {
+      vi.spyOn(Math, 'random').mockReturnValue(r);
+      const w = makeWorld();
+      initInventory(w);
+      const chest = putChest(w, 6 + 1.5, 6);
+      interact(w);
+      vi.restoreAllMocks();
+      const equips = chest.chestItems!.filter((e) => e.kind === 'equip');
+      for (const e of equips) expect(e.equipId).not.toBe('ring_scythe_horn');
+      if (r < balance.chest.equipChance) expect(equips).toHaveLength(1);
+    }
   });
 
   it('가방이 가득이면 상자의 각인을 가져올 수 없다 (full)', () => {

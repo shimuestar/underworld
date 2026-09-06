@@ -2917,9 +2917,9 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(boss.phase).toBe(3);
       expect(boss.phaseTarget).toBeUndefined();
       expect(resolvePhase(def, boss.phase)!.name).toBe('돌각');
-      // 노출 하나 열어 두고(왼 관절) — 전환이 닫아야 한다
-      openExposure(world, boss, 'joint_l', 50);
-      expect(weakPointOpen(boss, wp('joint_l'))).toBe(true);
+      // 노출 하나 열어 두고(눈 타이머 — 돌격 중 눈과 같은 문) — 전환이 닫아야 한다. 관절 타이머 노출은 전환을 기다리게 하므로(B3-6, 아래 별도 케이스) 여기선 눈으로
+      openExposure(world, boss, 'eye', 50);
+      expect(weakPointOpen(boss, wp('eye'))).toBe(true);
       const t0 = world.tick;
       boss.health = perBar * 2; // 1000 — 칸이 빈다
       Enemies.tick(world, DT);
@@ -2931,9 +2931,9 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(boss.pose).toBe('roar');
       expect(boss.molting).toBe(true);
       expect(boss.poseTicks).toBe(wpc.phaseShiftTicks - 1); // 전환 틱에 포즈 시계가 한 번 돈다
-      expect(boss.exposure?.['joint_l']).toBeUndefined();
-      expect(w.closed.map((c) => c.id)).toEqual(['joint_l']);
-      expect(w.status.map(w.tag)).toEqual(['expose:joint_l:true', 'expose:joint_l:false', 'molt:true']);
+      expect(boss.exposure?.['eye']).toBeUndefined();
+      expect(w.closed.map((c) => c.id)).toEqual(['eye']);
+      expect(w.status.map(w.tag)).toEqual(['expose:eye:true', 'expose:eye:false', 'molt:true']);
       expect(w.status[2]).toMatchObject({ kind: 'molt', on: true, ticks: 90, phase: 2, from: 3 });
       expect(resolvePhase(def, boss.phase)!.name).toBe('오염 갑각');
       // 약점 전부 닫힘 — 타이머를 억지로 세워도 판정이 없다(포효 자세라도 눈은 표적이 아니다)
@@ -2990,6 +2990,46 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(boss.pose).toBe('roar');
       expect(boss.chargeCooldown).toBe(Math.round(cdBefore * wpc.phaseShiftCooldownMul) - 1); // 절반, 그 뒤 전환 틱의 감소 1
       expect(boss.chargeTargetX).toBeUndefined();
+    });
+
+    it('관절 타이머 노출도 전환을 막는다(B2-6 잔여 메모 → B3-6) — 일반 패링으로 joint_r 36틱을 연 채 칸이 비면 phaseTarget 만 갱신, 타이머가 다해 닫히는 틱(exposure_closed 는 소진 — 전환이 빼앗은 게 아니다)에 전환. 눈·분출공의 되살리는 타이머는 관절이 아니라 막지 않는다', () => {
+      const boss = makeBehemoth(4.0);
+      const w = watch();
+      expect(normalParry(boss)).toBe('normal');
+      expect(boss.exposure?.['joint_r']).toBe(def.attack.exposeOnParry!.normalTicks);
+      // 패링 반동(넉백)이 끝나 그 밖의 막는 창이 없을 때까지
+      tickEnemiesUntil(() => (boss.kbTicks ?? 0) === 0 && boss.ai !== 'staggered', 30);
+      expect((boss.exposure?.['joint_r'] ?? 0)).toBeGreaterThan(10);
+      boss.health = perBar * 2; // 3칸째가 빈다
+      Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(0);
+      expect(boss.phaseTarget).toBe(2);
+      expect(boss.phase).toBe(3);
+      let waited = 1;
+      while (w.phases.length === 0 && waited < 80) {
+        // 노출이 살아 있는 동안은 전환이 없다
+        expect((boss.exposure?.['joint_r'] ?? 0)).toBeGreaterThan(0);
+        Enemies.tick(world, DT);
+        waited++;
+      }
+      expect(w.phases).toHaveLength(1);
+      expect(w.phases[0]).toMatchObject({ phase: 2, from: 3 });
+      expect(waited).toBeLessThanOrEqual(def.attack.exposeOnParry!.normalTicks + 2);
+      expect(w.closed.find((c) => c.id === 'joint_r')).toMatchObject({ id: 'joint_r', hits: 0 }); // 소진으로 닫혔다(전환의 '노출 전부 닫힘' 이 아니라도 결과는 같다)
+      expect(boss.exposure?.['joint_r'] ?? 0).toBe(0);
+      expect(boss.pose).toBe('roar');
+      // 대조 — 돌격 질주 중 6m 안 눈 노출(되살리는 타이머)은 전환을 막지 않는다: 질주 중 칸이 비면 그 틱에 전환·질주 취소
+      tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      world.player.x = boss.x + 10;
+      world.player.prevX = world.player.x;
+      boss.chargeCooldown = 0;
+      boss.closeCooldown = 9999;
+      tickEnemiesUntil(() => boss.ai === 'charging', 400);
+      tickEnemiesUntil(() => (boss.exposure?.['eye'] ?? 0) > 0, 80);
+      boss.health = perBar;
+      Enemies.tick(world, DT);
+      expect(w.phases).toHaveLength(2);
+      expect(boss.ai).toBe('recover');
     });
 
     it('큐잉 — 머리 내림(완벽 패링)·혼절(처형 창)·처형 넉백 중에 칸이 비면 phaseTarget 만 갱신하고 발동하지 않는다(눈 창·처형 창을 빼앗지 않는다). 넉백이 끝나 자유로워지는 틱에 한 번만 전환', () => {
@@ -3875,6 +3915,32 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(w.spawned.every((s) => s.kind === 'orb')).toBe(true);
     });
 
+    it('반사됐지만 시전자를 빗나간 구슬(보스가 비켜 몸 상자를 놓침)은 벽에 닿아도 웅덩이를 남기지 않는다 — 플레이어 소유(deflected) 투사체가 플레이어를 해치는 장판을 만들지 않는다(B3-2 잔여 메모 → B3-6, 기획서 §10.2). 반사 안 된 구슬은 그대로 웅덩이', () => {
+      Hazards.init(world);
+      const boss = makeBehemoth(8.0);
+      toP2(boss);
+      const w = watch();
+      untilVolleyWindup(boss, 5);
+      const orb = deflectNextOrb();
+      // 보스를 옆으로 크게 비켜 세운다 — 되돌아가는 구슬이 몸 상자를 놓치고 뒤 벽에 닿는다
+      boss.x = 20;
+      boss.z = 14.5;
+      boss.prevX = boss.x;
+      boss.prevZ = boss.z;
+      boss.ai = 'recover';
+      boss.timer = 9999;
+      boss.attackMode = 'melee';
+      world.projectiles.splice(0, world.projectiles.length, orb); // 뒤따르는 구슬은 치우고 이 구슬만 본다
+      flyUntilGone(orb);
+      expect(w.weakHits).toHaveLength(0); // 분출공에 닿지 않았다
+      expect(w.spawned).toHaveLength(0);
+      expect(world.pools).toHaveLength(0);
+      // 대조 — 반사되지 않은 구슬이 플레이어 뒤 벽에 닿으면 orb 웅덩이
+      world.projectiles.push({ ...orb, id: orb.id + 1, owner: 'enemy', deflected: false, x: 8, y: 1.6, z: 6, vx: -16, vy: 0, vz: 0 });
+      for (let i = 0; i < 120 && world.projectiles.length > 0; i++) stepAll();
+      expect(w.spawned).toEqual([expect.objectContaining({ kind: 'orb' })]);
+    });
+
     it('반사 노선 — 반응 반경 안의 구슬을 누르면 반사(deflect)돼 시전자 가슴으로 되돌아가 분출공에 고정 33(배율·열림 무관 — 시전이 끝나 닫힌 뒤에도) + weak_point_hit{vent 33} + damage_pop 33 + 오염 대기 −1(corruption_cleansed) — 웅덩이는 남기지 않는다. 뒤따라오는 구슬과 부딛혀 깨지지 않는다. 4회(볼리 2번)면 내구 0 → 질식: boss_status choke{ticks 1800} + 웅덩이 전부 증발 + 갑각 떨기 봉인(8m 에서 걸어온다) + 예고 +10(낫 32 → 42) + 분출공 닫힘·hp 0. 1800틱 뒤 hp 132 복귀·choke off·갑각 떨기 재개', () => {
       Hazards.init(world);
       Corruption.init(world);
@@ -4290,14 +4356,15 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(boss.ventScale).toBeCloseTo(Math.pow(sp.ventScalePerPlate, 3), 6); // 1.5209
       expect(w.broken.map((b) => b.ventScale)).toEqual([expect.closeTo(1.15, 6), expect.closeTo(1.3225, 6), expect.closeTo(1.520875, 6)]);
       expect(goldPouches()).toHaveLength(3);
-      // 판정 — 분출공을 열고(갑각 떨기 노출 타이머) 중심에서 0.4m 위를 지나는 정면 레이: 반지름 0.3 이면 빗나가고 0.456 이면 맞는다
+      // 판정 — 분출공을 열고(갑각 떨기 노출 타이머) 중심에서 0.5m 위를 지나는 정면 레이: 열림 반지름 0.42(×openRadiusMul 1.4, B3-6)면 빗나가고 판 3장의 0.639 면 맞는다
       openExposure(world, boss, 'vent', 60);
       const c = weakPointWorldPos(boss, def, wp('vent'));
-      const hit = rayHitsWeakPoint(c.x, c.y + 0.4, c.z - 5, 0, 0, 1, boss, def, 0);
+      const hit = rayHitsWeakPoint(c.x, c.y + 0.5, c.z - 5, 0, 0, 1, boss, def, 0);
       expect(hit?.wp.id).toBe('vent');
-      expect(weakPointRadius(boss, wp('vent'))).toBeCloseTo(0.3 * Math.pow(sp.ventScalePerPlate, 3), 6);
+      expect(weakPointRadius(boss, wp('vent'))).toBeCloseTo(0.3 * wp('vent').openRadiusMul! * Math.pow(sp.ventScalePerPlate, 3), 6);
       boss.ventScale = 1;
-      expect(rayHitsWeakPoint(c.x, c.y + 0.4, c.z - 5, 0, 0, 1, boss, def, 0)).toBeNull();
+      expect(weakPointRadius(boss, wp('vent'))).toBeCloseTo(0.3 * wp('vent').openRadiusMul!, 6);
+      expect(rayHitsWeakPoint(c.x, c.y + 0.5, c.z - 5, 0, 0, 1, boss, def, 0)).toBeNull();
       // 판이 다 부서진 뒤 heavy 타격은 판과 무관
       expect(hitShellPlates(world, boss, 100)).toBe(0);
       expect(w.broken).toHaveLength(3);

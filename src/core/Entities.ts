@@ -204,6 +204,9 @@ export interface WeakPointDef {
   /** 노출 타이머(enemy.exposure)로 열렸을 때의 배율 재정의(분출공 B3-2 — 갑각 떨기 예고·시전 중 ×1.5). 자세 노출(exposedStates — 탈진 B3-4)은 damageMul 그대로.
    *  없으면 언제나 damageMul(눈은 돌격 중 6m 노출도 ×3.0). Entities.weakPointDamageMul */
   openMul?: number;
+  /** 열려 있는 동안(weakPointOpen) 구체 반지름 배율(분출공 1.4 — 갑각 떨기 예고·시전·탈진에 커진다). 판정(weakPointRadius)과 그림(Stage.behemothWeakScaleMul)이
+   *  같은 값을 읽어 "보이는 크기 = 맞는 크기"(B3-2 잔여 메모 → B3-6). 없으면 1 */
+  openRadiusMul?: number;
 }
 
 /** 분출공 약점 id(거수) — Enemies(열림·역류·질식)·Weapons·Projectiles(정화·반사 자가 피격)가 같은 이름을 쓴다(DAZE_WEAK_POINT 'eye' 와 같은 규약) */
@@ -291,6 +294,8 @@ export interface EnemyDef {
   drops?: string[];
   /** true면 처형이 아니라 사망 시 드랍 (처형 불가능한 적/보스) */
   dropsOnDeath?: boolean;
+  /** 처치 주머니에 확정으로 들어가는 장비 id(거수 B3-6 — 유일 반지). 무작위 장비 1개(pickups.equip)와 별개. Loot.rollLoot 가 읽는다 */
+  equipDrops?: string[];
   behavior?: string;
   /** 눈이 없다 — 시야·인기척·랜턴으로 못 알아챈다. 소리와 피격만 깨운다 (슬라임) */
   blind?: boolean;
@@ -928,10 +933,20 @@ export function shellPlatesActive(def: EnemyDef, enemy: { phase?: number; plates
   return rp !== undefined && rp.shellPlatesOn && !rp.shedPlates;
 }
 
-/** 약점 구체의 실제 반지름 — 분출공(VENT_WEAK_POINT)은 갑각판이 부서진 만큼 커진다(enemy.ventScale — 판 밑 균열이 벌어짐, B3-3 ×1.15/장).
- *  판정(rayHitsWeakPoint)과 그림(Stage 구체 크기)이 이 한 함수를 읽는다(보이는 크기 = 판정 크기). 다른 약점은 정의 그대로 */
-export function weakPointRadius(enemy: { ventScale?: number }, wp: WeakPointDef): number {
-  return wp.id === VENT_WEAK_POINT ? wp.radius * (enemy.ventScale ?? 1) : wp.radius;
+/** 약점 구체의 실제 반지름 — 분출공(VENT_WEAK_POINT)은 갑각판이 부서진 만큼 커진다(enemy.ventScale — 판 밑 균열이 벌어짐, B3-3 ×1.15/장),
+ *  열려 있는 동안(weakPointOpen)은 그 위에 ×openRadiusMul(분출공 1.4 — B3-6, 옛 Stage 상수 BH_VENT_OPEN_SCALE 가 그림만 키우던 것을 판정과 같은 데이터로).
+ *  판정(rayHitsWeakPoint)과 그림(Stage.behemothWeakScaleMul)이 같은 배율을 읽는다(보이는 크기 = 판정 크기). 다른 약점은 정의 그대로 */
+export function weakPointRadius(
+  enemy: { ventScale?: number; weakHp?: Record<string, number>; exposure?: Record<string, number>; pose?: string; molting?: boolean; weakCooldown?: Record<string, number> },
+  wp: WeakPointDef,
+): number {
+  return wp.radius * weakPointScaleMul(enemy, wp, weakPointOpen(enemy, wp));
+}
+
+/** 약점 구체의 크기 배율(정의 반지름 대비) — 분출공은 ventScale(갑각판) 배, 열려 있으면 ×openRadiusMul. Stage 가 구체 scale 에, weakPointRadius 가 판정에 같은 값을 쓴다 */
+export function weakPointScaleMul(enemy: { ventScale?: number }, wp: WeakPointDef, open: boolean): number {
+  const vent = wp.id === VENT_WEAK_POINT ? (enemy.ventScale ?? 1) : 1;
+  return vent * (open ? (wp.openRadiusMul ?? 1) : 1);
 }
 
 export interface WeakPointHit {

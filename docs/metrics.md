@@ -46,7 +46,7 @@ weapon_kill     { weapon, enemyType }   ← 마나 이벤트 금지 (하드 룰)
 melee_kill      { enemyType, execution }
 spell_kill      { enemyType }
 weak_point_hit    { enemyId, enemyType, id, damage, x, y, z }   ← 약점 구체 명중 (거수 눈·관절·심장·분출공), 권총·화살·화염구 직격만
-weak_point_broken { enemyId, enemyType, id, x, y, z }   ← 약점 내구 0 (관절 파열 — 착탄점)
+weak_point_broken { enemyId, enemyType, id, x, y, z }   ← 약점 내구 0 (관절 파열 — 착탄점). 분출공(id 'vent')도 내구 0 에 발행되지만 그건 질식(boss_status choke)이다 — Metrics.weakPoints.broken 과 main 의 파열 연출은 vent 를 건너뛴다(B3-6)
 exposure_closed   { enemyId, enemyType, id, hits }   ← 약점 노출 창이 닫힘 (관절 타이머 소진·머리 내림 종료·혼절·파열). hits = 그 창 안의 명중 수 → 노출 활용률
 boss_status       { enemyId, enemyType, kind, on, id?, blade?, ticks?, cause?, cell?, sealed?, selfDamage?, despair? }   ← 보스 상태이상 on/off (expose{id — 관절·돌격 중 눈·갑각 떨기 중 분출공}·head_down{cause? 'topple'|'backflow'}·daze·rupture{id, blade}·limp·skid·blind·topple{cell 'P'|'C', row, col}·rear{sealed — 발구르기 앞발 들기 자세, 심장 열림}·backflow{cause 'heart'|'vent'|'eye', ticks, selfDamage — 심장 66 으로 발구르기 취소(자해 45) / 분출공 66 으로 갑각 떨기 취소(자해 0) / 눈 66 으로 포효 취소(자해 0, B3-4)}·choke{ticks — 분출공 내구 0, 갑각 떨기 봉인·웅덩이 증발·예고 +10, B3-2}·roar{despair — 포효 예고 자세, 눈이 위로 열림, B3-4}·exhaust{ticks — 삼연낫 3연속 완벽, 눈 + 분출공 동시 노출, B3-4} — 기획서 §5 의 12종이 이 하나로)
 charge_dodged     { enemyId, enemyType, x, z }   ← 돌격을 무적 8틱 안에 완벽 회피 (거수 미끄러짐 + 양 관절 노출)
@@ -66,7 +66,10 @@ pool_evaporated   { id, x, z, r, kind, reason }   ← 웅덩이 소멸 — reaso
 corrosive_applied / corrosive_ended   { kind, ticks } / { kind, reason }   ← 오염 진액(웅덩이 위·진액 구슬 직격 — 막아도, B3-2) 플레이어 상태 규약
 corrosive_tick    { amount, health }   ← 오염 진액 도트(dotIntervalTicks 마다 dotPerTick) — player_damaged 를 안 내는 도트 규약(damageTakenTotal 합산, 함정 사망은 아님)
 corrosive_pending { amount, total, cap, enemyId }   ← 오염 진액이 오염 대기에 +1(pendingPerTicks 마다, 전투당 상한 pendingCap — 보스 EnemyState.fightPendingIn)
-corruption_cleansed { amount, source, enemyId, enemyType, total }   ← 분출공 명중 정화(source 'vent' — 오염 대기 −ventHitCleanse, 부착 중 ×2, 전투당 상한 ventCleanseCap). Corruption.ts 가 구독해 pending 만 깎는다(applied 불변)
+corruption_cleansed { amount, source, enemyId, enemyType, total }   ← 정화 — source 'vent'(분출공 명중: 오염 대기 −ventHitCleanse, 부착 중 ×2, 전투당 상한 ventCleanseCap) / 'boss_death'(보스 사망 −bossCleansePending 10) / 'boss_execute'(처형 마무리 −bossExecuteCleanse 15, B3-6). Corruption.ts 가 구독해 pending 만 깎는다(applied 불변, 음수 허용)
+enemy_died        { enemyId?, enemyType, x, z, noLoot?, execution?, boss? }   ← 처치(모든 경로). execution = 처형으로 마무리(Reaction), boss = 보스 처형 사망(Metrics 가 데이터를 읽지 않고 처형 마무리를 센다, B3-6). Corruption 은 def.boss 를 읽어 사망/처형 정화를 낸다
+equip_sell_denied { id, reason }   ← 제단에서 팔 수 없는 장비(유일 장비 sellable false — 낫뿔 반지)를 팔려 했다(안내만, B3-6)
+aim_snapped       { enemyId, weakPointId?, deg }   ← 패드 겨누기 시작 스냅. weakPointId = 노출 중인 약점 구체를 후보로 골랐다(aimAssist.weakPointRadiusMul, B3-6)
 pillar_hit        { enemyId, enemyType, row, col, x, z, anticamp? }   ← 거수 돌격이 기둥 P 에 박힘 (전도와 함께 — Arena 가 받아 내구 −1. anticamp = 반캠핑 자발 박치기: 전도 대신 실신)
 pillar_damaged    { row, col, hp, max, x, z }   ← 기둥 내구가 깎임(hp 남은 내구, 0 = 붕괴 직전 표기 — 붕괴는 pillar_collapsed). Stage 붉은 균열선 1→2→3 (B3-5)
 pillar_collapsed  { row, col, x, z, playerHit, enemyHits }   ← 기둥 붕괴 — 칸 개방 + 잔해(몸만 막음) + 낙석(플레이어 40 / 보스 36 = 60 × traps.bossDamageMul)
@@ -117,11 +120,11 @@ zone_cleared    { tick }
 | `hazards.corrosiveApplied` | `corrosive_applied` | 오염 진액이 붙은 횟수 — 웅덩이를 밟는 빈도 |
 | `hazards.corrosiveDamage` | `corrosive_tick` (`amount` 합) | 오염 진액 도트 피해 합(damageTakenTotal 에도 합산) |
 | `hazards.pendingIn` | `corrosive_pending` (`amount` 합) | 오염 진액이 오염 대기에 더한 양(전투당 ≤ 8) |
-| `hazards.ventCleanse` | `corruption_cleansed` (`amount` 합) | 분출공 명중이 오염 대기에서 깎은 양(전투당 ≤ 6) — 반사·직격 노선 성공 지표 |
+| `hazards.ventCleanse` | `corruption_cleansed` (`source 'vent'`, `amount` 합) | 분출공 명중이 오염 대기에서 깎은 양(전투당 ≤ 6) — 반사·직격 노선 성공 지표. 보스 사망·처형 정화는 `boss.cleansed` |
 | `hazards.chokes` | `boss_status` (`kind 'choke'`, on) | 질식 수 — 반사 4회 달성 |
 | `weakPoints.backflows` (기존) | `boss_status` (`kind 'backflow'`, on) | 심장(cause 'heart')·분출공(cause 'vent')·눈(cause 'eye' — 포효 취소, B3-4) 역류 합 |
 
-순 오염 변화(기획서 §11.1 장부) = `pendingIn − ventCleanse`(처형·사망 정화는 B3-6). 시스템(`Hazards.ts`·`Status.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).
+순 오염 변화(기획서 §11.1 장부) = `pendingIn − ventCleanse − boss.cleansed`. 시스템(`Hazards.ts`·`Status.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).
 
 ## 보스 아레나 (arena) — 2026-09-06 (거수 B3-5)
 
@@ -146,6 +149,21 @@ zone_cleared    { tick }
 | `boss.chainTurns` | `enemy_chain_turn` | 광란 돌격 선회 수 — 첫 질주를 완벽 회피하지 못한 수 |
 
 위압 걸림·해제는 `cowed_applied/_ended`(플레이어 상태 규약). 시스템(`Enemies.ts`·`Reaction.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).
+
+## 보스 전투 마무리·상태이상 (boss) — 2026-09-07 (거수 B3-6, 기획서 §12)
+
+| 카운터 | 이벤트 | 뜻 |
+|---|---|---|
+| `boss.kills` | `boss_phase` (`phase 0`, death) | 페이즈 보스 처치 수(사망 마감 한 번 = 1) |
+| `boss.executeFinishes` | `enemy_died` (`execution && boss`) | 처형으로 마무리한 보스 수 — "처형 마무리 여부" = executeFinishes / kills |
+| `boss.cleansed` | `corruption_cleansed` (`source 'boss_death'|'boss_execute'`, `amount` 합) | 보스 사망·처형 정화가 오염 대기에서 깎은 합(−10 / −15) |
+| `boss.statusOn` | `boss_status` (`on`), kind 별 | 보스 상태이상 부여 횟수 — 12종(expose·head_down·daze·rupture·limp·skid·blind·topple·backflow·choke·exhaust·molt) + 자세(rear·roar). 예: `statusOn.expose` = 관절·눈·분출공 노출이 열린 수, `statusOn.head_down` = 머리 내림 수 |
+| `boss.playerStatus` | `numb_arm_applied`·`concussion_applied`·`hobble_applied`·`corrosive_applied`·`cowed_applied`, kind 별 | 플레이어 상태이상 부여 횟수 — `numb_arm` 이 많으면 낫을 막고 있다(튜토리얼 미이해 신호), `concussion` 은 돌격 직격 수 |
+| `boss.phaseSeconds` (기존) | `boss_phase` (`fromTicks`) | 페이즈별 소요 초 — 목표 P1 90s / P2 120s / P3 90s |
+| `weakPoints.exposuresClosed`·`exposureHits` (기존) → `derived.weakPointExposureUseRatio` | `exposure_closed` (`hits`) | 노출 활용률 = 닫힌 노출 창 안의 명중 합 / 닫힌 창 수. 0 에 가까우면 열린 약점을 못 쏘고 있다 |
+| `weakPoints.broken` (기존, 범위 수정) | `weak_point_broken` (`id !== 'vent'`) | 관절 파열 수 — 분출공 내구 0 은 질식(`hazards.chokes`)이라 섞지 않는다 |
+
+시스템(`Corruption.ts`·`Reaction.ts`·`Status.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4). Metrics 는 `enemyDef` 를 읽지 않으므로 보스 처형 사망은 `Reaction` 이 페이로드에 `boss: true` 를 싣는다.
 
 ## 전리품 (loot) — 2026-09-04
 

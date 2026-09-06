@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
-import { comboChain, enemyDef, resolvePhase, weakPointOffset } from '../core/Entities';
+import { comboChain, enemyDef, resolvePhase, weakPointOffset, weakPointScaleMul } from '../core/Entities';
 import {
   BEHEMOTH_TORSO,
   ENEMY_LEAN_JITTER,
@@ -16,7 +16,6 @@ import {
   behemothVentLit,
   behemothWeakScaleMul,
   BH_CRACK_GROW,
-  BH_VENT_OPEN_SCALE,
   buildBehemothRig,
   poseBehemothRig,
   setBehemothPhaseLook,
@@ -27,6 +26,10 @@ import {
 } from './Stage';
 
 const def = enemyDef('scythe_behemoth');
+/** 약점 정의 표 — 구체 크기 배율(behemothWeakScaleMul)은 판정과 같은 이 표를 읽는다(B3-6) */
+const WPS = def.weakPoints!;
+/** 분출공 열림 크기 배율 — 데이터(openRadiusMul 1.4, 판정 Entities.weakPointRadius 와 같은 값). 옛 Stage 상수 BH_VENT_OPEN_SCALE 폐지 */
+const VENT_OPEN = WPS.find((w) => w.id === 'vent')!.openRadiusMul!;
 const reach = def.attackRange * def.attack.impactRangeMul;
 const pullback = reach * balance.parrySpace.pullbackRatio;
 /** 삼연낫 ③(B3-4) — 양낫 내려찍기의 판정 사거리(aoe 3.2 = attackRange × impactRangeMul)와 그 pullback */
@@ -866,40 +869,44 @@ describe('갑각판 파괴 외형(B3-3)', () => {
     expect(on(rig.plates)).toEqual([false, false, false]);
   });
 
-  it('분출공 크기 = 판정 크기 — behemothWeakScaleMul(vent, open, ventScale): 닫힘·점등·봉인·파열 어느 가지든 ventScale 배(판 밑 균열이 벌어진 채), 열리면 그 위에 ×1.4. 다른 약점은 1', () => {
-    expect(behemothWeakScaleMul('vent', false, 1.15)).toBeCloseTo(1.15, 6);
-    expect(behemothWeakScaleMul('vent', true, 1.15)).toBeCloseTo(1.15 * BH_VENT_OPEN_SCALE, 6);
-    expect(behemothWeakScaleMul('eye', true, 1.15)).toBe(1);
-    expect(behemothWeakScaleMul('vent', false)).toBe(1); // 기본 — 옛 호출 그대로
+  it('분출공 크기 = 판정 크기 — behemothWeakScaleMul(vent, open, ventScale, wps): 닫힘·점등·봉인·파열 어느 가지든 ventScale 배(판 밑 균열이 벌어진 채), 열리면 그 위에 ×openRadiusMul(데이터 1.4 — 판정 weakPointScaleMul 과 같은 함수, B3-6). 다른 약점은 1', () => {
+    expect(behemothWeakScaleMul('vent', false, 1.15, WPS)).toBeCloseTo(1.15, 6);
+    expect(behemothWeakScaleMul('vent', true, 1.15, WPS)).toBeCloseTo(1.15 * VENT_OPEN, 6);
+    expect(behemothWeakScaleMul('eye', true, 1.15, WPS)).toBe(1);
+    expect(behemothWeakScaleMul('vent', false, 1, WPS)).toBe(1);
+    expect(behemothWeakScaleMul('vent', true, 1, undefined)).toBe(1); // 정의가 없으면 배율도 없다(족장 등 — 판정도 없다)
+    // 판정과 같은 값 — Entities.weakPointScaleMul 을 직접 대조
+    const ventWp = WPS.find((w) => w.id === 'vent')!;
+    expect(behemothWeakScaleMul('vent', true, 1.15, WPS)).toBeCloseTo(weakPointScaleMul({ ventScale: 1.15 }, ventWp, true), 9);
     const { rig } = measureRig(0, 0, 0, {});
     const vent = rig.weakPoints['vent']!;
     const vs = 1.15 ** 3;
-    styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent', scaleMul: behemothWeakScaleMul(id, false, vs) }));
+    styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent', scaleMul: behemothWeakScaleMul(id, false, vs, WPS) }));
     expect(vent.scale.x).toBeCloseTo(vs, 6); // 점등(P2 닫힘)
     expect(rig.weakPoints['eye']!.scale.x).toBe(1);
-    styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, scaleMul: behemothWeakScaleMul(id, false, vs) }));
+    styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, scaleMul: behemothWeakScaleMul(id, false, vs, WPS) }));
     expect(vent.scale.x).toBeCloseTo(vs, 6); // 닫힘(P1 색)
-    styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, sealed: id === 'vent', scaleMul: behemothWeakScaleMul(id, false, vs) }));
+    styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, sealed: id === 'vent', scaleMul: behemothWeakScaleMul(id, false, vs, WPS) }));
     expect(vent.scale.x).toBeCloseTo(vs, 6); // 질식(sealed)
-    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'vent', broken: false, flashAgeMs: -1, scaleMul: behemothWeakScaleMul(id, id === 'vent', vs) }));
-    expect(vent.scale.x).toBeCloseTo(1.12 * BH_VENT_OPEN_SCALE * vs, 3); // 열림 — 맥동 봉우리 × 1.4 × 균열
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'vent', broken: false, flashAgeMs: -1, scaleMul: behemothWeakScaleMul(id, id === 'vent', vs, WPS) }));
+    expect(vent.scale.x).toBeCloseTo(1.12 * VENT_OPEN * vs, 3); // 열림 — 맥동 봉우리 × 1.4 × 균열
   });
 });
 
 describe('갑각 떨기·분출공·질식 외형(B3-2)', () => {
-  it('열린 분출공은 ×1.4(BH_VENT_OPEN_SCALE — 맥동 위에 곱한다), 다른 약점은 1. 닫힌 분출공은 1. 질식(sealed)이면 어두운 본색·발광 없음·크기 1(파열색 0x7a1f3a 이 아니다)', () => {
-    expect(BH_VENT_OPEN_SCALE).toBe(1.4);
-    expect(behemothWeakScaleMul('vent', true)).toBe(1.4);
-    expect(behemothWeakScaleMul('vent', false)).toBe(1);
-    expect(behemothWeakScaleMul('eye', true)).toBe(1);
+  it('열린 분출공은 ×1.4(데이터 openRadiusMul — 맥동 위에 곱한다), 다른 약점은 1. 닫힌 분출공은 1. 질식(sealed)이면 어두운 본색·발광 없음·크기 1(파열색 0x7a1f3a 이 아니다)', () => {
+    expect(VENT_OPEN).toBe(1.4);
+    expect(behemothWeakScaleMul('vent', true, 1, WPS)).toBe(1.4);
+    expect(behemothWeakScaleMul('vent', false, 1, WPS)).toBe(1);
+    expect(behemothWeakScaleMul('eye', true, 1, WPS)).toBe(1);
     const { rig } = measureRig(0, 0, 0, {});
     const vent = rig.weakPoints['vent']!;
     const mat = vent.material as THREE.MeshLambertMaterial;
-    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: true, broken: false, flashAgeMs: -1, scaleMul: behemothWeakScaleMul(id, true) }));
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: true, broken: false, flashAgeMs: -1, scaleMul: behemothWeakScaleMul(id, true, 1, WPS) }));
     expect(vent.scale.x).toBeCloseTo(1.12 * 1.4, 3); // 맥동 봉우리 × 열림 배율
     expect(rig.weakPoints['eye']!.scale.x).toBeCloseTo(1.12, 3);
     expect(mat.emissive.getHex()).toBe(0x39ff88); // 텔레그래프 보라가 아니다 — 약점 발광은 제 색
-    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent', scaleMul: behemothWeakScaleMul(id, false) }));
+    styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent', scaleMul: behemothWeakScaleMul(id, false, 1, WPS) }));
     expect(vent.scale.x).toBeCloseTo(1, 6);
     // 질식 — sealed 로 그린다(syncEnemies 가 chokeTicks > 0 이면 sealed, broken 은 vent 에 쓰지 않는다)
     styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: false, broken: false, flashAgeMs: -1, sealed: id === 'vent' }));
@@ -961,6 +968,53 @@ describe('P3 기술 외형(B3-4) — 포효 어깨 솟음·탈진·삼연낫 ③
     }
   });
 
+  it('머리 내림·탈진·혼절(B3-6 — B3-4 잔여 메모 0.44m) — 어깨 피벗을 표 자리로 옮겨 관절 메시 = 구체(≤ 0.02m): head_down(박힌 낫, 양쪽 낫)·head_down 역류(매달린 낫)·exhaust·stunned. 진행 중간·움찔 ≤ 0.2. 낫끝은 그대로 바닥(0~0.25)·다른 낫은 들려 있다. 눈 IK 도 그대로(≤ 0.06)', () => {
+    const cases: { name: string; lean: number; crouch: number; pose: Partial<BehemothPose>; tips: 'stuck-one' | 'stuck-both' | 'hanging' | 'free' }[] = [
+      { name: 'head_down r', ...HEAD_DOWN, pose: { pose: 'head_down', bladeSide: 1 }, tips: 'stuck-one' },
+      { name: 'head_down l', ...HEAD_DOWN, pose: { pose: 'head_down', bladeSide: -1 }, tips: 'stuck-one' },
+      { name: 'head_down backflow', ...HEAD_DOWN, pose: { pose: 'head_down', poseCause: 'backflow' }, tips: 'hanging' },
+      { name: 'exhaust', ...HEAD_DOWN, pose: { pose: 'exhaust' }, tips: 'stuck-both' },
+      { name: 'stunned', ...STUNNED, pose: { pose: 'stunned' }, tips: 'free' },
+    ];
+    for (const c of cases) {
+      const { rig, box } = measureRig(c.lean, 0, c.crouch, c.pose);
+      for (const id of ['joint_r', 'joint_l']) expect(anchorGap(rig, id), `${c.name} ${id} 어긋남 ${anchorGap(rig, id).toFixed(3)}`).toBeLessThanOrEqual(0.02);
+      expect(anchorGap(rig, 'eye'), `${c.name} 눈`).toBeLessThanOrEqual(0.06);
+      expect(box.max.y, `${c.name} 꼭대기`).toBeLessThan(3.8);
+      expect(box.min.y, `${c.name} 바닥`).toBeGreaterThanOrEqual(-0.01);
+      const tips = ([1, -1] as const).map((side) => behemothBladeTip(rig, side, new THREE.Vector3()));
+      if (c.tips === 'stuck-both') for (const t of tips) expect(t.y, `${c.name} 낫끝 ${t.y.toFixed(2)}`).toBeLessThanOrEqual(0.25);
+      if (c.tips === 'stuck-one') {
+        const stuck = tips[c.pose.bladeSide === 1 ? 0 : 1]!;
+        const free = tips[c.pose.bladeSide === 1 ? 1 : 0]!;
+        expect(stuck.y, `${c.name} 박힌 낫끝 ${stuck.y.toFixed(2)}`).toBeLessThanOrEqual(0.25);
+        expect(free.y, `${c.name} 다른 낫 ${free.y.toFixed(2)}`).toBeGreaterThan(0.5);
+      }
+      if (c.tips === 'hanging') for (const t of tips) expect(t.y, `${c.name} 매달린 낫끝 ${t.y.toFixed(2)}`).toBeGreaterThanOrEqual(0.2);
+      for (const t of tips) expect(t.y, `${c.name} 낫끝 바닥 위`).toBeGreaterThanOrEqual(0);
+      // 어깨 피벗은 표(그 자세의 관절 y·z)에 있다
+      const table = weakPointOffset(def, def.weakPoints!.find((w) => w.id === 'joint_r')!, c.pose.pose!);
+      const jr = behemothAnchorPos(rig, 'joint_r', new THREE.Vector3());
+      expect(jr.y, `${c.name} 어깨 y`).toBeCloseTo(table.y, 2);
+      expect(jr.z, `${c.name} 어깨 z`).toBeCloseTo(table.z, 2);
+    }
+    // 진행 중간(poseBlend 0.5 — 몸통도 절반)·움찔(flinchLean) — 구체 반지름 0.30 의 2/3 안
+    const half = measureRig(HEAD_DOWN.lean * 0.5, 0, HEAD_DOWN.crouch * 0.5, { pose: 'head_down', poseBlend: 0.5 });
+    for (const id of ['joint_r', 'joint_l']) expect(anchorGap(half.rig, id), `head_down 0.5 ${id}`).toBeLessThanOrEqual(0.2);
+    const flinch = measureRig(HEAD_DOWN.lean + T.flinchLean, 0, HEAD_DOWN.crouch, { pose: 'exhaust', nowMs: 100 });
+    for (const id of ['joint_r', 'joint_l']) expect(anchorGap(flinch.rig, id), `exhaust+flinch ${id}`).toBeLessThanOrEqual(0.2);
+    // 자세가 풀리면 어깨는 제자리
+    const back = measureRig(HEAD_DOWN.lean, 0, HEAD_DOWN.crouch, { pose: 'exhaust' });
+    back.torso.rotation.x = 0;
+    back.torso.position.y = 0;
+    poseBehemothRig(back.rig, base);
+    const jt = def.visual!.joints.pos;
+    for (const arm of back.rig.arms) {
+      expect(arm.shoulder.position.y).toBeCloseTo(jt[1] * def.height, 6);
+      expect(arm.shoulder.position.z).toBeCloseTo(jt[2] * def.radius, 6);
+    }
+  });
+
   it('탈진(pose exhaust) — 두 낫이 다 바닥에 꽂힌다(낫끝 y 0~0.25, 몸 앞 2.4m~사거리, 어깨보다 안쪽, 좌우 대칭), 눈은 표 0.9(IK ≤ 0.06), 분출공 구체는 표 (0, 1.6, −1.7) — 내려온 머리 위로 보인다. 탈진은 exposedStates 로만 열리니 구체 자리만 여기서', () => {
     const { rig } = measureRig(HEAD_DOWN.lean, 0, HEAD_DOWN.crouch, { pose: 'exhaust' });
     const tips = ([1, -1] as const).map((side) => behemothBladeTip(rig, side, new THREE.Vector3()));
@@ -979,7 +1033,7 @@ describe('P3 기술 외형(B3-4) — 포효 어깨 솟음·탈진·삼연낫 ③
     expect(vent.z).toBeCloseTo(-1.7, 6);
     // 열린 표적은 보여야 한다 — 플레이어 눈높이 정면(몸 표면 4.4m)에서 분출공 구체를 향한 시선이 내려온 머리 상자·뿔에 가리지 않는다(레이가 구체 표면보다 먼저 머리를 맞지 않는다)
     const eyePos = new THREE.Vector3(0.5, balance.player.eyeHeight, -(reach + balance.player.radius));
-    const ventR = def.weakPoints!.find((w) => w.id === 'vent')!.radius * BH_VENT_OPEN_SCALE;
+    const ventR = def.weakPoints!.find((w) => w.id === 'vent')!.radius * VENT_OPEN;
     const dir = vent.clone().sub(eyePos).normalize();
     const hits = new THREE.Raycaster(eyePos, dir).intersectObject(rig.headShake, true);
     const toSurface = eyePos.distanceTo(vent) - ventR;

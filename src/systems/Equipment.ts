@@ -3,7 +3,7 @@
 // 걸치기/벗기 때 가방을 다시 재고(resizeInventory) — 줄어드는데 든 것이 안 들어가면 벗지 못한다(안내, 결정 6-A).
 
 import { balance } from '../core/Balance';
-import { equipDef, type EquipSlot, slotsFor } from '../core/EquipData';
+import { equipDef, equipSellable, type EquipSlot, slotsFor } from '../core/EquipData';
 import { addEquip, bagSizeFor, hasRoom, resizeInventory } from '../core/Inventory';
 import { recomputeModifiers } from '../core/Modifiers';
 import type { World } from '../core/World';
@@ -66,10 +66,14 @@ export function unequip(world: World, slot: EquipSlot): 'ok' | 'bag_full' | 'non
   return 'ok';
 }
 
-/** 제단에서 가방의 장비를 판다 — 정가 × equipment.sellRatio */
+/** 제단에서 가방의 장비를 판다 — 정가 × equipment.sellRatio. 유일 장비(sellable false — 낫뿔 반지, B3-6)는 팔 수 없다: equip_sell_denied 만 내고 그대로 둔다 */
 export function sellFromBag(world: World, slotIndex: number): number {
   const slot = world.inventory[slotIndex];
   if (!slot || slot.kind !== 'equip' || !slot.equipId) return 0;
+  if (!equipSellable(slot.equipId)) {
+    world.events.emit('equip_sell_denied', { id: slot.equipId, reason: 'unique' });
+    return 0;
+  }
   const gold = Math.round(equipDef(slot.equipId).price * balance.equipment.sellRatio);
   world.inventory[slotIndex] = null;
   world.gold += gold;

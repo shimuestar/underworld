@@ -11,7 +11,7 @@
 //  - 주머니는 부활해도 남고(비석과 같은 규칙), 층을 오갈 때도 그대로다(FloorState).
 
 import { balance } from '../core/Balance';
-import { equipDef, allEquipIds } from '../core/EquipData';
+import { equipDef, randomEquipIds } from '../core/EquipData';
 import { enemyDef } from '../core/Entities';
 import { addItem, autoBind, dropSlot, hasRoom, itemDef, addSigil, addEquip } from '../core/Inventory';
 import { sigilDef, isActiveSkill } from '../core/SigilData';
@@ -81,11 +81,16 @@ export function rollLoot(enemyType: string, rng: () => number = Math.random): Lo
     if (def.boss) amount *= cfg.gold.bossMul;
     mergeEntry(out, { kind: 'gold', count: amount });
   }
-  // 장비 — 보스는 확정 1개, 일반 적은 pickups.equip.dropChance (2026-09-04). 어느 장비인지도 rng 로
+  // 장비 — 보스는 확정 1개, 일반 적은 pickups.equip.dropChance (2026-09-04). 어느 장비인지도 rng 로 — 유일 장비(unique)는 이 풀에 없다
   if ((def.boss && cfg.equip.bossAlways) || rng() < cfg.equip.dropChance) {
-    const ids = allEquipIds();
-    const pick = ids[Math.min(ids.length - 1, Math.floor(rng() * ids.length))]!;
-    mergeEntry(out, { kind: 'equip', count: 1, equipId: pick });
+    const ids = randomEquipIds();
+    const pick = ids[Math.min(ids.length - 1, Math.floor(rng() * ids.length))];
+    if (pick) mergeEntry(out, { kind: 'equip', count: 1, equipId: pick });
+  }
+  // 확정 장비(거수 B3-6 — 유일 반지) — 정의의 equipDrops 가 무작위와 별개로 그대로 들어간다. 없는 id 는 equipDef 가 던진다(데이터 오타를 조용히 넘기지 않는다)
+  for (const id of def.equipDrops ?? []) {
+    equipDef(id);
+    mergeEntry(out, { kind: 'equip', count: 1, equipId: id });
   }
   return out;
 }

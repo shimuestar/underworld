@@ -47,6 +47,7 @@ describe('Metrics', () => {
     events.emit('weak_point_hit', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'eye', damage: 33, x: 0, y: 2.35, z: 0 });
     events.emit('weak_point_hit', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'joint_r', damage: 22, x: 0, y: 2.5, z: 0 });
     events.emit('weak_point_broken', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'joint_r' });
+    events.emit('weak_point_broken', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'vent' }); // 분출공 내구 0 은 질식(choke) — 파열로 세지 않는다(B3-6)
     events.emit('exposure_closed', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'joint_r', hits: 2 });
     events.emit('exposure_closed', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'eye', hits: 0 });
     events.emit('boss_staggered', { enemyId: 1, enemyType: 'scythe_behemoth', cause: 'eye' });
@@ -80,6 +81,10 @@ describe('Metrics', () => {
     events.emit('corrosive_tick', { amount: 2, health: 76 }); // 도트 — 받은 피해에 합산, 함정 사망은 아니다
     events.emit('corrosive_pending', { amount: 1, total: 1, cap: 8, enemyId: 1 });
     events.emit('corruption_cleansed', { amount: 2, source: 'vent', enemyId: 1, total: 2 });
+    events.emit('corruption_cleansed', { amount: 15, source: 'boss_execute', enemyId: 1, total: 15 }); // 보스 처형 정화(B3-6) — boss.cleansed, ventCleanse 아님
+    events.emit('enemy_died', { enemyId: 1, enemyType: 'scythe_behemoth', x: 0, z: 0, execution: true, boss: true }); // 처형 마무리
+    events.emit('enemy_died', { enemyId: 3, enemyType: 'goblin_runner', x: 0, z: 0, execution: true }); // 일반 적 처형은 보스 마무리가 아니다
+    events.emit('numb_arm_applied', { kind: 'numb_arm', ticks: 240 }); // 플레이어 상태 부여(팔 저림 — 막기 신호)
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'backflow', on: true, cause: 'vent', ticks: 60, selfDamage: 0 }); // 분출공 역류도 역류
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'choke', on: true, ticks: 1800 });
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'choke', on: false });
@@ -105,8 +110,14 @@ describe('Metrics', () => {
     const s = metrics.snapshot(makeWorldStub());
     expect(s.arena).toEqual({ seals: 2, pillarCollapses: 1, anticampCharges: 1, anticampFar: 1, rubbleBroken: 1 });
     expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1, chargeDodges: 1, limps: 1, blinds: 1, topples: 1, pillarHits: 1, backflows: 2 });
-    expect(s.boss).toEqual({ phaseShifts: 2, phaseSkips: 0, phaseSeconds: { '3': 90, '2': 120, '1': 90 }, platesBroken: 2, plateGold: 17, roars: 2, roarHits: 1, combos: 1, exhausts: 1, chainTurns: 1 });
+    expect(s.boss).toEqual({
+      phaseShifts: 2, phaseSkips: 0, phaseSeconds: { '3': 90, '2': 120, '1': 90 }, platesBroken: 2, plateGold: 17, roars: 2, roarHits: 1, combos: 1, exhausts: 1, chainTurns: 1,
+      kills: 1, executeFinishes: 1, cleansed: 15, // B3-6 — 사망 boss_phase 한 번 = 처치 1, 처형 마무리 1, 보스 정화 15
+      statusOn: { limp: 1, rupture: 1, blind: 1, topple: 1, head_down: 2, backflow: 2, rear: 1, choke: 1, exhaust: 1 }, // on 만, kind 별
+      playerStatus: { corrosive: 1, numb_arm: 1 },
+    });
     expect(s.hazards).toEqual({ pools: 2, evaporated: 1, corrosiveApplied: 1, corrosiveDamage: 2, pendingIn: 1, ventCleanse: 2, chokes: 1 });
+    expect(s.derived.weakPointExposureUseRatio).toBeCloseTo(2 / 2); // 닫힌 창 2 안의 명중 2
     expect(s.combat.damageTakenTotal).toBe(22 + 2); // 오염 진액 도트도 받은 피해다
     expect(s.traps.deaths).toBe(0);
     expect(s.combat.parryAttempts).toBe(4);
@@ -128,14 +139,15 @@ describe('Metrics', () => {
     const metrics = new Metrics(events);
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 1, from: 3, skipped: true, fromTicks: 600, tick: 600 });
     const s = metrics.snapshot(makeWorldStub());
-    expect(s.boss).toEqual({ phaseShifts: 1, phaseSkips: 1, phaseSeconds: { '3': 10 }, platesBroken: 0, plateGold: 0, roars: 0, roarHits: 0, combos: 0, exhausts: 0, chainTurns: 0 });
+    expect(s.boss).toEqual({ phaseShifts: 1, phaseSkips: 1, phaseSeconds: { '3': 10 }, platesBroken: 0, plateGold: 0, roars: 0, roarHits: 0, combos: 0, exhausts: 0, chainTurns: 0, kills: 0, executeFinishes: 0, cleansed: 0, statusOn: {}, playerStatus: {} });
   });
 
   it('데이터가 없으면 파생 지표는 null (0으로 왜곡하지 않는다)', () => {
     const metrics = new Metrics(new Events());
     const s = metrics.snapshot(makeWorldStub());
-    expect(s.boss).toEqual({ phaseShifts: 0, phaseSkips: 0, phaseSeconds: {}, platesBroken: 0, plateGold: 0, roars: 0, roarHits: 0, combos: 0, exhausts: 0, chainTurns: 0 });
+    expect(s.boss).toEqual({ phaseShifts: 0, phaseSkips: 0, phaseSeconds: {}, platesBroken: 0, plateGold: 0, roars: 0, roarHits: 0, combos: 0, exhausts: 0, chainTurns: 0, kills: 0, executeFinishes: 0, cleansed: 0, statusOn: {}, playerStatus: {} });
     expect(s.hazards).toEqual({ pools: 0, evaporated: 0, corrosiveApplied: 0, corrosiveDamage: 0, pendingIn: 0, ventCleanse: 0, chokes: 0 });
+    expect(s.derived.weakPointExposureUseRatio).toBeNull();
     expect(s.derived.perfectParryRatio).toBeNull();
     expect(s.derived.manaWasteRatio).toBeNull();
     expect(s.derived.ammoLeftRatioAtAltar).toBeNull();

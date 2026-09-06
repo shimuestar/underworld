@@ -39,6 +39,6 @@ export class DebugOverlay {
       `마나 휘발률   ${fmt(d.manaWasteRatio)}  (목표 ≤${t.manaWasteRatio}) ${mark(d.manaWasteRatio, t.manaWasteRatio, true)}  획득 ${s.mana.gained} 휘발 ${s.mana.decayed}\n` +
       `연쇄3 도달률  ${fmt(d.chainTier3ReachRatio)}  (목표 ≥${t.chainTier3ReachRatio}) ${mark(d.chainTier3ReachRatio, t.chainTier3ReachRatio, false)}\n` +
       `명중률 ${fmt(d.shotAccuracy)} (${s.ammo.shotsHit}/${s.ammo.shotsFired})   처치 총${s.kills.weapon}/처형${s.kills.execution}/마법${s.kills.spell}   교전 ${s.combat.encounters}   반사 ${s.combat.deflects}\n` +
-      `피격 ${s.combat.timesDamaged}회 ${s.combat.damageTakenTotal}dmg   오염 ${s.session.corruptionApplied}(+${s.session.corruptionPending})`;
+      `피격 ${s.combat.timesDamaged}회 ${s.combat.damageTakenTotal}dmg   오염 ${s.session.corruptionApplied}(${s.session.corruptionPending >= 0 ? '+' : ''}${s.session.corruptionPending} 대기)`;
   }
 }

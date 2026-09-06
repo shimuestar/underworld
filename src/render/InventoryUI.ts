@@ -26,7 +26,7 @@ import { itemIcon } from './ItemIcons';
 import { attachPopup, consumablePopup, equipPopup, sigilPopup, type PopupContent } from './ItemPopup';
 import { equipIcon, sigilIcon } from './ItemIcons';
 import { sigilDef } from '../core/SigilData';
-import { equipDef, slotLabel, type EquipSlot } from '../core/EquipData';
+import { equipDef, equipSellable, slotLabel, type EquipSlot } from '../core/EquipData';
 import { isActiveSkill, SIGIL_SLOTS, type SigilSlot } from '../core/SigilData';
 import { BODY_ANCHORS, BODY_H, BODY_W, buildBodySvg, SLOT_LABELS, type BodySvgOptions } from './BodyDoll';
 import * as Sigils from '../systems/Sigils';
@@ -975,10 +975,12 @@ export class InventoryUI {
       } else if (here && slot && slot.kind === 'equip' && slot.equipId) {
         const content = equipPopup(world, slot.equipId);
         const sellPrice = Math.round(equipDef(slot.equipId).price * balance.equipment.sellRatio);
+        // 유일 장비(낫뿔 반지, B3-6)는 제단에서도 팔 수 없다 — X 는 거부(equip_sell_denied)만 낸다
+        const sellLabel = equipSellable(slot.equipId) ? `팔기 ◆ ${sellPrice}` : '팔 수 없다 — 유일 장비';
         content.actions = [
           { key: this.key('Y', 'E'), label: '걸치기 (같은 부위 것과 맞바꾼다)' },
           { key: this.key('A 길게', '드래그'), label: '집어 옮기기 — 인형 칸에 놓으면 그 칸에 걸친다' },
-          { key: this.key('X', 'X'), label: this.altar ? `팔기 ◆ ${sellPrice}` : '바닥에 버리기' },
+          { key: this.key('X', 'X'), label: this.altar ? sellLabel : '바닥에 버리기' },
         ];
         attachPopup(cell, content, 'right', this.padMode);
       } else if (here && slot && slot.kind === 'sigil' && slot.sigilId) {

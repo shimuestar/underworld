@@ -1229,8 +1229,9 @@ function moveProjectiles(world: World, dt: number): void {
         );
       }
       // 진액 웅덩이(거수 진액 구슬, B3-2) — 어디에 닿았든 그 자리 바닥에 남는다(플레이어·바닥·벽 — 벽이면 구슬 반지름만큼 앞). 시전자의 분출공으로 되돌아간
-      // 반사 구슬(swallowed)은 삼켜진 것이라 남기지 않는다. 다른 투사체에 깨진 구슬(hitProjectile 은 이쪽이 화염구·수류탄일 때)은 이 문을 지나지 않는다
-      if (proj.poolKind && !swallowed) {
+      // 반사 구슬(swallowed)은 삼켜진 것이라 남기지 않고, 반사됐지만 시전자를 빗나간 구슬(deflected — 보스가 움직여 몸 상자를 놓침)도 남기지 않는다:
+      // 플레이어 소유가 된 투사체가 플레이어를 해치는 장판을 만들지 않는다(B3-2 잔여 메모 → B3-6, 기획서 §10.2). 다른 투사체에 깨진 구슬은 이 문을 지나지 않는다
+      if (proj.poolKind && !swallowed && !proj.deflected) {
         const back = hitEnemy !== null || hitPlayer ? 0 : proj.radius;
         world.events.emit('spawn_pool', {
           kind: proj.poolKind, x: proj.x + dirX * (hitT - back), z: proj.z + dirZ * (hitT - back), enemyId: proj.casterId, hit: hitPlayer,

@@ -8,7 +8,7 @@
 // 다 비운 상자는 뚜껑 열린 채 남되 대상에서 빠진다. 부활해도 다시 잠기지 않는다.
 
 import { balance } from '../core/Balance';
-import { allEquipIds } from '../core/EquipData';
+import { randomEquipIds } from '../core/EquipData';
 import { bagSigilIds, bagEquipIds } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
 import sigilsJson from '../../data/sigils.json';
@@ -62,11 +62,11 @@ export function open(world: World, chest: ChestState): void {
   world.events.emit('loot_opened', { kind: 'chest', id: chest.id, entries: chest.chestItems?.length ?? 0, first });
 }
 
-/** 뽑을 장비 — equipChance 안이면 하나. 몸에 걸친 것·가방에 든 것은 뺀다 */
+/** 뽑을 장비 — equipChance 안이면 하나. 몸에 걸친 것·가방에 든 것은 뺀다. 유일 장비(unique — 낫뿔 반지)는 풀에 없다(randomEquipIds) */
 function rollEquip(world: World): string | null {
   if (Math.random() >= balance.chest.equipChance) return null;
   const owned = new Set<string>([...Object.values(world.equipment).filter((v): v is string => !!v), ...bagEquipIds(world)]);
-  const pool = allEquipIds().filter((id) => !owned.has(id));
+  const pool = randomEquipIds().filter((id) => !owned.has(id));
   return pool[Math.floor(Math.random() * pool.length)] ?? null;
 }
 

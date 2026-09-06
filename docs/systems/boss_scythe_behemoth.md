@@ -1,4 +1,6 @@
-# 낫뿔 거수 (scythe_behemoth) — 울트라리스크형 신규 보스 최종 기획서 (검토 반영판)
+# 낫뿔 거수 (scythe_behemoth) — 울트라리스크형 신규 보스 구현 스펙 (기획서 → 구현 반영판)
+
+> **상태(2026-09-07):** M11 15 체크박스(B1-1 ~ B3-6) 전부 구현 완료 — 이 문서는 이제 **구현 스펙**이다. 수치·필드명은 `data/*.json` 과 일치하고(§14 가 실제 필드명), 체크 상태·검증 경로(스크린샷·로그)는 `TASKS.md` M11 이 정본. 기획 단계의 결정 35개(§확인이 필요한 결정)와 검토 반영 이력은 그대로 남겼다. 구현이 기획서와 달리한 점은 각 절의 **구현 메모**와 `## 검토 반영` 끝의 B3-6 항목에 있다.
 
 > **뼈대:** 패링·반응 중심. 패링은 스태거가 아니라 **약점을 열고**, 스태거(혼절)는 **눈 약점 사격**으로만 온다. **접목:** 약점 연쇄(돌격 중 눈 → 눈멂 → 기둥 충돌 → 전도), 아레나(기둥 내구·균열벽 돌격 개방·반캠핑), 경제(갑각판 골드·분출공 정화·처형 마무리 정화).
 >
@@ -64,12 +66,12 @@
 | 낫 ×2 | Box 0.12 × 1.8 × 0.5 | 관절에서 앞·아래로 | 0xcfc4a0 | 파랑 텔레그래프. **보이는 낫끝 = 판정 낫끝**(`weaponTipDist`) |
 | 다리 ×4 | Cylinder r 0.22 h 1.0 | (±1.0, 0.5, ±1.0) | 0x3a2d40 | 발구르기 예고 앞다리 빨강 |
 | **배 심장(약점)** | Sphere r 0.35 | (0, 0.6, −0.4) 몸통 밑면 아래 | 0x7a1f3a | 앞발 들기 중 **진홍 0xff2e63** 맥동 |
-| **분출공(약점, P2+)** | Sphere r 0.30 | **(0, 1.65, −1.55)** 가슴 앞, 머리(y ≥ 1.9) 아래 — 반사 복귀 높이 0.6h = 1.8 ± 구슬 r0.35 와 겹침 | 0x1f3a2e | P2 진입 후 **오염 녹색 0x39ff88** 맥동, 갑각 떨기 예고·탈진 중 크기 ×1.4 |
+| **분출공(약점, P2+)** | Sphere r 0.30 | **(0, 1.65, −1.55)** 가슴 앞, 머리(y ≥ 1.9) 아래 — 반사 복귀 높이 0.6h = 1.8 ± 구슬 r0.35 와 겹침 | 0x1f3a2e | P2 진입 후 **오염 녹색 0x39ff88** 맥동, 갑각 떨기 예고·탈진 중 크기 ×1.4(`weakPoints[vent].openRadiusMul` — **판정 반지름도 같은 배율**, B3-6) |
 | 입 | Box 1.0 × 0.25 × 0.7, 힌지 | 머리 앞 아래 | 0x2a1f30 | 포효 예고 시 벌어짐(−0.8rad) |
 | 꼬리 | Cylinder r 0.15 h 1.2 | 뒤로 (0, 1.2, +1.9) | 0x3a2d40 | 광란 돌격 선회 시 **빨강** + 휘두름 |
 | 이름표 | 기존 sprite, `plateScale 2.6`(def.boss 자동) | y = h + 0.7 | — | 체력 3칸 자동 |
 
-**자세(Stage `pose`, 로직 `enemy.pose`/`poseTicks`):** `normal` / `charge`(몸통 −12° 웅크림, 머리 내림 → 눈이 1.1m 높이 정면) / `rear`(몸통 +35°, 앞다리 들림 → 배 노출 — 회전축은 발이 아니라 몸통 가운데 조금 뒤·위 (y 1.83, z 0.17): 표의 심장 (0, 1.15, −1.0) 이 normal 에서 35° 돌아 나온 자리라 그 축이어야 배 메시와 구체가 맞는다. 몸통은 축 보정으로 앞 ≈1.02·위 ≈0.43 이동, 앞다리는 공중·뒷다리 바닥, 두 낫 앞아래, 머리는 faceUp IK — `Stage.behemothRearOffset`, B3-1) / `head_down`(몸통 +15° 앞 기울임 — 목 IK 가 눈 0.9m 를 만들 수 있는 각(구현 `BEHEMOTH_TORSO.headDownLean` −0.26), 낫끝 바닥 고정, 머리 0.9m. 역류 원인(`cause 'backflow'`)이면 낫이 박히지 않고 두 낫이 벌어져 매달린다) / `skid`(어깨 높이를 축으로 옆 8° 굴림 + 앞으로 미끄러지며 살짝 뒤로 젖혀 버팀·낮아짐 — 15° 는 양 어깨를 높이 0.6m 갈라 놓아 표(둘 다 2.4)의 구체가 관절 메시를 벗어나 8°(±0.16m) 로 줄임. 눈은 목 IK 로 표 자리(≈0.05m), 관절 메시–구체 어긋남 ≤ 0.2m 를 `Behemoth.test` 가 못박음) / `stunned`(머리 흔들림, 혼절) / `roar`(머리 치켜듦·입 벌림 → 눈이 위로 드러남) / `blind`(머리를 좌우로 휘저으며 직진).
+**자세(Stage `pose`, 로직 `enemy.pose`/`poseTicks`):** `normal` / `charge`(몸통 −12° 웅크림, 머리 내림 → 눈이 1.1m 높이 정면) / `rear`(몸통 +35°, 앞다리 들림 → 배 노출 — 회전축은 발이 아니라 몸통 가운데 조금 뒤·위 (y 1.83, z 0.17): 표의 심장 (0, 1.15, −1.0) 이 normal 에서 35° 돌아 나온 자리라 그 축이어야 배 메시와 구체가 맞는다. 몸통은 축 보정으로 앞 ≈1.02·위 ≈0.43 이동, 앞다리는 공중·뒷다리 바닥, 두 낫 앞아래, 머리는 faceUp IK — `Stage.behemothRearOffset`, B3-1) / `head_down`(몸통 +15° 앞 기울임 — 목 IK 가 눈 0.9m 를 만들 수 있는 각(구현 `BEHEMOTH_TORSO.headDownLean` −0.26), 낫끝 바닥 고정, 머리 0.9m. 역류 원인(`cause 'backflow'`)이면 낫이 박히지 않고 두 낫이 벌어져 매달린다. 어깨 피벗은 표의 관절 자리로 옮겨 관절 메시 = 구체 — B3-6) / `skid`(어깨 높이를 축으로 옆 8° 굴림 + 앞으로 미끄러지며 살짝 뒤로 젖혀 버팀·낮아짐 — 15° 는 양 어깨를 높이 0.6m 갈라 놓아 표(둘 다 2.4)의 구체가 관절 메시를 벗어나 8°(±0.16m) 로 줄임. 눈은 목 IK 로 표 자리(≈0.05m), 관절 메시–구체 어긋남 ≤ 0.2m 를 `Behemoth.test` 가 못박음) / `stunned`(머리 흔들림, 혼절) / `roar`(머리 치켜듦·입 벌림 → 눈이 위로 드러남) / `blind`(머리를 좌우로 휘저으며 직진).
 
 목 피벗(`visual.neck`)은 몸통 윗면 (0, 2.35, −0.5) — 머리 중심까지 0.9m 의 목 마디로, 목 IK(`Stage.solveNeckToEye`)가 머리 내림(charge 1.1m·head_down 0.9m)과 치켜듦(roar 2.9m·rear 3.0m)을 이 길이로 만든다(B2-2 에서 (0, 1.95, −1.0) 에서 옮겼다).
 
@@ -90,6 +92,8 @@
 **렌더 규약:**
 - 약점 구체는 `group`(yaw 만 회전)에 붙인다. 자세로 몸이 기울면 **Stage 와 판정이 같은 `poseOffsets` 표를 읽어** 구체를 옮긴다 — torso 기울임 보간에 구체를 딸려 보내지 않는다("보이는 창끝 = 판정 창끝").
 - 약점 머티리얼은 `flashMaterials` 에 넣지 않는다(일괄 emissive 대입이 자체 발광을 지운다). 별도 갱신.
+- **어깨 피벗 정렬(B3-4 → B3-6):** `roar`·`head_down`·`exhaust`·`stunned`(`Stage.BH_SHOULDER_ALIGN_POSES`)에서는 어깨 피벗(관절 메시)을 `poseOffsets` 표의 관절 자리로 옮겨 관절 메시 = 구체(어긋남 0.00 — `Behemoth.test`, `debug/behemoth ?view=head_down|exhaust|stunned`). 박힌·늘어진 낫의 낫끝 풀이는 옮긴 어깨에서 잰다. `skid` 는 굴림 보정으로 ≤ 0.2m, `charge`·`rear`·`blind` 는 어깨가 몸통을 따라간다(관절이 닫혀 있거나 표가 몸통과 함께 움직인다).
+- **약점 구체 크기 = 판정 크기:** 구체 scale 은 `Stage.behemothWeakScaleMul(id, open, ventScale, wps)` = `Entities.weakPointScaleMul` — 분출공은 갑각판 `ventScale`(B3-3) × 열림 `openRadiusMul` 1.4(B3-6). 옛 Stage 상수 `BH_VENT_OPEN_SCALE`(그림만 ×1.4)은 폐지.
 - 자세가 새로 서는 처음 ~10프레임은 `poseBlend`(Stage `BH_POSE_BLEND_K` 0.35/프레임)가 구체·머리를 normal → 표 자리로 **함께** 보간한다 — 판정은 그 틱에 즉시 표 자리다. 어긋남은 최대 ~0.26m·5프레임 안(완벽 패링 히트스톱 4틱이 대부분 가린다)이고, 서는 프레임에 스냅하면 예고 자세(rear·roar)가 튀어 보이므로 **스냅하지 않고 유지**한다(B2-2 검토 메모 → B3-5 결정). 사라질 때도 같은 계수로 normal 로 돌아간다.
 - 예고는 **동작·발광·소리로만.** 파랑 = 패링 가능(낫), 빨강 = 불가(돌격·발구르기·들이받기·포효·꼬리), 보라 = 투사체(갑각 떨기). 약점 노출은 **구체 발광 + 크기 맥동 + 짧은 금속성 소리**. 링·조준선·아웃라인 없음. 발구르기 바닥 표식은 결정 16(기본 없음).
 - 피 색 `BLOOD_COLORS.scythe_behemoth = 0x4a1a6e`(오염 보라). 파편 색은 몸통색.
@@ -174,9 +178,10 @@
 
 ### 4.2 약점 공통 규칙
 
-- **판정 우선순위(구체 승):** 레이가 구체에 맞고 **`facing` 원뿔 조건**을 만족하면 AABB 보다 우선한다 — 관절·심장이 몸 AABB 안에 있어도 맞는다. 원뿔 조건: 약점마다 데이터 `facing`(단위 벡터, 로컬)과 `coneDeg`(기본 100°)를 두고 `dot(rayDir, facing) ≤ −cos(coneDeg/2)` 일 때만 성립. 눈·분출공·심장 `facing (0,0,−1)`(정면 반구), `joint_r (1, 0.4, −0.4)`/`joint_l (−1, 0.4, −0.4)`(그쪽 옆·앞). **등 뒤에서 몸을 뚫고 눈을 맞힐 수 없고, 오른쪽에서 왼 관절을 맞힐 수 없다.** AABB 미명중(t_aabb = null)이면 구체 단독으로 성립(+∞ 취급). 테스트: 정면 → 눈 ×3 / 후면 → 몸통 0.8× / 우측면 → joint_r ○·joint_l ×.
+- **판정 우선순위(구체 승):** 레이가 구체에 맞고 **`facing` 원뿔 조건**을 만족하면 AABB 보다 우선한다 — 관절·심장이 몸 AABB 안에 있어도 맞는다. 원뿔 조건: 약점마다 데이터 `facing`(단위 벡터, 로컬)과 `coneDeg`(기본 100°)를 두고 `dot(rayDir, facing) ≤ −cos(coneDeg/2)` 일 때만 성립. 눈·분출공·심장 `facing (0,0,−1)`(정면 반구), **관절 `joint_r (1, 0.3, −1)`/`joint_l (−1, 0.3, −1)`·`coneDeg 140`**(그쪽 옆·앞 — 패링 자리(정면 4.4m·눈높이 1.6)에서 겨눈 레이가 dot ≈ −0.39 ≤ −cos 70° 로 성립한다. 기획 초안의 `(±1, 0.4, −0.4)`·100° 는 정면에서 dot ≈ +0.02 라 보이는 관절을 정면에서 절대 못 맞혔다 — B2-1 잔여 메모 → B3-6 데이터 수정). **등 뒤에서 몸을 뚫고 눈을 맞힐 수 없고, 오른쪽에서 왼 관절을 맞힐 수 없다.** AABB 미명중(t_aabb = null)이면 구체 단독으로 성립(+∞ 취급). 테스트(`WeakPoint.test`): 정면 → 눈 ×3 / 후면 → 몸통 0.8× / 우측면 → joint_r ○·joint_l × / **정면 4.4m → joint_r ○·joint_l ○, 등 뒤 → 둘 다 ×**.
 - **노출 아닐 때는 판정 자체가 없다** → 몸통 0.8× 로 떨어진다. 노출 종료 시 `exposure_closed{id, hits}` 발행(활용률 계측용, 벌칙 없음).
-- **패드 조준 보조:** 기본은 실루엣 자석만. 옵션 `balance.input.gamepad.aimAssist.weakPointRadiusMul 1.35` 로 노출 중 약점 구체를 후보에 추가(결정 24).
+- **열림 크기 = 판정 크기(`openRadiusMul`, B3-6):** 분출공 `weakPoints[vent].openRadiusMul 1.4` — 열려 있는 동안(`weakPointOpen`) 판정 반지름(`Entities.weakPointRadius` = radius × ventScale × openRadiusMul)과 그림(`Stage.behemothWeakScaleMul` — 같은 `weakPointScaleMul`)이 같은 배율로 커진다. 다른 약점은 배율 없음. 테스트: 열린 분출공 0.42 — 중심 위 0.38m 레이 ○, 닫히면 ×.
+- **패드 조준 보조(구현 B3-6, 결정 24):** `balance.input.gamepad.aimAssist.weakPointRadiusMul 1.35`(기본 켬, 0 이면 몸 실루엣만). `PlayerMove.padAimAssist` 가 노출 중인(`weakPointOpen`) 약점 구체를 몸 실루엣과 함께 마찰·자석·스냅 후보에 넣는다(`AimAssistTarget.weakPointId`). 각반지름은 **판정 반지름 × 1.35**(작은 구체를 조금 후하게), 후보 비교는 (키운) 구체 가장자리까지의 각거리 — 몸 중심보다 구체 가장자리가 가까우면 구체가 후보, 자석은 그 가장자리까지만 끈다(몸 안에서 머리/몸통을 고르는 규약 그대로 — 구체 위에 오르면 끌림 0). 닫힌 구체는 판정도 보조도 없다. `AimAssist.test`.
 - **jumpY 버그 동반 수정:** 부위 높이 비율이 `jumpY` 를 빼지 않는 기존 버그를 `weakPointWorldPos` 에서는 처음부터 포함하고, 권총·화살 헤드샷 비율도 같은 손질에서 고친다.
 - 투사체(화살·화염구 직격)는 `moveProjectiles` 플레이어 소유 루프에서 `rayHitsWeakPoint(pad = proj.radius)` 를 함께 검사해 `applyProjectileHit` 에 `weak` 로 전달. 반사된 진액 구슬은 kind `'goo'` + `deflected` 면 vent 에 `deflectSelfDamage` 를 적용(배율 무시).
 
@@ -200,7 +205,7 @@
 | 상태 `kind` | 원인 | 지속(틱) — 필드 | 효과 | 표시 |
 |---|---|---|---|---|
 | **관절 노출** `expose` | 일반 패링 / 완벽 패링 / 완벽 회피 / 삼연낫 일반 패링 | 36 / 90 / 40(양쪽) / 30 — `exposeOnParry.*`, `perfectDodgeExposes.ticks`, `comboAttack.exposeOnParry` | 관절 구체 판정 활성 | 백황 맥동 + `joint_open` |
-| **관절 파열** `rupture` | 관절 hp 0 | 비틀거림 60(`rupture.staggerTicks`, recover) → 그 낫 잠김 600(`rupture.bladeLockTicks`) | 잠긴 낫 공격 선택 불가(예측 가능해짐), 잠긴 낫은 축 늘어져 바닥을 긁음. 잠김이 풀려도 관절 hp 는 0 이라 **그 낫 패링·완벽 회피로 다시 열리지 않는다**(`openExposure` 가 hp 0 을 거름 — 갑각 재생까지). 파열은 낫 짝이 있는 관절만 — 분출공 hp 0 은 질식 | 관절 어둡게 + 파편 + `joint_crack` |
+| **관절 파열** `rupture` | 관절 hp 0 | 비틀거림 60(`rupture.staggerTicks`, recover) → 그 낫 잠김 600(`rupture.bladeLockTicks`) | 잠긴 낫 공격 선택 불가(예측 가능해짐), 잠긴 낫은 축 늘어져 바닥을 긁음. 잠김이 풀려도 관절 hp 는 0 이라 **그 낫 패링·완벽 회피로 다시 열리지 않는다**(`openExposure` 가 hp 0 을 거름 — 갑각 재생까지). 파열은 낫 짝이 있는 관절만 — 분출공 hp 0 은 질식 | 관절 어둡게 + 파편 + `joint_crack` 한 소리(착탄 틱의 `heavy_hit` 는 B3-6 에서 뺐다 — 이중음 제거) |
 | **절뚝** `limp` | 양 낫 동시 잠김 | 잠김이 하나라도 풀릴 때까지 | 이속 ×0.65(`limp.speedMul`), 돌격 속도 ×0.7(`limp.chargeSpeedMul`), 낫 없이 들이받기·발구르기·돌격만. 뒤로 물러나 2.5~6m 유지(`retreatWhenDisarmed{min 2.5, max 6}`) | 다리 절룩 애니 |
 | **머리 내림** `head_down` | 낫 박힘(완벽 패링) / 역류 / 전도 / 탈진 | 90 / 60 / 90 / 150 — `headDown.{stuck, backflow, topple, exhaust}Ticks` | 이동·공격 불가, 눈 노출(0.9m), 해머 타격 = 눈 집계(`hammerEyeMul`), 해머 넉백 0. 역류 원인이면 혼절 누적 없음. 해머 1·2타의 경직(`attackFreezeTicks`, §9.1 attackFreeze > 포즈)은 포즈 시계를 멈춘다 — 해머로 눈을 두들기면 창이 90 + 14×타수 로 늘어난다(권총 노선보다 조금 긴 비대칭, **의도로 고정** — B2-2 검토 메모 → B3-5) | `blade_stuck` + 머리 0.9m |
 | **혼절** `daze` | 눈 누적 66(`dazeThreshold`) | 90(`reaction.staggerTicks`) → 이후 600 쿨다운(`dazeCooldownTicks`) | `staggered` — 처형 가능, **눈 판정 닫힘**, 이름표 금색. 해머 3타 날림(5m) 면제(`staggerFlingImmune`, 결정 33) | STAGGER_COLOR + "지금 처형" + `eye_burst` |
@@ -208,7 +213,7 @@
 | **눈멂** `blind` | 돌격 중(≤ 6m) 눈 66(`blindThreshold`). **혼절 쿨다운(`dazeCooldown`) 중에도 유효** — 쿨다운은 A(머리 내림)의 혼절 누적만 막는다. 그래서 돌격 중 눈은 쿨다운이어도 어두운 청록이 아니라 밝은 청록으로 그린다(`Stage.behemothEyeDimmed`) | 남은 질주 + 40 오버런(`blindOverrunTicks`) | 목표 좌표 무시, 직진, 조향 없음. 접촉 피해는 그대로 | `pose blind`(머리 휘저음) + 비명 |
 | **전도** `topple` | 돌격(눈멂 포함)이 기둥 `P`·균열벽 `C` 에 박힘 | 90 (`headDown.toppleTicks`) | 머리 내림(눈 노출, 혼절 누적 가능, `head_down{cause 'topple'}`) + 박힌 몸이 `headDown.toppleReboundM` 2.5m 튕겨 물러남(내려온 눈 z −1.9 가 몸 반경 1.6 보다 앞이라 그대로면 눈 구체가 기둥 안에 묻힌다 — 기둥 앞에 서서 쏜다) + 기둥 내구 −1(`pillar_hit`) / 균열벽 개방. 튕김 `toppleReboundTicks` 10 동안은 넉백이 포즈 시계를 멈추므로(§9.1 넉백 > 포즈) 머리 내림 **실효 창은 90 + 10 = 100** — 2.5m 움직이는 10틱은 조준 창으로 치지 않는다(의도, `Boss.test` 가 확인) | 몸 처박힘 + `heavy_hit` + 카메라 킥 |
 | **미끄러짐** `skid` | 완벽 회피(회피 무적 8틱 안 접촉 — 블링크·탈출 무적은 아님) | 90 (`skid.ticks`) | 이동·공격 불가, 양 관절 40 노출, (P2+) 궤적에 웅덩이 | `pose skid` + `charge_dodged` |
-| **질식** `choke` | 분출공 hp 0 | 1800 (`choke.sealTicks`) | 갑각 떨기 봉인, 봉인 중 예고 +10틱(`choke.windupPenalty`), 웅덩이 전부 증발. 갑각 재생으로 안 풀림. 종료 시 분출공 hp 회복 | 분출공 꺼짐 + 거친 숨 |
+| **질식** `choke` | 분출공 hp 0 | 1800 (`choke.sealTicks`) | 갑각 떨기 봉인, 봉인 중 예고 +10틱(`choke.windupPenalty`), 웅덩이 전부 증발. 갑각 재생으로 안 풀림. 종료 시 분출공 hp 회복 | 분출공 꺼짐 + 거친 숨(`vent_choke`) — `weak_point_broken{vent}` 는 파열 연출(파편·소리)·계측(`weakPoints.broken`)에 들지 않는다(B3-6) |
 | **탈진** `exhaust` (P3) | 삼연낫 3연속 완벽 패링 | 150 (`headDown.exhaustTicks`) | 머리 내림 + 분출공 ×3.0 동시 노출 — **처형(마나) vs 정화(오염·봉인) 선택** | 양낫 박힘 + 헐떡임 |
 | **갑각 재생** `molt` | 페이즈 전환 | 90 (`phaseShiftTicks`) | 관절 hp 회복(`weakHp` 132 + `ruptured[id]` 표식 삭제 — 재생된 관절이 다시 0 이 되면 다시 파열)·낫 잠김·절뚝 해제, 쿨다운 절반. 질식·눈멂·전도는 해제 안 함 | 포효 자세 + 균열/탈락 연출 |
 
@@ -264,7 +269,7 @@
 
 리듬: 멀면 갑각 떨기(반사 시험), 중거리 발구르기(탐욕 시험), 붙으면 낫(패링 시험). 웅덩이가 발판을 조여 "제자리 패링"을 못 하게 한다 — 기름 함정 2곳·화염구·분출공 질식이 정화 수단.
 
-**구현 메모(B3-2):** ① 갑각 떨기 예고의 "분출공 보라" 는 구체가 아니라 몸·등갑판의 텔레그래프(보라 = 투사체)다 — 약점 구체는 §2 렌더 규약대로 텔레그래프 색을 쓰지 않고 오염 녹색 맥동 ×1.4 로 열림을 표시한다(낫·뿔은 물들지 않는다). ② 분출공은 예고·시전 내내 노출 타이머(돌격 중 눈과 같은 문)로 열리고 그때 배율은 `weakPoints[].openMul` 1.5, 탈진(자세 노출, B3-4)은 `damageMul` 3.0 — `Entities.weakPointDamageMul`. ③ 반사 구슬의 자가 피격은 구체 레이가 아니라 "반사된(`deflected`) 구슬이 시전자 몸 상자에 닿음" 으로 판정한다(복귀 높이 0.6h 가 분출공과 겹치므로) — 열림·배율·방패·질식 무관 고정 33, 질식(hp 0) 중에는 삼킬 분출공이 없어 옛 반사 경로(몸 ×1.5)로 흘러간다. ④ 반사된 투사체는 다른 적 투사체를 깨지 않는다 — 되돌아가는 구슬이 24틱 뒤따르는 구슬과 부딛혀 둘 다 사라지면 4회 반사가 성립하지 않았다. ⑤ 예고 중 직격 66 의 역류·질식은 진행 중 갑각 떨기를 접으며 쿨다운(540)을 문다(붙어 와서 접는 abortRange 와 같은 결 — 안 물면 머리 내림 뒤 곧바로 다시 떨어 역류 농사가 된다). 예고 중 abortRange 로 접는 옛 경로는 그대로 쿨다운 없음. ⑥ 구슬 직격의 오염 진액은 공격 정의의 `statusOnHit`·`statusOnBlock` 둘 다 corrosive 로 두어 "막아도 붙음" 을 데이터로 표현했고, 투사체가 근접 impact 와 같은 규약(`playerKnockback` 재정의 포함)을 든다. ⑦ 웅덩이 원인 이름은 §10.2·§14 의 `blade/stomp/orb/skid`; 낫 웅덩이는 impact 에 도달한 낫(맞았든·막혔든·헛쳤든)의 낫끝 자리 — 막은 플레이어는 밀림이 1/3 이라 대개 웅덩이 안에 남는다(막기의 벌), 패링은 impact 가 없어 웅덩이도 없다. 분출공으로 되돌아간 반사 구슬은 웅덩이를 남기지 않는다(삼켜진 것). ⑧ "불" 은 `explosion` 이벤트(화염구·수류탄·폭발통 — `igniteOilInRadius` 와 같은 셋, 내파는 제외)와 불붙은 기름 함정 반경이다. ⑨ 오염 대기 가산 카운터(`fightPendingIn`)는 살아 있는 보스가 없으면 오르지 않는다(전투가 끝난 웅덩이는 도트만). 정화로 pending 이 음수가 되면 제단 정산은 0 이하를 건너뛰고 다음 각인 부착이 그 여유를 쓴다(§11.1 의 "여유").
+**구현 메모(B3-2):** ① 갑각 떨기 예고의 "분출공 보라" 는 구체가 아니라 몸·등갑판의 텔레그래프(보라 = 투사체)다 — 약점 구체는 §2 렌더 규약대로 텔레그래프 색을 쓰지 않고 오염 녹색 맥동 ×1.4 로 열림을 표시한다(낫·뿔은 물들지 않는다). ② 분출공은 예고·시전 내내 노출 타이머(돌격 중 눈과 같은 문)로 열리고 그때 배율은 `weakPoints[].openMul` 1.5, 탈진(자세 노출, B3-4)은 `damageMul` 3.0 — `Entities.weakPointDamageMul`. ③ 반사 구슬의 자가 피격은 구체 레이가 아니라 "반사된(`deflected`) 구슬이 시전자 몸 상자에 닿음" 으로 판정한다(복귀 높이 0.6h 가 분출공과 겹치므로) — 열림·배율·방패·질식 무관 고정 33, 질식(hp 0) 중에는 삼킬 분출공이 없어 옛 반사 경로(몸 ×1.5)로 흘러간다. ④ 반사된 투사체는 다른 적 투사체를 깨지 않는다 — 되돌아가는 구슬이 24틱 뒤따르는 구슬과 부딛혀 둘 다 사라지면 4회 반사가 성립하지 않았다. ⑤ 예고 중 직격 66 의 역류·질식은 진행 중 갑각 떨기를 접으며 쿨다운(540)을 문다(붙어 와서 접는 abortRange 와 같은 결 — 안 물면 머리 내림 뒤 곧바로 다시 떨어 역류 농사가 된다). 예고 중 abortRange 로 접는 옛 경로는 그대로 쿨다운 없음. ⑥ 구슬 직격의 오염 진액은 공격 정의의 `statusOnHit`·`statusOnBlock` 둘 다 corrosive 로 두어 "막아도 붙음" 을 데이터로 표현했고, 투사체가 근접 impact 와 같은 규약(`playerKnockback` 재정의 포함)을 든다. ⑦ 웅덩이 원인 이름은 §10.2·§14 의 `blade/stomp/orb/skid`; 낫 웅덩이는 impact 에 도달한 낫(맞았든·막혔든·헛쳤든)의 낫끝 자리 — 막은 플레이어는 밀림이 1/3 이라 대개 웅덩이 안에 남는다(막기의 벌), 패링은 impact 가 없어 웅덩이도 없다. **반사된(`deflected`) 구슬은 웅덩이를 남기지 않는다** — 분출공으로 되돌아가 삼켜졌든, 보스가 비켜 빗나가 벽에 닿았든(플레이어 소유가 된 투사체가 플레이어를 해치는 장판을 만들지 않는다 — B3-2 잔여 메모 → B3-6). ⑧ "불" 은 `explosion` 이벤트(화염구·수류탄·폭발통 — `igniteOilInRadius` 와 같은 셋, 내파는 제외)와 불붙은 기름 함정 반경이다. ⑨ 오염 대기 가산 카운터(`fightPendingIn`)는 살아 있는 보스가 없으면 오르지 않는다(전투가 끝난 웅덩이는 도트만). 정화로 pending 이 음수가 되면 제단 정산은 0 이하를 건너뛰고 다음 각인 부착이 그 여유를 쓴다(§11.1 의 "여유").
 
 ### P3 「광란 — 낫의 폭풍」 — 체력바 1칸째 (34~0%) · 완벽 패링 압박
 
@@ -296,11 +301,11 @@
 | 항목 | 내용 |
 |---|---|
 | **조건** | `healthBarState(def, health).index` 가 이전 틱과 달라진 순간(칸이 비는 순간). `Enemies.ts` 가 이전 index 를 `enemy.phase` 에 두고 비교 → `boss_phase{enemyId, phase}` 발행. 페이즈 시스템이 없으므로 이 훅이 신규 |
-| **큐잉** | `staggered`·`head_down`·`skid`·`blind`·처형 넉백 중에 칸이 비면 **`phaseTarget`(목표 index)** 를 갱신만 하고 `chase` 복귀 시 한 번의 `phase_shift` 로 발동 — 플레이어의 처형·노출 창을 빼앗지 않는다. 한 창 안에서 두 경계를 넘으면(예: 눈 132 + 처형 240) `unlock` 을 누적 적용해 P2 를 건너뛴 P3 로 간다(연출은 P3 것) |
+| **큐잉** | `staggered`·`head_down`·`skid`·`blind`·처형 넉백·**관절 타이머 노출**(일반 패링 36·삼연낫 30/60 — 낫 짝이 있는 약점, B3-6) 중에 칸이 비면 **`phaseTarget`(목표 index)** 를 갱신만 하고 `chase` 복귀 시 한 번의 `phase_shift` 로 발동 — 플레이어의 처형·노출 창(방금 얻은 패링 보상 포함)을 빼앗지 않는다. 돌격 중 눈·갑각 떨기 중 분출공의 되살리는 타이머는 관절이 아니라 막지 않는다(질주·연사 중 전환 = 공격 취소 그대로). 한 창 안에서 두 경계를 넘으면(예: 눈 132 + 처형 240) `unlock` 을 누적 적용해 P2 를 건너뛴 P3 로 간다(연출은 P3 것) |
 | **전환 상태** `phase_shift` | recover 90(`phaseShiftTicks`) + `pose roar`. 진행 중 공격 취소, 약점 전부 닫힘, **갑각 재생**(관절 hp 회복 + `enemy.ruptured[id]` 삭제·낫 잠김·절뚝 해제 — 질식·전도·눈멂은 유지), 쿨다운 절반. 무적은 아니다(몸통 0.8× 는 들어간다). **위압은 걸지 않는다** |
 | **P1→P2 연출** | `boss_roar` + 등갑 균열 발광 점등 + 분출공 점등 + 문구 "갑각이 갈라진다" + HUD 보스 줄 페이즈명("낫뿔 거수 — 오염 갑각") |
 | **P2→P3 연출** | 남은 등갑판 `spawnDeathBurst`(power 0.6) 로 튕겨 나감(골드 없음) + `plate_shed` + 눈 붉게 + 문구 "거수가 광란한다". 복귀 후 **첫 선택 = 포효**(예고 30, 취소 가능) |
-| **데이터** | `phases: [ {bar 3}, {bar 2, unlock ['slam','volley','wakeSlam'], poolsOn true, shellPlatesOn true, attackOverrides {charge {cooldownTicks 360}}}, {bar 1, speedMul 1.2, unlock ['roar','combo','chainCharge'], shedPlates true, firstPick 'roar', attackOverrides {attack {damage 34}, attackAlt {damage 34}, close {damage 24}, charge {damage 50, cooldownTicks 300}, slam {damage 28, aoeRadius 5.5}}} ]` — 전역 damageMul 없음, 슬롯별 명시. **구현 메모(B2-6):** 각 항목에 `name`(HUD 페이즈명 돌각·오염 갑각·광란)·`shiftText`(전환 문구)를 데이터로 더 두었다. 표는 **누적**으로 읽는다(`Entities.resolvePhase` — 지금 칸 이상의 bar 를 큰 것부터 덮어써 낮은 bar 가 이기고 unlock 은 합친다) — P2 를 건너뛴 P3 도 P2 의 해금·갑각판을 갖는다. '쿨다운 절반'은 `balance.weakPoint.phaseShiftCooldownMul 0.5` 로 두고 공격 쿨다운(돌격·들이받기·연사)에만 곱한다 — 혼절 쿨다운(`dazeCooldown`)은 플레이어 쪽 박자라 건드리지 않는다. 전환을 막는 창은 `staggered`·포즈 타이머(head_down·skid·roar)·`blind`·넉백 — 그 밖(추격·예고·타격·질주·경직)이면 그 틱에 바로 전환하고 진행 중 공격은 취소된다. 등갑판 균열 발광·분출공 점등은 `shellPlatesOn`, 판 탈락·붉은 홍채는 `shedPlates` 를 기준으로 Stage 가 그린다(별도 플래그 없음). 점등된 분출공은 맥동 없이 은은하게만 빛난다 — 맥동은 열림(판정 있음)의 문법이라 닫힌 구체는 뛰지 않는다 |
+| **데이터** | `phases: [ {bar 3}, {bar 2, unlock ['slam','volley','wakeSlam'], poolsOn true, shellPlatesOn true, attackOverrides {charge {cooldownTicks 360}}}, {bar 1, speedMul 1.2, unlock ['roar','combo','chainCharge'], shedPlates true, firstPick 'roar', attackOverrides {attack {damage 34}, attackAlt {damage 34}, close {damage 24}, charge {damage 50, cooldownTicks 300}, slam {damage 28, aoeRadius 5.5}}} ]` — 전역 damageMul 없음, 슬롯별 명시. **구현 메모(B2-6):** 각 항목에 `name`(HUD 페이즈명 돌각·오염 갑각·광란)·`shiftText`(전환 문구)를 데이터로 더 두었다. 표는 **누적**으로 읽는다(`Entities.resolvePhase` — 지금 칸 이상의 bar 를 큰 것부터 덮어써 낮은 bar 가 이기고 unlock 은 합친다) — P2 를 건너뛴 P3 도 P2 의 해금·갑각판을 갖는다. '쿨다운 절반'은 `balance.weakPoint.phaseShiftCooldownMul 0.5` 로 두고 공격 쿨다운(돌격·들이받기·연사)에만 곱한다 — 혼절 쿨다운(`dazeCooldown`)은 플레이어 쪽 박자라 건드리지 않는다. 전환을 막는 창은 `staggered`·포즈 타이머(head_down·skid·roar)·`blind`·넉백·관절 타이머 노출(`Enemies.phaseShiftBlocked`, B3-6) — 그 밖(추격·예고·타격·질주·경직)이면 그 틱에 바로 전환하고 진행 중 공격은 취소된다. 등갑판 균열 발광·분출공 점등은 `shellPlatesOn`, 판 탈락·붉은 홍채는 `shedPlates` 를 기준으로 Stage 가 그린다(별도 플래그 없음). 점등된 분출공은 맥동 없이 은은하게만 빛난다 — 맥동은 열림(판정 있음)의 문법이라 닫힌 구체는 뛰지 않는다 |
 
 ---
 
@@ -387,7 +392,7 @@ C...........C      C 균열벽 → 뒤 1칸 벽감에 상자 — 폭발 또는 �
 | 미끄러짐 궤적 `skid` | 1.6 | 480 |
 | 증발 | 불(화염구 폭발·불붙은 기름) 즉시 / 질식 시 전부 / 자연 만료. 동시 상한 12개(`poolMax`, 오래된 것부터 소멸) |
 
-Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검사만 하고, 접촉 시 `p.corrosiveTicks = max(현재, lingerTicks)` 를 세운다. 감소·DoT·pending 은 Status.ts.
+Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검사만 하고, 접촉 시 `p.corrosiveTicks = max(현재, lingerTicks)` 를 세운다. 감소·DoT·pending 은 Status.ts. 반사된(`deflected`) 구슬은 어디에 닿아도 웅덩이를 남기지 않는다(`Projectiles` — B3-6).
 
 ### 10.3 Zone.test 와 곁방 로스터
 
@@ -403,9 +408,9 @@ Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검�
 |---|---|---|
 | 골드 | 3~9 × 12(`gold.bossMul`) + 균열 상자 2 + 갑각판 파편 6~10g × 최대 3(P2 한정) | Loot 자동 / Chest / 신규 shellPlates |
 | 물약·대형 물약 | 확정 | Loot 자동 |
-| **유일 장비** `ring_scythe_horn` 「낫뿔 반지」 | ring, tier 3, 색 0xd9cfa0. `perfectBandBonus +0.12`, `dodgeDistanceMul 1.15` — **기존 효과 키만**, Modifiers 무변경. `unique:true` 로 상점·상자·무작위 풀 제외(`Loot.rollLoot`·`Chest.rollEquip` 두 풀 모두 필터), 판매 불가 | equipment.json + `EquipDef.unique` + `equipDrops` |
-| 각인 | `sig_moment` 찰나 — 완벽 패링 슬로모 | drops/dropsOnDeath → Sigils 자동 |
-| **오염 정화** | 사망 시 `pending −10`(`corruption.bossCleansePending`), **처형으로 마무리하면 −15**(`corruption.bossExecuteCleanse`). 전투 중 분출공 명중 −1(상한 −6, 부착 중 ×2). applied 는 불변(임계 불가역 규칙) | `Corruption.ts` 에 `corruption_cleansed{amount, source}` 구독 신규 |
+| **유일 장비** `ring_scythe_horn` 「낫뿔 반지」 | ring, tier 3, 색 #d9cfa0, price 0. `perfectBandBonus +0.12`, `dodgeDistanceMul 1.15` — **기존 효과 키만**, Modifiers 무변경. `unique:true` 로 무작위 풀 제외(`EquipData.randomEquipIds` — `Loot.rollLoot`·`Chest.rollEquip` 두 풀 공용, 상점은 장비를 팔지 않는다), `sellable:false` 로 제단 매각 불가(`Equipment.sellFromBag` 거부 → `equip_sell_denied` + 안내 '유일한 장비는 팔 수 없다', 팝업 X 줄 '팔 수 없다 — 유일 장비', 설명에 '유일 장비 — 보스만 떨구며 팔 수 없다'). 보스 정의 `equipDrops` 가 처치 주머니에 **확정 한 줄**로 든다(무작위 장비 1개와 별개 — 장비 두 줄) | equipment.json `unique`·`sellable` + `EquipDef` + `EnemyDef.equipDrops` → `Loot.rollLoot` (구현 B3-6) |
+| 각인 | `sig_moment` 찰나 — 완벽 패링 슬로모. **미구현 각인이 떨어진다(결정 11 유지, B3-6 메모):** `slowMoOnPerfectTicks 24`/`timeScale 0.35` 는 아직 어느 시스템도 읽지 않고 `sigils.json` 의 zone 4·slice false 도 그대로다 — 가방에 든 채 척추에 새겨도 아무 일이 없다(오염 10 만 든다). 슬로모 구현(고정 틱 루프에 렌더 시간 배율을 얹는 일 — 규칙 2 와 맞물려 별도 작업) 또는 드랍 교체(`sig_reflect`/`sig_weakpoint`)는 후속 판단 | drops/dropsOnDeath → Sigils 자동 |
+| **오염 정화** | 사망 시 `pending −10`(`corruption.bossCleansePending`), **처형으로 마무리하면 −15**(`corruption.bossExecuteCleanse`) — 둘 중 하나. 전투 중 분출공 명중 −1(상한 −6, 부착 중 ×2). applied 는 불변(임계 불가역 규칙), pending 은 음수 허용(정산이 건너뛰고 다음 각인 부착이 쓴다) | `Corruption.ts` 가 `enemy_died{execution?}`(def.boss — 족장도, 소환수 noLoot 제외)를 구독해 `corruption_cleansed{amount, source 'boss_death'|'boss_execute'}` 를 내고 같은 `corruption_cleansed` 구독이 pending 을 깎는다(한 문). `Reaction` 의 보스 처형 사망이 `execution: true, boss: true` 를 싣는다. HUD 문구 '처형 마무리 — 고인 오염이 흩어진다: 오염 대기 −15' (구현 B3-6) |
 | 마나 | 패링(완벽 22/일반 11, 위압 중 일반 5)·처형 25·해머 6 만 — 총 처치 0, 완벽 회피 마나 0(약점 노출이 보상). 정체성 규칙 준수 | 기존 |
 | 탄 경제 | 약점 배율 2~3× 가 권총·활을 정답 무기로 → 상점 탄 소비. 화살은 회수되니 값싼 약점 무기. 수류탄은 균열벽·갑각판·잔해 정리용 | 기존 |
 | XP | 400 | Progression 자동 |
@@ -420,18 +425,22 @@ Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검�
 
 각인 한 슬롯(8~15)과 비슷한 폭 — 보스전이 "각인 하나를 공짜로 새길 여유"를 준다. `applied` 는 안 줄어들므로 임계 되돌림은 없다.
 
+**구현 메모(B3-6):** ① 유일 장비의 '판매 불가'는 `sellable: false` 별도 필드다(`unique` 는 풀 제외만) — 둘을 한 플래그로 묶지 않은 것은 "보스만 떨구지만 팔 수는 있는" 장비를 뒀을 때 데이터만 바꾸면 되게. ② `equipDrops` 의 없는 id 는 `equipDef` 가 던진다(데이터 오타를 조용히 넘기지 않는다). ③ 체력 물약·대형 체력 물약이 진탕을 지우는 것(`items.kinds.*.cures ['concussion']` × `status.concussion.potionCures`, `Inventory.curableStatuses` — `isUseful`·`Items.drink` 공용, 말린 고기는 지우지 않는다)은 B2-4 에서 끝났고 B3-6 은 확인만 했다(결정 22). ④ 정산 문구·스킬 탭·디버그 오버레이의 오염 대기 표기는 음수를 '−15' 로(옛 '+-15' 고침). ⑤ 오염 대기 음수 표시는 HUD·제단·스킬 탭·F1 오버레이 네 곳이 같은 꼴.
+
 ---
 
 ## 12. 계측 (`docs/metrics.md` 추가)
 
-이벤트: `boss_phase{phase, from, skipped, fromTicks}`(phase 0 = 사망 — 마지막 페이즈 시간), `plate_shed{count}`, `weak_point_hit{enemyType, id, damage}`, `weak_point_broken{id}`, `exposure_closed{id, hits}`, `boss_status{kind, on}`(12종), `charge_dodged`, `boss_roar_hit`, `pillar_hit{hp}`, `pillar_collapsed`, `plate_broken{gold}`, `corruption_cleansed{amount, source}`, `arena_sealed`, `arena_opened`, `anticamp_charge`, 플레이어 상태 `numb_arm_applied/_ended` 등 5종 × 2, `corrosive_tick{amount, health}`(damageTakenTotal 합산 목록에 등록 — 도트 규약).
+이벤트: `boss_phase{phase, from, skipped, fromTicks}`(phase 0 = 사망 — 마지막 페이즈 시간), `plate_shed{count}`, `weak_point_hit{enemyType, id, damage}`, `weak_point_broken{id}`(관절만 — 분출공은 질식), `exposure_closed{id, hits}`, `boss_status{kind, on}`(12종 + 자세), `charge_dodged`, `boss_roar_hit`, `pillar_hit{hp}`, `pillar_collapsed`, `plate_broken{gold}`, `corruption_cleansed{amount, source 'vent'|'boss_death'|'boss_execute'}`, `enemy_died{execution?, boss?}`(처형 마무리), `arena_sealed`, `arena_unsealed`, `anticamp_charge`, 플레이어 상태 `numb_arm_applied/_ended` 등 5종 × 2, `corrosive_tick{amount, health}`(damageTakenTotal 합산 목록에 등록 — 도트 규약), `equip_sell_denied`, `aim_snapped{weakPointId?}`.
 파생 지표: 페이즈별 완벽/일반 패링 비율, 노출 활용률(hits/열림), 처형 수, 사망 페이즈 분포, 돌격당 완벽 회피율·눈멂 유도율·전도 수, 막기 횟수(팔 저림 발생 = 튜토리얼 미이해 신호), 페이즈별 소요 시간(목표 P1 90s / P2 120s / P3 90s), 기둥 붕괴 수, 순 오염 변화 분포, 갑각판 파괴 수, 동시 디버프 2개 도달 빈도.
+
+**구현(Metrics 스냅샷, B2-6 ~ B3-6 — `docs/metrics.md`):** `weakPoints{hits, damage, broken(관절), exposuresClosed, exposureHits, dazes, chargeDodges, limps, blinds, topples, pillarHits, backflows}` · `boss{phaseShifts, phaseSkips, phaseSeconds{'3','2','1'}, platesBroken, plateGold, roars, roarHits, combos, exhausts, chainTurns, kills, executeFinishes, cleansed, statusOn{kind → n}, playerStatus{kind → n}}` · `hazards{pools, evaporated, corrosiveApplied, corrosiveDamage, pendingIn, ventCleanse(vent 만), chokes}` · `arena{seals, pillarCollapses, anticampCharges, anticampFar, rubbleBroken}` · `derived.weakPointExposureUseRatio`(= exposureHits/exposuresClosed). 순 오염 변화 = `hazards.pendingIn − hazards.ventCleanse − boss.cleansed`. 처형 마무리 여부 = `boss.executeFinishes / boss.kills`. 동시 디버프 2개 도달 빈도는 `Status` 의 `displaced` 해제(`*_ended{reason 'displaced'}`)로 읽을 수 있으나 카운터는 두지 않았다(후속).
 
 ---
 
 ## 13. 구현 배치 (3 마일스톤 · 15 체크박스 — 각 체크박스 뒤 플레이 가능)
 
-의존 순서는 번호순. 한 체크박스 = `TASKS.md` 한 줄. 각 항목 끝의 **▶** 가 그 시점의 "플레이 가능" 기준이다. **체크 상태는 `TASKS.md` M11 절이 정본** — 이 목록의 칸은 채우지 않는다(계획서).
+의존 순서는 번호순. 한 체크박스 = `TASKS.md` 한 줄. 각 항목 끝의 **▶** 가 그 시점의 "플레이 가능" 기준이다. **체크 상태는 `TASKS.md` M11 절이 정본** — 이 목록의 칸은 채우지 않는다(계획서). **2026-09-07: 15 체크박스 전부 구현 완료(B1-1 ~ B3-6).**
 
 ### 배치 1 — 뼈대: 기존 파이프만으로 싸울 수 있는 거수 (시험방)
 
@@ -455,7 +464,7 @@ Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검�
 - [ ] **B3-3 갑각판** — `shellPlates` hp 풀(heavy 타격 연동), 골드 주머니, `ventScalePerPlate`, P3 탈락 연출. ▶ 해머·수류탄 사용처.
 - [ ] **B3-4 P3 기술** — `roarAttack`(`attackMode 'roar'`, impact 우회 분기: 위압·`pushPlayer`·`boss_roar_hit`, iframe 존중, 눈 66 → 역류, 절망 변형 `pull`+`followUp`), `comboAttack`(`attackMode 'combo'`, `comboNext`/`continueOnParry`/`perfectOnly`+`noParryBuffer`, Reaction 콤보 진행·완벽 카운트 → 탈진 150), `chainCharge`(선회·꼬리 채기·2차 질주), `cowed` 상태(Status·Reaction 관절 미노출·마나 5). ▶ 전 기술 완성(시험방).
 - [ ] **B3-5 아레나 f4 + Arena.ts** — `data/levels/z01_f4.json`(carve, `arena.bounds`, `bossArena true`), `main.ts ZONE` 4층, `Zone.test.ts`(4층·보스 층 곡선 예외·`P` 허용·behemoth f4 한정), `src/systems/Arena.ts` 신규(봉쇄 조건·`door.sealed`·홈 복귀 대기·bounds 클램프 제공·기둥 내구/붕괴·반캠핑·FloorState 보존·부활 해제), GridLoader 기둥 균열선, `balance.arena`, `traps.bossDamageMul`. ▶ f4 에서 완전판.
-- [ ] **B3-6 보상·마무리** — `equipment.json` `ring_scythe_horn` + `EquipDef.unique` + Loot/Chest 풀 필터 + `equipDrops`; `corruption.{bossCleansePending 10, bossExecuteCleanse 15, ventHitCleanse 1, ventCleanseCap 6, corrosiveCleanseMul 2}`; `Inventory.isUseful` '지울 상태가 있으면 유용' + `Items.drink` 진탕 해제; `aimAssist.weakPointRadiusMul` 옵션; `docs/systems/boss_behemoth.md`, `docs/metrics.md`, `combat.md` 링크. 커밋·푸시(Pages 배포). ▶ 출시판.
+- [ ] **B3-6 보상·마무리** — `equipment.json` `ring_scythe_horn` + `EquipDef.unique` + Loot/Chest 풀 필터 + `equipDrops`; `corruption.{bossCleansePending 10, bossExecuteCleanse 15, ventHitCleanse 1, ventCleanseCap 6, corrosiveCleanseMul 2}`; `Inventory.isUseful` '지울 상태가 있으면 유용' + `Items.drink` 진탕 해제(B2-4 에서 선행 — 확인만); `aimAssist.weakPointRadiusMul` 옵션; 배치 2·3 잔여 메모 전부 처리(관절 원뿔 데이터·분출공 openRadiusMul·어깨 정렬·파열 이중음·질식≠파열·반사 구슬 웅덩이·관절 노출 중 전환 대기·오염 음수 표기·heavy 목록 주석·plates 뒤 카메라); 이 문서(`boss_scythe_behemoth.md`)를 구현 스펙으로, `docs/metrics.md`, `combat.md` 링크, `IMPLEMENTATION_HISTORY.md`. ▶ 출시판.
 
 **테스트 요약:** Ray(구체) · Weapons(약점 3방향·배율·헤드샷 억제·기존 몸통 테스트 유지) · Boss(노출 틱, 눈 66 → staggered → 처형 240, 혼절 중 눈 닫힘·쿨다운, 완벽 회피, 막기 → 저림 → 일반 패링 해제, 눈멂 → P 전도 / # whiff, 전환·큐잉·2단, 잠긴 낫 미선택·600틱 해제, 발구르기 심장 역류·쿨, 반사 4회 질식·증발, 위압 중 일반 패링 미노출·완벽 해제, 삼연낫 소표 전 조합, 광란 돌격 완벽 회피 시 2차 없음, 기둥 3회 붕괴·잔해 whiff, 반캠핑 300틱, 밖에서 깨웠을 때 봉쇄 안 됨·진입 시 봉쇄) · Status(상한 2·해제 규칙) · Hazards(웅덩이·불 증발·pending 상한) · Corruption(정화 상한·처형 마무리) · Loot/Chest(유일 반지 풀 제외) · Zone(f4 규칙).
 
@@ -465,7 +474,7 @@ Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검�
 
 | 위치 | 필드 |
 |---|---|
-| `EnemyDef` | `parryOutcome`, `hitBox{halfX, halfZ}`, `alertRadius`, `hitZonesImmune`, `hammerEyeMul`, `noKnockbackWhileHeadDown`, `staggerFlingImmune`, `chargeOnKnockback`, `weakPoints[]{id, offset, radius, damageMul, hp?, facing, coneDeg?, exposedStates?, openMul?}`, `poseOffsets{pose → {wpId → {x,y,z}}}`, `attackAlt`, `closeAttack{maxRange 3.0, cooldownTicks 240}`, `slamAttack`, `roarAttack`, `comboAttack`, `wakeSlam{windupTicks 30}`, `phases[]{bar, name?, shiftText?, unlock[], speedMul?, attackOverrides?, poolsOn?, shellPlatesOn?, shedPlates?, firstPick?}`, `equipDrops[]`, `shellPlates{count, hpEach, goldMin, goldMax, ventScalePerPlate}`, `retreatWhenDisarmed{min, max}` |
+| `EnemyDef` | `parryOutcome`, `hitBox{halfX, halfZ}`, `alertRadius`, `hitZonesImmune`, `hammerEyeMul`, `noKnockbackWhileHeadDown`, `staggerFlingImmune`, `chargeOnKnockback`, `weakPoints[]{id, offset, radius, damageMul, hp?, facing, coneDeg?, exposedStates?, openMul?, openRadiusMul?}`(관절 `facing (±1, 0.3, −1)`·`coneDeg 140`, 분출공 `openRadiusMul 1.4` — B3-6), `poseOffsets{pose → {wpId → {x,y,z}}}`, `attackAlt`, `closeAttack{maxRange 3.0, cooldownTicks 240}`, `slamAttack`, `roarAttack`, `comboAttack`, `wakeSlam{windupTicks 30}`, `phases[]{bar, name?, shiftText?, unlock[], speedMul?, attackOverrides?, poolsOn?, shellPlatesOn?, shedPlates?, firstPick?}`, `equipDrops[]`, `shellPlates{count, hpEach, goldMin, goldMax, ventScalePerPlate}`, `retreatWhenDisarmed{min, max}` |
 | `EnemyAttackDef` | `alternate`, `perfectOnly`, `noParryBuffer`, `comboNext`, `continueOnParry`, `chainCharge{turnTicks 24, tailRadius 2.5, tailDamage 12, tailTelegraph 'red'}`, `rearPose{from, to}`(예고 시작 후 from ≤ 경과 < to 에 pose rear — B3-1), `statusOnHit`, `statusOnBlock`(투사체 공격은 둘을 투사체가 들고 가 플레이어 피격에 같은 규약 — 진액 구슬은 둘 다 corrosive, B3-2), `poolKind`(낫 'blade'·발구르기 'stomp'·구슬 'orb' — balance.hazards.pools 키, B3-2), `exposeOnParry{joint, normalTicks 36, perfectTicks 90}`, `perfectDodgeExposes{ticks 40, joints ['joint_r', 'joint_l'], poolKind? 'skid'}`(열 관절을 데이터로 명시 — B2-3, 미끄러짐 웅덩이 — B3-2), `wallWhiffRecoverTicks 60`(돌격이 벽·문에 막힌 헛돌격 — B2-5), `pushM 1.5`(포효 밀림), `intervalTicks 1200`, `despairHealthFrac 0.2`, `despair{windupTicks 36, pull 4, followUp 'slam', followUpWindupTicks 40, followUpRearPose{8, 30}}`(절망의 포효 — B3-4 구현은 pull·followUp 을 이 블록에 묶었다; 눈 노출은 `exposedStates 'roar'` 로 표현해 `eyeExposedDuring` 은 두지 않았다), `deflectSelfDamage 33` |
 | `World.attackMode` | 기존 `'summon'|'bash'|'charge'|'volley'|'ranged'` + `'alt'|'close'|'slam'|'roar'|'combo'` |
 | `World.EnemyState` | `weakHp{id → hp}`, `exposure{id → ticks}`, `exposureHits`, `weakAccum`, `dazeCooldown`, `dazed`, `pose`/`poseTicks`, `bladeLock{r?, l?}`, `ruptured{id → true}`(파열 처리 표식 — Enemies 는 지우지 않고 **갑각 재생이 `weakHp` 회복과 함께 지운다**), `limping`, `blind`(눈멂 플래그 — 질주 중만 참, 질주가 끊기면 안전망이 내린다), `chargeStuck`(질주 막힘 연속 틱 — `chargeStuckTicks` 에 닿으면 지형 충돌 판정), `phase`(게임플레이 페이즈 = 체력 칸 index, 전환 순간에만 바뀐다)·`phaseTarget`(큐잉된 목표 칸)·`phaseSince`(페이즈 시작 틱 — 계측)·`molting`(전환 중 — 약점 판정 전부 닫힘), `wakeSlam`(이번 발구르기가 기상 발구르기)·`wakeSlamPending`(머리 내림·혼절이 끝나며 예약 — 다음 추격 틱에 소모, 전환이 지운다)·`slamCooldown`, `weakCooldown{id → ticks}`(약점 봉인 — 역류 뒤 심장 600, `weakPointOpen` 이 닫고 Stage 는 어둡게), `poseCause`(`beginPose` 의 cause — 'backflow' 면 눈 누적 없음·박힌 낫 없음) — B3-1, `chokeTicks`(질식 봉인 잔여 — 갑각 떨기 불가·예고 +windupPenalty, 끝나면 vent hp 복귀)·`fightPendingIn`(오염 진액이 이번 전투에 더한 오염 대기, 상한 pendingCap)·`fightCleansed`(분출공 명중 정화 누적, 상한 ventCleanseCap) — B3-2, `platesLeft`(남은 등갑판 — Spawner 가 shellPlates.count, heavy 타격이 깎고 P3 진입에 0)·`plateHp`(지금 판의 남은 hp — 넘친 피해는 다음 판으로)·`ventScale`(분출공 반지름 배율 ×ventScalePerPlate/장 — 판정 `weakPointRadius` 와 그림이 같은 값) — B3-3, `roarCooldown`(포효 간격 잔여)·`firstPick`(전환 복귀 후 첫 선택 슬롯)·`despairRoar`·`despairSlam`(절망의 포효·연계 발구르기 표식)·`comboStep`·`comboPerfects`·`comboCooldown`(삼연낫)·`chainLeg`·`chainTurn`·`chainTailHit`(광란 돌격 — 몇 번째 질주·선회 중·꼬리 채기 소진. 선회는 돌격 예고(attackMode 'charge')에서만 판정·그림에 읽히고, 파열 비틀거림·전환·지형 충돌이 내린다 — B3-4 검토) — B3-4 |
@@ -477,10 +486,13 @@ Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검�
 | `balance.arena` | `pillarHp 3, noLosTicks 300, farTicks 480, farM 12, farNearM 8, farSpeedMul 1.5, pillarStunTicks 30, rubbleHalf 1.7, rubbleBreakable true, rockfallDamage 40, rockfallEnemyDamage 60, rockfallRadius 5.0, rockfallPlayerKnockback 2.5, rockfallKnockbackTicks 12` — B3-5 구현(`anticamp*` 접두는 블록 이름이 arena 라 뺐다; 낙석은 함정 종별 값을 읽지 않고 제 키를 둔다) |
 | `balance.traps` | `bossDamageMul 0.6`(최상위 키 신설 — 아레나 낙석. 함정 종별 `types.trap_rockfall.bossDamageMul` 은 그 함정에 우선) |
 | `balance.corruption` | `bossCleansePending 10, bossExecuteCleanse 15, ventHitCleanse 1, ventCleanseCap 6, corrosiveCleanseMul 2` |
-| `balance.input.gamepad.aimAssist` | `weakPointRadiusMul 1.35`(옵션) |
-| `equipment.json` | `unique: true` |
+| `balance.input.gamepad.aimAssist` | `weakPointRadiusMul 1.35`(옵션, 0 = 끔 — `PlayerMove.padAimAssist` → `AimAssistTarget.weakPointId`, B3-6 구현) |
+| `equipment.json` | `unique: true`(무작위 풀 제외 — `EquipData.randomEquipIds`), `sellable: false`(제단 매각 불가 — `equipSellable`), `price 0`(상점가 없음) — 낫뿔 반지 `ring_scythe_horn`(B3-6) |
 | 레벨 JSON | `arena{bounds:[r0,c0,r1,c1], home:[r,c]}`(`GridLoader.ArenaDef` → `Level.arena`), `bossArena: true`(`Level.bossArena` — Zone.test 곡선 예외); 격자 문자 `P` 기둥(SOLID). 봉쇄 문·기둥·'안' 칸은 격자에서 찾는다(별도 필드 없음) |
 | `FloorState` | `arena: World['arena']`(ArenaState 통째 — 봉쇄·기둥 내구·잔해) |
+| 이벤트 페이로드(B3-6) | `enemy_died{…, execution?: true, boss?: true}`(보스 처형 사망 — Reaction; Corruption 은 `execution` 으로 −15/−10 을, Metrics 는 `boss` 로 처형 마무리를 읽는다), `corruption_cleansed{amount, source 'vent'|'boss_death'|'boss_execute', enemyId?, enemyType?, total}`, `equip_sell_denied{id, reason 'unique'}`, `aim_snapped{enemyId, weakPointId?, deg}` |
+| `Metrics` | `boss.kills/executeFinishes/cleansed/statusOn/playerStatus`, `derived.weakPointExposureUseRatio`; `weakPoints.broken` 은 관절만, `hazards.ventCleanse` 는 source 'vent' 만(B3-6) |
+| `Stage` | `BH_SHOULDER_ALIGN_POSES {roar, head_down, exhaust, stunned}`(어깨 피벗 = 표 관절), `behemothWeakScaleMul(id, open, ventScale, wps)` = `Entities.weakPointScaleMul`(옛 `BH_VENT_OPEN_SCALE` 폐지); `debug/behemoth ?view=plates&cam=back` |
 
 ---
 
@@ -607,5 +619,18 @@ Hazards 는 웅덩이 생성(`spawn_pool` 이벤트 수신)·증발·접촉 검�
 48 (전환·포효 이중·큐잉 boolean) — **반영.** P3 진입 = phase_shift 만(위압 없음), 복귀 후 `firstPick 'roar'`, `phaseTarget` index 큐잉 + 2단 누적 규칙.
 51 (수치 잔불일치) — **반영.** P3 이속 3.84 한 값, 발구르기 P3 28 은 override 로 명시, 해머 강타 79 반영, 발구르기 탈출 서술 수정.
 54 (이벤트 규약·기상 발구르기 조건) — **반영.** 플레이어 `${kind}_applied/_ended`, 보스 `boss_status{kind,on}` 단일화, 기상 발구르기 발동 상태(머리 내림 전 원인·혼절·탈진, 미끄러짐 제외)와 "눈 66 미달 근접 벌칙" 의도 명시.
+
+**B3-6 잔여 메모 처리(2026-09-07, TASKS.md M11 '배치 2·3 검토 잔여 메모' 전부 [x]):**
+- (B2-1) 관절 원뿔 — 데이터 `facing (±1, 0.3, −1)`·`coneDeg 140` 으로 정면 4.4m 성립(§4.2), `WeakPoint.test` '정면 4.4m 에서 joint_r ○·joint_l ○, 등 뒤 ×'. 코드 무변경(데이터·문서·테스트).
+- (B2-3) 관절 파열 이중음 — `main` 의 `weak_point_broken` 핸들러에서 `heavy_hit` 를 빼고 파편만; 소리는 `boss_status rupture` 의 `joint_crack` 하나(§5 표시 열).
+- (B2-6) 일반 패링 노출 중 전환 — **채택:** `Enemies.phaseShiftBlocked` 가 관절 타이머 노출(낫 짝이 있는 약점, `bladeOfJoint`)도 막는 창으로 본다(§8). 눈·분출공의 되살리는 타이머는 그대로. `Boss.test` '관절 타이머 노출도 전환을 막는다'(+ 옛 경계 전환 테스트의 노출 프로브를 눈으로).
+- (B3-4/B3-4 검토) head_down·exhaust 어깨 관절 메시 0.44m — 포효의 어깨 피벗 정렬 방식을 `BH_SHOULDER_ALIGN_POSES {roar, head_down, exhaust, stunned}` 로 일반화(어긋남 0.00, 낫끝 풀이는 옮긴 어깨에서). `Behemoth.test` 4자세 ≤ 0.02 + 진행 중간·움찔 ≤ 0.2, `debug/behemoth ?view=head_down|exhaust|stunned` 안내문 0.00.
+- (B3-2) 분출공 판정 = 그림 — (a) 채택: `weakPoints[vent].openRadiusMul 1.4` 를 판정(`weakPointRadius`)과 그림(`behemothWeakScaleMul` = `weakPointScaleMul`)이 함께 읽는다(§2·§4.2). 옛 Stage 상수 폐지.
+- (B3-2) 오염 대기 음수 표기 — `SkillUI` 제목 + `DebugOverlay` 오염 줄(`(+-15)` → `(−15 대기)`)을 HUD 와 같은 꼴로.
+- (B3-2) 분출공 내구 0 ≠ 파열 — `main` 의 `weak_point_broken` 은 `id === 'vent'` 를 건너뛰고(파편·소리 없음 — 질식은 `boss_status choke` 가 담당), `Metrics.weakPoints.broken` 도 관절만, `docs/metrics.md` 페이로드 설명에 명시.
+- (B3-2) 반사돼 빗나간 구슬의 웅덩이 — **채택:** `Projectiles` 가 `deflected` 구슬의 `spawn_pool` 을 내지 않는다(§7 메모 ⑦·§10.2). `Boss.test` '반사됐지만 시전자를 빗나간 구슬…'.
+- (B3-3) heavy 호출 목록 — `core/ShellPlates.ts` 머리 주석에 `hitShellPlates` 호출 5곳(해머 마무리·화염구/수류탄 폭발·폭발통·낙석 함정·기둥 붕괴)을 열거.
+- (B3-3) plates 디버그 카메라 — `debug/behemoth ?view=plates&broken=3&cam=back`(등 뒤 위, 실금 세 줄 다 보임).
+- 기획서 §4.2 의 관절 `facing (±1, 0.4, −0.4)` 수치는 구현 데이터와 다르게 확정됐다(위 첫 항목) — 이 문서를 데이터에 맞춰 고쳤다(deviation 기록: 정면 성립이 본문 '정면·그쪽 옆면에서만' 의 의도).
 
 **반영하지 않은 것:** 이슈 14 의 "corrosive 를 DotKind 로 두고 Traps.tickDots 가 감소" 대안 — pending 가산(오염 규약)을 Traps 가 떠안게 되어 이슈 47 의 단일 소유 제안과 충돌하므로 Status.ts 소유를 택했다. 이슈 30 의 "관절 hp 85(활 2발 정확)" — 활 2발 = 88 ≥ 132 아님이지만, 활 2발/권총 6발이 정확히 맞는 132 로 두는 쪽이 임계 단위(66 배수)와 일치해 채택하지 않았다.

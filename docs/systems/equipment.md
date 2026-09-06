@@ -41,6 +41,7 @@
 
 - 보물상자: `chest.equipChance`(0.6) 로 장비 한 줄 — 몸에 걸친 것·가방에 든 것은 빼고 뽑는다.
 - 보스 주머니: 확정 1개(`pickups.equip.bossAlways`). 일반 적은 `pickups.equip.dropChance`(0).
+- **유일 장비(2026-09-07, 거수 B3-6):** `unique: true` 인 장비는 무작위 풀(처치 주머니 `Loot.rollLoot`·보물상자 `Chest.rollEquip` — 둘 다 `EquipData.randomEquipIds`)에서 빠지고 보스 정의의 `equipDrops` 로만 확정 드랍된다(무작위 1개와 별개 줄). `sellable: false` 면 제단에서 팔 수 없다(`Equipment.sellFromBag` → `equip_sell_denied`, 팝업 '팔 수 없다 — 유일 장비'). 지금은 낫뿔 반지 `ring_scythe_horn`(ring·tier 3·`perfectBandBonus +0.12`·`dodgeDistanceMul 1.15`, price 0) 하나 — `docs/systems/boss_scythe_behemoth.md` §11.
 - 제단 상점 판매는 아직 없다(후속). 파는 것만 된다.
 
 이벤트: `equip_changed {slot, id, prev}` · `equip_denied {id, reason}` · `inventory_resized {size}`.

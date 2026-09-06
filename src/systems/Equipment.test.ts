@@ -4,7 +4,7 @@ import { balance } from '../core/Balance';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { addEquip, addItem, bagBaseSlots, initInventory } from '../core/Inventory';
-import { equipDef } from '../core/EquipData';
+import { equipDef, equipSellable } from '../core/EquipData';
 import { damagePlayer, World } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Altar from './Altar';
@@ -160,6 +160,37 @@ describe('정한 칸에 걸치기 · 팔기', () => {
     expect(Equipment.sellFromBag(world, 0)).toBe(price);
     expect(world.gold).toBe(price);
     expect(world.inventory[0]).toBeNull();
+  });
+
+  it('낫뿔 반지(ring_scythe_horn, B3-6) — 데이터: ring·tier 3·#d9cfa0·price 0·unique·sellable false·기존 효과 키만(perfectBandBonus 0.12·dodgeDistanceMul 1.15). 걸치면 Modifiers 에 그대로 합쳐진다', () => {
+    const def = equipDef('ring_scythe_horn');
+    expect(def).toMatchObject({ name: '낫뿔 반지', slot: 'ring', tier: 3, color: '#d9cfa0', price: 0, unique: true, sellable: false });
+    expect(def.effects).toEqual({ perfectBandBonus: 0.12, dodgeDistanceMul: 1.15 });
+    expect(def.desc).toContain('거수의 뿔');
+    const band0 = world.modifiers.perfectBandBonus;
+    const dodge0 = world.modifiers.dodgeDistanceMul;
+    addEquip(world, 'ring_scythe_horn');
+    expect(Equipment.equipFromBag(world, 0)).toBe('equipped');
+    expect(world.equipment.ring1).toBe('ring_scythe_horn');
+    expect(world.modifiers.perfectBandBonus).toBeCloseTo(band0 + 0.12, 9);
+    expect(world.modifiers.dodgeDistanceMul).toBeCloseTo(dodge0 * 1.15, 9);
+    // 다른 장비는 유일·판매 불가 표식이 없다
+    expect(equipDef('armor_chain').unique).toBeUndefined();
+    expect(equipSellable('armor_chain')).toBe(true);
+    expect(equipSellable('ring_scythe_horn')).toBe(false);
+  });
+
+  it('sellFromBag — 유일 장비(sellable false)는 팔 수 없다: 0 을 돌려주고 가방·골드 그대로, equip_sell_denied{id, reason unique} 만 낸다', () => {
+    addEquip(world, 'ring_scythe_horn');
+    const denied: unknown[] = [];
+    world.events.on('equip_sell_denied', (p) => denied.push(p));
+    const sold: unknown[] = [];
+    world.events.on('equip_sold', (p) => sold.push(p));
+    expect(Equipment.sellFromBag(world, 0)).toBe(0);
+    expect(world.gold).toBe(0);
+    expect(world.inventory[0]).toMatchObject({ kind: 'equip', equipId: 'ring_scythe_horn' });
+    expect(denied).toEqual([{ id: 'ring_scythe_horn', reason: 'unique' }]);
+    expect(sold).toHaveLength(0);
   });
 });
 

@@ -81,3 +81,58 @@ describe('Corruption — 정화(corruption_cleansed) 구독 (B3-2)', () => {
     expect(world.canReadGlyphs).toBe(true);
   });
 });
+
+describe('Corruption — 보스 사망·처형 정화 (B3-6, 기획서 §11)', () => {
+  function cleansedLog(): { amount: number; source: string }[] {
+    const out: { amount: number; source: string }[] = [];
+    world.events.on('corruption_cleansed', (p) => out.push(p as { amount: number; source: string }));
+    return out;
+  }
+
+  it('데이터 — bossCleansePending 10 · bossExecuteCleanse 15 (처형 마무리가 더 크다)', () => {
+    expect(balance.corruption).toMatchObject({ bossCleansePending: 10, bossExecuteCleanse: 15 });
+    expect(balance.corruption.bossExecuteCleanse).toBeGreaterThan(balance.corruption.bossCleansePending);
+  });
+
+  it('보스가 죽으면(enemy_died, def.boss) 오염 대기 −10 — corruption_cleansed{amount 10, source boss_death}. applied 는 그대로, pending 은 음수가 된다(여유)', () => {
+    const log = cleansedLog();
+    world.events.emit('enemy_died', { enemyId: 7, enemyType: 'scythe_behemoth', x: 0, z: 0 });
+    expect(world.corruption.pending).toBe(3 - 10);
+    expect(world.corruption.applied).toBe(20);
+    expect(log).toEqual([expect.objectContaining({ amount: 10, source: 'boss_death', enemyId: 7, enemyType: 'scythe_behemoth' })]);
+  });
+
+  it('처형으로 마무리하면(enemy_died{execution}) 대신 −15 — 둘 중 하나만(−25 가 아니다). 정산은 음수를 건너뛴다', () => {
+    const log = cleansedLog();
+    const appliedEv: unknown[] = [];
+    world.events.on('corruption_applied', (p) => appliedEv.push(p));
+    world.events.emit('enemy_died', { enemyId: 7, enemyType: 'scythe_behemoth', x: 0, z: 0, execution: true, boss: true });
+    expect(world.corruption.pending).toBe(3 - 15);
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({ amount: 15, source: 'boss_execute' });
+    world.events.emit('altar_entered', {});
+    expect(world.corruption.applied).toBe(20);
+    expect(appliedEv).toHaveLength(0);
+    // 다음 각인 부착(눈 8 + 심장 15 = 23)이 여유 12 를 쓴다
+    world.corruption.pending += 23;
+    world.events.emit('altar_entered', {});
+    expect(world.corruption.applied).toBe(31);
+  });
+
+  it('보스가 아닌 적·소환수(noLoot)는 정화가 없다. 족장(boss)도 정화한다 — 거수 전용 규칙이 아니다', () => {
+    const log = cleansedLog();
+    world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 0, z: 0, execution: true });
+    world.events.emit('enemy_died', { enemyType: 'scythe_behemoth', x: 0, z: 0, noLoot: true });
+    expect(world.corruption.pending).toBe(3);
+    expect(log).toHaveLength(0);
+    world.events.emit('enemy_died', { enemyType: 'goblin_chieftain', x: 0, z: 0 });
+    expect(world.corruption.pending).toBe(3 - 10);
+    expect(log).toEqual([expect.objectContaining({ amount: 10, source: 'boss_death' })]);
+  });
+
+  it('bossCleanse — 처형 여부로 양을 고르고 그 양을 돌려준다', () => {
+    expect(Corruption.bossCleanse(world, false)).toBe(10);
+    expect(Corruption.bossCleanse(world, true)).toBe(15);
+    expect(world.corruption.pending).toBe(3 - 25);
+  });
+});
