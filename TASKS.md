@@ -193,6 +193,27 @@
 - [x] (B3-4 검토 2 — 처리) 광란 돌격 선회 표식 `chainTurn` 이 예고의 비정상 종료(ruptureJoint → recover)에 남아, 다음 낫 예고(windup·attackMode melee)에서 tickChainTurn(플레이어 쪽 yaw 스냅 + 2.5m 안 꼬리 채기 12 패링 불가)과 Stage 꼬리 휘두름·꼬리/뿔 빨강이 새는 잠재 결함 — 지금은 선회 중 열린 관절이 있을 수 없어 닿지 않았다. (a) windup 의 선회 틱과 Stage 두 곳(꼬리/뿔 빨강·poseBehemothRig chainTurn)에 attackMode 'charge' 게이트, (b) ruptureJoint 의 recover 자리에서 chainTurn/chainLeg/chainTailHit 을 내림(beginPhaseShift·chargeCollide 와 같은 결). 기획서 §14 chainTurn 설명. Boss.test '광란 돌격 선회의 비정상 종료'.
 - [x] (B3-4 검토 2 — 처리, 문서를 코드에 맞춤) 기획서 §7 삼연낫 소표 ③ '일반 패링 (성립 안 함)' 과 구현이 팔 저림 중에 갈렸다 — Reaction 은 저림 배율을 성립 대역(perfectOnly 면 완벽 대역)엔 곱하지 않고 판정용 완벽 대역에만 곱하므로, 저림 중 ③ 완벽 대역 입력은 일반 패링(관절 없음 — ③ 에 exposeOnParry 없음·recover 40 + 튕김 36 으로 콤보 끊김·저림 해제·마나 11)이 된다. 족장 perfectParryOnly 와 같은 결이라 코드는 두고 §7 소표 ③ 열·§6 numb_arm 행·Reaction 머리 주석에 명시 + Boss.test '삼연낫 ③ 팔 저림 중 완벽 대역 입력' 으로 못박음. 반대로 저림 중 ③ 을 실패 규약으로 떨어뜨리면 막은 벌(저림) 위에 콤보 마무리에서 반응 버튼의 답이 아예 없어지는데(막기·뒤 대시만), '패링하면 풀린다' 는 저림의 출구를 남기는 쪽이 §6 의 의도에 가깝다.
 
+### 배치 3 전반 검토 잔여 메모 (전부 저순위 — 후반 B3-5/B3-6 때 함께 처리, 2026-09-04)
+
+- [ ] (B3-1) 기획서 드리프트(한 단어): docs/systems/boss_scythe_behemoth.md §14 `balance.weakPoint` 행이 여전히 `heartTrigger 66` 으로 적혀 있는데, data/balance.json·TASKS B3-1·Boss.test·Enemies.ts 는 전부 `heartThreshold`(dazeThreshold·blindThreshold 와 같은 명명)를 쓴다. 같은 커밋이 §14 의 다른 행(EnemyState·rearPose)은 B3-1 에 맞춰 고쳤으면서 이 필드명만 남겼다. 동작·게이트에는 영향 없음.
+  → docs/systems/boss_scythe_behemoth.md 468행의 `heartTrigger 66` 을 `heartThreshold 66` 으로 바꾼다(B3-2 가 §14 vent 필드를 손볼 때 함께 처리해도 된다).
+- [ ] (B3-2) 판정 = 그림 완화: 열린 분출공을 Stage 가 ×1.4(맥동 포함 r≈0.42~0.47)로 그리지만 판정 반지름은 0.30 그대로다(src/render/Stage.ts BH_VENT_OPEN_SCALE, src/core/Entities.ts rayHitsWeakPoint 는 wp.radius + pad 만 씀). 기획서 §2 표가 '크기 ×1.4' 를 표시 열에 두어 스펙 위반은 아니지만, 그려진 구체 가장자리(0.30~0.45m)를 쏘면 몸통 0.8× 로 떨어져 '보이는 것 = 맞는 것' 규약이 눈·관절과 달리 40% 어긋난다. 코드 주석·커밋에 의도로 적혀 있어 차단 사유는 아님.
+  → 둘 중 하나로 고정: (a) entities weakPoints[vent] 에 openRadiusMul 1.4 를 두고 rayHitsWeakPoint(노출 타이머 열림 중)와 behemothWeakScaleMul 이 같은 값을 읽게 해 판정 = 그림을 유지, 또는 (b) 기획서 §4.2 에 '분출공 열림 ×1.4 는 그림만(판정 r0.30)' 을 한 줄 명시하고 Behemoth.test 에 그 사실을 적는다.
+- [ ] (B3-2) 오염 대기 음수 표시 누락: main.ts 의 HUD·제단 문구는 음수를 그대로 보이게 손질됐지만 src/render/SkillUI.ts:83 은 여전히 `오염 대기 +${world.corruption.pending}` 이라 분출공 정화로 pending 이 −4 면 스킬 패널 제목에 '오염 대기 +-4' 가 찍힌다.
+  → SkillUI.ts 83행을 main.ts 와 같은 꼴(`${pending >= 0 ? '+' : ''}${pending}`)로 바꾼다.
+- [ ] (B3-2) 분출공 내구 0 이 관절 파열 규약을 함께 탄다: World.hitWeakPoint 가 vent 에도 weak_point_broken 을 내므로 src/main.ts:1617 의 범용 핸들러가 heavy_hit + spawnDeathBurst(파편)를 내고(다음 틱 vent_choke 와 겹침), src/core/Metrics.ts 의 weakPoints.broken 도 질식을 파열로 센다. 기획서 §5 choke 표시 열은 '분출공 꺼짐 + 거친 숨' 만이고, 지표는 파열·질식이 섞인다(배치 2 잔여 메모 #172 의 heavy_hit 이중음과 같은 결).
+  → main 의 weak_point_broken 핸들러와 Metrics 의 broken 카운터에서 id === 'vent' 를 건너뛰거나(질식은 boss_status choke 가 소리·hazards.chokes 를 담당), docs/metrics.md 의 weak_point_broken 설명에 '분출공(질식)도 포함' 을 명시한다.
+- [ ] (B3-2) 반사됐지만 시전자를 빗나간 진액 구슬(보스가 움직여 몸 상자를 놓친 경우)은 벽·다른 적에 닿은 자리에 orb 웅덩이를 남긴다(src/systems/Projectiles.ts — swallowed 만 예외). 기획서는 '분출공으로 되돌아간 구슬' 만 예외로 두어 위반은 아니지만, 플레이어 소유(deflected) 투사체가 플레이어를 해치는 장판을 만드는 결과가 된다.
+  → 설계 판단: 반사된(proj.deflected) 구슬은 착탄 웅덩이를 남기지 않게 하거나(spawn_pool 조건에 !proj.deflected), 기획서 §10.2 에 '반사돼 빗나간 구슬도 착탄 웅덩이' 를 한 줄 적어 의도로 고정한다.
+- [ ] (B3-3) heavy 피해 분류가 데이터 필드가 아니라 호출부 5곳(Weapons 해머 finisher·Projectiles 수류탄/화염구 폭발·core/Explosion.explodeAt·Traps.fireRockfall)의 hitShellPlates 호출로만 존재한다. 체크박스의 'damageClass 개념을 최소로(기존 필드에서 파생)' 를 넓게 해석한 것으로 규칙 위반은 아니지만, 앞으로 새 폭발·낙하 피해 경로를 추가할 때 호출을 빠뜨리면 조용히 판이 안 깎인다. 커밋 본문·기획서 §4.3 구현 메모 ①에 기록돼 있어 배포 차단 사유는 아님.
+  → 그대로 두어도 무방. 원하면 다음 heavy 피해 소스를 추가하는 작업에서 hitShellPlates 호출 목록을 core/ShellPlates.ts 머리 주석에 열거해 두거나, Boss.test 에 '폭발 이벤트를 내는 모든 피해 경로가 판을 깎는다' 류의 회귀 테스트를 한 건 더 둔다.
+- [ ] (B3-3) debug/behemoth ?view=plates 의 카메라(5.2, 4.8, −6.2)에서는 부서진 앞 판 자리의 벌어진 실금(×BH_CRACK_GROW)이 머리 상자·어깨 관절에 가려 broken=1 에서는 전혀 보이지 않고 broken=3 에서도 세 줄 중 한 줄만 보인다(스크린샷 확대로 확인). 판 숨김·분출공 확대는 스크린샷으로 확인되지만 '실금 벌어짐' 은 Behemoth.test 의 수치 검사로만 잠겨 있다. 기능 결함은 아님.
+  → 선택 사항 — ?view=plates 를 등 뒤 위쪽(예: (−4.5, 5.0, 5.5) → lookAt(0, 2.2, −0.3))에서 찍거나 &cam=back 매개변수를 두어 세 실금이 다 보이는 각을 하나 더 남긴다.
+- [ ] (B3-4) /Users/shimu/Dev/GameDev/underworld/src/systems/Enemies.ts — `impact` 분기(2848~2849행)의 `const leg = enemy.chainLeg ?? 0; enemy.chainLeg = 0;` 와 chase→돌격 개시의 `enemy.chainLeg = 0; enemy.chainTurn = false;` 가 무조건 실행되어, 구울·족장 등 광란 돌격이 없는 모든 적의 EnemyState 에도 `chainLeg`/`chainTurn` 장부가 생긴다. 같은 커밋이 ruptureJoint 에서 지킨 '없던 적에겐 장부를 만들지 않는다' 규약과 어긋난다. 기능 결함은 아니다(테스트 1045 통과, 옵셔널 필드).
+  → 두 자리를 `def.chargeAttack?.chainCharge` 가 있을 때만(또는 `enemy.chainLeg !== undefined` 일 때만) 쓰도록 게이트한다. 예: impact 에서 `const leg = enemy.chainLeg ?? 0; if (enemy.chainLeg !== undefined) enemy.chainLeg = 0;`, 돌격 개시에서 `if (def.chargeAttack.chainCharge) { enemy.chainLeg = 0; enemy.chainTurn = false; }`.
+- [ ] (B3-4) 판정 = 그림 잔여 — head_down·exhaust 자세의 어깨 관절 메시가 판정 구체와 0.44m 어긋난다(debug ?view=exhaust 안내문 '어긋남 r 0.44 / l 0.44', /tmp/pw/behemoth-b34-exhaust.png). 완벽 패링 뒤 head_down 90틱 동안은 그 관절이 실제로 열려(exposeOnParry.perfectTicks) 열린 구체가 어깨 메시에서 떨어져 보인다. B2-2 부터 있던 값이라 이 체크박스 범위 밖이고 TASKS.md 배치 2 잔여 메모(190행)에 처리 방식과 함께 기록돼 있다 — 차단 사유는 아니다.
+  → 메모대로 다음 리그 손질 때 roar 에 쓴 shoulderLift/shoulderShift 방식을 head_down·exhaust(가능하면 stunned)에도 적용하고 src/render/Behemoth.test.ts 의 관절 메시–구체 검사에 두 자세를 ≤ 0.2 로 추가한다.
+
 ## 의존성 주의
 
 - M3 이전에 M4를 건드리지 않는다. 패링 감각이 확정되기 전 마나 수치를 잡으면 전부 다시 한다
