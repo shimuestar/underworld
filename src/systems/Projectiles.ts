@@ -3,10 +3,10 @@
 // 시전 시 cast_spell 이벤트 발행 → Mana가 연쇄를 리셋한다.
 
 import { balance } from '../core/Balance';
-import { barrierUp, enemyDef, shieldBlocksProjectile, rayHitsEnemy } from '../core/Entities';
+import { barrierUp, enemyDef, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, type WeakPointDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
 import { sigilDef, type SigilDef } from '../core/SigilData';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius, damagePlayer } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, breakHeadsInRadius, breakPropsInRadius, damageProp, hitBarrel, hitWeakPoint, igniteBarrel, playerBlocks, pushEnemy, pushPlayer, applyFrostOnHit, type BarrelState, type EnemyState, type ProjectileState, type PropState, type World, disarmTrap, igniteOilInRadius, type TrapState, provokeTrap, breakRubbleInRadius, disarmTrapsInRadius, damagePlayer } from '../core/World';
 
 let nextProjectileId = 1;
 
@@ -764,6 +764,8 @@ function moveProjectiles(world: World, dt: number): void {
       }
     }
     let hitEnemy: (typeof world.enemies)[number] | null = null;
+    /** 맞힌 약점 구체(거수) — 화살·화염구 직격만 배율을 받는다 */
+    let hitWeak: WeakPointDef | null = null;
     let hitPlayer = false;
 
     // 폭발통 — 플레이어 투사체만 반응한다. 화염구가 통에 닿으면 즉발,
@@ -915,14 +917,26 @@ function moveProjectiles(world: World, dt: number): void {
     }
 
     if (proj.owner === 'player') {
+      // 약점 배율은 화살·화염구 직격만(기획서 §4) — 수류탄·반사 마법은 몸 상자 그대로
+      const weakEligible = proj.kind === 'arrow' || proj.kind === 'fireball';
       for (const enemy of world.enemies) {
         if (!enemy.alive) continue;
         const def = enemyDef(enemy.type);
         // 공중의 적은 jumpY 만큼 뜬 기둥, 죽은 척(엎어진 구울)은 정면으로 누운 낮은 상자, 거수는 시각 몸통 직사각(hitBox) — Entities.rayHitsEnemy
-        const t = rayHitsEnemy(proj.x, proj.y, proj.z, dirX, dirY, dirZ, enemy, def, proj.radius);
+        let t = rayHitsEnemy(proj.x, proj.y, proj.z, dirX, dirY, dirZ, enemy, def, proj.radius);
+        let weak: WeakPointDef | null = null;
+        // 약점 구체(거수, pad = 투사체 반지름) — 원뿔을 만족하고 이번 걸음의 벽·바닥 앞이면 몸 상자보다 우선("구체 승", Weapons.fire 와 같은 규칙)
+        if (weakEligible) {
+          const wpHit = rayHitsWeakPoint(proj.x, proj.y, proj.z, dirX, dirY, dirZ, enemy, def, proj.radius);
+          if (wpHit && wpHit.t < hitT) {
+            t = wpHit.t;
+            weak = wpHit.wp;
+          }
+        }
         if (t !== null && t < hitT) {
           hitT = t;
           hitEnemy = enemy;
+          hitWeak = weak;
           hitBarrelTarget = null; // 적이 통보다 앞이다
           hitHead = null;
           hitProjectile = null;
@@ -962,6 +976,7 @@ function moveProjectiles(world: World, dt: number): void {
         hitT = t;
         hitPlayer = true;
         hitEnemy = null; // 적보다 플레이어가 앞
+        hitWeak = null;
       }
     }
 
@@ -1215,8 +1230,11 @@ function moveProjectiles(world: World, dt: number): void {
           }
         }
       } else if (hitEnemy && proj.kind !== 'frost') {
-        // 착탄 높이를 넘긴다 — 화살 헤드샷 판정 (얼음 화살은 위에서 터졌다)
-        applyProjectileHit(world, proj, hitEnemy, shieldedAtImpact, proj.y + dirY * hitT);
+        // 착탄점을 넘긴다 — 화살 헤드샷 판정(높이)·약점 착탄 연출 (얼음 화살은 위에서 터졌다)
+        applyProjectileHit(
+          world, proj, hitEnemy, shieldedAtImpact,
+          proj.y + dirY * hitT, hitWeak, proj.x + dirX * hitT, proj.z + dirZ * hitT,
+        );
       }
       world.projectiles.splice(i, 1);
       i = removeBroken(world, hitProjectile, i);
@@ -1257,14 +1275,21 @@ function applyProjectileHit(
   shielded: boolean,
   /** 착탄 높이(y) — 화살 헤드샷 판정에 쓴다 */
   impactY = 0,
+  /** 맞힌 약점 구체(거수) — 화살·화염구 직격에 damageMul, 헤드샷 억제, weak_point_hit */
+  weak: WeakPointDef | null = null,
+  impactX = enemy.x,
+  impactZ = enemy.z,
 ): void {
   const def = enemyDef(enemy.type);
   // 화살 헤드샷 — 부위 경계는 권총과 같은 값(hitZones.headFrac)을 쓴다.
-  // 피해 보정은 없다 (활은 당김이 아니라 자리로 승부하는 무기가 아니다) — 연출·판정만
+  // 피해 보정은 없다 (활은 당김이 아니라 자리로 승부하는 무기가 아니다) — 연출·판정만.
+  // 약점을 맞혔거나 hitZonesImmune(거수)면 헤드샷은 없다(머리 = 눈 약점). 높이는 몸이 뜬 만큼(jumpY)을 빼고 잰다(기획서 §4.2)
   const headHit =
     proj.kind === 'arrow' &&
     proj.owner === 'player' &&
-    impactY / def.height >= balance.weapons.pistol.hitZones.headFrac;
+    weak === null &&
+    !def.hitZonesImmune &&
+    (impactY - (enemy.jumpY ?? 0)) / def.height >= balance.weapons.pistol.hitZones.headFrac;
   if (headHit) world.events.emit('headshot', { enemyId: enemy.id });
 
   // 정면 방패 — 화염구가 명중하면 방패가 부서진다. 방패가 화염을 일부 먹으므로 피해 감소
@@ -1302,12 +1327,16 @@ function applyProjectileHit(
   }
   // 동료 오사는 위력이 줄어든다 — 사고로 보이되 한 방에 죽지는 않게.
   // 함정이 쏜 것(trapShot)은 오사가 아니다 — 풀 피해, 숫자도 뜬다 (적을 유도해 걸리게 한 보상)
-  const damage =
+  let damage =
     proj.owner === 'enemy' && !proj.trapShot
       ? proj.damage * balance.enemyAi.friendlyFireDamageMul
       : proj.damage;
+  // 약점 배율 — 화살·화염구 직격(호출부가 weakEligible 로 골라 넘긴다). 폭발·내파 광역은 배율 없음
+  if (weak && proj.owner === 'player') damage *= weak.damageMul;
   const directDealt = applyFrostOnHit(world.events, enemy, damage);
   enemy.health -= directDealt;
+  // 약점 장부 — 피해 숫자보다 먼저(HUD 가 같은 틱의 약점 명중을 보고 숫자 옆에 '약점!' 을 붙인다)
+  if (weak && proj.owner === 'player') hitWeakPoint(world, enemy, weak.id, directDealt, impactX, impactY, impactZ);
   if (proj.owner === 'player' || proj.trapShot) {
     world.events.emit('damage_pop', { enemyId: enemy.id, amount: directDealt });
   }

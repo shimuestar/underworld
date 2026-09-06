@@ -76,7 +76,9 @@
         "webTear": { "ms": 45, "strong": 0.15, "weak": 0.35 },
         "reload": { "ms": 50, "strong": 0.2, "weak": 0.4 },
         "pickup": { "ms": 35, "strong": 0.08, "weak": 0.3 },
-        "use": { "ms": 90, "strong": 0.2, "weak": 0.45 }
+        "use": { "ms": 90, "strong": 0.2, "weak": 0.45 },
+        "_weakPointNote": "약점 명중 — 헤드샷보다 굵고 짧은 한 방(총 발사 shot 을 덮는다)",
+        "weakPoint": { "ms": 95, "strong": 0.75, "weak": 0.9 }
       },
       "_holdNote": "패드 랜턴 버튼을 이만큼 붙들면 배터리 교체다 (짧게는 켜고 끄기). 버튼이 모자라 한 버튼에 둘을 얹었다",
       "holdTicks": 18
@@ -898,6 +900,10 @@
     "farDist": 14,
     "nearScale": 1.35,
     "farScale": 0.8
+  },
+  "_weakPointNote": "약점 구체 판정 공용 규칙(기획서 §4.2) — defaultConeDeg: weakPoints[].coneDeg 가 없을 때의 정면 원뿔 각(도). dot(레이 방향, facing) ≤ −cos(coneDeg/2) 일 때만 구체가 성립한다. 혼절·눈멂·역류 임계 등은 B2-2 부터 이 블록에 쌓인다",
+  "weakPoint": {
+    "defaultConeDeg": 100
   },
   "_spatialAudioNote": "적 소리의 좌우 패닝 + 거리 감쇠 — 시야 밖 위협을 귀가 먼저 안다. minVol 아래로는 안 줄여 예고음이 게임플레이 단서로 항상 들리게 한다",
   "spatialAudio": {

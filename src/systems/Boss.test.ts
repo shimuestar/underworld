@@ -13,6 +13,7 @@ import { isSpawnable, spawnEnemyAt } from '../level/Spawner';
 import {
   BEHEMOTH_TORSO,
   ENEMY_LEAN_JITTER,
+  behemothAnchorPos,
   behemothBladeTip,
   buildBehemothRig,
   poseBehemothRig,
@@ -1637,11 +1638,13 @@ describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만�
   });
 
   it('들이받기 자세(B1-3) — 예고에 목이 뒤로(+) 젖혀져 눈이 뒤·위로, 타격엔 앞으로(−) 내리꽂혀 눈이 앞·아래로. 낫은 대기 그대로', () => {
+    // 머리의 움직임은 머리 메시 위 눈 자리(anchors)로 잰다 — 약점 구체는 B2-1 부터 판정과 같은 poseOffsets 표를 읽어
+    // 메시를 따라가지 않는다(src/render/Behemoth.test.ts)
     const rest = measureRig(0, 0, 0, {});
-    const eyeRest = rest.rig.weakPoints['eye']!.position.clone();
+    const eyeRest = behemothAnchorPos(rest.rig, 'eye', new THREE.Vector3());
     const coil = measureRig(BEHEMOTH_TORSO.headbuttLean, 0, 0, { headbuttCoil: 1 });
     expect(coil.rig.neck.rotation.x).toBeGreaterThan(0.3);
-    const eyeCoil = coil.rig.weakPoints['eye']!.position;
+    const eyeCoil = behemothAnchorPos(coil.rig, 'eye', new THREE.Vector3());
     expect(eyeCoil.y).toBeGreaterThan(eyeRest.y + 0.15);
     expect(eyeCoil.z).toBeGreaterThan(eyeRest.z + 0.15); // 뒤로
     const restLeaned = measureRig(BEHEMOTH_TORSO.headbuttLean, 0, 0, {}); // 같은 몸통 기울임의 대기 — 목만 움직였는지 본다
@@ -1651,7 +1654,7 @@ describe('scythe_behemoth (낫뿔 거수) — 배치 1 뼈대: 기존 슬롯만�
     expect(half.rig.neck.rotation.x).toBeGreaterThan(coil.rig.neck.rotation.x * 0.8);
     const butt = measureRig(BEHEMOTH_TORSO.headbuttStrikeLean, BEHEMOTH_TORSO.headbuttLunge, 0, { headbutting: true });
     expect(butt.rig.neck.rotation.x).toBeLessThan(-0.5);
-    const eyeButt = butt.rig.weakPoints['eye']!.position;
+    const eyeButt = behemothAnchorPos(butt.rig, 'eye', new THREE.Vector3());
     expect(eyeButt.y).toBeLessThan(eyeRest.y - 0.3);
     expect(eyeButt.z).toBeLessThan(eyeRest.z - 0.2); // 앞으로
     expect(eyeButt.y).toBeGreaterThan(1.0); // 머리가 바닥에 박히지는 않는다 (앞다리가 기울임만큼 살짝 잠기는 건 다른 자세와 같다)

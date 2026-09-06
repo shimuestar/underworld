@@ -4,9 +4,9 @@
 //    두 자원 경제를 분리하는 유일한 규칙이다 — docs/systems/combat.md §5.
 
 import { balance } from '../core/Balance';
-import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy } from '../core/Entities';
+import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, type WeakPointDef } from '../core/Entities';
 import { rayVsAabb } from '../core/Ray';
-import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, provokeTrap, hitBarrel, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
+import { alertEnemy, alertNearbyAt, breakGhoulHead, damageProp, disarmTrap, provokeTrap, hitBarrel, hitWeakPoint, noiseField, RANGED_WEAPONS, applyFrostOnHit, spendStamina, type BarrelState, type PropState, type TrapState, type World } from '../core/World';
 
 /** 원거리 차징을 전부 끊는다 — 조기 return 마다 하나씩 지우면 반드시 빠뜨린다.
  *  활을 넣으면서 실제로 방패·경직·무기 교체 세 곳이 bowDraw 를 안 지워
@@ -754,16 +754,24 @@ function fire(world: World): void {
   if (dy < 0) wallT = Math.min(wallT, oy / -dy);
   else if (dy > 0) wallT = Math.min(wallT, (world.level.ceiling - oy) / dy);
 
-  // 가장 가까운 적 히트박스
-  let hit: { enemy: (typeof world.enemies)[number]; t: number } | null = null;
+  // 가장 가까운 적 히트박스 (+ 약점 구체)
+  let hit: { enemy: (typeof world.enemies)[number]; t: number; weak: WeakPointDef | null } | null = null;
   let hitT = wallT;
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
     const def = enemyDef(enemy.type);
     // 공중의 적(천장 거머리·도약 중) — 몸이 뜬 만큼(jumpY) 피격 박스도 떠 있어야 맞는다
     // 공중은 jumpY 만큼 뜬 기둥, 죽은 척은 정면으로 누운 낮은 상자, 거수는 시각 몸통 직사각(hitBox) — Entities.rayHitsEnemy
-    const t = rayHitsEnemy(p.x, oy, p.z, dx, dy, dz, enemy, def, 0);
-    if (t !== null && t < wallT && (!hit || t < hit.t)) hit = { enemy, t };
+    let t = rayHitsEnemy(p.x, oy, p.z, dx, dy, dz, enemy, def, 0);
+    let weak: WeakPointDef | null = null;
+    // 약점 구체(거수) — 원뿔을 만족한 구체가 벽 앞이면 몸 상자보다 우선한다("구체 승": 관절·심장처럼 상자 안에 있어도,
+    // 눈처럼 상자 밖으로 나와 상자를 빗나가도). 구체가 벽 뒤면 몸 상자 그대로
+    const wpHit = rayHitsWeakPoint(p.x, oy, p.z, dx, dy, dz, enemy, def, 0);
+    if (wpHit && wpHit.t < wallT) {
+      t = wpHit.t;
+      weak = wpHit.wp;
+    }
+    if (t !== null && t < wallT && (!hit || t < hit.t)) hit = { enemy, t, weak };
   }
 
   // 폭발통 — 적보다 앞에 있으면 총알을 대신 받는다. 한 방에 터지지 않고
@@ -950,13 +958,23 @@ function fire(world: World): void {
 
   if (!hit) return;
 
-  // 부위 판정 (명중 높이) + 거리 감쇠
+  // 부위 판정 (명중 높이) + 거리 감쇠.
+  // 약점 구체를 맞혔으면 zone 'weak' + 그 배율(부위 배율 대신), hitZonesImmune(거수)면 약점 아닌 명중은 전부 body 배율 —
+  // 두 경우 모두 헤드샷(이벤트·처치 연출)은 나지 않는다(거수의 머리는 눈 약점이 대신한다).
+  // 높이 비율은 몸이 뜬 만큼(jumpY)을 빼고 잰다 — 공중의 박쥐·천장 거머리가 어디를 맞아도 '머리'로 집계되던 버그(기획서 §4.2)
   const def = enemyDef(hit.enemy.type);
   const zones = pistol.hitZones;
-  const heightFrac = (oy + dy * hit.t) / def.height;
-  let zone: 'head' | 'body' | 'limb';
+  const hitY = oy + dy * hit.t;
+  const heightFrac = (hitY - (hit.enemy.jumpY ?? 0)) / def.height;
+  let zone: 'head' | 'body' | 'limb' | 'weak';
   let zoneMul: number;
-  if (heightFrac >= zones.headFrac) {
+  if (hit.weak) {
+    zone = 'weak';
+    zoneMul = hit.weak.damageMul;
+  } else if (def.hitZonesImmune) {
+    zone = 'body';
+    zoneMul = zones.bodyMul;
+  } else if (heightFrac >= zones.headFrac) {
     zone = 'head';
     zoneMul = zones.headMul;
   } else if (heightFrac >= zones.bodyFrac) {
@@ -984,6 +1002,9 @@ function fire(world: World): void {
 
   const shotDealt = applyFrostOnHit(world.events, hit.enemy, damage);
   hit.enemy.health -= shotDealt;
+  // 약점 장부 — weak_point_hit(연출·'약점!'·진동) + 내구 차감·파열. 피해 숫자(damage_pop/enemy_damaged)보다 먼저 —
+  // HUD 가 같은 틱의 약점 명중을 보고 숫자 옆에 '약점!' 을 붙인다
+  if (hit.weak) hitWeakPoint(world, hit.enemy, hit.weak.id, shotDealt, p.x + dx * hit.t, hitY, p.z + dz * hit.t);
   // 피탄 경직 — 잠깐 발이 묶인다. 공격 상태 머신은 그대로 진행되므로
   // 총으로 공격을 끊거나 스턴락할 수는 없다 (패링 게임을 지우지 않는다)
   hit.enemy.flinchTicks = pistol.flinchTicks;
@@ -1017,6 +1038,7 @@ function fire(world: World): void {
       health: hit.enemy.health,
       zone,
       damage: shotDealt,
+      heightFrac, // 피 파편 높이(약점은 부위 비율이 없어 실제 명중 높이로)
     });
   }
 }

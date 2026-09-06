@@ -44,8 +44,12 @@ describe('Metrics', () => {
     events.emit('weapon_kill', { weapon: 'pistol', enemyType: 'x' });
     events.emit('melee_kill', { enemyType: 'x', execution: true });
     events.emit('player_damaged', { amount: 22, health: 78 });
+    events.emit('weak_point_hit', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'eye', damage: 33, x: 0, y: 2.35, z: 0 });
+    events.emit('weak_point_hit', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'joint_r', damage: 22, x: 0, y: 2.5, z: 0 });
+    events.emit('weak_point_broken', { enemyId: 1, enemyType: 'scythe_behemoth', id: 'joint_r' });
 
     const s = metrics.snapshot(makeWorldStub());
+    expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1 });
     expect(s.combat.parryAttempts).toBe(4);
     expect(s.derived.perfectParryRatio).toBeCloseTo(0.5);
     expect(s.derived.parrySuccessRatio).toBeCloseTo(0.75);

@@ -30,6 +30,8 @@ export interface MetricsSnapshot {
     lifeMotesExpired: number;
   };
   kills: { weapon: number; execution: number; spell: number; friendlyFire: number; total: number };
+  /** 약점(거수) — 명중 수 / 약점 피해 합 / 파열 수 (기획서 boss_scythe_behemoth §12) */
+  weakPoints: { hits: number; damage: number; broken: number };
   pickups: { potions: number; healed: number; gold: number; xp: number };
   shieldsBroken: number;
   ammo: { shotsFired: number; shotsHit: number; altarEntries: number; altarBypasses: number };
@@ -71,6 +73,9 @@ export class Metrics {
   private killsExecution = 0;
   private killsSpell = 0;
   private killsFriendlyFire = 0; // 적 투사체가 적을 죽인 수 (플레이어 전과 아님)
+  private weakPointHits = 0;
+  private weakPointDamage = 0;
+  private weakPointsBroken = 0;
   private potionsPicked = 0;
   private healedTotal = 0;
   private goldCollected = 0;
@@ -128,6 +133,11 @@ export class Metrics {
     events.on('boss_execute', () => this.killsExecution++); // 처형 타격도 시도로 집계
     events.on('spell_kill', () => this.killsSpell++);
     events.on('friendly_fire_kill', () => this.killsFriendlyFire++);
+    events.on('weak_point_hit', (payload) => {
+      this.weakPointHits++;
+      this.weakPointDamage += (payload as { damage: number }).damage;
+    });
+    events.on('weak_point_broken', () => this.weakPointsBroken++);
     // 소모품은 이제 줍는 순간이 아니라 마시는 순간을 센다 (가방을 거치므로)
     events.on('item_used', (payload) => {
       this.potionsPicked++;
@@ -253,6 +263,7 @@ export class Metrics {
         friendlyFire: this.killsFriendlyFire,
         total: this.killsWeapon + this.killsExecution + this.killsSpell,
       },
+      weakPoints: { hits: this.weakPointHits, damage: this.weakPointDamage, broken: this.weakPointsBroken },
       pickups: {
         potions: this.potionsPicked,
         healed: this.healedTotal,

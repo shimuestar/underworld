@@ -1,7 +1,8 @@
 // data/entities.json 로더. 적 스탯은 전부 여기서 읽는다 — 코드에 하드코딩 금지.
 
 import entitiesJson from '../../data/entities.json';
-import { rayVsAabb } from './Ray';
+import { balance } from './Balance';
+import { rayVsAabb, rayVsSphere } from './Ray';
 
 /** 착탄 시 광역 효과. 수호주술사 마법탄의 '내파' — 화염구(밀어냄)와 정반대로 끌어당긴다 */
 export interface ProjectileSplashDef {
@@ -132,6 +133,33 @@ export interface BehemothVisualDef {
   mouth: { size: VisualTriple; hinge: VisualTriple };
   /** 꼬리 — root 에서 +z 로 뻗는 원기둥 */
   tail: { radius: number; length: number; root: VisualTriple };
+}
+
+/** 세 성분 로컬 좌표(m) — 정면 = -z(Stage 규약) */
+export interface LocalVec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** 약점 구체 정의(거수, 기획서 §4) — 몸 AABB 와 별개인 구체. 히트스캔(권총)·화살·화염구 직격에만 배율,
+ *  해머·수류탄·폭발·빔은 배율 없음. 판정과 그림(Stage 구체)이 같은 정의를 읽는다 */
+export interface WeakPointDef {
+  id: string;
+  /** 로컬 오프셋(m, normal 자세). enemy.pose 가 있고 poseOffsets 표에 그 자세가 있으면 표가 우선 */
+  offset: LocalVec3;
+  radius: number;
+  damageMul: number;
+  /** 내구 — 있으면 Spawner 가 enemy.weakHp[id] 로 복사하고, 0 에 닿으면 weak_point_broken(판정 닫힘) */
+  hp?: number;
+  /** 정면 원뿔 축(로컬 단위 벡터에 가까운 값 — 정규화해 쓴다). dot(레이 방향, facing) ≤ −cos(coneDeg/2) 일 때만 성립 */
+  facing: LocalVec3;
+  /** 원뿔 각(도). 없으면 balance.weakPoint.defaultConeDeg */
+  coneDeg?: number;
+  /** 노출 조건(B2-2 부터) — 이 단계에선 무시하고 항상 노출 */
+  exposedStates?: string[];
+  /** 열림 중 배율 재정의(분출공, B3-2) */
+  openMul?: number;
 }
 
 export interface EnemyDef {
@@ -305,6 +333,12 @@ export interface EnemyDef {
   chargeOnKnockback?: boolean;
   /** 외형 부위 표(거수) — 없으면 Stage 의 기본 인간형 외형 */
   visual?: BehemothVisualDef;
+  /** 약점 구체 목록(거수) — 없으면 약점 판정 없음(옛 경로) */
+  weakPoints?: WeakPointDef[];
+  /** 자세별 약점 좌표표 pose → wpId → 로컬 좌표(m). 판정(weakPointWorldPos)과 그림(Stage)이 같은 표를 읽는다 */
+  poseOffsets?: Record<string, Record<string, LocalVec3>>;
+  /** 권총 부위 배율(head/limb)을 받지 않는다 — 약점 아닌 명중은 전부 body 배율, 권총·화살 헤드샷 이벤트 억제(거수: 머리 = 눈 약점) */
+  hitZonesImmune?: boolean;
 }
 
 /** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격 */
@@ -507,4 +541,92 @@ export function rayHitsEnemy(
     maxY: yBase + def.height + pad,
     maxZ: box.halfZ + pad,
   });
+}
+
+/** 약점의 로컬 오프셋 — enemy.pose 가 있고 poseOffsets 표에 그 자세·그 약점이 있으면 표, 아니면 정의의 offset(normal).
+ *  Stage 의 구체 배치와 판정이 이 한 함수를 쓴다(보이는 자리 = 판정 자리) */
+export function weakPointOffset(
+  def: { poseOffsets?: Record<string, Record<string, LocalVec3>> },
+  wp: WeakPointDef,
+  pose: string | undefined,
+): LocalVec3 {
+  if (pose !== undefined) {
+    const table = def.poseOffsets?.[pose];
+    const off = table?.[wp.id];
+    if (off) return off;
+  }
+  return wp.offset;
+}
+
+/** 로컬 벡터를 적의 yaw 로 월드에 돌린다 — 정면 (0,0,-1) 이 (-sin yaw, -cos yaw) 로 간다(rayHitsEnemy 의 역회전과 짝) */
+function rotateLocalByYaw(v: LocalVec3, yaw: number): { x: number; y: number; z: number } {
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  return { x: v.x * c + v.z * s, y: v.y, z: -v.x * s + v.z * c };
+}
+
+/** 약점 구체의 월드 중심 — 적 발 위치 + yaw 회전한 로컬 오프셋, 공중이면 jumpY 만큼 뜬다.
+ *  부위 높이 비율이 jumpY 를 빼지 않던 옛 버그(기획서 §4.2)를 여기서는 처음부터 포함한다 */
+export function weakPointWorldPos(
+  enemy: { x: number; z: number; yaw: number; jumpY?: number; pose?: string },
+  def: { poseOffsets?: Record<string, Record<string, LocalVec3>> },
+  wp: WeakPointDef,
+): { x: number; y: number; z: number } {
+  const off = weakPointOffset(def, wp, enemy.pose);
+  const r = rotateLocalByYaw(off, enemy.yaw);
+  return { x: enemy.x + r.x, y: (enemy.jumpY ?? 0) + r.y, z: enemy.z + r.z };
+}
+
+/** 이 약점이 지금 판정을 받는가 — 내구가 0(파열)이면 닫힘. 노출 조건(exposedStates)은 B2-2 에서 이 함수에 붙는다.
+ *  이 단계(B2-1)에선 그 외 전부 항상 노출 */
+export function weakPointOpen(enemy: { weakHp?: Record<string, number> }, wp: WeakPointDef): boolean {
+  const hp = enemy.weakHp?.[wp.id];
+  if (hp !== undefined && hp <= 0) return false;
+  return true;
+}
+
+export interface WeakPointHit {
+  wp: WeakPointDef;
+  /** 레이 진입 t (방향 벡터 길이 기준 — 호출부가 정규화 방향을 넣으면 미터) */
+  t: number;
+}
+
+/** 총알·화살·화염구 레이가 약점 구체에 닿는가 — 열린 약점 중 가장 가까운 것(Weapons·Projectiles 공용).
+ *  원뿔 조건: dot(레이 방향, 월드 facing) ≤ −cos(coneDeg/2) — 정면 반구(눈·심장·분출공)나 그쪽 옆(관절)에서만 성립해
+ *  등 뒤에서 몸을 뚫고 눈을 맞히거나 오른쪽에서 왼 관절을 맞힐 수 없다.
+ *  몸 AABB 와는 독립이다 — 호출부가 "구체 승" 규칙으로 합친다(AABB 미명중 = +∞ 취급이라 구체 단독으로도 성립하고,
+ *  관절·심장처럼 AABB 안에 있는 구체도 AABB 진입 t 와 무관하게 이긴다). pad 는 투사체 반지름 */
+export function rayHitsWeakPoint(
+  ox: number,
+  oy: number,
+  oz: number,
+  dx: number,
+  dy: number,
+  dz: number,
+  enemy: { x: number; z: number; yaw: number; jumpY?: number; pose?: string; weakHp?: Record<string, number>; feigning?: boolean },
+  def: { weakPoints?: WeakPointDef[]; poseOffsets?: Record<string, Record<string, LocalVec3>> },
+  pad: number,
+): WeakPointHit | null {
+  const wps = def.weakPoints;
+  if (!wps || wps.length === 0 || enemy.feigning) return null;
+  const dl = Math.hypot(dx, dy, dz);
+  if (dl === 0) return null;
+  const ndx = dx / dl;
+  const ndy = dy / dl;
+  const ndz = dz / dl;
+  let best: WeakPointHit | null = null;
+  for (const wp of wps) {
+    if (!weakPointOpen(enemy, wp)) continue;
+    const c = weakPointWorldPos(enemy, def, wp);
+    const t = rayVsSphere(ox, oy, oz, dx, dy, dz, c.x, c.y, c.z, wp.radius + pad);
+    if (t === null || (best && t >= best.t)) continue;
+    // 원뿔 — facing 을 월드로 돌려 정규화하고 레이 방향과 마주보는지 본다
+    const f = rotateLocalByYaw(wp.facing, enemy.yaw);
+    const fl = Math.hypot(f.x, f.y, f.z) || 1;
+    const dot = (ndx * f.x + ndy * f.y + ndz * f.z) / fl;
+    const coneDeg = wp.coneDeg ?? balance.weakPoint.defaultConeDeg;
+    if (dot > -Math.cos((coneDeg / 2) * (Math.PI / 180))) continue;
+    best = { wp, t };
+  }
+  return best;
 }

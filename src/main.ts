@@ -121,7 +121,7 @@ function padRumble(
   kind:
     | 'hit' | 'heavy' | 'kill' | 'shot' | 'cast' | 'block' | 'parry' | 'whiff'
     | 'interact' | 'hurt' | 'drain' | 'blast' | 'reload' | 'pickup' | 'use'
-    | 'roar' | 'heartbeat' | 'tremble' | 'crumble' | 'webSnag' | 'webTear',
+    | 'roar' | 'heartbeat' | 'tremble' | 'crumble' | 'webSnag' | 'webTear' | 'weakPoint',
 ): void {
   if (!input.usingPad) return;
   // 포효가 도는 동안은 아무것도 못 끼어든다 — 패드는 마지막 효과가 앞 효과를
@@ -540,6 +540,8 @@ for (const name of [
   'stamina_blocked',
   'weapon_kill',
   'headshot_kill',
+  'weak_point_hit',
+  'weak_point_broken',
   'enemy_split',
   'grave_dropped',
   'slime_ate',
@@ -1559,12 +1561,30 @@ function spawnHitBloodOn(
 // 피해 숫자 — 플레이어가 입힌 피해가 맞은 적 머리 위로 떠오른다.
 // 경로별 이벤트: damage_pop(화살·주문·폭발·처형·총 처치·화상 묶음) /
 // enemy_damaged(총 비처치 damage·스킬 amount) / melee_hit / bat_recoil(반동 자해)
+/** 같은 틱에 약점을 맞힌 적 — weak_point_hit 가 피해 숫자(damage_pop/enemy_damaged)보다 먼저 오므로
+ *  숫자를 띄울 때 이 표시를 보고 옆에 '약점!' 을 붙인다 */
+let lastWeakHit: { enemyId: number; tick: number } | null = null;
 function popDamageOn(enemyId: number | undefined, amount: number | undefined): void {
   if (enemyId === undefined || amount === undefined || amount < 0.5) return;
   const e = world.enemies.find((en) => en.id === enemyId);
   if (!e) return;
-  stage.spawnDamageNumber(e.x, enemyDef(e.type).height + (e.jumpY ?? 0) + 0.25, e.z, amount);
+  const weak = lastWeakHit !== null && lastWeakHit.enemyId === enemyId && lastWeakHit.tick === world.tick;
+  stage.spawnDamageNumber(e.x, enemyDef(e.type).height + (e.jumpY ?? 0) + 0.25, e.z, amount, weak ? '약점!' : undefined);
 }
+// 약점 명중(거수 눈·관절·심장·분출공) — 구체가 번쩍이고, 짧은 금속성 소리, 패드 진동. '약점!' 은 피해 숫자 옆에 붙는다(popDamageOn)
+events.on('weak_point_hit', (payload) => {
+  const hit = payload as { enemyId: number; id: string; damage: number };
+  lastWeakHit = { enemyId: hit.enemyId, tick: world.tick };
+  stage.flashWeakPoint(hit.enemyId, hit.id);
+  audio.play('weak_point_hit');
+  padRumble('weakPoint');
+});
+// 약점 파열(관절 내구 0) — 무거운 파열음. 낫 잠김·비틀거림은 B2-3
+events.on('weak_point_broken', (payload) => {
+  const b = payload as { x: number; z: number };
+  audio.play('heavy_hit', panAt(b.x, b.z));
+  showReaction('관절 파열!', 900);
+});
 events.on('damage_pop', (payload) => {
   const d = payload as { enemyId: number; amount: number };
   popDamageOn(d.enemyId, d.amount);
@@ -1605,12 +1625,13 @@ for (const noisyEvent of [
 // 권총 명중 — 관통 방향으로 핏방울. 부위(zone)에 따라 맞은 높이가 다르다.
 // zone 없는 enemy_damaged(주문 피해 등)는 제외 — 마법은 제 이펙트가 담당한다
 events.on('enemy_damaged', (payload) => {
-  const hit = payload as { enemyId: number; zone?: string; damage?: number };
+  const hit = payload as { enemyId: number; zone?: string; damage?: number; heightFrac?: number };
   if (hit.zone === undefined || hit.damage === undefined) return;
   spawnHitBloodOn(hit.enemyId, {
     damage: hit.damage,
     headshot: hit.zone === 'head',
-    heightFrac: hit.zone === 'head' ? 0.85 : hit.zone === 'limb' ? 0.25 : 0.55,
+    // 약점은 부위 비율이 없다 — 실제 명중 높이(Weapons 가 실어 준다)
+    heightFrac: hit.zone === 'weak' ? (hit.heightFrac ?? 0.55) : hit.zone === 'head' ? 0.85 : hit.zone === 'limb' ? 0.25 : 0.55,
     towardPlayer: true, // 총알이 몸 뒤로 뚫는 그림은 몸에 가려 안 보인다 — 정면으로
   });
 });

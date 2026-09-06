@@ -1013,6 +1013,12 @@ export interface EnemyState {
   attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley' | 'summon' | 'alt' | 'close';
   /** 마지막으로 휘두른 낫(거수 교대) — 'r' 오른낫(attack) / 'l' 왼낫(attackAlt). 없으면 다음은 오른낫 */
   lastBlade?: 'r' | 'l';
+  /** 약점 내구 잔량 id → hp (거수 관절) — weakPoints[].hp 가 있는 것만, Spawner 가 def 에서 복사한다.
+   *  0 이면 파열(판정 닫힘, Entities.weakPointOpen). 갑각 재생(B2-6)이 되돌린다 */
+  weakHp?: Record<string, number>;
+  /** 자세 id(거수) — poseOffsets 표의 키(charge·head_down·rear …). 없으면 normal 자리.
+   *  판정(weakPointWorldPos)과 그림(Stage 구체)이 같은 표를 읽는다. 세우는 포즈 타이머는 B2-2 */
+  pose?: string;
   /** 밀착 공격(closeAttack) 재사용 대기 */
   closeCooldown?: number;
   /** 연사 남은 발수 / 재사용 대기 (족장 화살 세례) */
@@ -1078,6 +1084,26 @@ export interface EnemyState {
   kbTicks?: number;
   kbX?: number;
   kbZ?: number;
+}
+
+/** 약점 명중 정산 — weak_point_hit 발행 + 내구(weakHp)가 있으면 그만큼 깎고 0 에 닿는 순간 weak_point_broken 한 번.
+ *  권총(Weapons)·화살·화염구(Projectiles)가 같은 문을 지난다. 피해 자체는 호출부가 이미 체력에 넣었다 —
+ *  이 함수는 약점 장부만 적는다. (x,y,z) 는 착탄점(연출용) */
+export function hitWeakPoint(
+  world: World,
+  enemy: EnemyState,
+  id: string,
+  damage: number,
+  x: number,
+  y: number,
+  z: number,
+): void {
+  world.events.emit('weak_point_hit', { enemyId: enemy.id, enemyType: enemy.type, id, damage, x, y, z });
+  const hp = enemy.weakHp?.[id];
+  if (hp === undefined || hp <= 0) return;
+  const left = Math.max(0, hp - damage);
+  enemy.weakHp![id] = left;
+  if (left <= 0) world.events.emit('weak_point_broken', { enemyId: enemy.id, enemyType: enemy.type, id, x, y, z });
 }
 
 /** 피격 밀림 시작 — (dirX,dirZ) 방향으로 distance 만큼 ticks 동안 밀린다.

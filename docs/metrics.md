@@ -45,6 +45,8 @@ chain_changed   { chain }
 weapon_kill     { weapon, enemyType }   ← 마나 이벤트 금지 (하드 룰)
 melee_kill      { enemyType, execution }
 spell_kill      { enemyType }
+weak_point_hit    { enemyId, enemyType, id, damage, x, y, z }   ← 약점 구체 명중 (거수 눈·관절·심장·분출공), 권총·화살·화염구 직격만
+weak_point_broken { enemyId, enemyType, id }   ← 약점 내구 0 (관절 파열)
 shot_fired      { hitEnemy }
 player_damaged  { amount, health }
 player_died     { tick }

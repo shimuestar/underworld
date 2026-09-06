@@ -3,16 +3,21 @@
 // ?view=front(기본 정면) / side(측면·걸음) / windup(낫 예고, 파랑) / strike(낫 타격 — 낫끝이 판정 4.4m 기둥에
 // 닿는지) / strike-front(플레이어 눈높이에서 본 타격) / charge(돌격 예고 — 머리 내림·뿔·몸 빨강) /
 // recoil(패링·막힘 튕김 — 팔이 바깥으로 들리고 낫이 매달림. 꼭대기가 3.8m 선 아래인지) /
-// windup-left(왼낫 예고 — 왼 어깨가 솟는다, B1-3) / headbutt(들이받기 예고 — 머리를 뒤로 홱 젓고 뿔 빨강) / headbutt-strike(들이받기 — 내리꽂음).
+// windup-left(왼낫 예고 — 왼 어깨가 솟는다, B1-3) / headbutt(들이받기 예고 — 머리를 뒤로 홱 젓고 뿔 빨강) / headbutt-strike(들이받기 — 내리꽂음) /
+// weak(약점 5개 열림 발광·맥동 + 눈 명중 플래시, B2-1 — 정면 눈높이). &pose=charge|head_down|… 을 붙이면 약점 구체를 그 자세의 poseOffsets 표 자리에 놓는다
+// (안내문에 구체 자리와 머리 메시의 눈 자리(anchor)를 함께 찍어 표와 메시가 얼마나 어긋나는지 본다 — B2-2 재조정 근거).
 // 참조물: 4.4m 기둥(= attackRange, 흰색) · 플레이어 기둥(r0.4 h1.7, 몸 표면이 4.4m) · 천장 4.0m / 낫 상한 3.8m 선.
 // 안내문의 '꼭대기' 는 리그 정점(precise Box3) 최고 높이 — 어느 뷰든 3.8 아래여야 한다 (Boss.test 의 천장 검사와 같은 잣대).
 import * as THREE from 'three';
 import { balance } from '../src/core/Balance';
 import { enemyDef } from '../src/core/Entities';
-import { BEHEMOTH_TORSO, ENEMY_LEAN_JITTER, behemothBladeTip, buildBehemothRig, poseBehemothRig } from '../src/render/Stage';
+import { BEHEMOTH_TORSO, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, buildBehemothRig, poseBehemothRig, styleBehemothWeakPoints } from '../src/render/Stage';
 
 const def = enemyDef('scythe_behemoth');
-const view = new URLSearchParams(location.search).get('view') ?? 'front';
+const params = new URLSearchParams(location.search);
+const view = params.get('view') ?? 'front';
+/** 로직 자세 id — 약점 구체를 poseOffsets 표의 이 자세 자리에 놓는다 (없으면 normal) */
+const logicPose = params.get('pose') ?? undefined;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x101014);
@@ -75,6 +80,7 @@ const base = {
   headbutting: false,
   trembling: false,
   snap: 1,
+  pose: logicPose,
 };
 const tint = (mats: THREE.MeshLambertMaterial[], hex: string): void => {
   for (const m of mats) m.emissive.set(new THREE.Color(hex).getHex());
@@ -148,6 +154,12 @@ if (view === 'side') {
   tint(rig.hornMats, balance.telegraph.colorUnparryable);
   camera.position.set(2.2, 1.6, -7.5);
   camera.lookAt(0, 1.4, -0.5);
+} else if (view === 'weak') {
+  // 약점 5개 열림(B2-1: 항상 노출) — 발광 + 맥동 봉우리, 눈은 명중 직후 플래시. 플레이어 눈높이 정면에서 본다
+  poseBehemothRig(rig, base);
+  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: true, broken: false, flashAgeMs: id === 'eye' ? 40 : -1 }));
+  camera.position.set(0.6, balance.player.eyeHeight, -7.5);
+  camera.lookAt(0, 1.7, -0.5);
 } else {
   poseBehemothRig(rig, base);
   camera.position.set(0.8, 2.2, -8.5);
@@ -164,11 +176,15 @@ const tipSide = view === 'windup-left' ? -1 : 1; // 왼낫 뷰는 왼 낫끝을 
 const tip = behemothBladeTip(rig, tipSide, new THREE.Vector3());
 const eye = rig.weakPoints['eye']!.position;
 const jr = rig.weakPoints['joint_r']!.position;
+// 머리 메시 위의 눈 자리(anchor) — 구체(판정 표)와 얼마나 어긋나는지. 대기 자세에선 0, 돌격 예고·들이받기에선 벌어진다(B2-2 가 메시를 표에 맞춘다)
+const eyeMesh = behemothAnchorPos(rig, 'eye', new THREE.Vector3());
+const f2 = (v: THREE.Vector3): string => `${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}`;
 note =
-  `view=${view}\n` +
-  `blade_${tipSide === 1 ? 'r' : 'l'} tip (x,y,z) = ${tip.x.toFixed(2)}, ${tip.y.toFixed(2)}, ${tip.z.toFixed(2)}  → 앞 거리 ${(-tip.z).toFixed(2)}m (판정 ${(view.startsWith('strike') ? reach : view.startsWith('windup') ? pullback : NaN).toFixed(2)})\n` +
+  `view=${view}${logicPose ? ` pose=${logicPose}` : ''}\n` +
+  `blade_${tipSide === 1 ? 'r' : 'l'} tip (x,y,z) = ${f2(tip)}  → 앞 거리 ${(-tip.z).toFixed(2)}m (판정 ${(view.startsWith('strike') ? reach : view.startsWith('windup') ? pullback : NaN).toFixed(2)})\n` +
   `꼭대기 ${bounds.max.y.toFixed(2)}m (낫 상한 3.8 / 천장 4.0)\n` +
-  `wp_eye = ${eye.x.toFixed(2)}, ${eye.y.toFixed(2)}, ${eye.z.toFixed(2)}   wp_joint_r = ${jr.x.toFixed(2)}, ${jr.y.toFixed(2)}, ${jr.z.toFixed(2)}`;
+  `wp_eye(판정 표) = ${f2(eye)}   머리 메시 눈 자리 = ${f2(eyeMesh)}   어긋남 ${eye.distanceTo(eyeMesh).toFixed(2)}m\n` +
+  `wp_joint_r = ${f2(jr)}`;
 document.getElementById('info')!.textContent = note;
 document.title = note.replace(/\n/g, ' | ');
 

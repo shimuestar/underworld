@@ -84,6 +84,7 @@ export type SoundName =
   | 'door_slide'
   | 'bow_twang'
   | 'headshot'
+  | 'weak_point_hit'
   | 'player_hurt'
   | 'block_hit'
   | 'hammer_heavy'
@@ -1148,6 +1149,12 @@ export class GameAudio {
         // 헤드샷 확인음 — 짧고 높은 스냅 (착탄 지연에 맞춤)
         this.tone(2800, 0.06, 'square', 0.6, 0.035);
         this.tone(1400, 0.09, 'triangle', 0.5, 0.05);
+        break;
+      case 'weak_point_hit':
+        // 약점 명중 — 헤드샷보다 낮고 굵은 금속성 '깡' + 짧은 유리 파열. 갑각 틈새를 맞힌 손맛
+        this.tone(1900, 0.05, 'square', 0.55, 0, 900);
+        this.tone(760, 0.11, 'triangle', 0.6, 0.02);
+        this.noise(0.07, 0.45, 3200, 0.01);
         break;
       case 'bow_twang':
         // 활시위 튕김 + 화살 바람 소리

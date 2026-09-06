@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { equipColor } from '../core/EquipData';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
-import { currentAttack, enemyDef, healthBarState, shieldLowered, type EnemyDef } from '../core/Entities';
+import { currentAttack, enemyDef, healthBarState, shieldLowered, weakPointOffset, type EnemyDef } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN } from '../level/GridLoader';
 import type {
@@ -977,7 +977,30 @@ const BEHEMOTH_COLORS = {
   vent: 0x1f3a2e,
   mouth: 0x2a1f30,
   tail: 0x3a2d40,
+  /** 약점 열림 발광(기획서 §2) — 눈 청록 · 관절 백황 · 심장 진홍 · 분출공 오염 녹색. 파열한 관절은 어둡게 */
+  eyeOpen: 0x3ff0d0,
+  jointOpen: 0xfff4c8,
+  heartOpen: 0xff2e63,
+  ventOpen: 0x39ff88,
+  jointBroken: 0x7a1f3a,
 } as const;
+
+/** 약점 구체의 닫힌 본색·열림 발광색 — id 로 고른다 (모르는 id 는 관절색) */
+function behemothWeakColors(id: string): { base: number; open: number } {
+  switch (id) {
+    case 'eye': return { base: BEHEMOTH_COLORS.eyeClosed, open: BEHEMOTH_COLORS.eyeOpen };
+    case 'heart': return { base: BEHEMOTH_COLORS.heart, open: BEHEMOTH_COLORS.heartOpen };
+    case 'vent': return { base: BEHEMOTH_COLORS.vent, open: BEHEMOTH_COLORS.ventOpen };
+    default: return { base: BEHEMOTH_COLORS.joint, open: BEHEMOTH_COLORS.jointOpen };
+  }
+}
+
+/** 약점 구체 연출 상수(시각값) — 열림 맥동 ±12%(기획서 §2)·주기, 명중 플래시 길이·세기, 열림 발광 세기 */
+const BH_WEAK_PULSE_AMP = 0.12;
+const BH_WEAK_PULSE_MS = 640;
+const BH_WEAK_FLASH_MS = 170;
+const BH_WEAK_FLASH_INTENSITY = 2.6;
+const BH_WEAK_OPEN_INTENSITY = 0.85;
 
 /** 거수 몸통 자세(rad·m·height 배) — 인간형 기본값(앞으로 24° 숙임·0.5m 전진)은 4족에겐 앞으로
  *  엎어지는 그림이라 따로 둔다. syncEnemies 와 debug/behemoth.ts 가 같은 값을 쓴다 */
@@ -1051,12 +1074,15 @@ export interface BehemothRig {
   /** 다리 4개 엉덩이 피벗 — [앞오, 앞왼, 뒤오, 뒤왼] */
   legs: THREE.Group[];
   tail: THREE.Group;
-  /** 약점 구체 5개 — group(yaw 만) 소속. 이름 wp_eye / wp_joint_r / wp_joint_l / wp_heart / wp_vent.
-   *  B1 은 비활성 장식(발광 없음). flashMaterials 에 넣지 않는다 */
+  /** 약점 구체(def.weakPoints 순서, 이름 wp_<id>) — group(yaw 만) 소속. 자리는 판정과 같은 poseOffsets 표
+   *  (poseBehemothRig 가 매 프레임 weakPointOffset 으로 놓는다 — 보이는 자리 = 판정 자리), 크기는 wp.radius.
+   *  재질은 구체마다 따로(styleBehemothWeakPoints 가 발광·맥동·플래시). flashMaterials 에 넣지 않는다 */
   weakPoints: Record<string, THREE.Mesh>;
-  /** 약점이 붙어 있어야 할 몸의 자리(torso 쪽 빈 노드) — 자세가 바뀌면 구체를 여기로 옮긴다.
-   *  B2 의 poseOffsets 표가 들어오면 그 표가 이 자리를 대신한다 */
+  /** 몸 메시 위의 약점 자리(torso 쪽 빈 노드: 눈은 머리, 관절은 어깨, 심장·분출공은 몸통) — 구체는 더 이상 따라가지
+   *  않는다. 표와 메시가 어긋나는지 재는 자(디버그 페이지·테스트)와 B2-2 의 머리 내림 재조정 기준 */
   anchors: Record<string, THREE.Object3D>;
+  /** 정의 — 약점 표(weakPoints·poseOffsets)를 자세마다 다시 읽는다 */
+  def: EnemyDef;
   /** 낫 재질(파랑 예고 전용) · 뿔 재질(돌격 빨강 전용) — 몸의 flashMaterials 와 따로 물든다 */
   bladeMats: THREE.MeshLambertMaterial[];
   hornMats: THREE.MeshLambertMaterial[];
@@ -1091,9 +1117,10 @@ export interface BehemothPose {
   trembling: boolean;
   /** 보간 계수 — 1 이면 즉시(타격·디버그), 0 이면 굳음(빙결) */
   snap: number;
+  /** 로직의 자세 id(enemy.pose) — 약점 구체를 poseOffsets 표의 이 자세 자리에 놓는다. 없으면 normal */
+  pose?: string;
 }
 
-const BH_TMP = new THREE.Vector3();
 
 /** 거수 외형을 torso(기울임 피벗)·group(yaw 만)에 짓는다. 몸 재질은 flashMaterials 에 넣어
  *  텔레그래프 일괄 발광을 받고, 낫·뿔·약점은 따로 돌려준다 */
@@ -1259,27 +1286,23 @@ export function buildBehemothRig(
   tail.add(tailMesh);
   torso.add(tail);
 
-  // 약점 구체 5개 — group 소속(yaw 만 따라 돈다). 배치 1 은 닫힌 색의 장식이다
+  // 약점 구체 — group 소속(yaw 만 따라 돈다). 크기·자리는 판정 정의(def.weakPoints, 미터)에서 — 보이는 구체 = 판정 구체.
+  // 자세별 자리는 poseBehemothRig 가 poseOffsets 표로 옮긴다
   const weakPoints: Record<string, THREE.Mesh> = {};
-  const wp = (id: string, radius: number, color: number, x: number, y: number, z: number): void => {
+  for (const wp of def.weakPoints ?? []) {
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(radius, 12, 10),
-      new THREE.MeshLambertMaterial({ color }), // flashMaterials 에 넣지 않는다 — 일괄 발광이 자체 발광을 지운다
+      new THREE.SphereGeometry(wp.radius, 12, 10),
+      new THREE.MeshLambertMaterial({ color: behemothWeakColors(wp.id).base }), // flashMaterials 에 넣지 않는다 — 일괄 발광이 자체 발광을 지운다
     );
-    mesh.name = `wp_${id}`;
-    mesh.position.set(x, y, z);
+    mesh.name = `wp_${wp.id}`;
+    mesh.position.set(wp.offset.x, wp.offset.y, wp.offset.z);
     group.add(mesh);
-    weakPoints[id] = mesh;
-  };
-  wp('eye', v.eye.radius * R, BEHEMOTH_COLORS.eyeClosed, ex, ey, ez);
-  wp('joint_r', v.joints.radius * R, BEHEMOTH_COLORS.joint, jtx, jty, jtz);
-  wp('joint_l', v.joints.radius * R, BEHEMOTH_COLORS.joint, -jtx, jty, jtz);
-  wp('heart', v.heart.radius * R, BEHEMOTH_COLORS.heart, cx, cy, cz);
-  wp('vent', v.vent.radius * R, BEHEMOTH_COLORS.vent, vx, vy, vz);
+    weakPoints[wp.id] = mesh;
+  }
 
   return {
     group, torso, neck, headPitch, headShake, head, jaw, arms, legs, tail,
-    weakPoints, anchors, bladeMats, hornMats,
+    weakPoints, anchors, bladeMats, hornMats, def,
     dims: { upperArm: upperLen, blade: bll, legH },
   };
 }
@@ -1294,6 +1317,47 @@ function behemothAnchorToGroup(node: THREE.Object3D, torso: THREE.Group, out: TH
     o = o.parent;
   }
   return out;
+}
+
+/** 몸 메시 위 약점 자리(anchors)의 group 좌표 — 표(구체)와 메시가 얼마나 어긋나는지 재는 자(디버그·테스트).
+ *  자세를 넣은 뒤(poseBehemothRig) 불러야 그 자세의 자리다 */
+export function behemothAnchorPos(rig: BehemothRig, id: string, out: THREE.Vector3): THREE.Vector3 {
+  const node = rig.anchors[id];
+  if (!node) return out.set(NaN, NaN, NaN);
+  return behemothAnchorToGroup(node, rig.torso, out);
+}
+
+/** 약점 구체 표시 — 열림: 발광 + 크기 맥동 ±12% / 닫힘: 어두운 본색 / 파열: 어둡게 / 명중 직후(flashAgeMs ≥ 0): 밝게 번쩍.
+ *  텔레그래프 3색·스태거 금색은 쓰지 않는다(기획서 §2). syncEnemies 와 debug/behemoth.ts 가 같은 함수를 쓴다 */
+export function styleBehemothWeakPoints(
+  rig: BehemothRig,
+  nowMs: number,
+  state: (id: string) => { open: boolean; broken: boolean; flashAgeMs: number },
+): void {
+  for (const id in rig.weakPoints) {
+    const mesh = rig.weakPoints[id]!;
+    const mat = mesh.material as THREE.MeshLambertMaterial;
+    const colors = behemothWeakColors(id);
+    const st = state(id);
+    const flash = st.flashAgeMs >= 0 && st.flashAgeMs < BH_WEAK_FLASH_MS ? 1 - st.flashAgeMs / BH_WEAK_FLASH_MS : 0;
+    if (st.broken) {
+      mat.color.setHex(BEHEMOTH_COLORS.jointBroken);
+      mat.emissive.setHex(0x000000);
+      mat.emissiveIntensity = 1;
+      mesh.scale.setScalar(1);
+    } else if (st.open) {
+      mat.color.setHex(colors.open);
+      mat.emissive.setHex(colors.open);
+      mat.emissiveIntensity = BH_WEAK_OPEN_INTENSITY + (BH_WEAK_FLASH_INTENSITY - BH_WEAK_OPEN_INTENSITY) * flash;
+      const pulse = 1 + Math.sin((nowMs / BH_WEAK_PULSE_MS) * Math.PI * 2) * BH_WEAK_PULSE_AMP;
+      mesh.scale.setScalar(pulse + flash * 0.2);
+    } else {
+      mat.color.setHex(colors.base);
+      mat.emissive.setHex(flash > 0 ? colors.open : 0x000000);
+      mat.emissiveIntensity = flash > 0 ? BH_WEAK_FLASH_INTENSITY * flash : 1;
+      mesh.scale.setScalar(1);
+    }
+  }
 }
 
 /** 거수 자세 적용. 낫끝 규칙: 타격(과 예고) 중에는 로직의 tipDist(적 중심에서 낫끝까지 수평 거리)를
@@ -1424,17 +1488,15 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     }
   }
 
-  // 약점 구체 — 몸의 자리(anchors)를 따라간다(기울임·목 내림·웅크림 반영). B1 임시 — 기획서 §2 렌더 규약은
-  // "torso 기울임 보간에 구체를 딸려 보내지 않고 판정과 같은 poseOffsets 표를 읽어 옮긴다"이며, 앵커 추종 결과는
-  // 표와 이미 어긋난다: 돌격 예고 눈 (0, 1.02, −2.32) vs 표 charge (0, 1.1, −1.95) — 0.37m 앞·0.08m 아래,
-  // 관절 (±1.15, 2.07, −1.30) vs (±1.15, 2.3, −0.6), 분출공 (0, 1.08, −1.86) vs (0, 1.35, −1.5), 심장 (0, 0.29, −0.52) vs (0, 0.6, −0.4).
-  // B2-1 에서 이 루프를 지우고 표로 배치할 때 구체만 옮기면 내려간 머리 메시와 눈이 떨어진다 —
-  // BH_NECK_DOWN·neck 피벗(entities visual.neck)·chargeCrouch 를 표의 charge 눈에 맞춰 함께 재조정할 것 (TASKS B2-1/B2-2 메모)
-  for (const id in rig.anchors) {
-    const sphere = rig.weakPoints[id];
-    const node = rig.anchors[id];
-    if (!sphere || !node) continue;
-    sphere.position.copy(behemothAnchorToGroup(node, torso, BH_TMP));
+  // 약점 구체 — 판정과 같은 poseOffsets 표를 읽어 놓는다(Entities.weakPointOffset, 로직 자세 p.pose). 몸통 기울임·목 내림
+  // 보간에 딸려 보내지 않는다 — "보이는 자리 = 판정 자리"(기획서 §2 렌더 규약). 자세가 없으면 normal 자리.
+  // 머리 내림(charge·head_down)에서 머리 메시가 표의 눈 자리와 맞도록 BH_NECK_DOWN·neck 피벗·chargeCrouch 를 재조정하는 것은
+  // B2-2 (로직 pose 가 생기는 곳) — 그때까지 돌격 예고·들이받기의 눈 구체는 머리 메시와 떨어져 보인다
+  for (const wp of rig.def.weakPoints ?? []) {
+    const sphere = rig.weakPoints[wp.id];
+    if (!sphere) continue;
+    const off = weakPointOffset(rig.def, wp, p.pose);
+    sphere.position.set(off.x, off.y, off.z);
   }
 }
 
@@ -1808,6 +1870,8 @@ export class Stage {
    *  그 프레임에 알아채는 경우 표시가 통째로 사라진다 (실측으로 확인).
    *  여기 적어 두면 다음 동기화 때 시각 객체가 생기면서 그대로 이어 붙는다 */
   private readonly alertAt = new Map<number, number>();
+  /** 약점 명중 시각 — "enemyId:wpId" 로 들고 있다(alertAt 과 같은 이유: 시각 객체가 아직 없어도 다음 동기화 때 이어 붙는다) */
+  private readonly weakFlashAt = new Map<string, number>();
   /** 조준(ADS) 줌 진행도 0~1 — setAimZoom 이 매 프레임 목표로 수렴시킨다 */
   private aimZoomFrac = 0;
   /** 활 당김 확대 진행도 0~1 — 당긴 시간(bowDrawTotal/rampTicks)을 목표로 수렴 (2026-09-04) */
@@ -1858,6 +1922,11 @@ export class Stage {
   /** 인지 표시 — 알아챈 순간 머리 위에서 튀어올랐다 옅어진다 */
   markAlert(enemyId: number): void {
     this.alertAt.set(enemyId, performance.now());
+  }
+
+  /** 약점 명중 — 그 구체가 명중 순간 밝게 번쩍인다(weak_point_hit). 거수 리그가 없는 적이면 조용히 무시 */
+  flashWeakPoint(enemyId: number, wpId: string): void {
+    this.weakFlashAt.set(`${enemyId}:${wpId}`, performance.now());
   }
 
   /** 방패에 화살을 꽂는다 — 슬롯을 순환해 쓴다 (다 차면 오래된 것부터 갈아 끼운다).
@@ -4069,6 +4138,19 @@ export class Stage {
           headbutting,
           trembling,
           snap: solidIce ? 0 : bladeStriking ? 1 : headbutting ? 0.6 : 0.25,
+          pose: enemy.pose,
+        });
+        // 약점 구체 — 열림(B2-1: 파열만 아니면 항상)·파열·명중 플래시. 플래시 시각은 Stage.weakFlashAt(적 id:약점 id)
+        const eid = enemy.id;
+        const flashMap = this.weakFlashAt;
+        styleBehemothWeakPoints(visual.behemoth, now, (id) => {
+          const key = `${eid}:${id}`;
+          const at = flashMap.get(key);
+          const age = at === undefined ? -1 : now - at;
+          if (at !== undefined && age > 1000) flashMap.delete(key); // 다 꺼진 플래시는 치운다
+          const hp = enemy.weakHp?.[id];
+          const broken = hp !== undefined && hp <= 0;
+          return { open: !broken, broken, flashAgeMs: age };
         });
       }
 
@@ -4295,6 +4377,7 @@ export class Stage {
       visual.alert.material.dispose(); // 텍스처는 전 적이 공유하므로 건드리지 않는다
       this.enemyVisuals.delete(id);
       this.alertAt.delete(id); // 죽은 적의 표시 시각까지 들고 있지 않는다
+      for (const key of this.weakFlashAt.keys()) if (key.startsWith(`${id}:`)) this.weakFlashAt.delete(key);
     }
   }
 
@@ -4544,12 +4627,13 @@ export class Stage {
 
   /** 화상 불티 하나 — 몸 아무 데서나 피어올라 잠깐 떠 있다 사라진다 */
   /** 피해 숫자 — 맞은 적 머리 위에서 떠올랐다 사라진다. bigAt 이상은 금색·큰 글씨 */
-  spawnDamageNumber(x: number, y: number, z: number, amount: number): void {
+  spawnDamageNumber(x: number, y: number, z: number, amount: number, suffix?: string): void {
     const cfg = balance.hud.damageNumbers;
     const shown = Math.round(amount);
     if (shown < 1) return;
     const big = amount >= cfg.bigAt;
-    this.spawnFloatText(x, y, z, String(shown), {
+    // suffix — 숫자 옆에 붙는 짧은 표기('약점!'). 같은 글자·같은 움직임이라 한 덩어리로 읽힌다
+    this.spawnFloatText(x, y, z, suffix ? `${shown} ${suffix}` : String(shown), {
       sizeM: big ? cfg.bigSizeM : cfg.sizeM,
       color: big ? '#ffd75e' : '#ffffff',
       ms: cfg.ms,

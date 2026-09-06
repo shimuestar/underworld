@@ -65,6 +65,12 @@ export function spawnEnemyAt(type: string, x: number, z: number, id: number): En
   };
   if (def.boss) enemy.parryStreak = 0;
   if (def.hearingMul !== undefined) enemy.hearingMul = def.hearingMul; // World 는 def 를 모른다
+  // 약점 내구(거수 관절) — hp 가 있는 약점만 장부에 올린다. 0 이 되면 파열(판정 닫힘)
+  if (def.weakPoints) {
+    const hp: Record<string, number> = {};
+    for (const wp of def.weakPoints) if (wp.hp !== undefined) hp[wp.id] = wp.hp;
+    if (Object.keys(hp).length > 0) enemy.weakHp = hp;
+  }
   enemy.homeX = x; // 대기 배회의 중심
   enemy.homeZ = z;
   return enemy;
