@@ -98,17 +98,23 @@ export interface PlayerState {
   corrosiveTicks?: number;
   /** 오염 진액이 붙은 채 흐른 누적 틱 — 도트(dotIntervalTicks)·오염 대기(pendingPerTicks) 박자의 기준. Status 만 쓰고 풀리면 0 */
   corrosiveAccum?: number;
+  /** 위압(cowed, 거수 P3 포효 12m 안, B3-4) 잔여 틱 — 일반 패링이 관절을 열지 못하고(완벽만) 일반 패링 마나가 준다(balance.status.cowed). 완벽 패링 1회 성립 시 즉시 0.
+   *  회피 거리·무적은 그대로. 감소·이벤트는 Status.ts 만 */
+  cowedTicks?: number;
+  /** 지금 무적(iframeTicks)의 출처 — 'dodge' 회피(Reaction.startDodge) / 'blink' 그림자 질주 / 'escape' 그래플 탈출. 거수 돌격의 완벽 회피(미끄러짐 보상)는 회피 무적만 친다(B2-3 검토) —
+   *  블링크·탈출 무적으로 스친 돌격은 옛 경로(헛돌격)다. 무적을 세우는 쪽이 함께 적는다 */
+  iframeSource?: 'dodge' | 'blink' | 'escape';
   /** 걸린 순서(오래된 것부터) — Status.ts 가 상한(balance.status.maxConcurrent)을 넘기면 맨 앞을 해제한다. Status 만 쓴다 */
   statusOrder?: PlayerStatusKind[];
 }
 
 /** 플레이어 상태이상 종류(기획서 §6) — 이벤트는 `${kind}_applied/_ended`. 카운터 필드·balance.status 키는 아래 표 */
-export type PlayerStatusKind = 'numb_arm' | 'concussion' | 'hobble' | 'corrosive';
-export const PLAYER_STATUS_KINDS: readonly PlayerStatusKind[] = ['numb_arm', 'concussion', 'hobble', 'corrosive'];
+export type PlayerStatusKind = 'numb_arm' | 'concussion' | 'hobble' | 'corrosive' | 'cowed';
+export const PLAYER_STATUS_KINDS: readonly PlayerStatusKind[] = ['numb_arm', 'concussion', 'hobble', 'corrosive', 'cowed'];
 /** 상태 → PlayerState 카운터 필드 */
-export const PLAYER_STATUS_FIELD = { numb_arm: 'numbArmTicks', concussion: 'concussionTicks', hobble: 'hobbleTicks', corrosive: 'corrosiveTicks' } as const satisfies Record<PlayerStatusKind, keyof PlayerState>;
+export const PLAYER_STATUS_FIELD = { numb_arm: 'numbArmTicks', concussion: 'concussionTicks', hobble: 'hobbleTicks', corrosive: 'corrosiveTicks', cowed: 'cowedTicks' } as const satisfies Record<PlayerStatusKind, keyof PlayerState>;
 /** 상태 → balance.status 블록 키 (지속 틱 등은 호출부가 balance 에서 읽는다 — World 는 데이터를 읽지 않는다) */
-export const PLAYER_STATUS_CFG = { numb_arm: 'numbArm', concussion: 'concussion', hobble: 'hobble', corrosive: 'corrosive' } as const satisfies Record<PlayerStatusKind, string>;
+export const PLAYER_STATUS_CFG = { numb_arm: 'numbArm', concussion: 'concussion', hobble: 'hobble', corrosive: 'corrosive', cowed: 'cowed' } as const satisfies Record<PlayerStatusKind, string>;
 
 /** 상태 설정 블록에서 '세울 때의 지속 틱' — 고정 지속 상태(팔 저림·진탕·절뚝)는 ticks, 오염 진액은 웅덩이에서 나온 뒤 남는 lingerTicks
  *  (웅덩이 위에선 Hazards 가 매 틱 이 값으로 되살린다). 호출부(Enemies impact·Projectiles 피격)가 balance.status 의 블록을 넘긴다 — World 는 데이터를 읽지 않는다 */
@@ -1091,8 +1097,25 @@ export interface EnemyState {
   frostStacks?: number;
   /** 보스 전용 — 연속 패링 누적 (parriesToStagger 도달 시 스태거) */
   parryStreak?: number;
-  /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지). 'alt' = 교대 근접(거수 왼낫), 'close' = 밀착 공격(거수 들이받기), 'slam' = 발구르기(거수 P2) */
-  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley' | 'summon' | 'alt' | 'close' | 'slam';
+  /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지). 'alt' = 교대 근접(거수 왼낫), 'close' = 밀착 공격(거수 들이받기), 'slam' = 발구르기(거수 P2),
+   *  'roar' = 포효(거수 P3 — impact 파이프를 타지 않는다), 'combo' = 삼연낫(거수 P3 — comboStep 이 몇 타째인지) */
+  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley' | 'summon' | 'alt' | 'close' | 'slam' | 'roar' | 'combo';
+  /** 포효 간격(거수 P3, B3-4 — roarAttack.intervalTicks) 잔여 틱. 슬롯이 열린 첫 추격 틱에 간격으로 세우고 포효마다 다시 센다. undefined = 아직 안 셈 */
+  roarCooldown?: number;
+  /** 페이즈 전환 복귀 후 첫 선택 슬롯(phases[].firstPick — P3 'roar', B3-4). beginPhaseShift 가 세우고 첫 추격 틱이 소모한다(쿨다운·거리 무관) */
+  firstPick?: string;
+  /** 이번 포효가 절망의 포효(체력 ≤ despairHealthFrac, B3-4)인가 — 예고 despair.windupTicks·입 보라 기운·끌림·발구르기 연계. 포효가 끝나거나 취소되면 false */
+  despairRoar?: boolean;
+  /** 이번 발구르기가 절망의 포효 연계(B3-4)인가 — attackMode 'slam' 과 함께. 예고 followUpWindupTicks·rearPose followUpRearPose(Entities.despairSlamAttack). 착지·취소에 false */
+  despairSlam?: boolean;
+  /** 삼연낫(거수 P3, B3-4) — 지금 타(0 = ①, 1 = ②, 2 = ③, comboAttack.comboNext 연쇄의 index)·이번 콤보 안 완벽 패링 수·재사용 대기 */
+  comboStep?: number;
+  comboPerfects?: number;
+  comboCooldown?: number;
+  /** 광란 돌격(거수 P3 chainCharge, B3-4) — 몇 번째 질주인가(0 첫 질주 / 1 두 번째), 선회(2차 예고) 중인가, 이번 선회의 꼬리 채기를 이미 넣었는가 */
+  chainLeg?: number;
+  chainTurn?: boolean;
+  chainTailHit?: boolean;
   /** 이번 발구르기가 기상 발구르기인가(거수 B3-1) — attackMode 'slam' 과 함께. 예고가 짧고 앞발 들기(rear)가 없다(Entities.currentAttack → wakeSlamAttack) */
   wakeSlam?: boolean;
   /** 기상 발구르기 예약 — 머리 내림(모든 원인)·혼절이 끝날 때 Enemies 가 세우고, 다음 추격 틱에 P2+ 이면 확정 발구르기로 소모한다(미끄러짐 뒤엔 세우지 않는다).

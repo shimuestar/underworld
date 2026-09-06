@@ -34,8 +34,9 @@ export interface MetricsSnapshot {
    *  돌격 완벽 회피 수 / 절뚝(양 낫 잠김) 진입 수 / 눈멂 유도 수 / 전도 수 / 기둥 충돌 수 / 역류(심장 66 — 발구르기 취소) 수 (기획서 boss_scythe_behemoth §12) */
   weakPoints: { hits: number; damage: number; broken: number; exposuresClosed: number; exposureHits: number; dazes: number; chargeDodges: number; limps: number; blinds: number; topples: number; pillarHits: number; backflows: number };
   /** 페이즈 보스(거수, B2-6) — 전환 수 / 두 경계를 한 번에 넘은(P2 건너뜀) 수 / 페이즈별 소요 초(체력 칸 index 키 '3'·'2'·'1' — 사망까지 포함, 목표 P1 90s / P2 120s / P3 90s) /
-   *  갑각판 파괴 수(P2 heavy 타격, B3-3 — 최대 3)와 그 골드 합(기획서 §12 "갑각판 파괴 수") */
-  boss: { phaseShifts: number; phaseSkips: number; phaseSeconds: Record<string, number>; platesBroken: number; plateGold: number };
+   *  갑각판 파괴 수(P2 heavy 타격, B3-3 — 최대 3)와 그 골드 합(기획서 §12 "갑각판 파괴 수") /
+   *  P3 기술(B3-4): 포효 발동 수·위압에 걸린 수(boss_roar_hit — 회피로 피한 비율 = 1 − roarHits/roars) / 삼연낫 시작 수·탈진 수(3연속 완벽 — 숙련 지표) / 광란 돌격 선회 수(첫 질주를 완벽 회피하지 못한 수) */
+  boss: { phaseShifts: number; phaseSkips: number; phaseSeconds: Record<string, number>; platesBroken: number; plateGold: number; roars: number; roarHits: number; combos: number; exhausts: number; chainTurns: number };
   /** 진액 웅덩이·오염 진액·분출공(거수 P2+, B3-2) — 생긴 웅덩이 수 / 자연 소멸이 아닌 증발 수(불·질식·상한) / 오염 진액이 붙은 횟수 / 오염 진액 도트 피해 합 /
    *  오염 진액이 오염 대기에 더한 양 / 분출공 명중이 오염 대기에서 깎은 양(정화) / 질식 수. 순 오염 변화 = pendingIn − ventCleanse (기획서 §11.1 장부) */
   hazards: { pools: number; evaporated: number; corrosiveApplied: number; corrosiveDamage: number; pendingIn: number; ventCleanse: number; chokes: number };
@@ -97,6 +98,11 @@ export class Metrics {
   private bossPhaseTicks: Record<string, number> = {};
   private platesBroken = 0;
   private plateGold = 0;
+  private roars = 0;
+  private roarHits = 0;
+  private combos = 0;
+  private exhausts = 0;
+  private chainTurns = 0;
   private poolsSpawned = 0;
   private poolsEvaporated = 0;
   private corrosiveApplied = 0;
@@ -180,9 +186,15 @@ export class Metrics {
       if (st.kind === 'limp') this.limps++;
       else if (st.kind === 'blind') this.blinds++;
       else if (st.kind === 'topple') this.topples++;
-      else if (st.kind === 'backflow') this.backflows++; // 역류(B3-1·B3-2) — 심장 66 으로 발구르기를, 분출공 66 으로 갑각 떨기를 취소시킨 수(cause 'heart'|'vent')
+      else if (st.kind === 'backflow') this.backflows++; // 역류(B3-1·B3-2·B3-4) — 심장 66 으로 발구르기를, 분출공 66 으로 갑각 떨기를, 눈 66 으로 포효를 취소시킨 수(cause 'heart'|'vent'|'eye')
       else if (st.kind === 'choke') this.chokes++; // 질식(B3-2) — 분출공 내구 0(반사 4회): 갑각 떨기 봉인 + 웅덩이 증발
+      else if (st.kind === 'exhaust') this.exhausts++; // 탈진(B3-4) — 삼연낫 3연속 완벽 패링
     });
+    // P3 기술(거수 B3-4) — 포효 발동·위압 적중·삼연낫 시작·광란 돌격 선회. 시스템(Enemies) 안에는 카운터가 없다
+    events.on('enemy_roar', () => this.roars++);
+    events.on('boss_roar_hit', () => this.roarHits++);
+    events.on('enemy_combo_start', () => this.combos++);
+    events.on('enemy_chain_turn', () => this.chainTurns++);
     events.on('pillar_hit', () => this.pillarHits++);
     // 진액 웅덩이·오염 진액·분출공 정화(B3-2) — Hazards/Status/hitWeakPoint 는 카운터를 갖지 않는다
     events.on('pool_spawned', () => this.poolsSpawned++);
@@ -350,6 +362,11 @@ export class Metrics {
         phaseSeconds: Object.fromEntries(Object.entries(this.bossPhaseTicks).map(([k, t]) => [k, Math.round(t / balance.loop.tickRate)])),
         platesBroken: this.platesBroken,
         plateGold: this.plateGold,
+        roars: this.roars,
+        roarHits: this.roarHits,
+        combos: this.combos,
+        exhausts: this.exhausts,
+        chainTurns: this.chainTurns,
       },
       hazards: {
         pools: this.poolsSpawned, evaporated: this.poolsEvaporated, corrosiveApplied: this.corrosiveApplied, corrosiveDamage: round2(this.corrosiveDamage) ?? 0,

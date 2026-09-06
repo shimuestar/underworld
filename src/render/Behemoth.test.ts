@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { balance } from '../core/Balance';
-import { enemyDef, resolvePhase, weakPointOffset } from '../core/Entities';
+import { comboChain, enemyDef, resolvePhase, weakPointOffset } from '../core/Entities';
 import {
   BEHEMOTH_TORSO,
   ENEMY_LEAN_JITTER,
@@ -29,6 +29,9 @@ import {
 const def = enemyDef('scythe_behemoth');
 const reach = def.attackRange * def.attack.impactRangeMul;
 const pullback = reach * balance.parrySpace.pullbackRatio;
+/** 삼연낫 ③(B3-4) — 양낫 내려찍기의 판정 사거리(aoe 3.2 = attackRange × impactRangeMul)와 그 pullback */
+const COMBO3_REACH = def.attackRange * comboChain(def)[2]!.impactRangeMul;
+const COMBO3_PULLBACK = COMBO3_REACH * balance.parrySpace.pullbackRatio;
 const T = BEHEMOTH_TORSO;
 const J = ENEMY_LEAN_JITTER;
 
@@ -422,6 +425,20 @@ describe('리그 천장·바닥·낫끝 검사 (B1-2 → B2-2 이동)', () => {
     // B3-1 역류 머리 내림(cause backflow) — 두 낫이 벌어져 매달린 고꾸라짐(박힌 낫 아님)
     { name: 'head_down backflow', ...HEAD_DOWN, pose: { pose: 'head_down', poseCause: 'backflow' } },
     { name: 'head_down backflow+flinch', ...HEAD_DOWN, lean: HEAD_DOWN.lean + T.flinchLean, pose: { pose: 'head_down', poseCause: 'backflow', nowMs: 100 } },
+    // B3-4 탈진(exhaust — 양낫 박힘, 몸통은 머리 내림 값) / 삼연낫 ③ 예고(두 낫 머리 위 — 떨림·움찔 최악)·타격(두 낫 내려찍기) / 광란 돌격 선회(꼬리 휘두름 봉우리) / 포효 예고는 위 roar
+    { name: 'exhaust', ...HEAD_DOWN, pose: { pose: 'exhaust' } },
+    { name: 'exhaust+flinch', ...HEAD_DOWN, lean: HEAD_DOWN.lean + T.flinchLean, pose: { pose: 'exhaust', nowMs: 100 } },
+    ...peaks.map((nowMs) => ({
+      name: `combo3 windup+tremble+flinch@${nowMs.toFixed(0)}`,
+      lean: T.windupLean + J.tremble + T.flinchLean, lunge: 0, crouch: 0,
+      pose: { bothBlades: true, bladeWindup: 1, tipDist: COMBO3_PULLBACK, trembling: true, nowMs },
+    })),
+    ...[0, 0.5, 1].map((sp) => ({
+      name: `combo3 strike ${sp}`,
+      lean: sp === 0 ? T.windupLean + J.tremble : T.strikeLean, lunge: T.strikeLunge, crouch: 0,
+      pose: { bothBlades: true, bladeStriking: true, strikeProgress: sp, tipDist: COMBO3_PULLBACK + (COMBO3_REACH - COMBO3_PULLBACK) * sp },
+    })),
+    ...peaks.map((nowMs) => ({ name: `chain turn@${nowMs.toFixed(0)}`, lean: T.chargeLean + T.flinchLean, lunge: 0, crouch: CHARGE.crouch, pose: { pose: 'charge', chargeCoil: 1, chainTurn: true, nowMs } })),
   ];
 
   it('어깨→위팔→낫을 실제로 지어 모든 자세(떨림·움찔·튕김 흔들림을 더한 최악)에서 꼭대기가 3.8m 아래', () => {
@@ -899,5 +916,105 @@ describe('갑각 떨기·분출공·질식 외형(B3-2)', () => {
       expect(p.rotation.z).toBeCloseTo(0, 6);
       expect(p.position.y).toBeCloseTo(restY, 6);
     }
+  });
+});
+
+describe('P3 기술 외형(B3-4) — 포효 어깨 솟음·탈진·삼연낫 ③·광란 돌격 선회', () => {
+  const base: BehemothPose = {
+    nowMs: 0, legPhase: 0, legBlend: 0, bladeSide: 1, bladeWindup: 0, bladeStriking: false,
+    strikeProgress: 0, tipDist: pullback, recoiled: false, chargeCoil: 0, charging: false,
+    headbuttCoil: 0, headbutting: false, trembling: false, snap: 1,
+  };
+  const anchorGap = (rig: ReturnType<typeof buildBehemothRig>, id: string): number =>
+    behemothAnchorPos(rig, id, new THREE.Vector3()).distanceTo(rig.weakPoints[id]!.position);
+
+  it('포효(pose roar) — 어깨 피벗(관절 자리)이 표 (±1.15, 2.7, −0.5) 로 솟아 관절 메시 = 구체(≤ 0.02m — B2-6 검토의 0.31m 어긋남을 없앴다), 진행 중간·움찔도 ≤ 0.2, 눈은 표 2.9(≤ 0.06). 자세가 풀리면 어깨는 제자리(2.5, −0.8)', () => {
+    const roar = measureRig(ROAR.lean, 0, 0, { pose: 'roar' });
+    for (const id of ['joint_r', 'joint_l']) expect(anchorGap(roar.rig, id), `${id} ${anchorGap(roar.rig, id).toFixed(3)}`).toBeLessThanOrEqual(0.02);
+    expect(anchorGap(roar.rig, 'eye')).toBeLessThanOrEqual(0.06);
+    const table = weakPointOffset(def, def.weakPoints!.find((w) => w.id === 'joint_r')!, 'roar');
+    const jr = behemothAnchorPos(roar.rig, 'joint_r', new THREE.Vector3());
+    expect(jr.y).toBeCloseTo(table.y, 2);
+    expect(jr.z).toBeCloseTo(table.z, 2);
+    const half = measureRig(ROAR.lean * 0.5, 0, 0, { pose: 'roar', poseBlend: 0.5 });
+    for (const id of ['joint_r', 'joint_l']) expect(anchorGap(half.rig, id)).toBeLessThanOrEqual(0.2);
+    const flinch = measureRig(ROAR.lean + T.flinchLean, 0, 0, { pose: 'roar', nowMs: 100 });
+    for (const id of ['joint_r', 'joint_l']) expect(anchorGap(flinch.rig, id)).toBeLessThanOrEqual(0.2);
+    // 자세가 풀리면 어깨는 제자리 — 같은 리그를 대기 자세로 다시 놓는다
+    roar.torso.rotation.x = 0;
+    poseBehemothRig(roar.rig, base);
+    const jt = def.visual!.joints.pos;
+    for (const arm of roar.rig.arms) {
+      expect(arm.shoulder.position.y).toBeCloseTo(jt[1] * def.height, 6);
+      expect(arm.shoulder.position.z).toBeCloseTo(jt[2] * def.radius, 6);
+    }
+    for (const id of ['joint_r', 'joint_l']) {
+      roar.group.updateMatrixWorld(true);
+      expect(anchorGap(roar.rig, id)).toBeLessThanOrEqual(1e-3);
+    }
+  });
+
+  it('탈진(pose exhaust) — 두 낫이 다 바닥에 꽂힌다(낫끝 y 0~0.25, 몸 앞 2.4m~사거리, 어깨보다 안쪽, 좌우 대칭), 눈은 표 0.9(IK ≤ 0.06), 분출공 구체는 표 (0, 1.6, −1.7) — 내려온 머리 위로 보인다. 탈진은 exposedStates 로만 열리니 구체 자리만 여기서', () => {
+    const { rig } = measureRig(HEAD_DOWN.lean, 0, HEAD_DOWN.crouch, { pose: 'exhaust' });
+    const tips = ([1, -1] as const).map((side) => behemothBladeTip(rig, side, new THREE.Vector3()));
+    for (const t of tips) {
+      expect(t.y, `낫끝 y ${t.y.toFixed(2)}`).toBeGreaterThanOrEqual(0);
+      expect(t.y, `낫끝 y ${t.y.toFixed(2)}`).toBeLessThanOrEqual(0.25);
+      expect(-t.z).toBeGreaterThan(2.4);
+      expect(-t.z).toBeLessThan(reach);
+      expect(Math.abs(t.x)).toBeLessThan(1.15);
+    }
+    expect(tips[1]!.x).toBeCloseTo(-tips[0]!.x, 6);
+    expect(rig.weakPoints['eye']!.position.y).toBeCloseTo(0.9, 6);
+    expect(anchorGap(rig, 'eye')).toBeLessThanOrEqual(0.06);
+    const vent = rig.weakPoints['vent']!.position;
+    expect(vent.y).toBeCloseTo(1.6, 6);
+    expect(vent.z).toBeCloseTo(-1.7, 6);
+    // 열린 표적은 보여야 한다 — 플레이어 눈높이 정면(몸 표면 4.4m)에서 분출공 구체를 향한 시선이 내려온 머리 상자·뿔에 가리지 않는다(레이가 구체 표면보다 먼저 머리를 맞지 않는다)
+    const eyePos = new THREE.Vector3(0.5, balance.player.eyeHeight, -(reach + balance.player.radius));
+    const ventR = def.weakPoints!.find((w) => w.id === 'vent')!.radius * BH_VENT_OPEN_SCALE;
+    const dir = vent.clone().sub(eyePos).normalize();
+    const hits = new THREE.Raycaster(eyePos, dir).intersectObject(rig.headShake, true);
+    const toSurface = eyePos.distanceTo(vent) - ventR;
+    expect(hits.length === 0 || hits[0]!.distance > toSurface, `머리가 분출공을 가린다(${hits[0]?.distance.toFixed(2)} < ${toSurface.toFixed(2)})`).toBe(true);
+  });
+
+  it('삼연낫 ③(bothBlades) — 예고에 두 위팔이 같은 각으로 단발 예고보다 높이 들리고 대칭으로 벌어지며 낫은 앞아래(낫끝이 어깨보다 낮다); 타격에 두 낫끝이 tipDist 앞 중심선에 함께(대칭) 온다', () => {
+    const wind = measureRig(T.windupLean, 0, 0, { bothBlades: true, bladeWindup: 1, tipDist: COMBO3_PULLBACK });
+    const [r, l] = wind.rig.arms;
+    const single = measureRig(T.windupLean, 0, 0, { bladeWindup: 1, tipDist: pullback });
+    expect(r!.shoulder.rotation.x).toBeGreaterThan(single.rig.arms[0]!.shoulder.rotation.x + 0.02);
+    expect(l!.shoulder.rotation.x).toBeCloseTo(r!.shoulder.rotation.x, 6);
+    expect(Math.abs(r!.shoulder.rotation.y)).toBeGreaterThan(0.05);
+    expect(l!.shoulder.rotation.y).toBeCloseTo(-r!.shoulder.rotation.y, 6);
+    for (const side of [1, -1] as const) {
+      const t = behemothBladeTip(wind.rig, side, new THREE.Vector3());
+      expect(t.y).toBeLessThan(def.visual!.joints.pos[1] * def.height); // 낫끝은 어깨 아래 — 위로 세우면 천장을 뚫는다
+    }
+    // 단발 예고는 한쪽만 들린다
+    expect(single.rig.arms[1]!.shoulder.rotation.x).toBeLessThan(single.rig.arms[0]!.shoulder.rotation.x - 0.03);
+    for (const sp of [0.5, 1]) {
+      const tipD = COMBO3_PULLBACK + (COMBO3_REACH - COMBO3_PULLBACK) * sp;
+      const { rig } = measureRig(T.strikeLean, T.strikeLunge, 0, { bothBlades: true, bladeStriking: true, strikeProgress: sp, tipDist: tipD });
+      const tr = behemothBladeTip(rig, 1, new THREE.Vector3());
+      const tl = behemothBladeTip(rig, -1, new THREE.Vector3());
+      expect(Math.abs(-tr.z - tipD), `sp ${sp} 오른 낫끝 ${(-tr.z).toFixed(2)} vs ${tipD.toFixed(2)}`).toBeLessThan(0.1);
+      expect(tl.x).toBeCloseTo(-tr.x, 6);
+      expect(tl.y).toBeCloseTo(tr.y, 6);
+      expect(tl.z).toBeCloseTo(tr.z, 6);
+      if (sp === 1) expect(Math.abs(tr.x)).toBeLessThan(0.3); // 끝에선 중심선
+    }
+  });
+
+  it('광란 돌격 선회(chainTurn) — 꼬리 yaw 가 크게(봉우리 ≥ 0.6rad) 빠르게 휘둘리고 평소엔 0.18 안. 입·꼬리 재질은 flashMaterials 밖(절망 포효 보라·선회 빨강을 따로 물들인다), 관절 자리는 어깨 피벗의 자식', () => {
+    const peak = measureRig(CHARGE.lean, 0, CHARGE.crouch, { pose: 'charge', chargeCoil: 1, chainTurn: true, nowMs: 55 * Math.PI * 0.5 });
+    expect(Math.abs(peak.rig.tail.rotation.y)).toBeGreaterThanOrEqual(0.6);
+    const rest = measureRig(0, 0, 0, { nowMs: 900 * Math.PI * 0.5 });
+    expect(Math.abs(rest.rig.tail.rotation.y)).toBeLessThanOrEqual(0.18 + 1e-6);
+    expect(rest.flash).not.toContain(rest.rig.mouthMat);
+    for (const m of rest.rig.tailMats) expect(rest.flash).not.toContain(m);
+    expect(rest.rig.tailMats).toHaveLength(1);
+    expect(rest.rig.anchors['joint_r']!.parent).toBe(rest.rig.arms[0]!.shoulder);
+    expect(rest.rig.anchors['joint_l']!.parent).toBe(rest.rig.arms[1]!.shoulder);
   });
 });

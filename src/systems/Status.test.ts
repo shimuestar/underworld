@@ -116,7 +116,7 @@ describe('Status.ts — 카운터·상한·이벤트 (기획서 §6)', () => {
     expect(CFG.concussion).toEqual({ ticks: 360, aimShakeAmp: 0.02, tiltDeg: 3, duckDb: -6, potionCures: true });
     expect(CFG.hobble).toEqual({ ticks: 300, dodgeStaminaMul: 2, noSprint: true }); // B3-1 절뚝 — 물약이 지우지 않는다(potionCures 없음)
     expect(CFG.corrosive).toEqual({ moveSpeedMul: 0.6, dotPerTick: 2, dotIntervalTicks: 30, lingerTicks: 30, pendingPerTicks: 60, pendingCap: 8 }); // B3-2 오염 진액 — 지속은 lingerTicks(웅덩이 잔류), 물약이 지우지 않는다
-    expect(PLAYER_STATUS_KINDS).toEqual(['numb_arm', 'concussion', 'hobble', 'corrosive']);
+    expect(PLAYER_STATUS_KINDS).toEqual(['numb_arm', 'concussion', 'hobble', 'corrosive', 'cowed']);
     expect(def.slamAttack!.statusOnHit).toBe('hobble');
     expect(def.slamAttack!.statusOnBlock).toBeUndefined(); // 막으면 절뚝 없음
     expect(CFG.numbArm.blockSpeedMul).toBeLessThan(balance.block.speedMul); // 저림 중 방어가 더 느리다
@@ -395,6 +395,35 @@ describe('팔 저림 numb_arm — 거수 낫을 방패로 막음', () => {
   });
 });
 
+describe('위압 cowed — 거수 P3 포효 (B3-4)', () => {
+  it('데이터 — balance.status.cowed{360, normalParryOpensJoint false, normalParryMana 5}, 상태 표(PLAYER_STATUS_KINDS·필드 cowedTicks·블록 cowed), 포효 statusOnHit cowed, 물약은 지우지 않는다', () => {
+    expect(CFG.cowed).toEqual({ ticks: 360, normalParryOpensJoint: false, normalParryMana: 5 });
+    expect(PLAYER_STATUS_KINDS).toContain('cowed');
+    expect(def.roarAttack!.statusOnHit).toBe('cowed');
+    for (const kind of ITEM_KINDS) expect(itemDef(kind).cures ?? []).not.toContain('cowed');
+  });
+
+  it('세우면 다음 Status 틱 _applied{360}, 매 틱 1씩; 밖에서 0(완벽 패링)으로 지우면 _ended{cured}; 상한 2 에 든다(세 번째면 가장 오래된 것이 밀린다)', () => {
+    const rec = recordStatus();
+    setPlayerStatus(world.player, 'cowed', CFG.cowed.ticks);
+    Status.tick(world, DT);
+    expect(rec.applied).toEqual([{ kind: 'cowed', ticks: CFG.cowed.ticks }]);
+    expect(playerStatusTicks(world.player, 'cowed')).toBe(CFG.cowed.ticks - 1);
+    setPlayerStatus(world.player, 'cowed', 0);
+    Status.tick(world, DT);
+    expect(rec.ended).toEqual([{ kind: 'cowed', reason: 'cured' }]);
+    // 상한 — 저림·절뚝이 걸린 채 위압이 오면 저림(가장 오래된 것)이 밀린다
+    setPlayerStatus(world.player, 'numb_arm', 100);
+    Status.tick(world, DT);
+    setPlayerStatus(world.player, 'hobble', 100);
+    Status.tick(world, DT);
+    setPlayerStatus(world.player, 'cowed', 100);
+    Status.tick(world, DT);
+    expect(world.player.statusOrder).toEqual(['hobble', 'cowed']);
+    expect(rec.ended.at(-1)).toEqual({ kind: 'numb_arm', reason: 'displaced' });
+  });
+});
+
 describe('진탕 concussion — 거수 돌격 직격', () => {
   it('돌격 직격 → 360틱 진탕(45 피해·7m 밀림은 기존대로), 다음 Status 틱에 _applied', () => {
     const ch = def.chargeAttack!;
@@ -428,6 +457,7 @@ describe('진탕 concussion — 거수 돌격 직격', () => {
     const boss = makeBehemoth(10);
     tickEnemiesUntil(() => boss.ai === 'charging', 300);
     world.player.iframeTicks = 9999;
+    world.player.iframeSource = 'dodge'; // 회피 무적만 완벽 회피(B2-3 검토)
     tickEnemiesUntil(() => boss.pose === 'skid', 300);
     expect(world.player.health).toBe(100);
     expect(world.player.concussionTicks ?? 0).toBe(0);

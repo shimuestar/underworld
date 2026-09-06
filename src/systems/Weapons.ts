@@ -4,9 +4,9 @@
 //    두 자원 경제를 분리하는 유일한 규칙이다 — docs/systems/combat.md §5.
 
 import { balance } from '../core/Balance';
-import { barrierUp, enemyDef, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, ventCleanseAmount, weakPointDamageMul, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
+import { barrierUp, enemyDef, headDownPose, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, ventCleanseAmount, weakPointDamageMul, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
 
-/** 머리 내림 중 해머가 집계되는 약점 id — 기획서 §4 "머리 내림·탈진 중 해머 타격 = 눈 집계(hammerEyeMul)" */
+/** 머리 내림·탈진 중 해머가 집계되는 약점 id — 기획서 §4 "머리 내림·탈진 중 해머 타격 = 눈 집계(hammerEyeMul)" (자세 판정은 Entities.headDownPose) */
 const HAMMER_EYE_ID = 'eye';
 import { rayVsAabb } from '../core/Ray';
 import { hitShellPlates } from '../core/ShellPlates';
@@ -336,7 +336,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
 
     // 머리 내림 특칙(거수, hammerEyeMul) — 낫이 박혀 머리가 0.9m 에 내려온 동안 해머는 눈을 두들긴다:
     // 피해 ×2.2(15 → 33 = 권총 한 발)이고 약점 장부(weak_point_hit·눈 누적)에 오른다. 눈이 열려 있을 때만(혼절 중엔 닫힘)
-    const eyeWp = def.hammerEyeMul !== undefined && enemy.pose === 'head_down' ? def.weakPoints?.find((wp) => wp.id === HAMMER_EYE_ID) : undefined;
+    const eyeWp = def.hammerEyeMul !== undefined && headDownPose(enemy.pose) ? def.weakPoints?.find((wp) => wp.id === HAMMER_EYE_ID) : undefined;
     const eyeHammer = eyeWp !== undefined && weakPointOpen(enemy, eyeWp);
     const meleeDealt = applyFrostOnHit(world.events, enemy, eyeHammer ? damage * def.hammerEyeMul! : damage);
     enemy.health -= meleeDealt;
@@ -355,7 +355,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
       // staggerFlingImmune(거수 혼절)은 면제 — 처형 반경(4.6) 밖으로 날아가면 혼절의 보상이 사라진다(결정 33)
       const flingStaggered = chainFull && enemy.ai === 'staggered' && !def.staggerFlingImmune;
       // 머리 내림 중 마무리 넉백 0(noKnockbackWhileHeadDown) — 눈을 두들기는 동안 밀어내면 2타째가 닿지 않는다
-      const noKnockback = def.noKnockbackWhileHeadDown === true && enemy.pose === 'head_down';
+      const noKnockback = def.noKnockbackWhileHeadDown === true && headDownPose(enemy.pose);
       // 크게 밀려난 적은 확률적으로 달려들며 반격한다 (방패가 깨진 뒤에도 동일).
       // 경직 중에는 걸지 않는다 — 밀림이 끝나자마자 돌격으로 경직을 털고 나온다.
       // chargeOnKnockback false(거수)는 이 우회 경로를 쓰지 않는다 — 자세·쿨다운을 무시하고 달려들면 안 된다

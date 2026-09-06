@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { balance } from '../core/Balance';
-import { attackInPhase, attackReaches, bladeOfJoint, currentAttack, enemyDef, healthBarState, implementedEnemyTypes, jointOfBlade, rayHitsEnemy, rayHitsWeakPoint, resolvePhase, shellPlatesActive, slotUnlocked, wakeSlamAttack, weakPointOpen, weakPointRadius, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
+import { attackInPhase, attackReaches, bladeOfJoint, comboChain, comboStepAttack, currentAttack, despairRoarAttack, despairSlamAttack, enemyDef, headDownPose, healthBarState, implementedEnemyTypes, jointOfBlade, rayHitsEnemy, rayHitsWeakPoint, resolvePhase, shellPlatesActive, slotUnlocked, wakeSlamAttack, weakPointDamageMul, weakPointOpen, weakPointRadius, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
 import { World, openExposure, playerStatusTicks, setPlayerStatus, type EnemyState, type ProjectileState, type TrapState } from '../core/World';
@@ -1342,8 +1342,8 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect(balance.weakPoint.dazeThreshold).toBe(66);
     expect(balance.weakPoint.dazeCooldownTicks).toBe(600);
     expect(balance.weakPoint.headDown.stuckTicks).toBe(90);
-    // 노출 조건 — 눈은 head_down 자세, 관절은 타이머만, 심장은 rear(B3-1). 족장에는 아무것도 없다
-    expect(def.weakPoints!.find((w) => w.id === 'eye')!.exposedStates).toEqual(['head_down']);
+    // 노출 조건 — 눈은 head_down 자세(+ 포효 예고 roar·탈진 exhaust, B3-4), 관절은 타이머만, 심장은 rear(B3-1). 족장에는 아무것도 없다
+    expect(def.weakPoints!.find((w) => w.id === 'eye')!.exposedStates).toEqual(['head_down', 'roar', 'exhaust']);
     expect(def.weakPoints!.find((w) => w.id === 'joint_r')!.exposedStates).toEqual([]);
     expect(def.weakPoints!.find((w) => w.id === 'heart')!.exposedStates).toEqual(['rear']);
     expect(enemyDef('goblin_chieftain').parryOutcome).toBeUndefined();
@@ -1813,6 +1813,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     const cd = Enemies.contactDist(def);
     tickEnemiesUntil(() => Math.hypot(boss.x - world.player.x, boss.z - world.player.z) <= cd + 1.0, 300);
     world.player.iframeTicks = balance.reaction.dodgeIFrameTicks;
+    world.player.iframeSource = 'dodge'; // 회피 무적(B2-3 검토 — 블링크·탈출 무적은 완벽 회피가 아니다)
     for (let i = 0; i < 300 && boss.ai !== 'recover'; i++) {
       Enemies.tick(world, DT);
       Reaction.tick(world, DT);
@@ -1865,6 +1866,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     const cd = Enemies.contactDist(def);
     tickEnemiesUntil(() => Math.hypot(boss.x - world.player.x, boss.z - world.player.z) <= cd + 1.0, 300);
     world.player.iframeTicks = 1e9;
+    world.player.iframeSource = 'dodge';
     tickEnemiesUntil(() => boss.pose === 'skid', 300);
     expect(mana).toHaveLength(0);
     // 들이받기 — 무적 접촉은 옛 경로(헛침)
@@ -2423,6 +2425,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     const cd = Enemies.contactDist(def);
     tickEnemiesUntil(() => Math.hypot(boss.x - world.player.x, boss.z - world.player.z) <= cd + 1.0, 300);
     world.player.iframeTicks = 1e9;
+    world.player.iframeSource = 'dodge';
     tickEnemiesUntil(() => boss.pose === 'skid', 300);
     expect(boss.exposure).toEqual({ joint_l: 40 });
     expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
@@ -2760,6 +2763,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       const cd = Enemies.contactDist(def);
       tickEnemiesUntil(() => distTo(boss) <= cd + 1.0, 300);
       world.player.iframeTicks = balance.reaction.dodgeIFrameTicks;
+      world.player.iframeSource = 'dodge';
       for (let i = 0; i < 300 && boss.ai !== 'recover'; i++) {
         Enemies.tick(world, DT);
         Reaction.tick(world, DT);
@@ -3063,6 +3067,9 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(slotUnlocked(def, boss, 'roar')).toBe(true);
       // 걷기 ×1.2 — 복귀 뒤 멀리 선 플레이어(돌격 maxRange 밖)를 향해 3.84 m/s 로 걷는다. 돌격 속도는 데이터 그대로
       tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      // P3 복귀 첫 선택은 포효(B3-4 firstPick) — 여기선 걷기만 본다: 첫 선택·간격을 지운다(포효는 B3-4 검증에서)
+      boss.firstPick = undefined;
+      boss.roarCooldown = 9999;
       world.player.x = boss.x - 20;
       world.player.prevX = world.player.x;
       boss.closeCooldown = 0;
@@ -3124,6 +3131,10 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       boss.health = perBar; // 500 — 1칸째(P3)
       Enemies.tick(world, DT);
       expect(boss.phase).toBe(1);
+      // P3 의 포효 첫 선택·삼연낫(B3-4)은 그쪽 검증에서 — 여기선 단발 낫만 본다
+      boss.firstPick = undefined;
+      boss.roarCooldown = 9999;
+      boss.comboCooldown = 9999;
       tickEnemiesUntil(() => boss.ai === 'chase', 200);
       tickEnemiesUntil(() => w.hits.length > 0, 400);
       expect(w.hits[0]!.amount).toBe(34);
@@ -3546,6 +3557,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       const cd = Enemies.contactDist(def);
       tickEnemiesUntil(() => Math.hypot(b4.x - world.player.x, b4.z - world.player.z) <= cd + 1.0, 300);
       world.player.iframeTicks = 1e9;
+      world.player.iframeSource = 'dodge';
       tickEnemiesUntil(() => b4.pose === 'skid', 60);
       world.player.iframeTicks = 0;
       tickEnemiesUntil(() => b4.ai === 'chase', 120);
@@ -3711,7 +3723,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       });
       expect(volley.playerKnockback).toBe(balance.playerKnockback.magic); // "magic 밀림 2.8m"
       expect(volley.muzzleHeightMul! * def.height).toBeCloseTo(wp('vent').offset.y, 6); // 구슬은 분출공에서 나간다
-      expect(wp('vent')).toMatchObject({ hp: 132, openMul: 1.5, damageMul: 3.0, exposedStates: [] });
+      expect(wp('vent')).toMatchObject({ hp: 132, openMul: 1.5, damageMul: 3.0, exposedStates: ['exhaust'] }); // 자세 노출은 탈진(B3-4)만
       expect(wp('vent').hp).toBe(volley.deflectSelfDamage! * 4); // 반사 4회 = 질식
       expect(wpc.ventGagThreshold).toBe(66);
       expect(wpc.ventGagThreshold).toBe(pistol.damage * wp('vent').openMul! * 4); // 예고 중 권총 4발
@@ -4085,6 +4097,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       const cd = Enemies.contactDist(def);
       tickEnemiesUntil(() => Math.hypot(b4.x - world.player.x, b4.z - world.player.z) <= cd + 1.0, 300);
       world.player.iframeTicks = 1e9;
+      world.player.iframeSource = 'dodge';
       tickEnemiesUntil(() => b4.pose === 'skid', 60);
       world.player.iframeTicks = 0;
       expect(w.spawned.at(-1)).toMatchObject({ kind: 'skid', r: 1.6 });
@@ -4106,6 +4119,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       tickEnemiesUntil(() => p1b.ai === 'charging', 300);
       tickEnemiesUntil(() => Math.hypot(p1b.x - world.player.x, p1b.z - world.player.z) <= cd + 1.0, 300);
       world.player.iframeTicks = 1e9;
+      world.player.iframeSource = 'dodge';
       tickEnemiesUntil(() => p1b.pose === 'skid', 60);
       world.player.iframeTicks = 0;
       expect(w.spawned.length).toBe(before);
@@ -4378,6 +4392,783 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(b3.platesLeft).toBe(0);
       expect(w.broken).toHaveLength(1 + 3); // b2 의 세 장만 — 탈락은 골드 없음
       expect(goldPouches()).toHaveLength(4);
+    });
+  });
+
+  describe('B3-4 P3 기술 — 포효·위압·절망의 포효·삼연낫·탈진·광란 돌격 (기획서 §4.1 eye C·§5 backflow/exhaust·§6 cowed·§7 P3·§9.2)', () => {
+    const wpc = balance.weakPoint;
+    const cw = balance.status.cowed;
+    const roar = def.roarAttack!;
+    const chain = comboChain(def);
+    const cc = def.chargeAttack!.chainCharge!;
+    const perBar = def.health / def.healthBars!; // 500
+    type Status = { kind: string; on: boolean; id?: string; ticks?: number; cause?: string; selfDamage?: number; despair?: boolean };
+    function watch() {
+      const status: Status[] = [];
+      world.events.on('boss_status', (p) => status.push(p as Status));
+      const hits: { amount: number; blocked?: boolean; source?: string }[] = [];
+      world.events.on('player_damaged', (p) => hits.push(p as { amount: number; blocked?: boolean; source?: string }));
+      const roarStarts: { despair: boolean; ticks: number }[] = [];
+      world.events.on('enemy_roar_start', (p) => roarStarts.push(p as { despair: boolean; ticks: number }));
+      const roars: { despair: boolean; radius: number; dist: number }[] = [];
+      world.events.on('enemy_roar', (p) => roars.push(p as { despair: boolean; radius: number; dist: number }));
+      const roarHits: { status?: string; pull: number; push: number; despair: boolean }[] = [];
+      world.events.on('boss_roar_hit', (p) => roarHits.push(p as { status?: string; pull: number; push: number; despair: boolean }));
+      const comboStarts: { steps: number }[] = [];
+      world.events.on('enemy_combo_start', (p) => comboStarts.push(p as { steps: number }));
+      const comboSteps: { step: number; steps: number; perfectOnly: boolean }[] = [];
+      world.events.on('enemy_combo_step', (p) => comboSteps.push(p as { step: number; steps: number; perfectOnly: boolean }));
+      const chainTurns: { ticks: number }[] = [];
+      world.events.on('enemy_chain_turn', (p) => chainTurns.push(p as { ticks: number }));
+      const windups: { telegraph: string; perfectOnly?: boolean }[] = [];
+      world.events.on('enemy_windup', (p) => windups.push(p as { telegraph: string; perfectOnly?: boolean }));
+      const closed: { id: string; hits: number }[] = [];
+      world.events.on('exposure_closed', (p) => closed.push(p as { id: string; hits: number }));
+      const weakHits: { id: string; damage: number }[] = [];
+      world.events.on('weak_point_hit', (p) => weakHits.push(p as { id: string; damage: number }));
+      const parries: { result: string; cowed?: boolean }[] = [];
+      world.events.on('parry_attempt', (p) => parries.push(p as { result: string; cowed?: boolean }));
+      const staggers: unknown[] = [];
+      world.events.on('boss_staggered', (p) => staggers.push(p));
+      const slamStarts: { wake: boolean; despair?: boolean }[] = [];
+      world.events.on('enemy_slam_start', (p) => slamStarts.push(p as { wake: boolean; despair?: boolean }));
+      const applied: { kind: string; ticks: number }[] = [];
+      const ended: { kind: string; reason: string }[] = [];
+      world.events.on('cowed_applied', (p) => applied.push(p as { kind: string; ticks: number }));
+      world.events.on('cowed_ended', (p) => ended.push(p as { kind: string; reason: string }));
+      const dodged: unknown[] = [];
+      world.events.on('charge_dodged', (p) => dodged.push(p));
+      const whiffs: { wall?: boolean }[] = [];
+      world.events.on('enemy_whiffed', (p) => whiffs.push(p as { wall?: boolean }));
+      const tag = (st: Status): string => `${st.kind}${st.id ? ':' + st.id : ''}:${st.on}`;
+      return { status, hits, roarStarts, roars, roarHits, comboStarts, comboSteps, chainTurns, windups, closed, weakHits, parries, staggers, slamStarts, applied, ended, dodged, whiffs, tag };
+    }
+    /** P3 로 둔다(게임플레이 페이즈 = 체력 칸 index 1). 체력은 그대로라 전환은 일어나지 않는다 */
+    function toP3(boss: EnemyState): void {
+      boss.phase = 1;
+    }
+    /** 검증하려는 기술만 남긴다 — 나머지 슬롯은 쿨다운으로 잠근다(포효는 첫 선택·간격을 지운다) */
+    function quietExcept(boss: EnemyState, keep: 'roar' | 'combo' | 'charge' | 'none'): void {
+      boss.firstPick = undefined;
+      boss.roarCooldown = 9999;
+      boss.comboCooldown = 9999;
+      boss.chargeCooldown = 9999;
+      boss.volleyCooldown = 9999;
+      boss.slamCooldown = 9999;
+      boss.closeCooldown = 9999;
+      if (keep === 'combo') boss.comboCooldown = 0;
+      if (keep === 'charge') boss.chargeCooldown = 0;
+    }
+    /** 첫 선택으로 포효를 예약하고 한 틱 — 예고에 들어간다 */
+    function startRoar(boss: EnemyState): void {
+      boss.firstPick = 'roar';
+      Enemies.tick(world, DT);
+      expect(boss.attackMode).toBe('roar');
+      expect(boss.ai).toBe('windup');
+    }
+    function untilRoarResolved(boss: EnemyState): void {
+      tickEnemiesUntil(() => !(boss.ai === 'windup' && boss.attackMode === 'roar'), 80);
+    }
+    function startCombo(boss: EnemyState): void {
+      tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'combo', 30);
+    }
+    function untilComboStep(boss: EnemyState, step: number): void {
+      tickEnemiesUntil(() => boss.attackMode === 'combo' && boss.ai === 'windup' && boss.comboStep === step, 200);
+    }
+    function shootVent(boss: EnemyState): void {
+      const c = weakPointWorldPos(boss, def, wp('vent'));
+      shootAt(c.x, c.y, c.z);
+    }
+    function angleDiff(a: number, b: number): number {
+      let d = a - b;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      return Math.abs(d);
+    }
+
+    it('데이터 — roarAttack(type roar·30/30·aoe 12·pushM 1.5·12틱·간격 1200·despair 0.2{36, pull 4, slam 40·rear 8~30}·cowed·빨강·패링 불가), comboAttack 3타(28/22/36, ①② 호 110·34·이음 6·continueOnParry·관절 30/60, ③ aoe 3.2 = 4.4 × 0.7273·40·perfectOnly·noParryBuffer·recover 40/whiff 60, 막으면 numb_arm, 쿨 600), chainCharge{24, 2.5, 12, red}, balance cowed{360, false, 5}·exhaustTicks 150·roarCancelThreshold 66, 눈 exposedStates roar/exhaust·분출공 exhaust·poseOffsets.exhaust = head_down, P3 해금 roar/combo/chainCharge(P2 아님)·firstPick roar, currentAttack 변형(절망 포효 36·연계 발구르기 40/8~30/28/5.5·삼연낫 타), headDownPose', () => {
+      expect(roar).toMatchObject({ type: 'roar', windupTicks: 30, recoverTicks: 30, aoeRadius: 12, pushM: 1.5, playerKnockbackTicks: 12, intervalTicks: 1200, despairHealthFrac: 0.2, statusOnHit: 'cowed', telegraph: 'red', parryable: false });
+      expect(roar.despair).toEqual({ windupTicks: 36, pull: 4, followUp: 'slam', followUpWindupTicks: 40, followUpRearPose: { from: 8, to: 30 } });
+      expect(chain).toHaveLength(3);
+      expect(chain[0]).toBe(def.comboAttack);
+      expect(chain[0]).toMatchObject({ windupTicks: 28, recoverTicks: 6, arcDeg: 110, damage: 34, playerKnockback: 2.0, parryable: true, telegraph: 'blue', continueOnParry: true, cooldownTicks: 600, statusOnBlock: 'numb_arm', poolKind: 'blade' });
+      expect(chain[0]!.exposeOnParry).toEqual({ joint: 'joint_r', normalTicks: 30, perfectTicks: 60 });
+      expect(chain[1]).toMatchObject({ windupTicks: 22, recoverTicks: 6, arcDeg: 110, damage: 34, continueOnParry: true });
+      expect(chain[1]!.exposeOnParry).toEqual({ joint: 'joint_l', normalTicks: 30, perfectTicks: 60 });
+      expect(chain[2]).toMatchObject({ windupTicks: 36, recoverTicks: 40, whiffRecoverTicks: 60, aoeRadius: 3.2, damage: 40, playerKnockback: 2.0, perfectOnly: true, noParryBuffer: true, parryable: true, statusOnBlock: 'numb_arm' });
+      expect(chain[2]!.exposeOnParry).toBeUndefined(); // 양낫 — 관절 짝 없음(Stage 는 이걸로 두 낫을 든다)
+      expect(chain[2]!.continueOnParry).toBeUndefined();
+      expect(chain[2]!.comboNext).toBeUndefined();
+      expect(def.attackRange * chain[2]!.impactRangeMul).toBeCloseTo(3.2, 2); // 보이는 낫끝 = 판정 원 반지름
+      expect(comboStepAttack(def, 0)).toBe(chain[0]);
+      expect(comboStepAttack(def, 2)).toBe(chain[2]);
+      expect(comboStepAttack(def, 3)).toBeUndefined();
+      expect(cc).toEqual({ turnTicks: 24, tailRadius: 2.5, tailDamage: 12, tailTelegraph: 'red' });
+      expect(cw).toEqual({ ticks: 360, normalParryOpensJoint: false, normalParryMana: 5 });
+      expect(wpc.headDown.exhaustTicks).toBe(150);
+      expect(wpc.roarCancelThreshold).toBe(66);
+      expect(wp('eye').exposedStates).toEqual(['head_down', 'roar', 'exhaust']);
+      expect(wp('vent').exposedStates).toEqual(['exhaust']);
+      // 탈진 표 — 눈·관절·심장은 머리 내림과 같은 자리, 분출공만 내려온 머리에 가리지 않게 가슴 위쪽으로(열린 표적은 보여야 한다)
+      const ex = def.poseOffsets!['exhaust']!;
+      const hd = def.poseOffsets!['head_down']!;
+      for (const id of ['eye', 'joint_r', 'joint_l', 'heart']) expect(ex[id]).toEqual(hd[id]);
+      expect(ex['vent']).toEqual({ x: 0, y: 1.6, z: -1.7 });
+      expect(ex['vent']!.y).toBeGreaterThan(hd['vent']!.y);
+      const p3 = resolvePhase(def, 1)!;
+      for (const slot of ['roar', 'combo', 'chainCharge']) {
+        expect(p3.unlock.has(slot)).toBe(true);
+        expect(slotUnlocked(def, { phase: 1 }, slot)).toBe(true);
+        expect(slotUnlocked(def, { phase: 2 }, slot)).toBe(false);
+      }
+      expect(p3.firstPick).toBe('roar');
+      expect(resolvePhase(def, 2)!.firstPick).toBeUndefined();
+      // currentAttack 변형
+      expect(currentAttack(def, { attackMode: 'roar', phase: 1 })).toBe(roar);
+      expect(currentAttack(def, { attackMode: 'roar', phase: 1, despairRoar: true })).toBe(despairRoarAttack(def));
+      expect(despairRoarAttack(def)).toMatchObject({ windupTicks: 36, aoeRadius: 12, statusOnHit: 'cowed' });
+      expect(roar.windupTicks).toBe(30); // 원본은 그대로
+      const ds = despairSlamAttack(def)!;
+      expect(ds.windupTicks).toBe(40);
+      expect(ds.rearPose).toEqual({ from: 8, to: 30 });
+      expect(def.slamAttack!.rearPose).toEqual({ from: 8, to: 36 });
+      expect(currentAttack(def, { attackMode: 'slam', phase: 1, despairSlam: true })).toMatchObject({ windupTicks: 40, damage: 28, aoeRadius: 5.5, statusOnHit: 'hobble' });
+      expect(currentAttack(def, { attackMode: 'slam', phase: 1, despairSlam: true }).rearPose).toEqual({ from: 8, to: 30 });
+      expect(currentAttack(def, { attackMode: 'slam', phase: 1, wakeSlam: true, despairSlam: true })).toBe(wakeSlamAttack(def)); // 기상이 이긴다
+      expect(currentAttack(def, { attackMode: 'combo', phase: 1, comboStep: 0 })).toBe(chain[0]);
+      expect(currentAttack(def, { attackMode: 'combo', phase: 1, comboStep: 2 })).toBe(chain[2]);
+      expect(headDownPose('head_down')).toBe(true);
+      expect(headDownPose('exhaust')).toBe(true);
+      expect(headDownPose('roar')).toBe(false);
+      expect(headDownPose(undefined)).toBe(false);
+      expect(enemyDef('goblin_chieftain').roarAttack).toBeUndefined();
+      expect(enemyDef('goblin_chieftain').comboAttack).toBeUndefined();
+      expect(enemyDef('goblin_chieftain').chargeAttack!.chainCharge).toBeUndefined();
+    });
+
+    it('포효 — P3 복귀 첫 선택(firstPick): 전환 뒤 첫 추격 틱에 attackMode roar·예고 30·pose roar(눈 2.9m 열림)·boss_status roar on·빨강 예고; 30틱 뒤 발동(enemy_roar): 12m 안 플레이어에게 boss_roar_hit — 피해·player_damaged 없이 1.5m/12틱 밀림 + 위압 360(Status cowed_applied), 눈 노출 닫힘(exposure_closed eye), 후딜 30 → 추격. 간격 1200 이 새로 돈다', () => {
+      const boss = makeBehemoth(8.0);
+      const w = watch();
+      boss.chargeCooldown = 9999;
+      boss.volleyCooldown = 9999;
+      boss.slamCooldown = 9999;
+      boss.comboCooldown = 9999;
+      boss.closeCooldown = 9999;
+      world.player.health = 1000;
+      boss.health = perBar; // 500 → P3 전환
+      Enemies.tick(world, DT);
+      expect(boss.phase).toBe(1);
+      expect(boss.firstPick).toBe('roar');
+      tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      expect(w.roarStarts).toHaveLength(0);
+      Enemies.tick(world, DT);
+      expect(boss.attackMode).toBe('roar');
+      expect(boss.ai).toBe('windup');
+      expect(boss.timer).toBe(roar.windupTicks);
+      expect(boss.despairRoar).toBe(false);
+      expect(boss.firstPick).toBeUndefined();
+      expect(boss.roarCooldown).toBe(roar.intervalTicks);
+      expect(boss.pose).toBe('roar');
+      expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+      expect(weakPointWorldPos(boss, def, wp('eye')).y).toBeCloseTo(2.9, 6);
+      expect(weakPointOpen(boss, wp('joint_r'))).toBe(false);
+      expect(w.roarStarts).toEqual([expect.objectContaining({ despair: false, ticks: roar.windupTicks })]);
+      expect(w.status.map(w.tag)).toContain('roar:true');
+      expect(w.windups.at(-1)).toMatchObject({ telegraph: 'red', perfectOnly: false });
+      for (let i = 0; i < roar.windupTicks - 1; i++) {
+        Enemies.tick(world, DT);
+        expect(boss.ai).toBe('windup');
+        expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+      }
+      expect(world.player.kbTicks ?? 0).toBe(0);
+      Enemies.tick(world, DT); // 발동
+      expect(w.roars).toEqual([expect.objectContaining({ despair: false, radius: roar.aoeRadius, dist: 8.0 })]);
+      expect(w.roarHits).toEqual([expect.objectContaining({ status: 'cowed', push: roar.pushM, pull: 0, despair: false })]);
+      expect(w.hits).toHaveLength(0);
+      expect(world.player.health).toBe(1000);
+      expect(world.player.cowedTicks).toBe(cw.ticks);
+      expect(world.player.kbTicks).toBe(roar.playerKnockbackTicks);
+      expect(world.player.kbX! * roar.playerKnockbackTicks!).toBeCloseTo(-roar.pushM!, 6); // 보스(+x)의 반대쪽으로 1.5m
+      expect(world.player.kbZ! * roar.playerKnockbackTicks!).toBeCloseTo(0, 6);
+      expect(boss.pose).toBeUndefined();
+      expect(boss.ai).toBe('recover');
+      expect(boss.timer).toBe(roar.recoverTicks);
+      expect(boss.attackMode).toBe('melee');
+      expect(w.closed).toEqual([expect.objectContaining({ id: 'eye', hits: 0 })]);
+      expect(w.status.map(w.tag).filter((t) => t.startsWith('roar:'))).toEqual(['roar:true', 'roar:false']);
+      Status.tick(world, DT);
+      expect(w.applied).toEqual([expect.objectContaining({ kind: 'cowed', ticks: cw.ticks })]);
+      // 간격 — 300틱 동안 두 번째 포효는 없다(1200), 간격 카운터가 줄어든다
+      tickEnemiesUntil(() => boss.ai === 'chase', 60);
+      for (let i = 0; i < 300; i++) Enemies.tick(world, DT);
+      expect(w.roarStarts).toHaveLength(1);
+      expect(boss.roarCooldown!).toBeLessThan(roar.intervalTicks!);
+      expect(boss.roarCooldown!).toBeGreaterThan(0);
+    });
+
+    it('포효 판정 — 12m 밖은 아무 일 없음(boss_roar_hit·위압 없음, 소리는 난다), 방어 중이어도 걸린다(방어 판정·player_damaged 없음), 발동 틱에 회피 무적이면 안 걸린다. 전환 없이 P3 에 든 거수(첫 선택 없음)는 간격부터 센다', () => {
+      const far = makeBehemoth(13.0);
+      toP3(far);
+      quietExcept(far, 'none');
+      const w = watch();
+      startRoar(far);
+      untilRoarResolved(far);
+      expect(w.roars).toHaveLength(1);
+      expect(w.roarHits).toHaveLength(0);
+      expect(world.player.cowedTicks ?? 0).toBe(0);
+      // 방어 중
+      world.enemies.length = 0;
+      const b2 = makeBehemoth(8.0);
+      toP3(b2);
+      quietExcept(b2, 'none');
+      world.player.blocking = true;
+      startRoar(b2);
+      untilRoarResolved(b2);
+      expect(w.roarHits).toHaveLength(1);
+      expect(w.hits).toHaveLength(0);
+      expect(world.player.cowedTicks).toBe(cw.ticks);
+      expect(world.player.stunTicks).toBe(0); // 방어 경직도 없다
+      world.player.blocking = false;
+      world.player.cowedTicks = 0;
+      // 회피 무적
+      world.enemies.length = 0;
+      const b3 = makeBehemoth(8.0);
+      toP3(b3);
+      quietExcept(b3, 'none');
+      startRoar(b3);
+      tickEnemiesUntil(() => b3.timer === 1, 60);
+      world.player.iframeTicks = 3;
+      world.player.iframeSource = 'dodge';
+      Enemies.tick(world, DT);
+      expect(b3.attackMode).toBe('melee');
+      expect(w.roars).toHaveLength(3);
+      expect(w.roarHits).toHaveLength(1);
+      expect(world.player.cowedTicks ?? 0).toBe(0);
+      world.player.iframeTicks = 0;
+      // 전환 없이 P3 — 첫 추격 틱은 포효 없이 간격만 세운다
+      world.enemies.length = 0;
+      const b4 = makeBehemoth(8.0);
+      toP3(b4);
+      b4.comboCooldown = 9999;
+      b4.chargeCooldown = 9999;
+      b4.volleyCooldown = 9999;
+      b4.slamCooldown = 9999;
+      expect(b4.roarCooldown).toBeUndefined();
+      Enemies.tick(world, DT);
+      expect(b4.attackMode ?? 'melee').not.toBe('roar');
+      expect(b4.roarCooldown).toBe(roar.intervalTicks); // 첫 틱에 간격을 세운다(그 틱의 감소는 그 전에 지나갔다) — 다음 틱부터 1씩
+      Enemies.tick(world, DT);
+      expect(b4.roarCooldown).toBe(roar.intervalTicks! - 1);
+    });
+
+    it('포효 예고 중 눈 66 → 역류: 포효 취소(enemy_roar·boss_roar_hit·위압 없음) + 머리 내림 60(cause backflow — 눈 ×3.0 피해만, 혼절 누적 없음, 자해 없음) + boss_status backflow{cause eye, selfDamage 0} + exposure_closed{eye, hits 2}, 간격은 새로 센다', () => {
+      const boss = makeBehemoth(8.0);
+      toP3(boss);
+      quietExcept(boss, 'none');
+      const w = watch();
+      startRoar(boss);
+      for (let i = 0; i < 5; i++) Enemies.tick(world, DT);
+      const hp0 = boss.health;
+      shootEye(boss);
+      shootEye(boss);
+      expect(w.weakHits.map((h) => h.damage)).toEqual([33, 33]);
+      expect(boss.health).toBe(hp0 - 66);
+      boss.roarCooldown = 5; // 취소가 간격을 되돌리는지
+      Enemies.tick(world, DT);
+      expect(boss.pose).toBe('head_down');
+      expect(boss.poseCause).toBe('backflow');
+      expect(boss.poseTicks).toBe(wpc.headDown.backflowTicks);
+      expect(boss.attackMode).toBe('melee');
+      expect(boss.despairRoar).toBe(false);
+      expect(boss.roarCooldown).toBe(roar.intervalTicks);
+      expect(boss.health).toBe(hp0 - 66); // 자해 없음
+      expect(w.roars).toHaveLength(0);
+      expect(w.roarHits).toHaveLength(0);
+      expect(world.player.cowedTicks ?? 0).toBe(0);
+      expect(w.status.find((s) => s.kind === 'backflow')).toMatchObject({ on: true, cause: 'eye', selfDamage: 0, ticks: wpc.headDown.backflowTicks });
+      expect(w.status.map(w.tag)).toEqual(['roar:true', 'roar:false', 'backflow:true', 'head_down:true']);
+      expect(w.closed).toEqual([expect.objectContaining({ id: 'eye', hits: 2 })]);
+      // 머리 내림(역류) 중 눈은 피해만 — 66 을 더 넣어도 혼절 없음
+      shootEye(boss);
+      shootEye(boss);
+      Enemies.tick(world, DT);
+      expect(boss.ai).not.toBe('staggered');
+      expect(w.staggers).toHaveLength(0);
+      // 취소된 뒤 눈 누적은 새 창(65 이하)에서 다시 — 다음 포효는 간격 뒤
+      tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      expect(w.status.map(w.tag)).toContain('backflow:false');
+    });
+
+    it('위압 중 패링 — 일반 패링은 관절을 열지 못하고(expose 없음) 마나 5(parry_attempt.cowed → Mana); 완벽 패링은 관절 90 + 머리 내림 + 마나 22 + 위압 해제(cowed 0 → Status cowed_ended cured). 조기 입력 실패 규약은 그대로', () => {
+      const boss = makeBehemoth(4.0);
+      boss.chargeCooldown = 9999;
+      boss.closeCooldown = 9999;
+      Mana.init(world);
+      setPlayerStatus(world.player, 'cowed', cw.ticks);
+      Status.tick(world, DT);
+      const w = watch();
+      world.mana.value = 0;
+      expect(normalParry(boss)).toBe('normal');
+      expect(boss.exposure?.['joint_r'] ?? 0).toBe(0);
+      expect(w.status.filter((s) => s.kind === 'expose')).toHaveLength(0);
+      expect(w.parries.at(-1)).toMatchObject({ result: 'normal', cowed: true });
+      expect(world.mana.value).toBeCloseTo(cw.normalParryMana * balance.chain.multipliers[0]!, 6);
+      expect(playerStatusTicks(world.player, 'cowed')).toBeGreaterThan(0);
+      expect(boss.ai).toBe('recover'); // 튕김 후딜은 그대로
+      // 조기 입력 — 실패 규약 그대로(위압은 패링 실패를 바꾸지 않는다)
+      tickEnemiesUntil(() => boss.ai === 'windup', 300);
+      world.mana.value = 40;
+      pressReaction();
+      expect(w.parries.at(-1)).toMatchObject({ result: 'fail' });
+      expect(world.mana.value).toBe(20);
+      expect(world.player.stunTicks).toBe(balance.reaction.failStunTicks);
+      world.player.stunTicks = 0;
+      // 완벽 — 관절 90 + 머리 내림, 위압 해제
+      world.mana.value = 0;
+      expect(perfectParry(boss)).toBe('perfect');
+      expect(boss.pose).toBe('head_down');
+      expect(w.status.filter((s) => s.kind === 'expose' && s.on)).toHaveLength(1);
+      expect(w.parries.at(-1)).toMatchObject({ result: 'perfect', cowed: false });
+      expect(world.mana.value).toBeCloseTo(balance.mana.gain.parryPerfect * balance.chain.multipliers[0]!, 6);
+      expect(playerStatusTicks(world.player, 'cowed')).toBe(0);
+      Status.tick(world, DT);
+      expect(w.ended).toEqual([expect.objectContaining({ kind: 'cowed', reason: 'cured' })]);
+    });
+
+    it('절망의 포효 — 체력 ≤ 20%(300): despairRoar·예고 36, 발동에 밀림 대신 4m 끌림(보스 쪽) + 위압, 곧바로 발구르기 연계(despairSlam: 예고 40·앞발 들기 8~30 심장 노출·P3 28/5.5·절뚝, 쿨다운·거리 무관, enemy_slam_start{despair}). 착지 뒤 표식은 지워진다', () => {
+      const boss = makeBehemoth(10.0);
+      toP3(boss);
+      quietExcept(boss, 'none');
+      boss.health = def.health * roar.despairHealthFrac!; // 300
+      const w = watch();
+      startRoar(boss);
+      expect(boss.despairRoar).toBe(true);
+      expect(boss.timer).toBe(roar.despair!.windupTicks);
+      expect(w.roarStarts.at(-1)).toMatchObject({ despair: true, ticks: 36 });
+      expect(w.status.at(-1)).toMatchObject({ kind: 'roar', on: true, despair: true });
+      untilRoarResolved(boss);
+      expect(w.roars).toEqual([expect.objectContaining({ despair: true })]);
+      expect(w.roarHits).toEqual([expect.objectContaining({ pull: roar.despair!.pull, push: 0, despair: true, status: 'cowed' })]);
+      expect(world.player.kbX! * roar.playerKnockbackTicks!).toBeCloseTo(roar.despair!.pull, 6); // 보스(+x) 쪽으로 4m
+      expect(world.player.cowedTicks).toBe(cw.ticks);
+      expect(w.hits).toHaveLength(0);
+      // 연계 발구르기 — 발동 틱에 곧바로 예고(쿨다운 9999·거리 10m 무관)
+      expect(boss.attackMode).toBe('slam');
+      expect(boss.despairSlam).toBe(true);
+      expect(boss.despairRoar).toBe(false);
+      expect(boss.ai).toBe('windup');
+      expect(boss.timer).toBe(roar.despair!.followUpWindupTicks);
+      expect(currentAttack(def, boss)).toMatchObject({ windupTicks: 40, damage: 28, aoeRadius: 5.5 });
+      expect(w.slamStarts).toEqual([expect.objectContaining({ wake: false, despair: true })]);
+      expect(boss.wakeSlamPending ?? false).toBe(false);
+      // 앞발 들기 8 ≤ t < 30 — 심장이 열린다
+      const rearTicks: number[] = [];
+      for (let k = 1; k <= 40; k++) {
+        Enemies.tick(world, DT);
+        if (boss.ai !== 'windup') break;
+        if (boss.pose === 'rear') {
+          rearTicks.push(40 - boss.timer);
+          expect(weakPointOpen(boss, wp('heart'))).toBe(true);
+        } else {
+          expect(weakPointOpen(boss, wp('heart'))).toBe(false);
+        }
+      }
+      expect(rearTicks[0]).toBe(8);
+      expect(rearTicks.at(-1)).toBe(29);
+      expect(rearTicks).toHaveLength(22);
+      expect(boss.ai).toBe('impact');
+      // 착지 — 끌려온 자리(4m)에 선 플레이어에게 28 + 절뚝, 표식 소거
+      world.player.x = boss.x - 4.0;
+      world.player.prevX = world.player.x;
+      Enemies.tick(world, DT);
+      expect(w.hits).toEqual([expect.objectContaining({ amount: 28, blocked: false })]);
+      expect(world.player.hobbleTicks).toBe(balance.status.hobble.ticks);
+      expect(boss.despairSlam).toBe(false);
+      expect(boss.ai).toBe('recover');
+      // 끌림은 몸 접촉 거리 안으로 들이지 않는다 — 3m 에서 절망의 포효를 맞으면 0.85m 만
+      world.enemies.length = 0;
+      world.player.x = 6;
+      world.player.kbTicks = 0;
+      const near = makeBehemoth(3.0);
+      toP3(near);
+      quietExcept(near, 'none');
+      near.health = 300;
+      startRoar(near);
+      untilRoarResolved(near);
+      expect(w.roarHits.at(-1)!.pull).toBeCloseTo(3.0 - Enemies.contactDist(def), 6);
+    });
+
+    it('삼연낫 — P3 낫 사거리 안 단발보다 먼저(attackMode combo·step 0·예고 28·쿨 600·enemy_combo_start{steps 3}); 세 타 전부 완벽 → ①② 관절 60·콤보 계속(이음 6 → 다음 타 예고 22/36, enemy_combo_step, ③ 은 perfectOnly 고음) → ③ 완벽에 탈진 150(pose exhaust: 눈 0.9m + 분출공 ×3.0 동시 열림, boss_status exhaust on); 탈진 중 분출공 한 발 33, 눈 66 → 혼절(처형 창)', () => {
+      const boss = makeBehemoth(3.1);
+      toP3(boss);
+      quietExcept(boss, 'combo');
+      const w = watch();
+      startCombo(boss);
+      expect(boss.comboStep).toBe(0);
+      expect(boss.comboPerfects).toBe(0);
+      expect(boss.timer).toBe(chain[0]!.windupTicks);
+      expect(boss.comboCooldown).toBe(chain[0]!.cooldownTicks);
+      expect(w.comboStarts).toEqual([expect.objectContaining({ steps: 3 })]);
+      expect(w.windups.at(-1)).toMatchObject({ telegraph: 'blue', perfectOnly: false });
+      expect(perfectParry(boss)).toBe('perfect');
+      expect(boss.exposure?.['joint_r']).toBe(chain[0]!.exposeOnParry!.perfectTicks);
+      expect(boss.comboPerfects).toBe(1);
+      expect(boss.ai).toBe('recover');
+      expect(boss.timer).toBe(chain[0]!.recoverTicks);
+      expect(boss.attackMode).toBe('combo');
+      expect(boss.pose).toBeUndefined(); // 낫이 박히지 않는다 — 콤보는 이어진다
+      untilComboStep(boss, 1);
+      expect(boss.timer).toBe(chain[1]!.windupTicks);
+      expect(w.comboSteps.at(-1)).toMatchObject({ step: 1, steps: 3, perfectOnly: false });
+      expect(perfectParry(boss)).toBe('perfect');
+      expect(boss.exposure?.['joint_l']).toBe(chain[1]!.exposeOnParry!.perfectTicks);
+      expect(boss.comboPerfects).toBe(2);
+      untilComboStep(boss, 2);
+      expect(boss.timer).toBe(chain[2]!.windupTicks);
+      expect(w.comboSteps.at(-1)).toMatchObject({ step: 2, steps: 3, perfectOnly: true });
+      expect(w.windups.at(-1)).toMatchObject({ telegraph: 'blue', perfectOnly: true });
+      expect(perfectParry(boss)).toBe('perfect');
+      expect(boss.comboPerfects).toBe(3);
+      expect(boss.pose).toBe('exhaust');
+      expect(boss.poseTicks).toBe(wpc.headDown.exhaustTicks);
+      expect(boss.attackMode).toBe('melee');
+      expect(headDownPose(boss.pose)).toBe(true);
+      expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+      expect(weakPointWorldPos(boss, def, wp('eye')).y).toBeCloseTo(0.9, 6);
+      expect(weakPointOpen(boss, wp('vent'))).toBe(true);
+      expect(weakPointDamageMul(boss, wp('vent'))).toBe(3.0);
+      expect(weakPointOpen(boss, wp('heart'))).toBe(false);
+      expect(w.status.map(w.tag)).toContain('exhaust:true');
+      // 분출공 ×3.0 — 권총 한 발 33(내구 132 → 99), 눈 두 발 → 혼절(탈진도 머리 내림이다)
+      shootVent(boss);
+      expect(w.weakHits.at(-1)).toMatchObject({ id: 'vent', damage: 33 });
+      expect(boss.weakHp!['vent']).toBe(wp('vent').hp! - 33);
+      shootEye(boss);
+      shootEye(boss);
+      Enemies.tick(world, DT);
+      expect(boss.ai).toBe('staggered');
+      expect(boss.pose).toBe('stunned');
+      expect(w.staggers).toHaveLength(1);
+      expect(w.status.map(w.tag)).toContain('exhaust:false');
+    });
+
+    it('탈진이 시간으로 끝나면 일어서며 기상 발구르기(wakeSlam) — 머리 내림과 같은 자리; 탈진 중 해머는 눈 집계(hammerEyeMul)·넉백 0', () => {
+      const boss = makeBehemoth(3.1);
+      toP3(boss);
+      quietExcept(boss, 'combo');
+      const w = watch();
+      startCombo(boss);
+      expect(perfectParry(boss)).toBe('perfect');
+      untilComboStep(boss, 1);
+      expect(perfectParry(boss)).toBe('perfect');
+      untilComboStep(boss, 2);
+      expect(perfectParry(boss)).toBe('perfect');
+      expect(boss.pose).toBe('exhaust');
+      // 해머(3.1m — 사거리 안) 한 타 = 눈 33, 밀리지 않는다
+      const x0 = boss.x;
+      hammerSwing();
+      expect(w.weakHits.at(-1)).toMatchObject({ id: 'eye', damage: 15 * def.hammerEyeMul! });
+      Enemies.tick(world, DT);
+      expect(boss.x).toBe(x0);
+      // 시간 만료 → 일어서며 기상 발구르기
+      tickEnemiesUntil(() => boss.pose === undefined, 200);
+      expect(boss.wakeSlamPending).toBe(true);
+      Enemies.tick(world, DT);
+      expect(boss.attackMode).toBe('slam');
+      expect(boss.wakeSlam).toBe(true);
+      expect(w.slamStarts.at(-1)).toMatchObject({ wake: true });
+    });
+
+    it('삼연낫 소표 — ①② 일반 패링은 관절 30(위압 중엔 없음)·콤보 계속, ③ 완벽인데 완벽 카운트 미달 → 탈진이 아니라 머리 내림 90(분출공 닫힘)', () => {
+      const boss = makeBehemoth(3.1);
+      toP3(boss);
+      quietExcept(boss, 'combo');
+      const w = watch();
+      startCombo(boss);
+      expect(normalParry(boss)).toBe('normal');
+      expect(boss.exposure?.['joint_r']).toBe(chain[0]!.exposeOnParry!.normalTicks);
+      expect(boss.ai).toBe('recover');
+      expect(boss.timer).toBe(chain[0]!.recoverTicks); // 튕김 후딜(parryRecoilTicks) 없이 이음만
+      expect(boss.attackMode).toBe('combo');
+      untilComboStep(boss, 1);
+      // 위압 중 일반 패링 — 관절이 열리지 않지만 콤보는 그대로 이어진다
+      setPlayerStatus(world.player, 'cowed', cw.ticks);
+      expect(normalParry(boss)).toBe('normal');
+      expect(boss.exposure?.['joint_l'] ?? 0).toBe(0);
+      expect(boss.attackMode).toBe('combo');
+      world.player.cowedTicks = 0;
+      untilComboStep(boss, 2);
+      expect(perfectParry(boss)).toBe('perfect');
+      expect(boss.comboPerfects).toBe(1);
+      expect(boss.pose).toBe('head_down');
+      expect(boss.poseCause).toBeUndefined();
+      expect(boss.poseTicks).toBe(wpc.headDown.stuckTicks);
+      expect(boss.attackMode).toBe('melee');
+      expect(weakPointOpen(boss, wp('eye'))).toBe(true);
+      expect(weakPointOpen(boss, wp('vent'))).toBe(false);
+      expect(w.status.map(w.tag)).not.toContain('exhaust:true');
+    });
+
+    it('삼연낫 ③ 일반 대역에 누름 — perfectOnly + noParryBuffer: 패링 성립 없이 실패 규약(경직 20 + 마나 절반, 팔 저림이면 면제) → 40 피격. 이르게 눌러도(판정 창 안·완벽 대역 밖) 실패', () => {
+      const boss = makeBehemoth(3.1);
+      toP3(boss);
+      quietExcept(boss, 'combo');
+      Mana.init(world);
+      world.player.health = 1000;
+      const w = watch();
+      startCombo(boss);
+      untilComboStep(boss, 2);
+      expect(w.hits.map((h) => h.amount)).toEqual([34, 34]); // ①② 는 흘려보냈다
+      tickEnemiesUntil(() => boss.ai === 'active_perfect');
+      const dist = Math.hypot(boss.x - world.player.x, boss.z - world.player.z);
+      // 일반 대역(완벽 밖·guardDepth 안)
+      boss.weaponTipDist = dist - balance.player.radius - (balance.parrySpace.perfectBand + balance.parrySpace.guardDepth) * 0.5;
+      world.mana.value = 40;
+      pressReaction();
+      expect(w.parries.at(-1)).toMatchObject({ result: 'fail' });
+      expect(world.player.stunTicks).toBe(balance.reaction.failStunTicks);
+      expect(world.mana.value).toBe(20);
+      expect(world.player.parryBufferTicks ?? 0).toBe(0); // 버퍼로 살아남지 않는다
+      expect(boss.ai).toBe('active_perfect'); // 공격은 그대로 온다
+      tickEnemiesUntil(() => boss.ai === 'recover', 30);
+      expect(w.hits.at(-1)).toMatchObject({ amount: 40, blocked: false });
+      expect(world.player.kbX! * balance.playerKnockback.ticks).toBeCloseTo(-chain[2]!.playerKnockback!, 6); // smash 2.0
+      tickEnemiesUntil(() => boss.ai === 'chase', 120);
+      expect(boss.attackMode).toBe('melee');
+      // 팔 저림 중이면 마나 면제 — 새 콤보의 ③ 을 다시 일반 대역에
+      world.enemies.length = 0;
+      world.player.stunTicks = 0;
+      const b2 = makeBehemoth(3.1);
+      toP3(b2);
+      quietExcept(b2, 'combo');
+      startCombo(b2);
+      untilComboStep(b2, 2);
+      tickEnemiesUntil(() => b2.ai === 'active_perfect');
+      b2.weaponTipDist = dist - balance.player.radius - (balance.parrySpace.perfectBand + balance.parrySpace.guardDepth) * 0.5;
+      setPlayerStatus(world.player, 'numb_arm', balance.status.numbArm.ticks);
+      world.mana.value = 40;
+      pressReaction();
+      expect(w.parries.at(-1)).toMatchObject({ result: 'fail', noManaLoss: true });
+      expect(world.mana.value).toBe(40);
+    });
+
+    it('삼연낫 막기·미입력 — ① 막으면 칩 10.2 + 경직 10 + 팔 저림, 콤보 계속; 미입력이면 34·34·40(밀림 smash 2.0) 뒤 콤보 끝(attackMode melee) — 쿨다운 600 동안은 단발 낫', () => {
+      const boss = makeBehemoth(3.1);
+      toP3(boss);
+      quietExcept(boss, 'combo');
+      world.player.health = 1000;
+      const w = watch();
+      startCombo(boss);
+      world.player.blocking = true;
+      tickEnemiesUntil(() => boss.ai === 'recover', 80);
+      expect(w.hits).toHaveLength(1);
+      expect(w.hits[0]!.amount).toBeCloseTo(chain[0]!.damage! * balance.block.chipDamageRatio, 6);
+      expect(w.hits[0]!.blocked).toBe(true);
+      expect(world.player.stunTicks).toBe(balance.block.clashPlayerStunTicks);
+      expect(world.player.numbArmTicks).toBe(balance.status.numbArm.ticks);
+      expect(boss.attackMode).toBe('combo');
+      expect(boss.recoiled).toBe(false); // blockCannotStagger — 튕기지 않는다
+      untilComboStep(boss, 1);
+      world.player.blocking = false;
+      world.player.stunTicks = 0;
+      tickEnemiesUntil(() => w.hits.length === 3, 300);
+      expect(w.hits.map((h) => Math.round(h.amount * 10) / 10)).toEqual([10.2, 34, 40]);
+      expect(w.hits[2]!.blocked).toBe(false);
+      tickEnemiesUntil(() => boss.ai === 'chase', 120);
+      expect(boss.attackMode).toBe('melee');
+      expect(boss.comboCooldown!).toBeGreaterThan(0);
+      tickEnemiesUntil(() => boss.ai === 'windup', 60);
+      expect(['melee', 'alt']).toContain(boss.attackMode); // 쿨다운 중엔 단발
+      expect(w.comboStarts).toHaveLength(1);
+    });
+
+    it('삼연낫은 양 낫이 자유일 때만(한 낫이 잠겼으면 단발), P2 에선 없다(슬롯 잠김); 관절이 콤보 중 터지면 콤보가 끊긴다', () => {
+      const b = makeBehemoth(3.1);
+      toP3(b);
+      quietExcept(b, 'combo');
+      b.bladeLock = { r: 600 };
+      tickEnemiesUntil(() => b.ai === 'windup', 30);
+      expect(b.attackMode).toBe('alt');
+      world.enemies.length = 0;
+      const b2 = makeBehemoth(3.1);
+      b2.phase = 2;
+      quietExcept(b2, 'combo');
+      tickEnemiesUntil(() => b2.ai === 'windup', 30);
+      expect(['melee', 'alt']).toContain(b2.attackMode);
+      // 콤보 중 파열 — ① 일반 패링으로 연 오른 관절을 0 으로
+      world.enemies.length = 0;
+      const b3 = makeBehemoth(3.1);
+      toP3(b3);
+      quietExcept(b3, 'combo');
+      startCombo(b3);
+      expect(normalParry(b3)).toBe('normal');
+      b3.weakHp!['joint_r'] = 0;
+      Enemies.tick(world, DT);
+      expect(b3.ruptured).toEqual({ joint_r: true });
+      expect(b3.attackMode).toBe('melee');
+      tickEnemiesUntil(() => b3.ai === 'windup', 300);
+      expect(b3.attackMode).toBe('alt'); // 남은 왼낫 단발
+    });
+
+    it('광란 돌격 — P3 첫 질주가 끝나면(헛침) 제자리 선회 24틱(windup·chainTurn·enemy_chain_turn, 새 예고 없음) 동안 몸이 플레이어 쪽으로 돌고, 끝나면 그 자리로 두 번째 질주(charging·목표 = 새 위치, 6m 안 눈 노출), 두 번째 뒤엔 선회가 없다(P3 50 직격)', () => {
+      const boss = makeBehemoth(10.0);
+      toP3(boss);
+      quietExcept(boss, 'charge');
+      world.player.health = 1000;
+      const w = watch();
+      tickEnemiesUntil(() => boss.ai === 'windup' && boss.attackMode === 'charge', 30);
+      expect(boss.chainLeg ?? 0).toBe(0);
+      tickEnemiesUntil(() => boss.ai === 'charging', 80);
+      // 비켜선다 — 옆(+z)으로 5m
+      world.player.z = 6 + 5;
+      world.player.prevZ = world.player.z;
+      tickEnemiesUntil(() => boss.ai !== 'charging' && boss.ai !== 'impact', 120); // 질주 끝 → impact 한 틱 → 선회
+      expect(boss.ai).toBe('windup');
+      expect(boss.attackMode).toBe('charge');
+      expect(boss.chainTurn).toBe(true);
+      expect(boss.chainLeg).toBe(1);
+      expect(boss.timer).toBe(cc.turnTicks);
+      expect(w.chainTurns).toEqual([expect.objectContaining({ ticks: cc.turnTicks })]);
+      expect(w.whiffs).toHaveLength(0);
+      expect(boss.pose).toBe('charge'); // 선회도 돌격 자세
+      const redWindups = w.windups.filter((x) => x.telegraph === 'red').length;
+      const yaw0 = boss.yaw;
+      const target = Math.atan2(-(world.player.x - boss.x), -(world.player.z - boss.z));
+      expect(angleDiff(yaw0, target)).toBeGreaterThan(0.5); // 아직 옛 방향
+      for (let i = 0; i < cc.turnTicks; i++) Enemies.tick(world, DT);
+      expect(boss.ai).toBe('charging');
+      expect(boss.chainTurn).toBe(false);
+      expect(boss.chainLeg).toBe(1);
+      expect(boss.chargeTargetX).toBe(world.player.x);
+      expect(boss.chargeTargetZ).toBe(world.player.z);
+      expect(angleDiff(boss.yaw, target)).toBeLessThan(0.05);
+      expect(w.windups.filter((x) => x.telegraph === 'red')).toHaveLength(redWindups); // 두 번째 질주엔 예고가 없다
+      // 두 번째 질주 — 6m 안 눈 노출, 직격 50(P3) + 진탕, 그 뒤 선회 없음
+      tickEnemiesUntil(() => weakPointOpen(boss, wp('eye')), 120);
+      tickEnemiesUntil(() => boss.ai === 'recover', 120);
+      expect(w.hits.at(-1)).toMatchObject({ amount: 50, blocked: false });
+      expect(world.player.concussionTicks).toBe(balance.status.concussion.ticks);
+      expect(w.chainTurns).toHaveLength(1);
+      expect(boss.chainLeg).toBe(0);
+      expect(boss.chainTurn).toBe(false);
+    });
+
+    it('광란 돌격 선회 중 꼬리 채기 — 2.5m 안이면 한 번 12(패링 불가 — 판정 창 없음), 밀림 contact 0.8m, 막으면 칩 3.6 + 방어 경직(진탕 없음), 회피 무적이면 스친다', () => {
+      function toTurn(): EnemyState {
+        world.enemies.length = 0;
+        world.player.x = 6;
+        world.player.z = 6;
+        world.player.prevX = 6;
+        world.player.prevZ = 6;
+        const boss = makeBehemoth(10.0);
+        toP3(boss);
+        quietExcept(boss, 'charge');
+        tickEnemiesUntil(() => boss.ai === 'charging', 120);
+        world.player.z = 6 + 5;
+        world.player.prevZ = world.player.z;
+        tickEnemiesUntil(() => boss.chainTurn === true, 120);
+        // 꼬리 반경 안으로(−x 쪽 2.0m)
+        world.player.x = boss.x - 2.0;
+        world.player.z = boss.z;
+        world.player.prevX = world.player.x;
+        world.player.prevZ = world.player.z;
+        return boss;
+      }
+      world.player.health = 1000;
+      const w = watch();
+      const boss = toTurn();
+      Enemies.tick(world, DT);
+      expect(w.hits.at(-1)).toMatchObject({ amount: cc.tailDamage, blocked: false, source: 'tail_whirl' });
+      expect(world.player.kbX! * balance.playerKnockback.ticks).toBeCloseTo(-balance.playerKnockback.contact, 6);
+      expect(boss.chainTailHit).toBe(true);
+      expect(world.player.concussionTicks ?? 0).toBe(0);
+      for (let i = 0; i < 5; i++) Enemies.tick(world, DT);
+      expect(w.hits.filter((h) => h.source === 'tail_whirl')).toHaveLength(1); // 선회에 한 번
+      expect(boss.ai).toBe('windup'); // 선회는 이어진다
+      // 막기
+      const b2 = toTurn();
+      world.player.blocking = true;
+      Enemies.tick(world, DT);
+      const blockedHit = w.hits.at(-1)!;
+      expect(blockedHit.blocked).toBe(true);
+      expect(blockedHit.amount).toBeCloseTo(cc.tailDamage * balance.block.chipDamageRatio, 6);
+      expect(world.player.stunTicks).toBe(balance.block.clashPlayerStunTicks);
+      expect(b2.chainTailHit).toBe(true);
+      world.player.blocking = false;
+      world.player.stunTicks = 0;
+      // 회피 무적
+      const b3 = toTurn();
+      world.player.iframeTicks = 5;
+      const n = w.hits.length;
+      Enemies.tick(world, DT);
+      expect(w.hits).toHaveLength(n);
+      expect(b3.chainTailHit).toBe(false);
+      world.player.iframeTicks = 0;
+    });
+
+    it('광란 돌격이 없는 경우 — 첫 질주를 완벽 회피(미끄러짐)하면 두 번째가 없다; 첫 질주에서 눈멂이면 없다; P2 는 슬롯이 잠겨 헛돌격 90 그대로; 블링크 무적으로 스친 돌격은 미끄러지지 않는다(회피 무적만, B2-3 검토)', () => {
+      const cd = Enemies.contactDist(def);
+      // 완벽 회피
+      const boss = makeBehemoth(10.0);
+      toP3(boss);
+      quietExcept(boss, 'charge');
+      const w = watch();
+      tickEnemiesUntil(() => boss.ai === 'charging', 120);
+      tickEnemiesUntil(() => Math.hypot(boss.x - world.player.x, boss.z - world.player.z) <= cd + 1.0, 300);
+      world.player.iframeTicks = 1e9;
+      world.player.iframeSource = 'dodge';
+      tickEnemiesUntil(() => boss.pose === 'skid', 60);
+      world.player.iframeTicks = 0;
+      expect(w.dodged).toHaveLength(1);
+      expect(w.chainTurns).toHaveLength(0);
+      expect(boss.chainLeg).toBe(0);
+      tickEnemiesUntil(() => boss.ai === 'chase', 200);
+      expect(w.chainTurns).toHaveLength(0);
+      // 눈멂 — 질주 중 6m 안 눈 66
+      world.enemies.length = 0;
+      const b2 = makeBehemoth(10.0);
+      toP3(b2);
+      quietExcept(b2, 'charge');
+      world.player.health = 1000;
+      tickEnemiesUntil(() => b2.ai === 'charging' && weakPointOpen(b2, wp('eye')), 200);
+      shootEye(b2);
+      shootEye(b2);
+      Enemies.tick(world, DT);
+      expect(b2.blind).toBe(true);
+      tickEnemiesUntil(() => b2.ai === 'recover', 300);
+      expect(w.chainTurns).toHaveLength(0);
+      expect(b2.chainLeg).toBe(0);
+      // P2 — 슬롯 잠김
+      world.enemies.length = 0;
+      world.player.x = 6;
+      world.player.z = 6;
+      const b3 = makeBehemoth(10.0);
+      b3.phase = 2;
+      quietExcept(b3, 'charge');
+      tickEnemiesUntil(() => b3.ai === 'charging', 120);
+      world.player.z = 6 + 5;
+      world.player.prevZ = world.player.z;
+      tickEnemiesUntil(() => b3.ai === 'recover', 120);
+      expect(b3.whiffed).toBe(true);
+      expect(b3.timer).toBe(def.chargeAttack!.whiffRecoverTicks);
+      expect(w.chainTurns).toHaveLength(0);
+      // 블링크 무적 — 옛 경로(헛돌격)
+      world.enemies.length = 0;
+      world.player.z = 6;
+      world.player.prevZ = 6;
+      const b4 = makeBehemoth(10.0);
+      b4.closeCooldown = 9999;
+      const hpBeforeBlink = world.player.health; // 눈먼 돌격(위)이 닿아 50 이 들어갔다 — 그 뒤로 변화가 없어야 한다
+      tickEnemiesUntil(() => b4.ai === 'charging', 120);
+      tickEnemiesUntil(() => Math.hypot(b4.x - world.player.x, b4.z - world.player.z) <= cd + 1.0, 300);
+      world.player.iframeTicks = 1e9;
+      world.player.iframeSource = 'blink';
+      tickEnemiesUntil(() => b4.ai === 'recover', 120);
+      expect(b4.pose).not.toBe('skid');
+      expect(b4.whiffed).toBe(true);
+      expect(w.dodged).toHaveLength(1); // 위의 한 번뿐
+      expect(world.player.health).toBe(hpBeforeBlink);
+      world.player.iframeTicks = 0;
     });
   });
 });

@@ -567,6 +567,14 @@ for (const name of [
   'corrosive_ended',
   'corrosive_pending',
   'corruption_cleansed',
+  'cowed_applied',
+  'cowed_ended',
+  'enemy_roar_start',
+  'enemy_roar',
+  'boss_roar_hit',
+  'enemy_combo_start',
+  'enemy_combo_step',
+  'enemy_chain_turn',
   'enemy_split',
   'grave_dropped',
   'slime_ate',
@@ -780,19 +788,22 @@ for (const name of [
 const audio = new GameAudio();
 app.addEventListener('click', () => audio.unlock());
 events.on('enemy_windup', (payload) => {
-  const wind = payload as { telegraph?: string; enemyType?: string };
+  const wind = payload as { telegraph?: string; enemyType?: string; perfectOnly?: boolean };
   // 박쥐 박치기는 예고 시작이 '조용한 정지 비행'이다 — 신호는 발사 순간의 비명(bat_swoop)
   if (wind.enemyType === 'bat') return;
   const at = panOf(payload); // 예고음에 방향을 싣는다 — 등 뒤 공격을 귀가 먼저 안다
   // 슬라임 — 몸이 부풀어 오르는 꿀렁임을 텔레그래프 소리에 얹는다
   if (wind.enemyType?.startsWith('slime')) audio.play('slime_windup', at);
   const telegraph = wind.telegraph;
+  // 완벽 전용 파랑(거수 삼연낫 ③, attack.perfectOnly — 결정 17)은 같은 파랑 예고음을 고음으로
   audio.play(
     telegraph === 'red'
       ? 'telegraph_red'
       : telegraph === 'purple'
         ? 'telegraph_purple'
-        : 'telegraph_blue',
+        : wind.perfectOnly
+          ? 'telegraph_blue_high'
+          : 'telegraph_blue',
     at,
   );
 });
@@ -3045,7 +3056,23 @@ events.on('boss_status', (payload) => {
     audio.play('vent_gag', at);
     stage.lurchBehemoth(st.enemyId);
     padRumble('weakPoint');
-    showReaction(st.cause === 'vent' ? '역류 — 갑각 떨기가 무너졌다, 머리가 내려온다 (혼절은 안 된다)' : '역류 — 발구르기가 무너졌다, 머리가 내려온다 (혼절은 안 된다)', 1600);
+    showReaction(
+      st.cause === 'vent'
+        ? '역류 — 갑각 떨기가 무너졌다, 머리가 내려온다 (혼절은 안 된다)'
+        : st.cause === 'eye'
+          ? '역류 — 포효가 막혔다, 머리가 내려온다 (위압 없음·혼절은 안 된다)'
+          : '역류 — 발구르기가 무너졌다, 머리가 내려온다 (혼절은 안 된다)',
+      1600,
+    );
+  } else if (st.kind === 'roar' && st.on) {
+    // 포효 예고(B3-4) — 머리를 치켜들어 눈이 위로 드러났다(청록 맥동은 Stage). 예고음(telegraph_red)은 enemy_windup 이 냈다. 절망의 포효는 입에서 보라 기운
+    showReaction((st as { despair?: boolean }).despair ? '절망의 포효 — 끌어당긴다! 눈 66 이면 취소, 아니면 뒤 대시' : '포효 — 눈이 위로 드러났다: 66 이면 취소, 아니면 무적 타이밍 회피', 1200);
+  } else if (st.kind === 'exhaust' && st.on) {
+    // 탈진(B3-4) — 삼연낫 3연속 완벽: 양낫이 박히고 눈(처형)과 분출공(정화·질식 ×3.0)이 함께 열린다. 헐떡임 + 안내
+    audio.play('behemoth_pant', at);
+    padRumble('weakPoint');
+    const sec = Math.round(balance.weakPoint.headDown.exhaustTicks / balance.loop.tickRate);
+    showReaction(`탈진 ${sec}초 — 눈(혼절·처형)이냐 분출공(정화·질식)이냐, 골라 쏴라!`, 2600);
   } else if (st.kind === 'choke') {
     // 질식(B3-2) — 분출공 내구 0(반사 4회): 갑각 떨기 봉인 + 웅덩이 전부 증발 + 예고가 늘어진다. 거친 숨소리 + 안내 / 풀리면 안내만
     if (st.on) {
@@ -3061,9 +3088,43 @@ events.on('boss_status', (payload) => {
 // 발구르기 예고 시작(거수 B3-1) — 예고음(telegraph_red)은 enemy_windup 이 냈다. 여기선 땅울림(stomp_ready, 예고음 버스)과 안내만.
 // 기상 발구르기(wake)는 머리 내림·혼절이 끝나며 확정으로 나오는 벌칙 — 문구를 나눈다
 events.on('enemy_slam_start', (payload) => {
-  const s = payload as { enemyId: number; enemyType: string; wake: boolean; dist: number };
+  const s = payload as { enemyId: number; enemyType: string; wake: boolean; despair?: boolean; dist: number };
   audio.play('stomp_ready', panOf(payload));
-  showReaction(s.wake ? '일어서며 발을 구른다 — 물러나라!' : '발구르기 — 반경 밖으로 나가거나 막아라 (앞발 들 때 심장)', 1200);
+  showReaction(
+    s.wake ? '일어서며 발을 구른다 — 물러나라!' : s.despair ? '끌려온 자리에 발구르기 — 심장 66 으로 무너뜨리거나 뒤 대시!' : '발구르기 — 반경 밖으로 나가거나 막아라 (앞발 들 때 심장)',
+    1200,
+  );
+});
+// 포효(거수 P3, B3-4) — 예고 시작 안내(예고음 telegraph_red 는 enemy_windup, 눈 노출 문구는 boss_status roar), 발동엔 포효 소리 + 카메라 킥 + 진동(가까울수록 크게),
+// 맞으면(12m 안·회피 무적 아님) 위압·밀림/끌림 안내. 피해는 없다 — 방어 판정도 없다
+events.on('enemy_roar', (payload) => {
+  const r = payload as { enemyId: number; despair: boolean; radius: number; dist: number; x: number; z: number };
+  audio.play('boss_roar', panAt(r.x, r.z));
+  stage.triggerCameraKick(0.5 + 0.7 * Math.max(0, 1 - r.dist / r.radius), 420);
+  padRumble('roar');
+});
+events.on('boss_roar_hit', (payload) => {
+  const h = payload as { status?: string; pull: number; push: number; despair: boolean };
+  const cw = balance.status.cowed;
+  showReaction(
+    h.pull > 0
+      ? `끌려간다 — 위압 ${Math.round(cw.ticks / balance.loop.tickRate)}초: 일반 패링이 관절을 열지 못한다(마나 ${cw.normalParryMana}), 완벽 패링 한 번이면 풀린다`
+      : `위압 ${Math.round(cw.ticks / balance.loop.tickRate)}초 — 일반 패링이 관절을 열지 못한다(마나 ${cw.normalParryMana}). 완벽 패링 한 번이면 풀린다`,
+    2800,
+  );
+});
+// 삼연낫(거수 P3, B3-4) — ① 시작·② ③ 진행 안내. 예고음은 enemy_windup 이 타마다 낸다(③ 은 고음 telegraph_blue_high)
+events.on('enemy_combo_start', () => showReaction('삼연낫 — ①오른 ②왼 ③양낫(완벽만): 셋 다 완벽이면 탈진', 1400));
+events.on('enemy_combo_step', (payload) => {
+  const c = payload as { step: number; steps: number; perfectOnly: boolean };
+  showReaction(c.perfectOnly ? `삼연낫 ③ 양낫 내려찍기 — 완벽 패링만 통한다(일반 대역은 실패), 아니면 3.2m 밖으로` : `삼연낫 ${c.step + 1}/${c.steps} — 왼낫`, 1100);
+});
+// 광란 돌격 선회(거수 P3, B3-4) — 첫 질주 뒤 제자리 선회 = 2차 예고: 회전 소리(예고음 버스) + 안내. 두 번째 질주는 예고 없이 온다
+events.on('enemy_chain_turn', (payload) => {
+  const t = payload as { enemyType: string; x: number; z: number };
+  audio.play('tail_whirl', panAt(t.x, t.z));
+  const tailRadius = enemyDef(t.enemyType).chargeAttack?.chainCharge?.tailRadius;
+  showReaction(`선회 — 꼬리${tailRadius !== undefined ? ` ${tailRadius}m` : ''} 밖으로! 두 번째 돌격이 온다(예고 없음)`, 1400);
 });
 // 페이즈 전환(거수 B2-6, 기획서 §8) — 포효 소리 + 카메라 킥 + 진동 + 전환 문구(phases[].shiftText: "갑각이 갈라진다" / "거수가 광란한다").
 // 균열 발광·분출공 점등·등갑판 탈락·붉은 홍채는 Stage 가 enemy.phase 로 매 프레임 그린다. phase 0 은 사망 신호(계측 전용) — 연출 없음
@@ -3124,6 +3185,11 @@ events.on('hobble_applied', (payload) => {
   showReaction(`절뚝 — ${statusSeconds(payload)}초 동안 질주 불가·회피 스태미너 ×${balance.status.hobble.dodgeStaminaMul}. 발구르기는 막거나 걸어 나가라`, 2800);
 });
 events.on('hobble_ended', () => showReaction('다리가 풀렸다 — 절뚝이 끝났다', 1200));
+// 위압(B3-4, 거수 P3 포효) — 일반 패링이 관절을 열지 못하고 마나가 준다. 걸림 안내는 boss_roar_hit 이 냈다(같은 틱) — 여기선 해제만
+events.on('cowed_ended', (payload) => {
+  const reason = (payload as { reason: string }).reason;
+  showReaction(reason === 'cured' ? '완벽 패링 — 위압이 풀렸다' : '위압이 풀렸다', 1200);
+});
 // 오염 진액(B3-2, 거수 진액 웅덩이·구슬) — 이속 ×0.6·도트·오염 대기 가산. 도트 틱은 붉은 화면·진동 없이 신음만(독·화염 규약), 정화는 분출공 명중이 알린다
 events.on('corrosive_applied', () => {
   audio.play('grunt');
@@ -3756,6 +3822,18 @@ buffCorrosiveEl.insertAdjacentHTML(
 );
 const buffCorrosiveCd = buffCorrosiveEl.querySelector<HTMLElement>('.buff-cd')!;
 const buffCorrosiveSec = buffCorrosiveEl.querySelector<HTMLElement>('.buff-sec')!;
+// 위압 디버프 아이콘(B3-4, 거수 P3 포효) — 벌어진 입(포효)과 그 앞에서 눌린 방패 — "일반 패링이 관절을 열지 못한다"
+const buffCowedEl = document.getElementById('buff-cowed')!;
+buffCowedEl.insertAdjacentHTML(
+  'afterbegin',
+  '<svg width="22" height="22" viewBox="0 0 22 22">' +
+    '<path d="M2.5 6 L10 9.5 L2.5 15.5 Z" fill="#c9a6ff"/>' +
+    '<path d="M4.5 9 l1.6 -1.2 M4.5 12.8 l1.6 1.2" stroke="#efe4ff" stroke-width="1.2" stroke-linecap="round"/>' +
+    '<path d="M13 5.5 h6.5 v6.2 c0 3.1 -1.9 5.2 -3.25 5.8 c-1.35 -0.6 -3.25 -2.7 -3.25 -5.8 Z" fill="#6b5a80" stroke="#c9a6ff" stroke-width="1.2"/>' +
+    '<path d="M14.6 9.3 l3.3 3.3 M17.9 9.3 l-3.3 3.3" stroke="#ff8fa6" stroke-width="1.5" stroke-linecap="round"/></svg>',
+);
+const buffCowedCd = buffCowedEl.querySelector<HTMLElement>('.buff-cd')!;
+const buffCowedSec = buffCowedEl.querySelector<HTMLElement>('.buff-sec')!;
 /** 디버프 아이콘 깜빡임 — 상태가 다시 시작됐다. 클래스를 떼고 리플로우로 애니메이션을 처음부터 다시 돌린다 */
 function flashBuffIcon(el: HTMLElement): void {
   el.classList.remove('refresh');
@@ -4274,6 +4352,7 @@ function render(alpha: number): void {
   syncDotIcon(buffHobbleEl, buffHobbleCd, buffHobbleSec, statusIconArg(p.hobbleTicks, balance.status.hobble.ticks)); // 절뚝(B3-1)
   // 오염 진액(B3-2) — 웅덩이 위에선 매 틱 lingerTicks 로 되살아나 부채꼴이 꽉 찬 채, 나오면 30틱에 걸쳐 줄어든다
   syncDotIcon(buffCorrosiveEl, buffCorrosiveCd, buffCorrosiveSec, statusIconArg(p.corrosiveTicks, balance.status.corrosive.lingerTicks));
+  syncDotIcon(buffCowedEl, buffCowedCd, buffCowedSec, statusIconArg(p.cowedTicks, balance.status.cowed.ticks)); // 위압(B3-4)
   // 랜턴 — HP·마나 바 아래의 얇은 실선 게이지. 오른쪽에 % 와 예비 전지 개수
   const battFrac = Math.max(0, Math.min(1, world.lantern.battery / balance.lantern.batteryMax));
   const battPct = Math.round(battFrac * 100);

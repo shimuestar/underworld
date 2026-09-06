@@ -14,7 +14,11 @@
 // limp(B2-3 — 양 낫 잠김 절뚝: 두 낫이 다 끌리고 앞다리 걸음이 짧다, 측면 걸음) /
 // blind(B2-5 — 눈멂 질주: 웅크린 돌격 자세로 내린 머리(표의 눈 1.2m)를 좌우로 휘젓는다, 뿔·몸 빨강, 눈 닫힘 — 정면 살짝 옆) /
 // topple(B2-5 — 돌격이 기둥에 박혀 전도: head_down 자세 + 눈만 열림(관절은 안 열린다), 기둥 참조 상자 앞 — 측면) /
-// roar(B2-6 — 페이즈 전환 갑각 재생: 머리 치켜듦(표의 눈 2.9m)·입 벌림 −0.8rad·두 낫 벌려 들기, P2 진입 연출로 등갑판 균열 발광·분출공 점등, 약점 전부 닫힘 — 정면 아래에서) /
+// roar(B3-4 — P3 포효 예고: 로직 pose 'roar' 머리 치켜듦(표의 눈 2.9m)·입 벌림·두 낫 벌려 들기·어깨 관절이 표 (2.7, −0.5) 로 솟음, 몸 전체 빨강(낫·뿔은 아님), 눈이 위로 드러나 열림(청록 — 66 이면 취소), P3 외형 —
+//   플레이어 눈높이 정면 6m 에서 올려다본다: 눈 구체가 보여야 한다) / despair(B3-4 — 절망의 포효: 같은 자세에 입 보라 기운) /
+// exhaust(B3-4 — 탈진: 양낫이 바닥에 박힌 머리 내림, 눈 청록 + 분출공 오염 녹색 ×1.4 동시 열림, P3 외형 — 정면 눈높이) /
+// combo3(B3-4 — 삼연낫 ③ 예고: 두 낫을 머리 위로 치켜듦(bothBlades), 완벽 전용이라 파랑이 더 밝다 — 정면 옆) / chain-turn(B3-4 — 광란 돌격 선회: 돌격 웅크림에 꼬리를 크게 휘두르고 꼬리·뿔 빨강 — 뒤 옆 위) /
+// roar-molt(B2-6 — 페이즈 전환 갑각 재생: 같은 포효 자세에 P2 진입 연출(등갑판 균열 발광·분출공 점등), 약점 전부 닫힘 — 정면 아래에서) /
 // p2(B2-6 — 오염 갑각: 정면 normal 자세에 균열 발광·분출공 점등 — 분출공이 머리에 가리지 않는지) / p2-back(같은 P2 를 뒤 위에서 — 등갑판 균열 띠·실금) /
 // p3(B2-6 — 광란: 등갑판 탈락·눈 붉은 홍채 — 뒤 위에서) /
 // rear(B3-1 — 발구르기 앞발 들기: 몸통 +35°(몸통 가운데 축 — behemothRearOffset), 앞다리 들림, 두 낫 앞아래, 머리 치켜듦(표의 눈 3.0m), 배 심장이 표 (0, 1.15, −1.0) 로
@@ -33,8 +37,8 @@
 // (src/render/Behemoth.test.ts 의 천장·바닥 검사와 같은 잣대).
 import * as THREE from 'three';
 import { balance } from '../src/core/Balance';
-import { enemyDef, resolvePhase } from '../src/core/Entities';
-import { BEHEMOTH_TORSO, BH_CRACK_GROW, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, behemothRearOffset, behemothVentLit, behemothWeakScaleMul, buildBehemothRig, poseBehemothRig, setBehemothPhaseLook, styleBehemothWeakPoints } from '../src/render/Stage';
+import { comboChain, enemyDef, resolvePhase } from '../src/core/Entities';
+import { BEHEMOTH_TORSO, BH_CRACK_GROW, BH_PERFECT_ONLY_GLOW, ENEMY_LEAN_JITTER, behemothAnchorPos, behemothBladeTip, behemothRearOffset, behemothVentLit, behemothWeakScaleMul, buildBehemothRig, poseBehemothRig, setBehemothPhaseLook, styleBehemothWeakPoints } from '../src/render/Stage';
 
 const def = enemyDef('scythe_behemoth');
 const params = new URLSearchParams(location.search);
@@ -85,6 +89,8 @@ group.add(torso);
 scene.add(group);
 const flash: THREE.MeshLambertMaterial[] = [];
 const rig = buildBehemothRig(group, torso, def, flash);
+// 디버그 틴트용 — 입·꼬리 재질은 flashMaterials 밖(B3-4: 절망 포효 보라·선회 빨강을 따로 물들인다)이지만 게임에선 syncEnemies 가 몸과 같은 색을 넣으니 여기서도 몸과 함께 물들인다
+flash.push(rig.mouthMat, ...rig.tailMats);
 const STAGGER_COLOR = 0xcc9922; // Stage 의 스태거 표시색(몸 발광) — 약점 구체엔 쓰지 않는다
 
 const pullback = reach * balance.parrySpace.pullbackRatio;
@@ -252,7 +258,60 @@ if (view === 'side') {
   styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'eye', broken: false, flashAgeMs: -1 }));
   camera.position.set(8.5, 2.0, -3.0);
   camera.lookAt(0, 1.2, -2.0);
-} else if (view === 'roar') {
+} else if (view === 'roar' || view === 'despair') {
+  // 포효 예고(B3-4, P3 roarAttack) — 로직 pose 'roar'(목 IK 눈 2.9m·턱 −0.8·두 낫 벌려 들기·어깨 관절이 표 (2.7, −0.5) 로 솟는다 — 관절 메시 = 구체), 몸 전체 빨강(낫·뿔은 물들지 않는다),
+  // 눈이 위로 드러나 열림(청록 맥동 — 66 이면 포효 취소·역류). despair 는 절망의 포효 — 입에서 보라 기운(mouthMat). P3 외형(등갑판 탈락·붉은 홍채·분출공 점등).
+  // 플레이어 눈높이 정면 6m(포효 반경 안)에서 올려다본다 — 눈 구체가 머리 상자에 가리지 않고 보여야 한다(B2-6 검토 메모)
+  torso.rotation.x = BEHEMOTH_TORSO.roarLean;
+  poseBehemothRig(rig, { ...base, pose: 'roar', nowMs: 45 * Math.PI * 0.5 });
+  tint(flash, balance.telegraph.colorUnparryable);
+  if (view === 'despair') {
+    rig.mouthMat.emissive.set(new THREE.Color(balance.telegraph.colorProjectile).getHex());
+    rig.mouthMat.emissiveIntensity = 1.4;
+  }
+  const p3 = resolvePhase(def, 1);
+  setBehemothPhaseLook(rig, p3, 0);
+  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'eye', broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p3) }));
+  camera.position.set(0.6, balance.player.eyeHeight, -6.4);
+  camera.lookAt(0, 2.4, -0.8);
+} else if (view === 'exhaust') {
+  // 탈진(B3-4) — 삼연낫 3연속 완벽: 양낫이 바닥에 박힌 머리 내림(pose exhaust — 표는 head_down 과 같다), 눈(청록)과 분출공(오염 녹색 ×1.4) 동시 열림 — 처형 vs 정화. P3 외형.
+  // 플레이어 눈높이 정면(몸 표면 4.4m)에서 내려온 머리와 가슴을 본다
+  torso.rotation.x = BEHEMOTH_TORSO.headDownLean;
+  torso.position.y = -def.height * BEHEMOTH_TORSO.headDownCrouch;
+  poseBehemothRig(rig, { ...base, pose: 'exhaust' });
+  const p3 = resolvePhase(def, 1);
+  setBehemothPhaseLook(rig, p3, 0);
+  styleBehemothWeakPoints(rig, 640 / 4, (id) => ({ open: id === 'eye' || id === 'vent', broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p3), scaleMul: behemothWeakScaleMul(id, id === 'vent') }));
+  camera.position.set(0.5, balance.player.eyeHeight, -(reach + balance.player.radius));
+  camera.lookAt(0, 1.1, -1.0);
+} else if (view === 'combo3') {
+  // 삼연낫 ③ 예고(B3-4) — 두 낫을 머리 위로 치켜든다(bothBlades — 위팔 BH_ARM_COMBO3, 낫은 앞아래로 늘어뜨려 낫끝이 어깨 아래·천장 3.8 안), 완벽 전용이라 파랑이 더 밝다(BH_PERFECT_ONLY_GLOW, 결정 17).
+  // P3 외형. 판정 원(3.2m) 밖 정면 옆에서
+  torso.rotation.x = BEHEMOTH_TORSO.windupLean;
+  const reach3 = def.attackRange * comboChain(def)[2]!.impactRangeMul;
+  poseBehemothRig(rig, { ...base, bothBlades: true, bladeWindup: 1, tipDist: reach3 * balance.parrySpace.pullbackRatio });
+  tint(flash, balance.telegraph.colorParryable);
+  tint(rig.bladeMats, balance.telegraph.colorParryable);
+  for (const m of [...flash, ...rig.bladeMats]) m.emissiveIntensity = BH_PERFECT_ONLY_GLOW;
+  const p3 = resolvePhase(def, 1);
+  setBehemothPhaseLook(rig, p3, 0);
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p3) }));
+  camera.position.set(2.5, balance.player.eyeHeight, -7.0);
+  camera.lookAt(0, 2.4, -0.8);
+} else if (view === 'chain-turn') {
+  // 광란 돌격 선회(B3-4) — 첫 질주 뒤 제자리 선회(2차 예고): 돌격 웅크림에 꼬리를 크게 휘두르고(chainTurn 봉우리) 꼬리·뿔이 빨강(tailTelegraph). P3 외형. 뒤 옆 위에서 꼬리를 본다
+  torso.rotation.x = BEHEMOTH_TORSO.chargeLean;
+  torso.position.y = -def.height * BEHEMOTH_TORSO.chargeCrouch;
+  poseBehemothRig(rig, { ...base, pose: 'charge', chargeCoil: 1, chainTurn: true, nowMs: 55 * Math.PI * 0.5 });
+  tint(rig.tailMats, balance.telegraph.colorUnparryable);
+  tint(rig.hornMats, balance.telegraph.colorUnparryable);
+  const p3 = resolvePhase(def, 1);
+  setBehemothPhaseLook(rig, p3, 0);
+  styleBehemothWeakPoints(rig, 0, (id) => ({ open: false, broken: false, flashAgeMs: -1, lit: id === 'vent' && behemothVentLit(p3) }));
+  camera.position.set(5.5, 3.2, 4.5);
+  camera.lookAt(0, 1.4, 0.2);
+} else if (view === 'roar-molt') {
   // 페이즈 전환(B2-6, P1 → P2) — 포효 자세(로직 pose 'roar': 목 IK 가 눈을 표 2.9m 로, 턱 −0.8rad, 두 낫 벌려 들기) + P2 외형(등갑판 균열 발광·분출공 점등).
   // 약점은 전부 닫힘(molting) — 눈은 표 자리에 있되 발광 없음. 플레이어 눈높이 정면에서 올려다본다
   torso.rotation.x = BEHEMOTH_TORSO.roarLean;

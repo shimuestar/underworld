@@ -93,6 +93,9 @@ export type SoundName =
   | 'behemoth_scream'
   | 'stomp_ready'
   | 'vent_gag'
+  | 'tail_whirl'
+  | 'telegraph_blue_high'
+  | 'behemoth_pant'
   | 'vent_hiss'
   | 'goo_spit'
   | 'vent_choke'
@@ -162,7 +165,7 @@ const MASTER_GAIN = 0.25;
 
 /** 예고음 버스로 가는 소리 — 덕킹(진탕 concussion 등)을 우회한다. 파랑 예고음 1760/2637Hz 는 판정 단서라 언제나 같은 크기로 들려야 한다.
  *  charge_ready 는 긴 돌격의 빨강 예고를 대신하는 소리(main enemy_charge) */
-const TELEGRAPH_SOUNDS: ReadonlySet<SoundName> = new Set<SoundName>(['telegraph_blue', 'telegraph_red', 'telegraph_purple', 'charge_ready', 'stomp_ready', 'vent_hiss']);
+const TELEGRAPH_SOUNDS: ReadonlySet<SoundName> = new Set<SoundName>(['telegraph_blue', 'telegraph_red', 'telegraph_purple', 'telegraph_blue_high', 'charge_ready', 'stomp_ready', 'vent_hiss', 'tail_whirl']);
 
 /** dB → 선형 게인 (0dB = 1) */
 function dbToGain(db: number): number {
@@ -1287,6 +1290,24 @@ export class GameAudio {
         this.tone(88, 0.34, 'sawtooth', 0.4, 0.34, 60);
         this.noise(0.1, 0.5, 600, 0.4);
         this.noise(0.06, 0.8, 1500, 0.66);
+        break;
+      case 'telegraph_blue_high':
+        // 완벽 전용 파랑 예고(거수 삼연낫 ③, 결정 17 — 예고음 버스) — telegraph_blue 와 같은 2연타를 한 옥타브 위로: "같은 파랑, 더 높은 음"
+        this.tone(3520, 0.09, 'triangle', 0.8);
+        this.tone(5274, 0.12, 'triangle', 0.6, 0.05);
+        break;
+      case 'tail_whirl':
+        // 광란 돌격 선회(B3-4, 2차 예고 — 예고음 버스) — 몸을 돌리는 낮은 회전 소리 + 꼬리가 공기를 찢는 휘파람 두 번(아래로 꺾인다)
+        this.tone(78, 0.4, 'sawtooth', 0.6, 0, 120);
+        this.noise(0.42, 0.5, 900, 0.0);
+        this.tone(1600, 0.1, 'triangle', 0.35, 0.05, 700);
+        this.tone(1750, 0.1, 'triangle', 0.3, 0.22, 800);
+        break;
+      case 'behemoth_pant':
+        // 탈진(B3-4) — 양낫이 박힌 거수의 헐떡임: 굵은 들숨·날숨 노이즈 둘 + 낮은 신음
+        this.noise(0.22, 0.45, 800, 0.0);
+        this.noise(0.28, 0.4, 600, 0.3);
+        this.tone(110, 0.5, 'sawtooth', 0.28, 0.05, 80);
         break;
       case 'bow_twang':
         // 활시위 튕김 + 화살 바람 소리

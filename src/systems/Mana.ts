@@ -49,7 +49,9 @@ export function init(world: World): void {
         world.events.emit('chain_changed', { chain: world.mana.chainIndex });
       }
     } else if (result === 'normal') {
-      gain(world, balance.mana.gain.parryNormal, 'parry_normal'); // 배율 유지, 상승 없음
+      // 배율 유지, 상승 없음. 위압(cowed, 거수 P3 포효 — B3-4) 중 일반 패링은 balance.status.cowed.normalParryMana 로 준다(Reaction 이 parry_attempt.cowed 로 알린다)
+      const cowed = (payload as { cowed?: boolean }).cowed === true;
+      gain(world, cowed ? balance.status.cowed.normalParryMana : balance.mana.gain.parryNormal, 'parry_normal');
     } else {
       // 실패 — 축적 마나 절반 소실 + 연쇄 리셋. 팔 저림 중(noManaLoss, balance.status.numbArm.noManaLossOnFail)엔 소실만 면제 — 연쇄는 끊긴다
       if (!(payload as { noManaLoss?: boolean }).noManaLoss) {

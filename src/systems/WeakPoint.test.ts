@@ -137,8 +137,8 @@ describe('데이터 — weakPoints·poseOffsets·hitZonesImmune (기획서 §2·
     expect(wp('vent')).toMatchObject({ offset: { x: 0, y: 1.65, z: -1.55 }, radius: 0.3, damageMul: 3.0 });
     expect(wp('eye').coneDeg).toBeUndefined(); // 기본 원뿔은 balance.weakPoint.defaultConeDeg
     expect(balance.weakPoint.defaultConeDeg).toBe(100);
-    // 자세 표 — 8 자세 × 5 약점, normal 은 정의의 offset 과 같다
-    const poses = ['normal', 'charge', 'rear', 'head_down', 'skid', 'stunned', 'roar', 'blind'];
+    // 자세 표 — 9 자세 × 5 약점(exhaust 는 탈진, B3-4 — 머리 내림과 같은 자리), normal 은 정의의 offset 과 같다
+    const poses = ['normal', 'charge', 'rear', 'head_down', 'skid', 'stunned', 'roar', 'blind', 'exhaust'];
     expect(Object.keys(def.poseOffsets!)).toEqual(poses);
     for (const pose of poses) expect(Object.keys(def.poseOffsets![pose]!)).toEqual(['eye', 'joint_r', 'joint_l', 'heart', 'vent']);
     for (const w of def.weakPoints!) expect(def.poseOffsets!['normal']![w.id]).toEqual(w.offset);

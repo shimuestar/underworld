@@ -124,6 +124,25 @@ export interface EnemyAttackDef {
   /** 예고 중 앞발 들기 구간(거수 발구르기, 기획서 §4.1 heart·§7 P2) — 예고 시작 후 경과 틱이 from ≤ t < to 인 동안 enemy.pose 가 'rear'
    *  (몸통 +35°·앞다리 들림 → poseOffsets.rear 로 배 심장이 앞·위로 나와 열린다). Enemies 가 매 틱 비춘다. 없으면 자세 없음(기상 발구르기) */
   rearPose?: { from: number; to: number };
+  /** 완벽 대역에서만 패링이 성립한다(거수 삼연낫 ③, 기획서 §7 소표) — def.perfectParryOnly 의 공격 단위판. Stage 는 이 파랑을 더 밝게, main 은 예고음을 고음으로(결정 17) */
+  perfectOnly?: boolean;
+  /** 이르게 누른 입력을 버퍼로 살리지 않는다 — 판정 창 안에서 완벽 대역 밖(일반 대역·아직 오는 중)에 누르면 패링 실패 규약(경직 + 마나 절반)으로 떨어진다. perfectOnly 와 짝(실효 창 ≈ 완벽 대역 2~3틱) */
+  noParryBuffer?: boolean;
+  /** 연쇄 — 이 타가 끝나면(맞았든 막혔든 헛쳤든, continueOnParry 면 패링돼도) recoverTicks 뒤 이 정의의 예고로 이어진다(거수 삼연낫 ① → ② → ③). 없으면 이 타가 마지막 */
+  comboNext?: EnemyAttackDef;
+  /** 패링(완벽·일반)이 이 타를 끊지 않는다 — 노출은 열리되 콤보는 다음 타로 이어진다(거수 삼연낫 ①②). 없으면 패링이 공격을 끊는다(옛 경로) */
+  continueOnParry?: boolean;
+  /** 광란 돌격(거수 P3, 기획서 §7 P3 — 슬롯 'chainCharge' 해금) — 첫 질주 뒤 제자리 선회 turnTicks(= 2차 예고, 꼬리·뿔 tailTelegraph 색) 동안 tailRadius 안 꼬리 채기 tailDamage(패링 불가·막으면 칩·밀림 contact 급),
+   *  그 뒤 플레이어의 새 위치로 두 번째 질주(예고 없이). 완벽 회피(미끄러짐)·눈멂·전도·벽 헛돌격이면 두 번째 없음 */
+  chainCharge?: { turnTicks: number; tailRadius: number; tailDamage: number; tailTelegraph: string };
+  /** 포효(type 'roar', 거수 P3) — aoeRadius 안 플레이어를 이만큼(m) 밀어낸다(피해 없음). 밀림 틱은 playerKnockbackTicks */
+  pushM?: number;
+  /** 포효 간격(틱) — 첫 포효(firstPick) 뒤 이 간격마다. 슬롯이 열린 첫 추격 틱부터 센다 */
+  intervalTicks?: number;
+  /** 체력이 def.health 의 이 비율 이하이면 절망의 포효(despair)로 */
+  despairHealthFrac?: number;
+  /** 절망의 포효 변형 — 예고 windupTicks, 밀림 대신 pull(m) 끌림(몸 접촉 거리까지), 곧바로 followUp 슬롯('slam')을 예고 followUpWindupTicks·앞발 들기 followUpRearPose 로 즉시 연계 */
+  despair?: { windupTicks: number; pull: number; followUp: string; followUpWindupTicks?: number; followUpRearPose?: { from: number; to: number } };
 }
 
 /** 세 성분 좌표·치수 — [x, y, z]. x·z 는 def.radius 배, y 는 def.height 배 (Stage 가 곱한다) */
@@ -399,6 +418,10 @@ export interface EnemyDef {
   /** 기상 발구르기(거수 P2, 슬롯 'wakeSlam' 해금) — 머리 내림·혼절이 끝나 일어서는 첫 추격 틱에 확정. slamAttack 을 그대로 쓰되 예고만 이 값이고
    *  rearPose 가 없다(앞발을 낮게 들어 심장 안 보임 — wakeSlamAttack). 없으면 기상 발구르기 없음 */
   wakeSlam?: { windupTicks: number };
+  /** 포효(거수 P3, 슬롯 'roar' 해금, B3-4) — type 'roar': impact 파이프를 타지 않는 범위 상태 부여(위압·밀림/끌림). attackMode 'roar'. 절망 변형은 despair */
+  roarAttack?: EnemyAttackDef;
+  /** 삼연낫(거수 P3, 슬롯 'combo' 해금, B3-4) — ① 이 정의, ② comboNext, ③ comboNext.comboNext. attackMode 'combo' + enemy.comboStep */
+  comboAttack?: EnemyAttackDef;
   /** 완벽 패링만 받는다 — 일반 대역(guardDepth)에서 눌러도 성립하지 않는다.
    *  이르게 누른 입력은 버퍼로 살아남아 무기 끝이 완벽 대역에 들어오는 순간 성립한다 */
   perfectParryOnly?: boolean;
@@ -551,9 +574,64 @@ export function wakeSlamAttack(def: EnemyDef): EnemyAttackDef | undefined {
   return merged;
 }
 
+/** 머리가 내려온 자세인가(거수) — 'head_down'(낫 박힘·역류·전도)과 'exhaust'(탈진, B3-4 — 양낫 박힘 + 분출공 동시 노출). 눈 0.9m 노출·해머 눈 집계(hammerEyeMul)·
+ *  해머 넉백 0·기상 발구르기 예약·Stage 의 앞 기울임이 같은 규칙을 읽는다. 눈의 혼절 누적도 이 두 자세에서만(역류 원인 제외 — Enemies) */
+export function headDownPose(pose: string | undefined): boolean {
+  return pose === 'head_down' || pose === 'exhaust';
+}
+
+/** 삼연낫 연쇄(거수 B3-4) — comboAttack 에서 comboNext 를 따라 내려간 타 정의 배열(① ② ③). def 별로 한 번 만들어 캐시한다. comboAttack 이 없으면 빈 배열 */
+const COMBO_CHAINS = new WeakMap<EnemyDef, EnemyAttackDef[]>();
+export function comboChain(def: EnemyDef): EnemyAttackDef[] {
+  const cached = COMBO_CHAINS.get(def);
+  if (cached) return cached;
+  const chain: EnemyAttackDef[] = [];
+  for (let step: EnemyAttackDef | undefined = def.comboAttack; step !== undefined && chain.length < 16; step = step.comboNext) chain.push(step);
+  COMBO_CHAINS.set(def, chain);
+  return chain;
+}
+
+/** 삼연낫 step(0 부터)번째 타의 정의 — 없으면 undefined(연쇄 끝) */
+export function comboStepAttack(def: EnemyDef, step: number): EnemyAttackDef | undefined {
+  return comboChain(def)[step];
+}
+
+/** 절망의 포효(B3-4) 정의 — roarAttack 에 despair.windupTicks 만 덮은 것(캐시). despair 가 없으면 roarAttack 그대로 */
+const DESPAIR_ROARS = new WeakMap<EnemyDef, EnemyAttackDef>();
+export function despairRoarAttack(def: EnemyDef): EnemyAttackDef | undefined {
+  const roar = def.roarAttack;
+  if (!roar) return undefined;
+  if (!roar.despair) return roar;
+  const cached = DESPAIR_ROARS.get(def);
+  if (cached) return cached;
+  const merged: EnemyAttackDef = { ...roar, windupTicks: roar.despair.windupTicks };
+  DESPAIR_ROARS.set(def, merged);
+  return merged;
+}
+
+/** 절망의 포효 연계 발구르기(B3-4) 정의 — slamAttack 에 despair.followUpWindupTicks(예고 40)·followUpRearPose(앞발 들기 8~30, 심장 노출)를 덮은 것(캐시).
+ *  슬롯은 'slam' 그대로라 P3 덮어쓰기(28·5.5)를 받는다. slamAttack 이나 roarAttack.despair 가 없으면 undefined */
+const DESPAIR_SLAMS = new WeakMap<EnemyDef, EnemyAttackDef>();
+export function despairSlamAttack(def: EnemyDef): EnemyAttackDef | undefined {
+  const slam = def.slamAttack;
+  const despair = def.roarAttack?.despair;
+  if (!slam || !despair) return undefined;
+  const cached = DESPAIR_SLAMS.get(def);
+  if (cached) return cached;
+  const merged: EnemyAttackDef = { ...slam };
+  if (despair.followUpWindupTicks !== undefined) merged.windupTicks = despair.followUpWindupTicks;
+  if (despair.followUpRearPose !== undefined) merged.rearPose = despair.followUpRearPose;
+  DESPAIR_SLAMS.set(def, merged);
+  return merged;
+}
+
 /** 현재 공격 정의 — attackMode 가 가리키는 특수 공격, 없으면 기본 공격. 페이즈 표(phases[].attackOverrides)가 있으면 피해·쿨다운·범위를 합쳐 돌려준다(B2-6).
- *  발구르기('slam')는 enemy.wakeSlam 이면 기상 발구르기 정의(슬롯 'wakeSlam' — 페이즈 덮어쓰기를 받지 않는다) */
-export function currentAttack(def: EnemyDef, enemy: { attackMode?: string; phase?: number; wakeSlam?: boolean }): EnemyAttackDef {
+ *  발구르기('slam')는 enemy.wakeSlam 이면 기상 발구르기 정의(슬롯 'wakeSlam' — 페이즈 덮어쓰기를 받지 않는다), enemy.despairSlam 이면 절망의 포효 연계 정의(슬롯 'slam').
+ *  포효('roar')는 enemy.despairRoar 면 절망 변형(예고 36), 삼연낫('combo')은 enemy.comboStep 번째 타(슬롯 'combo') — B3-4 */
+export function currentAttack(
+  def: EnemyDef,
+  enemy: { attackMode?: string; phase?: number; wakeSlam?: boolean; despairSlam?: boolean; despairRoar?: boolean; comboStep?: number },
+): EnemyAttackDef {
   let base = def.attack;
   let slot: string | undefined;
   if (enemy.attackMode === 'summon' && def.summonAttack) base = def.summonAttack;
@@ -563,13 +641,15 @@ export function currentAttack(def: EnemyDef, enemy: { attackMode?: string; phase
   else if (enemy.attackMode === 'ranged' && def.rangedAttack) base = def.rangedAttack;
   else if (enemy.attackMode === 'alt' && def.attackAlt) base = def.attackAlt;
   else if (enemy.attackMode === 'close' && def.closeAttack) base = def.closeAttack;
+  else if (enemy.attackMode === 'roar' && def.roarAttack) base = (enemy.despairRoar ? despairRoarAttack(def) : undefined) ?? def.roarAttack;
+  else if (enemy.attackMode === 'combo' && def.comboAttack) base = comboStepAttack(def, enemy.comboStep ?? 0) ?? def.comboAttack;
   else if (enemy.attackMode === 'slam' && def.slamAttack) {
     const wake = enemy.wakeSlam ? wakeSlamAttack(def) : undefined;
     if (wake) {
       base = wake;
       slot = 'wakeSlam';
     } else {
-      base = def.slamAttack;
+      base = (enemy.despairSlam ? despairSlamAttack(def) : undefined) ?? def.slamAttack;
     }
   }
   if (!def.phases) return base;

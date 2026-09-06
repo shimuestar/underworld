@@ -83,10 +83,18 @@ describe('Metrics', () => {
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'backflow', on: true, cause: 'vent', ticks: 60, selfDamage: 0 }); // 분출공 역류도 역류
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'choke', on: true, ticks: 1800 });
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'choke', on: false });
+    // P3 기술(B3-4) — 포효 둘(하나는 위압 적중), 삼연낫 하나 → 탈진, 광란 돌격 선회 하나
+    events.emit('enemy_roar', { enemyId: 1, enemyType: 'scythe_behemoth', despair: false, radius: 12, dist: 8 });
+    events.emit('boss_roar_hit', { enemyId: 1, enemyType: 'scythe_behemoth', status: 'cowed', pull: 0, push: 1.5, dist: 8, despair: false });
+    events.emit('enemy_roar', { enemyId: 1, enemyType: 'scythe_behemoth', despair: true, radius: 12, dist: 14 });
+    events.emit('enemy_combo_start', { enemyId: 1, enemyType: 'scythe_behemoth', steps: 3 });
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'exhaust', on: true, ticks: 150 });
+    events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'exhaust', on: false });
+    events.emit('enemy_chain_turn', { enemyId: 1, enemyType: 'scythe_behemoth', ticks: 24 });
 
     const s = metrics.snapshot(makeWorldStub());
     expect(s.weakPoints).toEqual({ hits: 2, damage: 55, broken: 1, exposuresClosed: 2, exposureHits: 2, dazes: 1, chargeDodges: 1, limps: 1, blinds: 1, topples: 1, pillarHits: 1, backflows: 2 });
-    expect(s.boss).toEqual({ phaseShifts: 2, phaseSkips: 0, phaseSeconds: { '3': 90, '2': 120, '1': 90 }, platesBroken: 2, plateGold: 17 });
+    expect(s.boss).toEqual({ phaseShifts: 2, phaseSkips: 0, phaseSeconds: { '3': 90, '2': 120, '1': 90 }, platesBroken: 2, plateGold: 17, roars: 2, roarHits: 1, combos: 1, exhausts: 1, chainTurns: 1 });
     expect(s.hazards).toEqual({ pools: 2, evaporated: 1, corrosiveApplied: 1, corrosiveDamage: 2, pendingIn: 1, ventCleanse: 2, chokes: 1 });
     expect(s.combat.damageTakenTotal).toBe(22 + 2); // 오염 진액 도트도 받은 피해다
     expect(s.traps.deaths).toBe(0);
@@ -109,13 +117,13 @@ describe('Metrics', () => {
     const metrics = new Metrics(events);
     events.emit('boss_phase', { enemyId: 1, enemyType: 'scythe_behemoth', phase: 1, from: 3, skipped: true, fromTicks: 600, tick: 600 });
     const s = metrics.snapshot(makeWorldStub());
-    expect(s.boss).toEqual({ phaseShifts: 1, phaseSkips: 1, phaseSeconds: { '3': 10 }, platesBroken: 0, plateGold: 0 });
+    expect(s.boss).toEqual({ phaseShifts: 1, phaseSkips: 1, phaseSeconds: { '3': 10 }, platesBroken: 0, plateGold: 0, roars: 0, roarHits: 0, combos: 0, exhausts: 0, chainTurns: 0 });
   });
 
   it('데이터가 없으면 파생 지표는 null (0으로 왜곡하지 않는다)', () => {
     const metrics = new Metrics(new Events());
     const s = metrics.snapshot(makeWorldStub());
-    expect(s.boss).toEqual({ phaseShifts: 0, phaseSkips: 0, phaseSeconds: {}, platesBroken: 0, plateGold: 0 });
+    expect(s.boss).toEqual({ phaseShifts: 0, phaseSkips: 0, phaseSeconds: {}, platesBroken: 0, plateGold: 0, roars: 0, roarHits: 0, combos: 0, exhausts: 0, chainTurns: 0 });
     expect(s.hazards).toEqual({ pools: 0, evaporated: 0, corrosiveApplied: 0, corrosiveDamage: 0, pendingIn: 0, ventCleanse: 0, chokes: 0 });
     expect(s.derived.perfectParryRatio).toBeNull();
     expect(s.derived.manaWasteRatio).toBeNull();

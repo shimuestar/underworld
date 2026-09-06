@@ -361,6 +361,7 @@ export function tick(world: World, dt: number): void {
     const moved = Math.hypot(p.x - bx, p.z - bz);
     p.blinkLeft = moved < step * 0.5 ? 0 : (p.blinkLeft ?? 0) - step;
     p.iframeTicks = Math.max(p.iframeTicks, 2);
+    p.iframeSource = 'blink'; // 그림자 질주 무적 — 거수 돌격의 완벽 회피(회피 무적만)엔 들지 않는다
     if ((p.blinkLeft ?? 0) <= 0) {
       p.blinkLeft = 0;
       p.iframeTicks = Math.max(p.iframeTicks, p.blinkTailIframes ?? 0);

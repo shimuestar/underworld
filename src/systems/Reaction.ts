@@ -18,10 +18,14 @@
 // 팔 저림(numb_arm, B2-4 — 거수 낫을 방패로 막음): 완벽 대역 ×perfectBandMul(0 = 정직하게 일반만), 패링 실패의 마나 소실 면제
 //       (parry_attempt 에 noManaLoss — Mana 가 읽는다), 일반 패링 1회 성립 시 즉시 해제(카운터 0 → Status 가 _ended 를 낸다).
 // 절뚝(hobble, B3-1 — 거수 발구르기 직격): 회피 스태미너 ×dodgeStaminaMul(tryDodge). 회피 거리·무적 틱은 어느 상태도 건드리지 않는다.
+// 위압(cowed, B3-4 — 거수 P3 포효): 일반 패링이 관절을 열지 못하고(balance.status.cowed.normalParryOpensJoint false — 완벽만), 일반 패링 마나가 준다(parry_attempt.cowed → Mana),
+//       완벽 패링 1회 성립 시 즉시 해제. 삼연낫(comboAttack, B3-4): continueOnParry 타는 패링해도 끊기지 않고 recoverTicks 뒤 다음 타로(Enemies recover → startWindup),
+//       ①② 완벽은 관절 perfectTicks(60)·완벽 카운트, ③(perfectOnly + noParryBuffer — 완벽 대역 밖에 누르면 실패 규약)은 완벽 카운트가 타 수와 같으면 탈진(pose exhaust,
+//       headDown.exhaustTicks — 눈 + 분출공 동시 노출) 아니면 단발 완벽과 같은 머리 내림.
 
 import { balance } from '../core/Balance';
-import { attackReaches, currentAttack, enemyDef } from '../core/Entities';
-import { beginPose, openExposure, pushEnemy, applyFrostOnHit, setPlayerStatus, spendStamina } from '../core/World';
+import { attackReaches, comboChain, currentAttack, enemyDef } from '../core/Entities';
+import { beginPose, openExposure, pushEnemy, applyFrostOnHit, playerStatusTicks, setPlayerStatus, spendStamina } from '../core/World';
 import type { EnemyState, ProjectileState, World } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
@@ -97,6 +101,8 @@ export function tick(world: World, _dt: number): void {
   let incoming = false; // 반경 안에서 무기가 날아오는 중인 적이 있는가
   let executeTarget: { enemy: EnemyState; dist: number } | null = null;
   let windupTarget: { enemy: EnemyState; dist: number } | null = null;
+  // 버퍼 없는 완벽 전용 타(거수 삼연낫 ③, noParryBuffer)의 판정 창 안인데 완벽 대역 밖 — 누르면 실패(조기 입력과 같은 규약)
+  let bandFailTarget: { enemy: EnemyState; dist: number } | null = null;
 
   for (const enemy of world.enemies) {
     if (!enemy.alive) continue;
@@ -109,14 +115,19 @@ export function tick(world: World, _dt: number): void {
       // 애초에 나를 향하지 않는 공격은 막을 것도 없다 (옆으로 비켰으면 그냥 빗나간다)
       if (!attackReaches(def, enemy, attack, p.x, p.z)) continue;
       // 무기 끝이 가드 안까지 왔는가.
-      // perfectParryOnly(족장)는 일반 대역을 받지 않는다 — 정확히 닿는 순간만 성립한다
-      const band = def.perfectParryOnly ? space.perfectBand + world.modifiers.perfectBandBonus : space.guardDepth;
+      // perfectParryOnly(족장)·attack.perfectOnly(거수 삼연낫 ③)는 일반 대역을 받지 않는다 — 정확히 닿는 순간만 성립한다
+      const band = def.perfectParryOnly || attack.perfectOnly ? space.perfectBand + world.modifiers.perfectBandBonus : space.guardDepth;
       const gap = dist - balance.player.radius - (enemy.weaponTipDist ?? 0);
       if (gap <= band && (!parryTarget || gap < parryTarget.gap)) {
         parryTarget = { enemy, gap };
       } else if (gap > band) {
-        // 아직 오는 중 — 이르게 눌렀다면 버퍼로 살려 두고, 대역에 들어오는 순간 성립시킨다
-        incoming = true;
+        if (attack.noParryBuffer) {
+          // 버퍼 없는 타(삼연낫 ③) — 완벽 대역 밖에 누른 입력은 살려 두지 않고 실패로 떨어진다(실효 창 ≈ 완벽 대역 2~3틱, 기획서 §7 소표)
+          if (!bandFailTarget || dist < bandFailTarget.dist) bandFailTarget = { enemy, dist };
+        } else {
+          // 아직 오는 중 — 이르게 눌렀다면 버퍼로 살려 두고, 대역에 들어오는 순간 성립시킨다
+          incoming = true;
+        }
       }
     } else if (enemy.ai === 'staggered') {
       if (!executeTarget || dist < executeTarget.dist) executeTarget = { enemy, dist };
@@ -150,19 +161,44 @@ export function tick(world: World, _dt: number): void {
     const perfect = perfectBand > 0 && parryTarget.gap <= perfectBand && !def.parryAlwaysNormal; // 가죽 투구
     world.freezeTicks = perfect ? reaction.hitstopPerfectTicks : reaction.hitstopNormalTicks;
 
+    const cowed = playerStatusTicks(p, 'cowed') > 0;
     if (def.parryOutcome === 'expose') {
       // 거수(기획서 §4.1) — 패링은 약점을 연다. 어느 낫이었는지는 공격 정의(exposeOnParry.joint)가 안다:
-      // 오른낫(attack) → joint_r, 왼낫(attackAlt) → joint_l
+      // 오른낫(attack) → joint_r, 왼낫(attackAlt) → joint_l. 삼연낫(attackMode 'combo', B3-4)은 continueOnParry 타면 패링해도 다음 타로 이어진다
       const ex = attack.exposeOnParry;
+      const combo = enemy.attackMode === 'combo';
+      const comboContinues = combo && attack.continueOnParry === true && attack.comboNext !== undefined;
       if (perfect) {
-        // 완벽 — 낫이 바닥에 박혀 머리가 내려온다(눈 0.9m 노출, 이동·공격 불가). 관절도 함께 길게 열린다(눈과 양자택일)
+        // 완벽 — 관절이 길게 열린다(눈과 양자택일)
         if (ex) openExposure(world, enemy, ex.joint, ex.perfectTicks);
-        beginPose(world, enemy, 'head_down', balance.weakPoint.headDown.stuckTicks);
+        if (combo) enemy.comboPerfects = (enemy.comboPerfects ?? 0) + 1;
+        if (comboContinues) {
+          // 삼연낫 ①② — 낫이 박히지 않고 콤보가 이어진다. 짧은 이음(recoverTicks) 뒤 Enemies 가 다음 타의 예고를 낸다
+          enemy.ai = 'recover';
+          enemy.timer = attack.recoverTicks;
+          enemy.recoiled = true;
+        } else if (combo && (enemy.comboPerfects ?? 0) >= comboChain(def).length) {
+          // 삼연낫 ③ — 세 타 전부 완벽: 탈진. 양낫이 박혀 머리가 내려오고 분출공도 열린다(exposedStates 'exhaust') — 처형(눈)과 정화(분출공)의 양자택일
+          enemy.attackMode = 'melee';
+          beginPose(world, enemy, 'exhaust', balance.weakPoint.headDown.exhaustTicks);
+        } else {
+          // 단발 완벽(또는 ③ 완벽인데 앞 타에 완벽이 모자람) — 낫이 바닥에 박혀 머리가 내려온다(눈 0.9m 노출, 이동·공격 불가)
+          if (combo) enemy.attackMode = 'melee';
+          beginPose(world, enemy, 'head_down', balance.weakPoint.headDown.stuckTicks);
+        }
+        // 위압(cowed) 은 완벽 패링 1회로 풀린다("완벽만이 답이다"). 0 만 세우고 _ended 는 Status 가 낸다
+        if (cowed) setPlayerStatus(p, 'cowed', 0);
       } else {
-        // 일반 — 그 낫의 관절만 짧게(통제 노선). 적은 크게 튕겨 후딜(기존 일반 패링과 같은 결)
-        if (ex) openExposure(world, enemy, ex.joint, ex.normalTicks);
+        // 일반 — 그 낫의 관절만 짧게(통제 노선). 위압 중엔 열리지 않는다(balance.status.cowed.normalParryOpensJoint)
+        if (ex && !(cowed && !balance.status.cowed.normalParryOpensJoint)) openExposure(world, enemy, ex.joint, ex.normalTicks);
         enemy.ai = 'recover';
-        enemy.timer = attack.recoverTicks + reaction.parryRecoilTicks;
+        if (comboContinues) {
+          // 삼연낫 ①② — 튕기되 콤보는 이어진다(짧은 이음)
+          enemy.timer = attack.recoverTicks;
+        } else {
+          // 적은 크게 튕겨 후딜(기존 일반 패링과 같은 결)
+          enemy.timer = attack.recoverTicks + reaction.parryRecoilTicks;
+        }
         enemy.recoiled = true;
       }
     } else if (def.boss && def.parriesToStagger) {
@@ -195,6 +231,8 @@ export function tick(world: World, _dt: number): void {
       result: perfect ? 'perfect' : 'normal',
       chain: 0,
       enemyType: enemy.type,
+      // 위압 중 일반 패링 — 마나가 준다(balance.status.cowed.normalParryMana, Mana 가 읽는다). 완벽은 위압을 푼 것이라 온전히
+      cowed: cowed && !perfect,
     });
     // 격돌 연출 — 막기와 같은 계열이되 플레이어는 경직되지 않는다 (패링의 보상)
     world.events.emit('guard_clash', {
@@ -286,14 +324,15 @@ export function tick(world: World, _dt: number): void {
     return;
   }
 
-  if (windupTarget && freshPress) {
-    // 조기 입력 — 실패. 경직 20t (마나 절반 소실은 Mana — 팔 저림 중엔 noManaLoss 로 면제를 알린다)
+  const failTarget = windupTarget ?? bandFailTarget;
+  if (failTarget && freshPress) {
+    // 조기 입력(또는 버퍼 없는 완벽 전용 타의 완벽 대역 밖 입력) — 실패. 경직 20t (마나 절반 소실은 Mana — 팔 저림 중엔 noManaLoss 로 면제를 알린다)
     p.stunTicks = Math.round(reaction.failStunTicks * world.modifiers.stunMul); // 쇠 투구·인내 반지
     const numbCfg = balance.status.numbArm;
     world.events.emit('parry_attempt', {
       result: 'fail',
       chain: 0,
-      enemyType: windupTarget.enemy.type,
+      enemyType: failTarget.enemy.type,
       noManaLoss: (p.numbArmTicks ?? 0) > 0 && numbCfg.noManaLossOnFail,
     });
     return;
@@ -360,5 +399,6 @@ function startDodge(world: World): void {
   p.dodgeDistMul = sideMul + (1 - sideMul) * along;
   p.dodgeTicks = reaction.dodgeDashTicks;
   p.iframeTicks = world.modifiers.dodgeIFrameTicks; // sig_dash 부착 시 연장
+  p.iframeSource = 'dodge'; // 회피 무적 — 거수 돌격의 완벽 회피(미끄러짐)는 이 출처만 친다(B2-3 검토)
   world.events.emit('dodge_step', {});
 }

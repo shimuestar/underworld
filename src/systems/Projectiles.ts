@@ -641,6 +641,7 @@ function castBlink(world: World, effects: Record<string, number>): void {
   p.blinkTailIframes = effects['iframeTicks'] ?? 0;
   p.blinkShroudAfter = effects['shroudTicks'] ?? 0;
   p.iframeTicks = Math.max(p.iframeTicks, 2); // 첫 틱부터 무적 — 갱신은 PlayerMove
+  p.iframeSource = 'blink'; // 회피 무적이 아니다 — 거수 돌격의 완벽 회피 보상은 회피(dodge)만(B2-3 검토)
   world.events.emit('blink', { fromX: p.x, fromZ: p.z, range: p.blinkLeft });
 }
 

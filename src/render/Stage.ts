@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { equipColor } from '../core/EquipData';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
-import { bladeLocked, currentAttack, enemyDef, healthBarState, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, type EnemyDef, type ResolvedPhase } from '../core/Entities';
+import { bladeLocked, bladeOfJoint, currentAttack, enemyDef, headDownPose, healthBarState, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, type EnemyDef, type ResolvedPhase } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN } from '../level/GridLoader';
 import type {
@@ -1163,6 +1163,19 @@ const BH_ARM_ROAR_YAW = -0.5;
 const BH_BLADE_ROAR = -1.35;
 const BH_TAIL_DROOP = 0.3;
 const BH_TAIL_SWAY = 0.18;
+// 광란 돌격 선회(chainTurn, B3-4) — 꼬리를 크게 빠르게 휘두른다(yaw 진폭 rad·주기 ms). 꼬리·뿔 빨강은 syncEnemies
+const BH_TAIL_WHIRL = 0.95;
+const BH_TAIL_WHIRL_MS = 55;
+// 삼연낫 ③(bothBlades 예고, B3-4) — 두 낫을 머리 위로 치켜든다(위팔 각·낫 월드각·바깥 벌림). 위팔 끝 + 낫 날 높이가 3.8m 아래여야 한다(Behemoth.test 천장 검사 — 단발 예고 0.5 보다 조금 높다).
+// 낫은 앞아래로 늘어뜨린다 — 위로 세우면 낫끝이 천장을 뚫는다
+const BH_ARM_COMBO3 = 0.55;
+const BH_BLADE_COMBO3 = -1.35;
+const BH_ARM_COMBO3_YAW = -0.18;
+// 탈진(pose exhaust, B3-4) — 양낫이 박힌 채 헐떡인다(기울임 잔떨림 진폭 rad·주기 ms). 몸통 값은 머리 내림과 같다(BEHEMOTH_TORSO.headDown*)
+const BH_PANT_AMP = 0.012;
+const BH_PANT_MS = 260;
+// 완벽 전용 타(attack.perfectOnly — 삼연낫 ③, 결정 17) — 같은 파랑을 더 밝게(emissiveIntensity 배)
+export const BH_PERFECT_ONLY_GLOW = 1.8;
 const BH_TIP_MIN_Y = 0.08; // 낫끝이 바닥을 뚫지 않게 (m)
 // 잠긴 낫(관절 파열, B2-3) — 위팔이 앞아래로 축 늘어지고(월드 각) 낫끝이 바닥을 긁는다. 낫 상자의 날 높이(0.5m)가 기울어 있으니 끝 중심은 조금 띄운다
 const BH_ARM_LOCKED = -1.0;
@@ -1238,6 +1251,10 @@ export interface BehemothRig {
   /** 낫 재질(파랑 예고 전용) · 뿔 재질(돌격 빨강 전용) — 몸의 flashMaterials 와 따로 물든다 */
   bladeMats: THREE.MeshLambertMaterial[];
   hornMats: THREE.MeshLambertMaterial[];
+  /** 아래턱 안쪽 재질 — 절망의 포효 예고에 보라 기운(B3-4), 그 밖엔 몸과 같이 물든다(flashMaterials 밖) */
+  mouthMat: THREE.MeshLambertMaterial;
+  /** 꼬리 재질 — 광란 돌격 선회(2차 예고)에 빨강(B3-4), 그 밖엔 몸과 같이 물든다(flashMaterials 밖) */
+  tailMats: THREE.MeshLambertMaterial[];
   /** 등갑판 셋(plate0~2) — P3 진입에 탈락(숨김 + 파편은 Stage.shedBehemothPlates) */
   plates: THREE.Mesh[];
   /** P2 균열 — 판 사이 이음새·판 위 실금(얇은 상자, 자체 발광 재질 하나). setBehemothPhaseLook 이 켠다 */
@@ -1292,6 +1309,10 @@ export interface BehemothPose {
   poseCause?: string;
   /** 갑각 떨기(volley, B3-2) 예고·시전 중 — 등갑판이 덜그럭거린다(판마다 위상이 다른 잘게 떠는 굴림·들썩). 몸통 잔떨림은 syncEnemies(BEHEMOTH_TORSO.ventShake) */
   shaking?: boolean;
+  /** 삼연낫 ③(B3-4) — 두 낫이 함께 나간다: 예고엔 둘 다 머리 위로 치켜들고(BH_ARM_COMBO3), 타격엔 둘 다 내려찍는다(낫끝 = tipDist). bladeSide 와 무관하게 양팔이 acting */
+  bothBlades?: boolean;
+  /** 광란 돌격 선회(B3-4, 2차 예고) — 꼬리를 크게 빠르게 휘두른다. 몸의 회전은 로직 yaw 가 한다 */
+  chainTurn?: boolean;
 }
 
 
@@ -1411,7 +1432,9 @@ export function buildBehemothRig(
   const [jx, jy, jz] = M(v.mouth.hinge);
   jaw.position.set(jx - hx, jy - hy, jz - hz);
   const [mw, mh, md] = M(v.mouth.size);
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(mw, mh, md), lam(BEHEMOTH_COLORS.mouth, true));
+  // 턱 재질은 flashMaterials 밖 — 절망의 포효 예고에 보라 기운을 따로 물들인다(B3-4). 평소엔 syncEnemies 가 몸과 같은 색을 넣는다
+  const mouthMat = new THREE.MeshLambertMaterial({ color: BEHEMOTH_COLORS.mouth });
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(mw, mh, md), mouthMat);
   mouth.position.set(0, -mh / 2, -md / 2);
   jaw.add(mouth);
   headShake.add(jaw);
@@ -1454,7 +1477,8 @@ export function buildBehemothRig(
     elbow.rotation.x = BH_BLADE_REST - BH_ARM_REST;
     torso.add(shoulder);
     arms.push({ side, shoulder, elbow, blade });
-    anchor(side === 1 ? 'joint_r' : 'joint_l', torso, side * jtx, jty, jtz);
+    // 관절 자리는 어깨 피벗 자체(어깨 그룹의 원점) — 포효에 어깨가 솟아 옮겨 가면(poseBehemothRig) 자리도 따라간다(B3-4, roar 관절 메시–구체 어긋남 0.31 → 표 자리)
+    anchor(side === 1 ? 'joint_r' : 'joint_l', shoulder, 0, 0, 0);
   }
 
   // 다리 넷 — 엉덩이 피벗에서 늘어진 원기둥. 걸음은 대각 쌍이 번갈아
@@ -1480,9 +1504,12 @@ export function buildBehemothRig(
   tail.position.set(tx, ty, tz);
   tail.rotation.x = BH_TAIL_DROOP;
   const tailLen = v.tail.length * R;
+  // 꼬리 재질은 flashMaterials 밖 — 광란 돌격 선회(2차 예고)에 빨강을 따로 물들인다(B3-4). 평소엔 syncEnemies 가 몸과 같은 색을 넣는다
+  const tailMat = new THREE.MeshLambertMaterial({ color: BEHEMOTH_COLORS.tail });
+  const tailMats: THREE.MeshLambertMaterial[] = [tailMat];
   const tailMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(v.tail.radius * R * 0.6, v.tail.radius * R, tailLen, 8),
-    lam(BEHEMOTH_COLORS.tail, true),
+    tailMat,
   );
   tailMesh.rotation.x = Math.PI / 2; // 원기둥 축(+y)을 +z 로
   tailMesh.position.z = tailLen / 2;
@@ -1514,7 +1541,7 @@ export function buildBehemothRig(
 
   return {
     group, torso, neck, headPitch, headShake, head, jaw, arms, legs, tail,
-    weakPoints, anchors, bladeMats, hornMats, plates, cracks, crackMat, iris, def,
+    weakPoints, anchors, bladeMats, hornMats, mouthMat, tailMats, plates, cracks, crackMat, iris, def,
     dims: { upperArm: upperLen, blade: bll, legH },
   };
 }
@@ -1697,8 +1724,9 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     }
   }
 
-  // 꼬리 — 느린 좌우 흔들림, 달릴 때 뒤로 뻗친다. 앞발 들기(rear)엔 몸통이 35° 젖혀지니 그만큼 되들어 꼬리가 바닥을 뚫지 않게(월드 각 ≈ 살짝 처짐)
-  rig.tail.rotation.y = mix(rig.tail.rotation.y, Math.sin(p.nowMs / 900) * BH_TAIL_SWAY);
+  // 꼬리 — 느린 좌우 흔들림, 달릴 때 뒤로 뻗친다. 앞발 들기(rear)엔 몸통이 35° 젖혀지니 그만큼 되들어 꼬리가 바닥을 뚫지 않게(월드 각 ≈ 살짝 처짐).
+  // 광란 돌격 선회(chainTurn, B3-4)엔 크게 빠르게 휘두른다 — 꼬리 채기(tailRadius)의 그림
+  rig.tail.rotation.y = mix(rig.tail.rotation.y, p.chainTurn ? Math.sin(p.nowMs / BH_TAIL_WHIRL_MS) * BH_TAIL_WHIRL : Math.sin(p.nowMs / 900) * BH_TAIL_SWAY);
   rig.tail.rotation.x = mix(rig.tail.rotation.x, p.charging ? BH_TAIL_DROOP * 0.3 : BH_TAIL_DROOP - rearing * (lean + BH_TAIL_DROOP * 0.6));
 
   // 등갑판 덜그럭(갑각 떨기, B3-2) — 판마다 위상이 다른 잘게 떠는 굴림(z)과 들썩(y). 제 자리(restY)는 처음 볼 때 기억한다. 떨지 않으면 제자리로
@@ -1752,9 +1780,12 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
   rig.jaw.rotation.x = mix(rig.jaw.rotation.x, BH_JAW_ROAR * roarK);
 
   for (const arm of rig.arms) {
-    const acting = arm.side === p.bladeSide;
-    // 어깨의 group 좌표(기울임·전진 반영) — 낫끝 거리는 적 중심 기준이라 여기서부터 잰다
-    const sy = arm.shoulder.position.y;
+    // 삼연낫 ③(bothBlades)은 두 낫이 함께 나간다
+    const acting = arm.side === p.bladeSide || p.bothBlades === true;
+    // 어깨의 group 좌표(기울임·전진 반영) — 낫끝 거리는 적 중심 기준이라 여기서부터 잰다. 어깨 제자리(rest)는 처음 볼 때 기억한다 — 포효에 어깨가 솟았다 돌아온다
+    const sy0 = arm.shoulder.userData['restY'] as number | undefined;
+    const syRest = sy0 ?? (arm.shoulder.userData['restY'] = arm.shoulder.position.y);
+    const sy = syRest;
     const sz0 = arm.shoulder.userData['restZ'] as number | undefined;
     const szRest = sz0 ?? (arm.shoulder.userData['restZ'] = arm.shoulder.position.z);
     const shoulderZ = lunge + sy * Math.sin(lean) + szRest * Math.cos(lean);
@@ -1764,6 +1795,7 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     let armTarget: number;
     let bladeWorld = BH_BLADE_REST; // 낫의 월드 기울기(rad). 0 = 수평 앞, -π/2 = 곧게 아래
     let shoulderShift = 0; // 어깨 앞밀림(m, torso 축)
+    let shoulderLift = 0; // 어깨 들림(m, torso 축) — 포효에 관절이 솟는다
     let yaw = 0; // 세운 축 회전(rad) — + 면 낫끝이 몸 가운데 쪽으로 (side 로 부호를 준다)
     let direct = false;
     /** 위팔 각·휩쓸기 각이 정해진 뒤, 낫끝의 앞 거리가 tipDist 에 오도록 낫 각을 푼다.
@@ -1804,16 +1836,33 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
       armTarget = BH_ARM_SKID + Math.sin(p.nowMs / 120) * 0.03;
       yaw = BH_ARM_SKID_YAW;
       bladeWorld = BH_BLADE_SKID;
+    } else if (tablePose === 'exhaust' && blend > 0.01) {
+      // 탈진(B3-4) — 삼연낫 3연속 완벽 패링에 양낫이 다 바닥에 박혔다(머리 내림의 박힌 낫 자세를 두 팔에). 헐떡임은 syncEnemies 의 몸통 잔떨림
+      armTarget = BH_ARM_STUCK - lean;
+      yaw = BH_ARM_STUCK_YAW;
+      const elbowY = shoulderY + rig.dims.upperArm * Math.sin(BH_ARM_STUCK);
+      bladeWorld = -Math.asin(Math.max(-1, Math.min(1, (elbowY - BH_TIP_MIN_Y) / rig.dims.blade)));
     } else if (rearing > 0.01) {
       // 앞발 들기(B3-1) — 어깨가 2.9m 로 솟으니 두 낫을 앞아래로 낮게 뻗는다(월드 각 고정, 살짝 바깥). 낫끝은 바닥 위(≈0.9m)
       armTarget = BH_ARM_REST + (BH_ARM_REAR - lean - BH_ARM_REST) * rearing;
       yaw = BH_ARM_REAR_YAW * rearing;
       bladeWorld = BH_BLADE_REST + (BH_BLADE_REAR - BH_BLADE_REST) * rearing;
     } else if (roarK > 0.01) {
-      // 포효(페이즈 전환) — 두 낫을 바깥으로 벌려 들고 부르르 떤다. 높이는 예고(BH_ARM_WINDUP)만큼이라 천장을 못 뚫는다
+      // 포효(페이즈 전환·포효 예고) — 두 낫을 바깥으로 벌려 들고 부르르 떤다. 높이는 예고(BH_ARM_WINDUP)만큼이라 천장을 못 뚫는다.
+      // 어깨(관절)가 솟는다 — 어깨 피벗을 표(poseOffsets.roar 의 관절 자리)로 옮겨 관절 메시 = 구체(B2-6 검토 0.31m 어긋남 → 0). group 좌표 표를 torso 로컬로 벗겨 넣는다
       armTarget = BH_ARM_REST + (BH_ARM_ROAR - BH_ARM_REST) * roarK + Math.sin(p.nowMs / 45) * 0.02 * roarK;
       yaw = BH_ARM_ROAR_YAW * roarK;
       bladeWorld = BH_BLADE_REST + (BH_BLADE_ROAR - BH_BLADE_REST) * roarK;
+      const jointWp = rig.def.weakPoints?.find((wp) => wp.id === (arm.side === 1 ? 'joint_r' : 'joint_l'));
+      if (jointWp) {
+        const t = weakPointOffset(rig.def, jointWp, 'roar');
+        const gy = t.y - torso.position.y;
+        const gz = t.z - lunge;
+        const ty = gy * Math.cos(lean) + gz * Math.sin(lean);
+        const tz = -gy * Math.sin(lean) + gz * Math.cos(lean);
+        shoulderLift = (ty - syRest) * roarK;
+        shoulderShift = (szRest - tz) * roarK;
+      }
     } else if (acting && p.bladeStriking) {
       // 타격 — 위팔은 진행도로 내려오고 낫끝은 판정 거리 그대로 (즉시 반영).
       // 안쪽으로 휩쓸어 끝에서 낫끝이 몸 가운데 선(플레이어 정면)에 온다 — 호 110° 의 그림
@@ -1833,6 +1882,13 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
       armTarget = BH_ARM_RECOIL;
       bladeWorld = BH_BLADE_RECOIL;
       yaw = BH_ARM_RECOIL_YAW;
+    } else if (acting && p.bladeWindup > 0 && p.bothBlades) {
+      // 삼연낫 ③ 예고(B3-4) — 두 낫을 머리 위로 치켜든다(단발 예고보다 높게, 살짝 바깥으로). 낫은 앞아래로 늘어뜨려 천장을 못 뚫는다 — 내려찍기 직전의 그림
+      const w = p.bladeWindup;
+      armTarget = BH_ARM_REST + (BH_ARM_COMBO3 - BH_ARM_REST) * w;
+      yaw = BH_ARM_COMBO3_YAW * w;
+      if (p.trembling) armTarget += Math.sin(p.nowMs / 12) * 0.04; // 단발(0.06)보다 작게 — 더 든 팔이 떨림 봉우리에서 3.8 을 넘지 않게
+      bladeWorld = BH_BLADE_REST + (BH_BLADE_COMBO3 - BH_BLADE_REST) * w;
     } else if (acting && p.bladeWindup > 0) {
       // 예고 — 관절이 솟고(위팔 들림) 낫끝이 대기 거리에서 pullback 거리까지 뒤로 접힌다.
       // 예고 끝 = 타격 시작이라 낫끝이 이어진다
@@ -1855,17 +1911,20 @@ export function poseBehemothRig(rig: BehemothRig, p: BehemothPose): void {
     }
     const elbowTarget = bladeWorld - lean - armTarget; // 낫 힌지 로컬각 = 월드각 − 기울임 − 위팔각
     const shoulderZTarget = szRest - shoulderShift;
+    const shoulderYTarget = syRest + shoulderLift;
     const yawTarget = arm.side * yaw;
     if (direct) {
       arm.shoulder.rotation.x = armTarget;
       arm.shoulder.rotation.y = yawTarget;
       arm.elbow.rotation.x = elbowTarget;
       arm.shoulder.position.z = shoulderZTarget;
+      arm.shoulder.position.y = shoulderYTarget;
     } else {
       arm.shoulder.rotation.x = mix(arm.shoulder.rotation.x, armTarget);
       arm.shoulder.rotation.y = mix(arm.shoulder.rotation.y, yawTarget);
       arm.elbow.rotation.x = mix(arm.elbow.rotation.x, elbowTarget);
       arm.shoulder.position.z = mix(arm.shoulder.position.z, shoulderZTarget);
+      arm.shoulder.position.y = mix(arm.shoulder.position.y, shoulderYTarget);
     }
   }
 
@@ -4202,16 +4261,31 @@ export class Stage {
         const telegraphing = flashing || enemy.ai === 'windup' || enemy.ai === 'volley';
         const hornMode = enemy.attackMode === 'charge' || enemy.attackMode === 'close';
         const ventMode = enemy.attackMode === 'volley'; // 갑각 떨기(보라, B3-2) — 무기는 분출공이라 낫·뿔 어느 쪽도 물들지 않는다(몸·등갑판만)
-        const bladeEmissive = telegraphing && (hornMode || ventMode) ? 0x000000 : emissive;
-        const hornEmissive = telegraphing && !hornMode ? 0x000000 : emissive;
+        const roarMode = enemy.attackMode === 'roar'; // 포효(빨강, B3-4) — 몸 전체(입·꼬리 포함)만, 낫·뿔은 물들지 않는다
+        const bladeEmissive = telegraphing && (hornMode || ventMode || roarMode) ? 0x000000 : emissive;
+        // 광란 돌격 선회(2차 예고, B3-4) — 꼬리·뿔이 예고 내내 빨강(chainCharge.tailTelegraph)
+        const chainTurn = enemy.chainTurn === true && enemy.ai === 'windup';
+        const tailRed = chainTurn ? new THREE.Color(def2.chargeAttack?.chainCharge?.tailTelegraph === 'red' ? balance.telegraph.colorUnparryable : balance.telegraph.colorParryable).getHex() : undefined;
+        const hornEmissive = tailRed !== undefined ? tailRed : telegraphing && !hornMode ? 0x000000 : emissive;
+        // 완벽 전용 타(삼연낫 ③, perfectOnly — 결정 17) — 예고 내내 같은 파랑을 더 밝게
+        const glow = telegraphing && attack.perfectOnly === true && hitIntensity <= 0 ? BH_PERFECT_ONLY_GLOW : hitIntensity > 0 ? hitIntensity : 1;
+        if (glow !== 1) for (const material of visual.flashMaterials) material.emissiveIntensity = glow;
         for (const material of visual.behemoth.bladeMats) {
           material.emissive.set(bladeEmissive);
-          material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
+          material.emissiveIntensity = glow;
         }
         for (const material of visual.behemoth.hornMats) {
           material.emissive.set(hornEmissive);
           material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
         }
+        for (const material of visual.behemoth.tailMats) {
+          material.emissive.set(tailRed ?? emissive);
+          material.emissiveIntensity = hitIntensity > 0 ? hitIntensity : 1;
+        }
+        // 입 — 절망의 포효 예고(despairRoar)엔 보라 기운(투사체 보라 — 끌어당김의 마법 문법), 그 밖엔 몸과 같이
+        const despairMouth = roarMode && enemy.despairRoar === true && enemy.ai === 'windup';
+        visual.behemoth.mouthMat.emissive.set(despairMouth ? new THREE.Color(balance.telegraph.colorProjectile).getHex() : emissive);
+        visual.behemoth.mouthMat.emissiveIntensity = despairMouth ? 1.4 : hitIntensity > 0 ? hitIntensity : 1;
       }
       // 떨림의 기우뚱. z 회전은 이 연출만 쓰므로 매 프레임 절대값으로 넣는다 —
       // 자세를 만드는 x 회전(기울임·내지름)은 건드리지 않는다
@@ -4381,9 +4455,9 @@ export class Stage {
         const slamMode = enemy.attackMode === 'slam';
         // 발구르기 착지(B3-1) — impact 와 그 뒤 후딜(recover, 튕김·헛침 아님) 동안 내리찍은 자세로
         const slamLanding = slamMode && enemy.pose === undefined && (enemy.ai === 'impact' || (enemy.ai === 'recover' && !recoiled && !frozenWhiff));
-        if (enemy.pose === 'head_down') {
-          // 머리 내림 — 낫이 박혀 앞으로 기울고 앞다리가 접힌다. 머리·구체는 poseBehemothRig 가 표(눈 0.9m)로
-          leanTarget = BEHEMOTH_TORSO.headDownLean;
+        if (headDownPose(enemy.pose)) {
+          // 머리 내림·탈진(exhaust, B3-4 — 양낫 박힘) — 낫이 박혀 앞으로 기울고 앞다리가 접힌다. 머리·구체는 poseBehemothRig 가 표(눈 0.9m)로. 탈진은 헐떡이는 잔떨림
+          leanTarget = BEHEMOTH_TORSO.headDownLean + (enemy.pose === 'exhaust' ? Math.sin(now / BH_PANT_MS) * BH_PANT_AMP : 0);
           lungeTarget = 0;
           crouchTarget = -def2.height * BEHEMOTH_TORSO.headDownCrouch;
         } else if (enemy.pose === 'rear') {
@@ -4596,10 +4670,16 @@ export class Stage {
         const chargeMode = enemy.attackMode === 'charge';
         const closeMode = enemy.attackMode === 'close';
         const slamMode = enemy.attackMode === 'slam';
-        // 낫 공격(오른 'melee'·왼 'alt')만 낫이 나간다 — 돌격·들이받기는 뿔이, 발구르기는 앞발이 무기라 낫을 접는다
-        const bladeMode = isMelee && !chargeMode && !closeMode && !slamMode;
+        const roarMode = enemy.attackMode === 'roar';
+        const comboMode = enemy.attackMode === 'combo';
+        // 낫 공격(오른 'melee'·왼 'alt'·삼연낫 'combo')만 낫이 나간다 — 돌격·들이받기는 뿔이, 발구르기는 앞발이, 포효는 입이 무기라 낫을 접는다
+        const bladeMode = isMelee && !chargeMode && !closeMode && !slamMode && !roarMode;
         const bladeStriking = bladeMode && striking;
         const headbutting = closeMode && striking;
+        // 삼연낫(B3-4) — 타의 낫은 정의의 관절 짝(exposeOnParry.joint → bladeOfJoint)으로: ① 오른 ② 왼, 짝이 없는 ③ 은 양낫(bothBlades)
+        const comboBlade = comboMode ? bladeOfJoint(def2, attack.exposeOnParry?.joint ?? '') : undefined;
+        const bothBlades = comboMode && comboBlade === undefined;
+        const bladeSide: 1 | -1 = enemy.attackMode === 'alt' || comboBlade === 'l' ? -1 : 1;
         // 자세 보간 — 로직 자세(enemy.pose)가 서면 표 자리로, 사라지면 normal 로. 돌격 예고는 예고 진행도 그대로(머리가 내려가는 만큼
         // 구체도 따라 내려간다), 그 외(head_down·stunned)는 몇 프레임에 걸쳐. 마지막 자세를 기억해 되돌아갈 때도 같은 표를 읽는다
         if (enemy.pose !== undefined) {
@@ -4626,7 +4706,9 @@ export class Stage {
           nowMs: now,
           legPhase: visual.legPhase ?? 0,
           legBlend: visual.legBlend ?? 0,
-          bladeSide: enemy.attackMode === 'alt' ? -1 : 1, // 왼낫 교대(B1-3) — 'alt' 면 왼팔이 나간다
+          bladeSide, // 왼낫 교대(B1-3) — 'alt' 면 왼팔이 나간다, 삼연낫 ② 도 왼팔
+          bothBlades, // 삼연낫 ③ — 두 낫 함께
+          chainTurn: enemy.chainTurn === true && inWindup, // 광란 돌격 선회 — 꼬리 휘두름
           bladeWindup: bladeMode && inWindup && !chargeCoil ? windupProgress : 0,
           bladeStriking,
           strikeProgress: enemy.strikeProgress ?? 0,

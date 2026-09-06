@@ -16,6 +16,7 @@
 //   corrosive — PlayerMove(이속 ×moveSpeedMul). 도트·오염 대기는 여기서: dotIntervalTicks 마다 dotPerTick(corrosive_tick — player_damaged 없음),
 //                pendingPerTicks 마다 오염 대기 +1(전투당 상한 pendingCap — 살아 있는 보스의 EnemyState.fightPendingIn 에 누적, 보스가 없으면 오르지 않는다).
 //                웅덩이 위에선 Hazards 가 매 틱 lingerTicks 로 되살린다. 물약이 지우지 않는다
+//   cowed     — Reaction(일반 패링이 관절을 열지 못함 normalParryOpensJoint·완벽 패링 1회로 해제), Mana(일반 패링 마나 normalParryMana). 거수 P3 포효(Enemies.resolveRoar)가 세운다(B3-4)
 //
 // 실행 순서: Reaction 뒤 — 같은 틱의 일반 패링 해제·impact 부여를 이 틱 안에 이벤트로 낸다.
 

@@ -636,11 +636,49 @@
       #buff-corrosive svg {
         display: block;
       }
+      /* 위압 디버프(거수 P3 포효, B3-4) — 같은 틀, 짙은 자주 결(거수 갑각색 계열). 일반 패링이 관절을 열지 못하고 마나가 준다, 완벽 패링 한 번이면 풀린다 */
+      #buff-cowed {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        padding: 3px;
+        box-sizing: border-box;
+        border: 1px solid #7a5aa0;
+        border-radius: 6px;
+        background: rgba(20, 8, 32, 0.66);
+        display: none;
+        animation: cowed-pulse 1.4s ease-in-out infinite;
+      }
+      #buff-cowed.on {
+        display: block;
+      }
+      @keyframes cowed-pulse {
+        0%, 100% { box-shadow: 0 0 4px rgba(201, 166, 255, 0.3); }
+        50% { box-shadow: 0 0 10px rgba(201, 166, 255, 0.8); }
+      }
+      #buff-cowed .buff-cd {
+        position: absolute;
+        inset: 0;
+        border-radius: 5px;
+        pointer-events: none;
+      }
+      #buff-cowed .buff-sec {
+        position: absolute;
+        right: 1px;
+        bottom: -1px;
+        font: bold 10px/1 monospace;
+        color: #e4d4ff;
+        text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+      }
+      #buff-cowed svg {
+        display: block;
+      }
       /* 디버프 재시작 — 세 번 크게 깜빡인다 (독·화염·상태 공용, id 맥동보다 우선) */
       #buff-poison.refresh,
       #buff-burn.refresh,
       #buff-numb.refresh,
       #buff-hobble.refresh,
+      #buff-cowed.refresh,
       #buff-concussion.refresh {
         animation: buff-refresh 0.25s ease-in-out 3;
       }
@@ -1251,7 +1289,7 @@
     <div id="sigil-toast"><div class="name"></div><div class="sub"></div></div>
     <div id="web-overlay"></div>
     <div id="status">
-      <div id="buffs"><div class="buff-group buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div></div><div class="buff-group debuffs"><div id="buff-poison"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-burn"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-numb"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-concussion"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-hobble"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-corrosive"><div class="buff-cd"></div><span class="buff-sec"></span></div></div></div>
+      <div id="buffs"><div class="buff-group buffs"><div id="buff-food"><div class="buff-cd"></div><span class="buff-sec"></span></div></div><div class="buff-group debuffs"><div id="buff-poison"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-burn"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-numb"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-concussion"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-hobble"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-corrosive"><div class="buff-cd"></div><span class="buff-sec"></span></div><div id="buff-cowed"><div class="buff-cd"></div><span class="buff-sec"></span></div></div></div>
       <div id="status-bars">
         <div id="status-hp"><div id="status-hp-fill"></div><span class="bar-num" id="status-hp-num"></span></div>
         <div id="status-mana"><div id="status-mana-fill"></div><span class="bar-num" id="status-mana-num"></span></div>

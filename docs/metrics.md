@@ -48,11 +48,17 @@ spell_kill      { enemyType }
 weak_point_hit    { enemyId, enemyType, id, damage, x, y, z }   ← 약점 구체 명중 (거수 눈·관절·심장·분출공), 권총·화살·화염구 직격만
 weak_point_broken { enemyId, enemyType, id, x, y, z }   ← 약점 내구 0 (관절 파열 — 착탄점)
 exposure_closed   { enemyId, enemyType, id, hits }   ← 약점 노출 창이 닫힘 (관절 타이머 소진·머리 내림 종료·혼절·파열). hits = 그 창 안의 명중 수 → 노출 활용률
-boss_status       { enemyId, enemyType, kind, on, id?, blade?, ticks?, cause?, cell?, sealed?, selfDamage? }   ← 보스 상태이상 on/off (expose{id — 관절·돌격 중 눈·갑각 떨기 중 분출공}·head_down{cause? 'topple'|'backflow'}·daze·rupture{id, blade}·limp·skid·blind·topple{cell 'P'|'C', row, col}·rear{sealed — 발구르기 앞발 들기 자세, 심장 열림}·backflow{cause 'heart'|'vent', ticks, selfDamage — 심장 66 으로 발구르기 취소(자해 45) / 분출공 66 으로 갑각 떨기 취소(자해 0)}·choke{ticks — 분출공 내구 0, 갑각 떨기 봉인·웅덩이 증발·예고 +10, B3-2} — 기획서 §5 의 12종이 이 하나로)
+boss_status       { enemyId, enemyType, kind, on, id?, blade?, ticks?, cause?, cell?, sealed?, selfDamage?, despair? }   ← 보스 상태이상 on/off (expose{id — 관절·돌격 중 눈·갑각 떨기 중 분출공}·head_down{cause? 'topple'|'backflow'}·daze·rupture{id, blade}·limp·skid·blind·topple{cell 'P'|'C', row, col}·rear{sealed — 발구르기 앞발 들기 자세, 심장 열림}·backflow{cause 'heart'|'vent'|'eye', ticks, selfDamage — 심장 66 으로 발구르기 취소(자해 45) / 분출공 66 으로 갑각 떨기 취소(자해 0) / 눈 66 으로 포효 취소(자해 0, B3-4)}·choke{ticks — 분출공 내구 0, 갑각 떨기 봉인·웅덩이 증발·예고 +10, B3-2}·roar{despair — 포효 예고 자세, 눈이 위로 열림, B3-4}·exhaust{ticks — 삼연낫 3연속 완벽, 눈 + 분출공 동시 노출, B3-4} — 기획서 §5 의 12종이 이 하나로)
 charge_dodged     { enemyId, enemyType, x, z }   ← 돌격을 무적 8틱 안에 완벽 회피 (거수 미끄러짐 + 양 관절 노출)
 enemy_slam_start  { enemyId, enemyType, wake, dist }   ← 거수 발구르기 예고 시작(B3-1). wake = 기상 발구르기(머리 내림·혼절이 끝나며 확정)
 slam_landed       { enemyId, enemyType, x, z, radius, wake, hit }   ← 발구르기 착지(ground_slam 과 함께). hit = 플레이어 직격
 hobble_applied / hobble_ended   { kind, ticks } / { kind, reason }   ← 절뚝(발구르기 직격, B3-1) — numb_arm·concussion 과 같은 플레이어 상태 규약
+cowed_applied / cowed_ended     { kind, ticks } / { kind, reason }   ← 위압(거수 P3 포효 12m 안, B3-4 — 일반 패링이 관절을 열지 못함·마나 5, 완벽 패링 1회로 cured) 플레이어 상태 규약
+enemy_roar_start  { enemyId, enemyType, despair, ticks, x, z }   ← 거수 포효 예고 시작(B3-4 — pose roar, 눈이 위로 열린다). despair = 절망의 포효(체력 ≤ 20%)
+enemy_roar        { enemyId, enemyType, despair, radius, dist, x, z }   ← 포효 발동(impact 파이프가 아닌 별도 분기 — 피해·방어 판정 없음). 소리·카메라 킥
+boss_roar_hit     { enemyId, enemyType, status, pull, push, dist, despair }   ← 포효가 플레이어를 잡았다(12m 안·회피 무적 아님): 위압 + 밀림 push(m) 또는 끌림 pull(m)
+enemy_combo_start / enemy_combo_step   { enemyId, enemyType, steps } / { enemyId, enemyType, step, steps, perfectOnly }   ← 삼연낫 ① 시작 / ②③ 진행(perfectOnly = ③ 완벽 전용 — 예고음 고음)
+enemy_chain_turn  { enemyId, enemyType, ticks, x, z }   ← 광란 돌격의 제자리 선회(2차 예고) 시작 — 첫 질주를 완벽 회피하지 못했고 눈멂·전도도 아니었다
 enemy_volley_start / enemy_volley_shot   { enemyId, enemyType, shots } / { enemyId, enemyType, left }   ← 연사(족장 화살 세례·거수 갑각 떨기 B3-2 — 종류는 def.volleyAttack.projectileKind)
 spawn_pool        { kind, x, z, enemyId?, hit? }   ← 진액 웅덩이 요청(거수 P2+, B3-2 — Enemies 낫 착지 'blade'·발구르기 'stomp'·미끄러짐 'skid', Projectiles 구슬 착탄 'orb'). Hazards 가 받아 만든다
 pool_spawned      { id, x, z, r, kind }   ← 웅덩이가 생김(balance.hazards.pools)
@@ -102,9 +108,21 @@ zone_cleared    { tick }
 | `hazards.pendingIn` | `corrosive_pending` (`amount` 합) | 오염 진액이 오염 대기에 더한 양(전투당 ≤ 8) |
 | `hazards.ventCleanse` | `corruption_cleansed` (`amount` 합) | 분출공 명중이 오염 대기에서 깎은 양(전투당 ≤ 6) — 반사·직격 노선 성공 지표 |
 | `hazards.chokes` | `boss_status` (`kind 'choke'`, on) | 질식 수 — 반사 4회 달성 |
-| `weakPoints.backflows` (기존) | `boss_status` (`kind 'backflow'`, on) | 심장(cause 'heart')·분출공(cause 'vent') 역류 합 |
+| `weakPoints.backflows` (기존) | `boss_status` (`kind 'backflow'`, on) | 심장(cause 'heart')·분출공(cause 'vent')·눈(cause 'eye' — 포효 취소, B3-4) 역류 합 |
 
 순 오염 변화(기획서 §11.1 장부) = `pendingIn − ventCleanse`(처형·사망 정화는 B3-6). 시스템(`Hazards.ts`·`Status.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).
+
+## P3 기술 (boss) — 2026-09-06 (거수 B3-4)
+
+| 카운터 | 이벤트 | 뜻 |
+|---|---|---|
+| `boss.roars` | `enemy_roar` | 포효 발동 수(절망 포함) |
+| `boss.roarHits` | `boss_roar_hit` | 위압에 걸린 수 — 회피로 피한 비율 = 1 − roarHits/roars |
+| `boss.combos` | `enemy_combo_start` | 삼연낫 시작 수 |
+| `boss.exhausts` | `boss_status` (`kind 'exhaust'`, on) | 탈진 수 — 3연속 완벽 패링(숙련 지표) |
+| `boss.chainTurns` | `enemy_chain_turn` | 광란 돌격 선회 수 — 첫 질주를 완벽 회피하지 못한 수 |
+
+위압 걸림·해제는 `cowed_applied/_ended`(플레이어 상태 규약). 시스템(`Enemies.ts`·`Reaction.ts`) 안에는 카운터가 없다 — Metrics 가 이벤트를 구독한다 (CLAUDE.md 규칙 4).
 
 ## 전리품 (loot) — 2026-09-04
 
