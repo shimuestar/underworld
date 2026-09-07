@@ -4744,17 +4744,7 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
   // 미니맵 — 키(M)가 아니라 일시정지 메뉴에서만 켜고 끈다. 꺼지면 왼쪽 위 안내 글도 함께 (render 가 본다)
   toggleMinimap: () => minimap.toggle(),
   minimapOn: () => minimap.visible,
-  trapRoom: () => {
-    enterTrapRoom();
-    setPaused(false);
-    input.requestLock();
-  },
-  monsterRoom: () => {
-    enterMonsterRoom();
-    setPaused(false);
-    menuUI.show('summon'); // 들어서자마자 소환 탭 — 시간은 멈춰 있다
-  },
-  // 맵 목록 워프 (2026-09-07 사용자) — 층은 입구로, 시험방은 각자의 진입 함수로
+  // 맵 목록 워프 (2026-09-07 사용자) — 층은 입구로, 시험방은 각자의 진입 함수로 (시험방 메뉴 항목은 목록으로 통합)
   warp: (id) => {
     if (id === 'trap') {
       enterTrapRoom();
