@@ -2,6 +2,8 @@ import { GameAudio } from './core/Audio';
 import { balance } from './core/Balance';
 import { Events } from './core/Events';
 import { Metrics } from './core/Metrics';
+import * as Save from './core/Save';
+import * as SaveStorage from './core/SaveStorage';
 import { DebugOverlay } from './render/DebugOverlay';
 import { Input } from './core/Input';
 import { Loop } from './core/Loop';
@@ -108,6 +110,10 @@ interface FloorState {
   npcs: World['npcs'];
 }
 const floorStates = new Map<number, FloorState>();
+/** 불러온 세이브의 층 차이 — 그 층을 처음 지을 때 loadFloor 가 덧씌우고 지운다 (core/Save) */
+let pendingFloorDiffs: Record<string, Save.FloorDiff> = {};
+/** 첫 로드·세이브 복원 중에는 층 이동 자동 저장을 하지 않는다 */
+let suppressAutosave = false;
 
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
@@ -397,6 +403,8 @@ const deathMenu = new ListDialog(deathOverlay);
 const warpDialog = new ListDialog(undefined, 'warpdialog');
 /** 사제 대화 — 축복·(추후) 퀘스트 */
 const npcDialog = new ListDialog(undefined, 'npcdialog');
+/** 저장 목록 — 정지 메뉴 '불러오기' (2026-09-07 사용자) */
+const saveDialog = new ListDialog(undefined, 'savedialog');
 /** 상인 창 — 팔기·사기·퀘스트, 인벤토리 방식 (2026-09-07 사용자). 제단 상점(ShopUI)과 품목·재고를 공유한다 */
 const merchantUI = new MerchantUI(world);
 /** UI 오버레이 열기/닫기 — 닫을 때 포인터 락을 바로 되찾는다.
@@ -806,6 +814,8 @@ for (const name of [
   'shop_denied',
   'respawn_registered',
   'respawned',
+  'game_saved',
+  'game_loaded',
   'lobby_altar_entered',
   'lobby_warp',
   'npc_talked',
@@ -2873,19 +2883,9 @@ events.on('player_died', () => {
 let runXpGained = 0;
 events.on('xp_gained', (payload) => { runXpGained += (payload as { amount: number }).amount; });
 
-/** 틱 수 → 시간: 00:00:00 (시:분:초). 시뮬레이션이 멈춘 동안(창·사망·정지)은 흐르지 않는다 */
-function formatPlayTime(ticks: number): string {
-  const total = Math.floor(ticks / balance.loop.tickRate);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const two = (n: number) => String(n).padStart(2, '0');
-  return `${two(h)}:${two(m)}:${two(s)}`;
-}
-
-/** 사망 화면 본문 — 게임플레이 시간(전체)과 이번 플레이로 얻은 경험치 */
+/** 사망 화면 본문 — 게임플레이 시간(전체, 시:분:초 — 시뮬레이션이 멈춘 동안은 흐르지 않는다)과 이번 플레이로 얻은 경험치 */
 function deathSummary(): string {
-  return `시간: ${formatPlayTime(world.tick)}\n획득 경험치: ✦ ${runXpGained.toLocaleString()}`;
+  return `시간: ${Save.formatPlayTime(world.tick)}\n획득 경험치: ✦ ${runXpGained.toLocaleString()}`;
 }
 
 /** 로비 부활 예약 — 사망 화면을 lobbyReviveDelayMs 동안 보여 준 뒤 로비 마법진에서 깨어난다.
@@ -2928,6 +2928,11 @@ function showDeathMenu(): void {
 events.on('respawned', (payload) => {
   const r = payload as { kind?: string };
   if (r.kind === 'lobby') showReaction('성소의 빛이 몸을 되돌렸다 — 대제단에서 활성화한 제단으로 돌아갈 수 있다', 3600);
+});
+
+// 제단 활성화 — 체크포인트 자동 저장 (balance.save.autosave.altarActivated)
+events.on('respawn_registered', () => {
+  if (balance.save.autosave.altarActivated) saveGame('auto');
 });
 
 events.on('grave_dropped', () =>
@@ -3014,6 +3019,103 @@ function restartCurrentFloor(): void {
   forgetFloor(floorIndex);
   loadFloor(floorIndex, 'entrance', true);
   finishRevive({ x: world.player.x, z: world.player.z, kind: 'restart' });
+}
+
+// ---- 세이브/로드 (2026-09-07 사용자) — 규칙은 core/Save, 저장소는 core/SaveStorage. 여기는 시점과 창만 ----
+
+/** 저장할 수 없는 곳 — 시험방(함정·몬스터)은 진행과 섞이지 않는다 */
+function canSaveHere(): boolean {
+  return floorIndex !== TRAP_ROOM && floorIndex !== MONSTER_ROOM;
+}
+
+/** 지금 상태를 저장한다 — 현재 층은 살아 있는 world 에서, 다녀온 층은 얼려 둔 FloorState 에서 차이를 뜬다. 성공하면 저장 데이터 */
+function saveGame(kind: Save.SaveKind): Save.SaveData | null {
+  if (!canSaveHere()) return null;
+  const floors: Record<string, Save.FloorDiff> = {};
+  for (const [idx, fs] of floorStates) {
+    if (idx === TRAP_ROOM || idx === MONSTER_ROOM) continue;
+    floors[String(idx)] = Save.captureFloorDiff(fs);
+  }
+  floors[String(floorIndex)] = Save.captureFloorDiff(world);
+  // 아직 안 가 본 층에 남겨 둔(불러온 뒤 미방문) 차이도 그대로 물려준다
+  for (const [k, d] of Object.entries(pendingFloorDiffs)) if (!(k in floors)) floors[k] = d;
+  const data = Save.serialize(world, { kind, floorLabel: floorLabel(floorIndex), floors, unlockedFloors, barsCineSeen });
+  if (!SaveStorage.putSave(data)) {
+    showReaction('저장 실패 — 브라우저 저장 공간을 쓸 수 없다', 3000);
+    return null;
+  }
+  events.emit('game_saved', { kind, id: data.id, floor: floorIndex });
+  lastSaveAt = performance.now();
+  lastSaveKind = kind;
+  return data;
+}
+let lastSaveAt = -Infinity;
+let lastSaveKind: Save.SaveKind | null = null;
+
+/** 저장 데이터로 되돌린다 — 진행을 복원하고 저장한 층을 새로 지어(차이 덧씌움) 저장한 자리에 세운다.
+ *  다른 층의 차이는 그 층에 처음 들어갈 때 적용된다. 살아 있던 적·보스는 만피로 돌아온다 */
+function loadGame(data: Save.SaveData): void {
+  suppressAutosave = true;
+  try {
+    // 떠 있는 창을 전부 걷는다 — 사망 화면에서 불러올 수도 있다
+    deathMenu.hide();
+    deathOverlay!.classList.remove('visible');
+    warpDialog.hide();
+    npcDialog.hide();
+    lootUI.hide();
+    menuUI.hide();
+    if (shopUI.open) shopUI.hide();
+    world.uiOpen = false;
+    world.dead = false;
+    // 진행 기록 — 이 세션 것은 버리고 저장된 것으로
+    floorStates.clear();
+    unlockedFloors.clear();
+    for (const f of data.unlockedFloors) unlockedFloors.add(f);
+    barsCineSeen.clear();
+    for (const f of data.barsCineSeen) barsCineSeen.add(f);
+    pendingFloorDiffs = { ...data.floors };
+    Save.restoreProgress(world, data); // loadFloor 보다 먼저 — 봉인·해독 판정이 진행 값을 읽는다
+    loadFloor(data.floorIndex, 'entrance', true);
+    floorStates.clear(); // loadFloor 가 떠나는(불러오기 전) 층을 얼려 둔 것도 버린다 — 그 층은 차이로 다시 짓는다
+    Save.applyPlayerPose(world, data);
+    world.player.dots = {};
+    Status.clearAll(world);
+    world.itemChannel = null;
+    world.itemCooldown = 0;
+    Sigils.recompute(world); // 각인·장비 파생 수치
+    runXpGained = 0;
+    events.emit('game_loaded', { kind: data.kind, id: data.id, floor: data.floorIndex });
+    showReaction(`${Save.kindLabel(data.kind)} 저장 불러옴 — ${data.floorLabel} · ${Save.formatSavedAt(data.savedAt)}`, 3200);
+  } finally {
+    suppressAutosave = false;
+  }
+}
+
+/** 저장 목록 창 — 정지 메뉴 '불러오기'. 고르면 그 시점으로, 닫으면 정지 메뉴로 돌아간다 */
+function showSaveDialog(): void {
+  const saves = SaveStorage.listSaves();
+  const entries = saves.length
+    ? saves.map((s) => ({
+        id: s.id,
+        label: `${Save.kindLabel(s.kind)} · ${s.floorLabel} · ${Save.formatSavedAt(s.savedAt)}`,
+        sub: `시간 ${Save.formatPlayTime(s.tick)} · ◆ ${s.gold} · ✦ ${s.xp} · 체력 ${Math.round(s.player.health)} · 활성 제단 ${s.altars.length}곳`,
+      }))
+    : [{ id: 'none', label: '저장된 게임이 없다', sub: '층을 옮기거나 제단을 활성화하면 자동으로 저장되고, 정지 메뉴에서 수동 저장도 할 수 있다', enabled: false }];
+  pauseMenu.hide();
+  saveDialog.padMode = input.usingPad;
+  saveDialog.show({
+    title: '불러오기',
+    subtitle: `자동 저장은 최근 ${balance.save.keep.auto}개, 수동 저장은 최근 ${balance.save.keep.manual}개까지 남는다`,
+    entries,
+    onPick: (id) => {
+      const data = saves.find((s) => s.id === id);
+      if (!data) { pauseMenu.show(); return; }
+      loadGame(data);
+      setPaused(false);
+      input.requestLock();
+    },
+    onClose: () => pauseMenu.show(),
+  });
 }
 
 /** 층 기록을 잊는다 — 봉인 해제·쇠창살 연출 기억. 새로 짓거나 몬스터를 전부 되살릴 때 */
@@ -3757,6 +3859,12 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance', fre
     world.pulledLevers = new Set();
     world.arena = Arena.fromLevel(level); // 아레나(거수 4층, B3-5) — arena 정의가 없는 층은 null
     world.npcs = spawnNpcs(levelJson.entities, level); // 로비의 사제·상인 — 다른 층은 빈 배열
+    // 불러온 세이브의 층 — 원본과의 차이(죽인 적·연 상자·부순 통…)를 덧씌운다. 한 번 쓰면 지운다 ((개발) 새로 시작은 원본으로)
+    const diff = pendingFloorDiffs[String(index)];
+    if (diff) {
+      Save.applyFloorDiff(world, level, diff);
+      delete pendingFloorDiffs[String(index)];
+    }
   }
   world.npcInView = null;
   world.projectiles.length = 0;
@@ -3842,6 +3950,8 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance', fre
   // (setGlyphsReadable 은 씬을 훑으므로 층을 갈아 끼운 뒤 한 번 더 불러야 한다)
   stage.setGlyphsReadable(world.corruption.applied >= (balance.corruption.thresholds[0] ?? 25));
   events.emit('floor_entered', { index, id: levelJson.id, name: levelJson.name, total: ZONE.length });
+  // 체크포인트 자동 저장 — 층을 옮길 때(로비 도착·부활 포함). 첫 로드와 세이브 복원 중, 시험방은 제외 (balance.save.autosave)
+  if (!suppressAutosave && balance.save.autosave.floorChange) saveGame('auto');
 }
 
 events.on('zone_cleared', () => {
@@ -4101,7 +4211,7 @@ function simulate(dt: number): void {
     lootUI.padX(input.gamepad.rawHeld(2)); // X 짧게 모두 가져오기 · 길게 수량 나누기 (홀드 판정이라 매 틱)
   }
   // 사망 메뉴·워프 목록·사제 대화 — 일시정지 메뉴와 같은 고정 버튼 규약 (D-패드 ↑↓, A 결정, B 닫기)
-  for (const dlg of [deathMenu, warpDialog, npcDialog]) {
+  for (const dlg of [deathMenu, warpDialog, npcDialog, saveDialog]) {
     if (!dlg.open) continue;
     dlg.padMode = input.usingPad;
     if (!input.gamepad.connected) continue;
@@ -5098,6 +5208,18 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
     input.requestLock();
   },
   restart: () => reloadClean(),
+  // 세이브/로드 (2026-09-07 사용자) — 수동 저장은 메뉴에 남아 안내 줄로 결과를 알리고, 불러오기는 목록 창을 연다
+  save: () => {
+    if (!canSaveHere()) return '시험방에서는 저장할 수 없다 — 진행 층이나 성소 로비에서';
+    const data = saveGame('manual');
+    return data ? `수동 저장 완료 — ${data.floorLabel} · ${Save.formatSavedAt(data.savedAt)}` : '저장 실패 — 브라우저 저장 공간을 쓸 수 없다';
+  },
+  load: () => showSaveDialog(),
+  saveSummary: () => {
+    const n = SaveStorage.listSaves().length;
+    const last = lastSaveKind ? `마지막 ${Save.kindLabel(lastSaveKind)} 저장 ${Math.round((performance.now() - lastSaveAt) / 1000)}초 전 · ` : '';
+    return `${last}저장 ${n}개 · 층 이동·제단 활성화 때 자동 저장, 여기서는 테스트용 수동 저장`;
+  },
   openBindings: (mode) => {
     // 일시정지는 유지한 채 설정 화면만 덮는다 — 닫으면 다시 메뉴로 돌아온다
     pauseMenu.hide();
@@ -5240,6 +5362,7 @@ window.addEventListener('gamepaddisconnected', () => {
 // 개발 빌드 전용 디버그 핸들 (헤드리스 테스트/콘솔 조작용)
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__world = world;
+  (window as unknown as Record<string, unknown>).__save = { save: saveGame, load: loadGame, list: SaveStorage.listSaves, dialog: showSaveDialog, loadFloor }; // 세이브/로드 검증용
   (window as unknown as Record<string, unknown>).__input = input;
   (window as unknown as Record<string, unknown>).__stage = stage; // 씬 그래프 검증용
   (window as unknown as Record<string, unknown>).__audio = audio; // 소리 재생 호출 추적용(헤드리스)
@@ -5260,7 +5383,15 @@ if (import.meta.env.DEV) {
 }
 // 게임은 성소 로비에서 시작한다 (2026-09-07 사용자). 지하 1층은 로비 남쪽 현관 계단으로 내려간다.
 // 지하 1층 상태는 여기서 얼려 두었다가 내려갈 때 그대로 되살린다. ?b1 이면 예전처럼 지하 1층 입구에서 시작 (테스트 편의)
-if (!new URLSearchParams(location.search).has('b1')) loadFloor(LOBBY);
+if (!new URLSearchParams(location.search).has('b1')) {
+  suppressAutosave = true; // 첫 로드는 저장하지 않는다 — 빈 게임으로 목록을 채우지 않게
+  loadFloor(LOBBY);
+  suppressAutosave = false;
+}
+{
+  const n = SaveStorage.listSaves().length;
+  if (n > 0) afterMs(1200, () => showReaction(`저장된 게임 ${n}개 — ESC 정지 메뉴 → 불러오기 로 이어할 수 있다`, 4000));
+}
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)
 if (new URLSearchParams(location.search).has('skills')) {

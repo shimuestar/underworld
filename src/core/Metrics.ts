@@ -51,6 +51,8 @@ export interface MetricsSnapshot {
   /** 보스 아레나(거수 4층, B3-5) — 봉쇄 수(입장·재입장) / 기둥 붕괴 수(기획서 §12 "기둥 붕괴 수") / 반캠핑 자발 돌격 수(숨기 플레이 신호) / 반캠핑 접근 가속 수(원거리 캠핑 신호) / 폭발로 치운 잔해 수 */
   arena: { seals: number; pillarCollapses: number; anticampCharges: number; anticampFar: number; rubbleBroken: number };
   pickups: { potions: number; healed: number; gold: number; xp: number };
+  /** 세이브/로드 — 자동 저장 수 / 수동 저장 수 / 불러온 수 */
+  saves: { auto: number; manual: number; loads: number };
   shieldsBroken: number;
   ammo: { shotsFired: number; shotsHit: number; altarEntries: number; altarBypasses: number };
   mana: { gained: number; decayed: number; lostToFail: number };
@@ -144,6 +146,10 @@ export class Metrics {
   private lootDeniedFull = 0;
   private lootInterrupted = 0;
   private xpGained = 0;
+  /** 세이브/로드 — 저장 수(자동·수동)·불러온 수 */
+  private savesAuto = 0;
+  private savesManual = 0;
+  private loads = 0;
   private shieldsBroken = 0;
   private shotsFired = 0;
   private shotsHit = 0;
@@ -329,6 +335,11 @@ export class Metrics {
     events.on('xp_gained', (payload) => {
       this.xpGained += (payload as { amount: number }).amount;
     });
+    events.on('game_saved', (payload) => {
+      if ((payload as { kind: string }).kind === 'auto') this.savesAuto++;
+      else this.savesManual++;
+    });
+    events.on('game_loaded', () => this.loads++);
 
     events.on('shot_fired', (payload) => {
       this.shotsFired++;
@@ -440,6 +451,7 @@ export class Metrics {
         pools: this.poolsSpawned, evaporated: this.poolsEvaporated, corrosiveApplied: this.corrosiveApplied, corrosiveDamage: round2(this.corrosiveDamage) ?? 0,
         pendingIn: this.corrosivePendingIn, ventCleanse: this.ventCleanse, chokes: this.chokes,
       },
+      saves: { auto: this.savesAuto, manual: this.savesManual, loads: this.loads },
       pickups: {
         potions: this.potionsPicked,
         healed: this.healedTotal,

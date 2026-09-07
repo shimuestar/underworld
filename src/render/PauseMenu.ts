@@ -33,6 +33,12 @@ export interface PauseMenuActions {
   resume(): void;
   /** 처음부터 시작 */
   restart(): void;
+  /** 수동 저장 — 테스트용 (2026-09-07 사용자). 결과 문구를 돌려준다(메뉴 안내 줄에 띄운다) */
+  save(): string;
+  /** 저장 목록 열기 — 골라 이어한다 */
+  load(): void;
+  /** 저장 목록 요약 — 저장 항목의 설명 줄 */
+  saveSummary(): string;
   /** 키 설정 열기 — 키보드 화면 또는 패드 화면 */
   openBindings(mode: 'kb' | 'pad'): void;
   /** 미니맵 켜기/끄기 — 왼쪽 위 안내 글도 함께 (키가 아니라 여기서만, 2026-09-04) */
@@ -95,22 +101,35 @@ export class PauseMenu {
         enabled: () => true,
         run: actions.restart,
       },
-      // '저장된 곳(제단)에서 시작'은 제단 부활 폐지와 함께 뺐다 (2026-09-07 사용자) — 부활은 로비에서만
+      // '저장된 곳(제단)에서 시작'은 제단 부활 폐지와 함께 뺐다 (2026-09-07 사용자) — 부활은 로비에서만.
+      // 대신 세이브/로드 — 자동 저장(층 이동·제단 활성화)에 더해 테스트용 수동 저장, 목록에서 골라 이어하기
       {
-        label: '3. 키보드 키 설정',
+        label: '3. 저장 (수동)',
+        hint: () => actions.saveSummary(),
+        enabled: (world) => !world.dead,
+        run: () => this.setNotice(actions.save()),
+      },
+      {
+        label: '4. 불러오기',
+        hint: () => '저장 목록에서 골라 그 시점부터 이어한다 — 지금 진행은 사라진다',
+        enabled: () => true,
+        run: actions.load,
+      },
+      {
+        label: '5. 키보드 키 설정',
         hint: () => '키보드 키를 기능에 건다',
         enabled: () => true,
         run: () => actions.openBindings('kb'),
       },
       {
-        label: '4. 패드 키 설정',
+        label: '6. 패드 키 설정',
         hint: () => '게임패드 버튼을 기능에 건다',
         enabled: () => true,
         run: () => actions.openBindings('pad'),
       },
       // 시험방 항목 둘은 오른쪽 맵 목록으로 옮겼다 (2026-09-07 사용자 — 중복 제거)
       {
-        label: '5. 미니맵 켜기 / 끄기',
+        label: '7. 미니맵 켜기 / 끄기',
         hint: () =>
           actions.minimapOn()
             ? '지금 켜짐 — 끄면 왼쪽 위 안내 글도 함께 사라진다 (화면을 비운다)'
