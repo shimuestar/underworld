@@ -54,7 +54,7 @@ import { LootUI } from './render/LootUI';
 import { InventoryUI, quickslotView } from './render/InventoryUI';
 import { SKILL_KEYS, SkillUI } from './render/SkillUI';
 import { itemIconSvg } from './render/ItemIcons';
-import { allSigilIds, isImplemented, sigilColor, sigilDef } from './core/SigilData';
+import { allSigilIds, isActiveSkill, isImplemented, sigilColor, sigilDef, type SigilDef } from './core/SigilData';
 import z01f1 from '../data/levels/z01_f1.json';
 import z01f2 from '../data/levels/z01_f2.json';
 import z01f3 from '../data/levels/z01_f3.json';
@@ -436,11 +436,21 @@ window.addEventListener('keydown', (e) => {
       );
     }
   }
-  // 테스트용 무적 토글 — HP·마나·탄약·배터리·스태미너가 줄지 않는다 (슬라이스 검증 시 제거)
+  // 테스트용 무적 토글 — HP·마나·탄약·배터리·스태미너가 줄지 않는다 (슬라이스 검증 시 제거).
+  // 켤 때 구현된 액티브 스킬을 전부 익힌다 — 스킬 시험이 목적이라 스킬 탭이 비어 있으면 쓸 게 없다 (2026-09-07 사용자).
+  // 끌 때 스킬은 남는다 — 정식으로 익힌 것과 구분할 수 없어 빼앗지 않는다 (U 와 같은 규약)
   if (e.code === 'KeyG') {
     world.godMode = !world.godMode;
-    showReaction(world.godMode ? '(테스트) 무적 ON' : '(테스트) 무적 OFF', 1400);
-    console.log('[debug] 무적', world.godMode);
+    const n = world.godMode ? grantActiveSkills() : 0;
+    showReaction(
+      world.godMode
+        ? n > 0
+          ? `(테스트) 무적 ON — 액티브 스킬 ${n}종 익힘`
+          : '(테스트) 무적 ON'
+        : '(테스트) 무적 OFF',
+      1400,
+    );
+    console.log('[debug] 무적', world.godMode, '액티브 익힘', n);
   }
   // 테스트용 시야 내 몰살 (Alt) — 진행 속도를 위한 편의 (슬라이스 검증 시 제거).
   // 화면에 들어와 있고 벽에 가리지 않은 적만 죽인다.
@@ -2975,16 +2985,17 @@ function reloadClean(): void {
   location.assign(location.pathname);
 }
 
-/** 테스트 — 구현된 스킬을 전부 익힌다. 패시브는 빈 부위에 새겨지고 액티브는 빈 칸에
- *  올라간다(4종이라 칸 4개에 딱 맞는다). 오염 대기는 되돌려 밸런스 검증을 더럽히지 않는다 */
-function grantAllSkills(): number {
+/** 테스트 — 조건에 맞는 구현된 스킬을 익힌다(이미 익힌 것은 건너뛴다). 패시브는 빈 부위에 새겨지고
+ *  액티브는 빈 칸에 올라간다(시전 가능 4종이라 칸 4개에 딱 맞는다).
+ *  오염 대기는 되돌려 밸런스 검증을 더럽히지 않는다. 모드 전환은 부르는 쪽이 정한다 */
+function grantSkills(pick: (def: SigilDef) => boolean): number {
   const pendingBefore = world.corruption.pending;
   let granted = 0;
   sigilToastMuted = true; // 스킬별 토스트 대신 부르는 쪽이 한 줄 안내를 낸다
   try {
     for (const id of allSigilIds()) {
       const def = sigilDef(id);
-      if (!isImplemented(def)) continue;
+      if (!isImplemented(def) || !pick(def)) continue;
       if (world.sigils.inventory.includes(id)) continue;
       Sigils.acquire(world, id);
       granted++;
@@ -2993,10 +3004,22 @@ function grantAllSkills(): number {
     sigilToastMuted = false;
   }
   world.corruption.pending = pendingBefore;
+  return granted;
+}
+
+/** 테스트(U·?skills·몬스터 시험방) — 구현된 스킬 전부 + 스킬 테스트 모드(마나 무한) */
+function grantAllSkills(): number {
+  const granted = grantSkills(() => true);
   // 모드를 켠다 — 시뮬레이션이 매 틱 마나를 최대치로 되돌려 소비가 무효가 된다
   world.skillTestMode = true;
   world.mana.value = balance.mana.max;
   return granted;
+}
+
+/** 테스트(무적 G) — 구현된 액티브 스킬만. 패시브(가방 아이템·몸 새김)와 마나 모드는 건드리지 않는다:
+ *  무적이 이미 자원을 틱마다 되돌리므로 스킬 테스트 모드를 겹쳐 켤 이유가 없다 */
+function grantActiveSkills(): number {
+  return grantSkills((def) => isActiveSkill(def));
 }
 
 function restartAfterDeath(): void {
