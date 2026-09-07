@@ -2486,14 +2486,23 @@ events.on('item_used', (payload) => {
   audio.play(ITEM_SOUND[info.kind] ?? 'pickup_potion');
   padRumble('use'); // 꿀꺽 — 마시는 손맛
   const parts: string[] = [];
-  if (info.healed > 0) parts.push(`+${Math.round(info.healed)} HP`);
-  if (info.restored > 0) parts.push(`+${Math.round(info.restored)} 마나`);
   const idef = itemDef(info.kind);
-  if (idef.overTime) parts.push(`나머지는 ${Math.round(idef.overTime.durationTicks / 60)}초 동안`); // 대형 물약
+  const ot = idef.overTime;
+  const secs = ot ? Math.round(ot.durationTicks / 60) : 0;
+  if (ot && ot.instantRatio <= 0) {
+    // 일반 물약 — 마신 순간엔 안 차고 전부 천천히 (2026-09-07). 총량을 '~초 동안' 으로 말한다
+    if (idef.heal > 0) parts.push(`+${Math.round(idef.heal * world.modifiers.potionHealMul)} HP`);
+    if (idef.restore > 0) parts.push(`+${Math.round(idef.restore)} 마나`);
+    parts.push(`${secs}초 동안 천천히`);
+  } else {
+    if (info.healed > 0) parts.push(`+${Math.round(info.healed)} HP`);
+    if (info.restored > 0) parts.push(`+${Math.round(info.restored)} 마나`);
+    if (ot) parts.push(`나머지는 ${secs}초 동안`); // 대형 물약 — 절반 즉시
+  }
   showReaction(`${parts.join('  ')}   (남은 ${info.left}개)`, 1200);
-  // 이 아이템이 만지는 게이지만 깜빡인다 — 이미 가득했으면 끝부분만
-  if (idef.heal > 0) flashRestoreBar('status-hp-fill', info.healed <= 0);
-  if (idef.restore > 0) flashRestoreBar('status-mana-fill', info.restored <= 0);
+  // 이 아이템이 만지는 게이지만 깜빡인다 — 이미 가득했으면 끝부분만 (즉시분이 0인 물약은 게이지로 판정)
+  if (idef.heal > 0) flashRestoreBar('status-hp-fill', world.player.health >= balance.player.healthMax);
+  if (idef.restore > 0) flashRestoreBar('status-mana-fill', world.mana.value >= balance.mana.max);
   if (idef.regen) flashRestoreBar('status-stamina-fill', false); // 지속 효과 시작 — 스태미너도
 });
 const DENY_TEXT: Record<string, string> = {

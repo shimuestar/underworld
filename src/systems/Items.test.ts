@@ -194,9 +194,29 @@ describe('사용', () => {
     world.events.on('item_used', (p) => used.push(p as { healed: number; left: number }));
 
     drink(world, 1);
-    expect(world.player.health).toBe(10 + itemDef('potion').heal);
+    // 일반 물약도 천천히 찬다 (2026-09-07 사용자) — 마신 순간엔 안 차고 overTime.durationTicks(3초) 동안 고르게
+    const def = itemDef('potion');
+    expect(def.overTime).toEqual({ instantRatio: 0, durationTicks: 180 });
+    expect(world.player.health).toBe(10);
     expect(countOf(world, 'potion')).toBe(0);
-    expect(used[0]).toMatchObject({ healed: itemDef('potion').heal, left: 0 });
+    expect(used[0]).toMatchObject({ healed: 0, left: 0 });
+    idle(world, Math.floor(def.overTime!.durationTicks / 2));
+    expect(world.player.health).toBeGreaterThan(10 + def.heal * 0.4);
+    expect(world.player.health).toBeLessThan(10 + def.heal * 0.6);
+    idle(world, def.overTime!.durationTicks);
+    expect(world.player.health).toBeCloseTo(10 + def.heal, 3);
+    expect(world.potionRegen.hp.amount).toBe(0);
+  });
+
+  it('마나 물약도 같은 규칙 — 3초 동안 천천히 (총 35)', () => {
+    addItem(world, 'mana');
+    world.mana.value = 0;
+    drink(world, 1);
+    const def = itemDef('mana');
+    expect(def.overTime).toEqual({ instantRatio: 0, durationTicks: 180 });
+    expect(world.mana.value).toBe(0);
+    idle(world, def.overTime!.durationTicks + 1);
+    expect(world.mana.value).toBeCloseTo(def.restore, 3);
   });
 
   it('음식 — 먹자마자 조금만 차고, 30초 동안 아주 천천히 이어서 찬다', () => {
@@ -227,6 +247,7 @@ describe('사용', () => {
     addItem(world, 'potion');
     world.player.health = balance.player.healthMax - 5;
     drink(world, 1);
+    idle(world, itemDef('potion').overTime!.durationTicks + 1);
     expect(world.player.health).toBe(balance.player.healthMax);
   });
 
@@ -303,8 +324,10 @@ describe('시전 시간', () => {
 
     idle(world, 1);
     expect(world.itemChannel).toBeNull();
-    expect(world.player.health).toBe(10 + itemDef('potion').heal);
-    expect(countOf(world, 'potion')).toBe(0);
+    expect(countOf(world, 'potion')).toBe(0); // 이제 마셨다 — 회복은 이 틱부터 천천히 (potionRegen)
+    expect(world.potionRegen.hp.amount).toBeCloseTo(itemDef('potion').heal, 5);
+    idle(world, itemDef('potion').overTime!.durationTicks);
+    expect(world.player.health).toBeCloseTo(10 + itemDef('potion').heal, 3);
   });
 
   it('맞아서 굳으면 끊긴다 — 아이템은 그대로 남는다', () => {

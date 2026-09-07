@@ -282,6 +282,11 @@ export class Metrics {
       this.potionsPicked++;
       this.healedTotal += (payload as { healed: number }).healed;
     });
+    // 물약의 지속분 — 일반 물약은 전부(2026-09-07), 대형은 절반이 마신 뒤 천천히 차므로 여기서 더해야 총량이 맞는다
+    events.on('potion_regen_tick', (payload) => {
+      const d = payload as { stat: 'hp' | 'mp'; amount: number };
+      if (d.stat === 'hp') this.healedTotal += d.amount;
+    });
     events.on('gold_picked', (payload) => {
       this.goldCollected += (payload as { amount: number }).amount;
     });
