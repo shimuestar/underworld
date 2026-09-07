@@ -6803,14 +6803,22 @@ export class Stage {
       const pouch = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshLambertMaterial({ color: 0x4a3320 }));
       pouch.position.set(0.3, 0.95, -0.12);
       torso.add(pouch);
-      // 팔 — 앞으로 내밀어 물건을 권하는 자세
+      // 팔 — 어깨점에서 손까지 한 마디로 잇는다 (앞으로 내밀어 물건을 권하는 자세).
+      // 원기둥을 두 점 사이에 놓고 축을 그 방향으로 돌린다 — 각도만 맞추던 예전 팔은 어깨·손 어느 쪽에도 닿지 않았다 (2026-09-07 사용자)
       for (const sx of [-1, 1]) {
-        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.6, 8), robe);
-        arm.position.set(sx * 0.3, 1.32, -0.22);
-        arm.rotation.x = -1.1;
+        const shoulder = new THREE.Vector3(sx * 0.3, 1.55, -0.08);
+        const handAt = new THREE.Vector3(sx * 0.26, 1.16, -0.5);
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), robe);
+        joint.position.copy(shoulder);
+        torso.add(joint);
+        const dir = handAt.clone().sub(shoulder);
+        const len = dir.length();
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, len, 8), robe);
+        arm.position.copy(shoulder).addScaledVector(dir, 0.5);
+        arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
         torso.add(arm);
         const hand = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), skin);
-        hand.position.set(sx * 0.3, 1.2, -0.5);
+        hand.position.copy(handAt);
         torso.add(hand);
       }
     }
