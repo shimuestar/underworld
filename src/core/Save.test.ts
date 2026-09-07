@@ -237,18 +237,18 @@ describe('저장소 — 목록·다듬기', () => {
     return Save.serialize(world, { kind, floorLabel: '', floors: {}, unlockedFloors: [], barsCineSeen: [], now });
   }
 
-  it('최신이 앞이고, 종류별로 keep 개까지만 남는다 — 오래된 것부터 지운다', () => {
+  it('최신이 앞이고, 개수 제한 없이 전부 남는다 (2026-09-07 사용자: 목록에서 직접 지운다)', () => {
     const st = memStorage();
-    const { auto, manual } = balance.save.keep;
-    for (let i = 0; i < auto + 2; i++) expect(SaveStorage.putSave(save('auto', 1000 + i), st)).toBe(true);
-    for (let i = 0; i < manual + 1; i++) SaveStorage.putSave(save('manual', 5000 + i), st);
+    for (let i = 0; i < 25; i++) expect(SaveStorage.putSave(save(i % 2 ? 'auto' : 'manual', 1000 + i), st)).toBe(true);
     const list = SaveStorage.listSaves(st);
-    expect(list.filter((d) => d.kind === 'auto')).toHaveLength(auto);
-    expect(list.filter((d) => d.kind === 'manual')).toHaveLength(manual);
-    expect(list[0]!.savedAt).toBe(5000 + manual); // 최신이 앞
-    expect(list.filter((d) => d.kind === 'auto').map((d) => d.savedAt)).toEqual(
-      Array.from({ length: auto }, (_, k) => 1000 + auto + 1 - k), // 가장 오래된 둘(1000, 1001)이 빠졌다
-    );
+    expect(list).toHaveLength(25);
+    expect(list.map((d) => d.savedAt)).toEqual(Array.from({ length: 25 }, (_, k) => 1024 - k)); // 최신이 앞
+  });
+
+  it('이름 — 목록 한 줄과 저장 완료 문구가 같은 이름을 쓴다', () => {
+    const d = save('manual', new Date(2026, 8, 7, 21, 43).getTime());
+    d.floorLabel = '지하 1층';
+    expect(Save.displayName(d)).toBe('수동 · 지하 1층 · 09-07 21:43');
   });
 
   it('깨진 JSON·낯선 항목은 걸러 내고, 지우기·비우기가 된다', () => {

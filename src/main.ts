@@ -816,6 +816,7 @@ for (const name of [
   'respawned',
   'game_saved',
   'game_loaded',
+  'save_deleted',
   'lobby_altar_entered',
   'lobby_warp',
   'npc_talked',
@@ -3091,28 +3092,38 @@ function loadGame(data: Save.SaveData): void {
   }
 }
 
-/** 저장 목록 창 — 정지 메뉴 '불러오기'. 고르면 그 시점으로, 닫으면 정지 메뉴로 돌아간다 */
+/** 저장 목록 창 — 정지 메뉴 '불러오기'. 고르면 그 시점으로, 줄의 '삭제'(X/Delete·패드 X)로 지우고, 닫으면 정지 메뉴로 돌아간다 */
 function showSaveDialog(): void {
-  const saves = SaveStorage.listSaves();
-  const entries = saves.length
-    ? saves.map((s) => ({
-        id: s.id,
-        label: `${Save.kindLabel(s.kind)} · ${s.floorLabel} · ${Save.formatSavedAt(s.savedAt)}`,
-        sub: `시간 ${Save.formatPlayTime(s.tick)} · ◆ ${s.gold} · ✦ ${s.xp} · 체력 ${Math.round(s.player.health)} · 활성 제단 ${s.altars.length}곳`,
-      }))
-    : [{ id: 'none', label: '저장된 게임이 없다', sub: '층을 옮기거나 제단을 활성화하면 자동으로 저장되고, 정지 메뉴에서 수동 저장도 할 수 있다', enabled: false }];
+  let saves = SaveStorage.listSaves();
+  const build = () =>
+    saves.length
+      ? saves.map((s) => ({
+          id: s.id,
+          label: Save.displayName(s),
+          sub: `시간 ${Save.formatPlayTime(s.tick)} · ◆ ${s.gold} · ✦ ${s.xp} · 체력 ${Math.round(s.player.health)} · 활성 제단 ${s.altars.length}곳`,
+          deletable: true,
+        }))
+      : [{ id: 'none', label: '저장된 게임이 없다', sub: '층을 옮기거나 제단을 활성화하면 자동으로 저장되고, 정지 메뉴에서 수동 저장도 할 수 있다', enabled: false }];
+  const subtitle = () => `저장 ${saves.length}개 — 개수 제한 없음, 안 쓰는 것은 삭제로 지운다`;
   pauseMenu.hide();
   saveDialog.padMode = input.usingPad;
   saveDialog.show({
     title: '불러오기',
-    subtitle: `자동 저장은 최근 ${balance.save.keep.auto}개, 수동 저장은 최근 ${balance.save.keep.manual}개까지 남는다`,
-    entries,
+    subtitle: subtitle(),
+    entries: build(),
     onPick: (id) => {
       const data = saves.find((s) => s.id === id);
       if (!data) { pauseMenu.show(); return; }
       loadGame(data);
       setPaused(false);
       input.requestLock();
+    },
+    onDelete: (id) => {
+      const gone = saves.find((s) => s.id === id);
+      SaveStorage.deleteSave(id);
+      saves = SaveStorage.listSaves();
+      saveDialog.refresh(build(), subtitle());
+      if (gone) events.emit('save_deleted', { id, kind: gone.kind });
     },
     onClose: () => pauseMenu.show(),
   });
@@ -4220,6 +4231,7 @@ function simulate(dt: number): void {
     else if (stick.dy !== 0) dlg.padMove(stick.dy);
     else if (input.gamepad.rawPressed(0)) dlg.padActivate();
     else if (input.gamepad.rawPressed(1)) dlg.padClose();
+    else if (input.gamepad.rawPressed(2)) dlg.padDelete(); // 저장 목록 — 커서 줄 삭제
   }
 
   // 히트스톱 — simulate를 건너뛰되 반응 입력(릴리즈)은 버퍼에 보관 (docs/architecture.md §1)
@@ -5212,7 +5224,12 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
   save: () => {
     if (!canSaveHere()) return '시험방에서는 저장할 수 없다 — 진행 층이나 성소 로비에서';
     const data = saveGame('manual');
-    return data ? `수동 저장 완료 — ${data.floorLabel} · ${Save.formatSavedAt(data.savedAt)}` : '저장 실패 — 브라우저 저장 공간을 쓸 수 없다';
+    if (!data) return '저장 실패 — 브라우저 저장 공간을 쓸 수 없다';
+    // 화면에 '저장되었습니다' — 불러오기 목록의 이름 그대로 (2026-09-07 사용자). 정지 오버레이가 덮고 있으니 게임으로 돌아가며 띄운다
+    setPaused(false);
+    input.requestLock();
+    showReaction(`저장되었습니다 — ${Save.displayName(data)}`, 3200);
+    return `수동 저장 완료 — ${Save.displayName(data)}`;
   },
   load: () => showSaveDialog(),
   saveSummary: () => {
@@ -5362,7 +5379,7 @@ window.addEventListener('gamepaddisconnected', () => {
 // 개발 빌드 전용 디버그 핸들 (헤드리스 테스트/콘솔 조작용)
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__world = world;
-  (window as unknown as Record<string, unknown>).__save = { save: saveGame, load: loadGame, list: SaveStorage.listSaves, dialog: showSaveDialog, loadFloor }; // 세이브/로드 검증용
+  (window as unknown as Record<string, unknown>).__save = { save: saveGame, load: loadGame, list: SaveStorage.listSaves, dialog: showSaveDialog, loadFloor, pause: () => setPaused(true) }; // 세이브/로드 검증용 (pause: 헤드리스엔 포인터 락이 없어 ESC 로 못 연다)
   (window as unknown as Record<string, unknown>).__input = input;
   (window as unknown as Record<string, unknown>).__stage = stage; // 씬 그래프 검증용
   (window as unknown as Record<string, unknown>).__audio = audio; // 소리 재생 호출 추적용(헤드리스)

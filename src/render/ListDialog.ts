@@ -17,6 +17,8 @@ export interface DialogEntry {
   enabled?: boolean;
   /** 초록 강조 — "지금 여기" 같은 표식 */
   current?: boolean;
+  /** 줄 오른쪽에 '삭제' 버튼 — 누르면 spec.onDelete(id). 저장 목록 (2026-09-07 사용자) */
+  deletable?: boolean;
 }
 
 export interface DialogSpec {
@@ -29,6 +31,8 @@ export interface DialogSpec {
   onPick: (id: string) => void;
   /** ESC·B·닫기 줄로 닫혔다 (onPick 뒤 닫힘에는 부르지 않는다) */
   onClose?: () => void;
+  /** deletable 줄의 삭제 버튼·Delete/X 키·패드 X — 창은 열린 채, 부르는 쪽이 refresh 로 목록을 갈아 끼운다 */
+  onDelete?: (id: string) => void;
   /** 기본 true — 고르면 닫힌다. false 면 열린 채 refresh 로 내용만 갈아 끼운다 (사제 대화) */
   closeOnPick?: boolean;
   /** ESC 로 닫을 수 있는가 — 기본 true. 사망 메뉴는 닫을 수 없다 */
@@ -107,6 +111,11 @@ export class ListDialog {
         this.activate(this.selected);
         return;
       }
+      if (e.code === 'Delete' || e.code === 'KeyX') {
+        e.preventDefault();
+        this.deleteAt(this.selected);
+        return;
+      }
       // ESC·E — 닫기. 창을 연 그 E 가 곧바로 닫지 않게 잠깐 무시한다
       if ((e.code === 'Escape' || e.code === 'KeyE') && performance.now() - this.openedAt > 250) {
         e.preventDefault();
@@ -141,6 +150,13 @@ export class ListDialog {
     if (!this.spec) return;
     if (entries) this.spec.entries = entries;
     if (subtitle !== undefined) this.spec.subtitle = subtitle;
+    // 줄이 줄었으면(삭제) 커서를 마지막 고를 수 있는 줄로
+    const n = this.spec.entries.length;
+    if (this.selected >= n) this.selected = Math.max(0, n - 1);
+    if (this.spec.entries[this.selected]?.enabled === false) {
+      const first = this.spec.entries.findIndex((en) => en.enabled !== false);
+      this.selected = Math.max(0, first);
+    }
     this.render();
   }
 
@@ -166,6 +182,18 @@ export class ListDialog {
   }
   padClose(): void {
     this.close();
+  }
+  /** 패드 X — 커서 줄 삭제 (deletable 줄만) */
+  padDelete(): void {
+    if (this.open) this.deleteAt(this.selected);
+  }
+
+  private deleteAt(index: number): void {
+    const spec = this.spec;
+    if (!spec?.onDelete) return;
+    const entry = spec.entries[index];
+    if (!entry || !entry.deletable) return;
+    spec.onDelete(entry.id);
   }
 
   private move(step: number): void {
@@ -195,7 +223,7 @@ export class ListDialog {
 
   private rebuildRows(): void {
     const spec = this.spec!;
-    const key = spec.entries.map((en) => `${en.id}:${en.label}:${en.sub ?? ''}:${en.enabled === false ? 0 : 1}:${en.current ? 1 : 0}`).join('|');
+    const key = spec.entries.map((en) => `${en.id}:${en.label}:${en.sub ?? ''}:${en.enabled === false ? 0 : 1}:${en.current ? 1 : 0}:${en.deletable ? 1 : 0}`).join('|');
     if (key === this.rowsKey) return;
     this.rowsKey = key;
     this.listEl.textContent = '';
@@ -204,15 +232,32 @@ export class ListDialog {
     spec.entries.forEach((en, i) => {
       const row = document.createElement('div');
       row.style.cssText =
-        `padding:7px 12px;border-left:2px solid transparent;border-top:1px solid ${holy ? '#e2d9c4' : '#23232b'};`;
+        `padding:7px 12px;border-left:2px solid transparent;border-top:1px solid ${holy ? '#e2d9c4' : '#23232b'};` +
+        'display:flex;align-items:center;gap:12px;';
+      const text = document.createElement('div');
+      text.style.cssText = 'flex:1;min-width:0;';
       const label = document.createElement('span');
       label.style.cssText = 'font-size:15px;';
       label.textContent = `${i + 1}. ${en.label}`;
       const sub = document.createElement('span');
       sub.style.cssText = 'display:block;font-size:11px;white-space:pre-line;';
       sub.textContent = en.sub ?? '';
-      row.appendChild(label);
-      row.appendChild(sub);
+      text.appendChild(label);
+      text.appendChild(sub);
+      row.appendChild(text);
+      if (en.deletable && spec.onDelete) {
+        // 삭제 버튼 — 줄 클릭(고르기)과 섞이지 않게 이벤트를 막는다
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.textContent = '삭제';
+        del.style.cssText =
+          'flex:none;font:12px monospace;padding:4px 10px;cursor:pointer;background:transparent;' +
+          `color:#c0504a;border:1px solid #6a2e2c;border-radius:2px;`;
+        del.addEventListener('mouseenter', () => { del.style.background = 'rgba(192,80,74,0.15)'; });
+        del.addEventListener('mouseleave', () => { del.style.background = 'transparent'; });
+        del.addEventListener('click', (ev) => { ev.stopPropagation(); this.deleteAt(i); });
+        row.appendChild(del);
+      }
       row.addEventListener('mouseenter', () => {
         if (this.padMode || en.enabled === false || this.selected === i) return;
         this.selected = i;
@@ -249,10 +294,11 @@ export class ListDialog {
       r.sub.style.color = enabled ? subNormal : subDim;
     });
     const canClose = spec.closable !== false;
+    const canDelete = !!spec.onDelete && spec.entries.some((en) => en.deletable);
     this.footEl.textContent =
       spec.footer ??
       (this.padMode
-        ? `D-패드 ↑↓ 선택   A 결정${canClose ? '   B 닫기' : ''}`
-        : `W/S·↑↓ 선택   Enter·클릭 결정   숫자키 바로 고르기${canClose ? '   E / Esc 닫기' : ''}`);
+        ? `D-패드 ↑↓ 선택   A 결정${canDelete ? '   X 삭제' : ''}${canClose ? '   B 닫기' : ''}`
+        : `W/S·↑↓ 선택   Enter·클릭 결정   숫자키 바로 고르기${canDelete ? '   X / Delete 삭제' : ''}${canClose ? '   E / Esc 닫기' : ''}`);
   }
 }

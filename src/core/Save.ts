@@ -324,6 +324,11 @@ export function kindLabel(kind: SaveKind): string {
   return kind === 'auto' ? '자동' : '수동';
 }
 
+/** 불러오기 목록 한 줄의 이름 — 저장 완료 문구도 이 이름을 그대로 쓴다 (2026-09-07 사용자) */
+export function displayName(d: Pick<SaveData, 'kind' | 'floorLabel' | 'savedAt'>): string {
+  return `${kindLabel(d.kind)} · ${d.floorLabel} · ${formatSavedAt(d.savedAt)}`;
+}
+
 /** 저장 시각 — 목록 한 줄용 `09-07 20:45` */
 export function formatSavedAt(ms: number): string {
   const d = new Date(ms);
