@@ -259,7 +259,7 @@ export class ShopUI {
       name.textContent = '성소 로비로 워프';
       name.style.cssText = 'color:#e8c76a;width:180px;';
       const desc = document.createElement('span');
-      desc.textContent = '대제단 앞에 도착한다 · 이 층은 그대로 남는다 (대제단에서 여기로 돌아올 수 있다)';
+      desc.textContent = '부활 마법진에서 시작한다 · 이 층은 그대로 남는다 (대제단에서 여기로 돌아올 수 있다)';
       desc.style.cssText = 'color:#8a8f9a;';
       line.append(cursor, key, name, desc);
       panel.appendChild(line);

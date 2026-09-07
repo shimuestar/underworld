@@ -3309,7 +3309,7 @@ events.on('altar_entered', () => {
 shopUI.onWarp = () => warpToLobby();
 
 /** 던전 제단 → 성소 로비 워프 (2026-09-07 사용자). 떠난 층은 그대로 얼려 둔다(몬스터 부활 없음 — 그건 로비→던전 규칙).
- *  로비 대제단 앞(lobby.warpArriveDistance, 부활 마법진 쪽)에 대제단을 바라보며 도착한다 — 곧장 되돌아갈 수 있게 */
+ *  로비의 부활 마법진(스폰)에서 시작한다 — 부활과 같은 자리 (loadFloor 의 기본 도착 지점) */
 function warpToLobby(): void {
   if (traveling || floorIndex === LOBBY) return;
   traveling = true;
@@ -3320,20 +3320,6 @@ function warpToLobby(): void {
   screenFade(1, 320);
   afterMs(340, () => {
     loadFloor(LOBBY);
-    const a = level.altarPos;
-    const p = world.player;
-    if (a) {
-      const s = level.spawn;
-      const d = Math.hypot(s.x - a.x, s.z - a.z) || 1;
-      const off = balance.lobby.warpArriveDistance;
-      p.x = a.x + ((s.x - a.x) / d) * off;
-      p.z = a.z + ((s.z - a.z) / d) * off;
-      p.prevX = p.x;
-      p.prevZ = p.z;
-      p.yaw = Math.atan2(-(a.x - p.x), -(a.z - p.z)); // 대제단을 본다 — facing = (-sin yaw, -cos yaw)
-      p.pitch = 0;
-    }
-    world.altarEnteredThisApproach = true; // 도착하자마자 워프 목록이 다시 열리지 않게
     events.emit('altar_warp_lobby', { from });
     screenFade(0, 400);
   });
