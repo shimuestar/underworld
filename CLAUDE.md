@@ -90,6 +90,7 @@ docs/
 - 워크트리(`.claude/worktrees/*`, 브랜치 `worktree-*`)에서 한 작업은 **로컬 `main` 에 먼저 머지**한다. 워크트리 브랜치에서 원격 main 으로 바로 밀지 않는다(`push origin HEAD:main` 금지).
 - 푸시는 **로컬 `main` 에 있는 것만** 한다. 순서: 원래 디렉터리(`/Users/shimu/Dev/GameDev/underworld`)의 `main` 에서 pull → `merge worktree-<이름>` → tsc·vitest·build 통과 확인 → `push origin main`.
 - 워크트리 브랜치는 pull 로 origin/main 을 따라가되(upstream 은 origin/main), 그 자체를 원격에 올리지 않는다.
+- **워크트리에서 "푸시해" 는 이 절차 전체를 뜻한다** — 워크트리 브랜치를 로컬 `main` 에 머지하고, 그 로컬 `main` 을 origin main 에 푸시하는 것. 워크트리 브랜치 자체를 어디에 올리라는 말이 아니다.
 
 ---
 
