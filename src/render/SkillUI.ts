@@ -5,6 +5,7 @@
 // 조작(2026-09-07 사용자): 왼쪽 마름모 십자(전투 HUD 와 같은 .dslot 공유) + 오른쪽 익힌 스킬 목록.
 //   목록의 아이콘을 끌어 칸(또는 칸 이름 줄)에 놓기 = 올리기 / 칸끼리 끌기 = 자리 바꾸기 / 칸을 밖으로 끌기 = 비우기
 //   보조: 스킬 클릭 = 고르기 → 칸 클릭 또는 Z·X·C·V = 올리기 / 빈손으로 찬 칸 클릭 = 비우기
+// 칸 키 표기는 HUD 와 같은 장치를 따른다 — 패드면 RB 를 누른 채 Y·B·A·X, 키보드면 설정된 키 (main 이 keyLabel 을 채운다, 2026-09-07 사용자)
 
 import { balance } from '../core/Balance';
 import { isActiveSkill, sigilDef } from '../core/SigilData';
@@ -34,6 +35,23 @@ export class SkillUI {
   private altarMode = false;
   /** 스킬 칸에 올리려고 골라 둔 액티브 (null = 없음) */
   private picked: string | null = null;
+  /** 칸 키 표기 — main 이 장치(패드/키보드)와 현재 바인딩을 따라 채운다. 기본은 Z·X·C·V */
+  keyLabel: (index: number, pad: boolean) => string = (i) => SKILL_KEYS[i] ?? String(i + 1);
+  /** 패드의 스킬 선택(조합) 버튼 이름 — 기본 'RB'. 헤더 문구에 쓴다 */
+  padSelectLabel: () => string = () => 'RB';
+  private _padMode = false;
+  /** 패드 표기 모드 — 바뀌면 창이 열려 있을 때 다시 그린다 (HUD 의 칸 표기와 같은 장치를 따른다) */
+  get padMode(): boolean {
+    return this._padMode;
+  }
+  set padMode(v: boolean) {
+    if (v === this._padMode) return;
+    this._padMode = v;
+    if (this.open) this.rebuild();
+  }
+  private key(i: number): string {
+    return this.keyLabel(i, this._padMode);
+  }
 
   constructor(private readonly world: World, parent: HTMLElement) {
     // 메뉴 창(MenuTabs)의 스킬 탭 패널 — 배경·시간 정지는 셸이 맡는다 (2026-09-04)
@@ -127,9 +145,12 @@ export class SkillUI {
     panel.appendChild(columns);
 
     const hint = document.createElement('div');
-    hint.textContent =
-      '아이콘 끌어 칸에 놓기 = 올리기   ·   칸끼리 끌기 = 자리 바꾸기   ·   칸을 밖으로 끌기(또는 빈손으로 클릭) = 비우기   ·   ' +
-      '스킬 클릭 = 고르기 → Z·X·C·V 로 올리기   ·   패시브 각인은 가방 탭(I)의 몸에 새긴다   ·   Tab 닫기';
+    const keys = world.skillSlots.map((_, i) => this.key(i)).join('·');
+    hint.textContent = this._padMode
+      ? '아이콘 끌어 칸에 놓기 = 올리기   ·   칸끼리 끌기 = 자리 바꾸기   ·   칸을 밖으로 끌기(또는 빈손으로 클릭) = 비우기 (마우스)   ·   ' +
+        '패시브 각인은 가방 탭의 몸에 새긴다   ·   LB/RB 탭 전환   ·   B 닫기'
+      : '아이콘 끌어 칸에 놓기 = 올리기   ·   칸끼리 끌기 = 자리 바꾸기   ·   칸을 밖으로 끌기(또는 빈손으로 클릭) = 비우기   ·   ' +
+        `스킬 클릭 = 고르기 → ${keys} 로 올리기   ·   패시브 각인은 가방 탭(I)의 몸에 새긴다   ·   Tab 닫기`;
     hint.style.cssText = 'margin-top:14px;color:#6c7280;font-size:11px;';
     panel.appendChild(hint);
 
@@ -147,9 +168,12 @@ export class SkillUI {
     const col = document.createElement('div');
     col.style.cssText = `width:${LEFT_PX}px;flex:none;`;
     const head = document.createElement('div');
+    const keys = slots.map((_, i) => this.key(i)).join('·');
     head.textContent = this.picked
       ? `스킬 퀵슬롯 — ${sigilDef(this.picked).name} 을(를) 올릴 칸을 고른다`
-      : '스킬 퀵슬롯 — 아이콘을 끌어 칸에 놓는다';
+      : this._padMode
+        ? `스킬 퀵슬롯 — 전투 중 ${this.padSelectLabel()} 를 누른 채 ${keys}   ·   아이콘을 끌어 칸에 놓는다`
+        : `스킬 퀵슬롯 — 전투 중 ${keys}   ·   아이콘을 끌어 칸에 놓는다`;
     head.style.cssText = `color:${this.picked ? '#e8c76a' : '#9fe870'};margin-bottom:6px;`;
     col.appendChild(head);
 
@@ -178,7 +202,7 @@ export class SkillUI {
       frame.className = 'frame';
       const key = document.createElement('div');
       key.className = 'key';
-      key.textContent = SKILL_KEYS[i] ?? String(i + 1);
+      key.textContent = this.key(i);
       const body = document.createElement('div');
       body.className = 'body';
       const mark = document.createElement('span');
@@ -190,7 +214,7 @@ export class SkillUI {
       }
       body.appendChild(mark);
       cell.append(frame, key, body);
-      cell.title = `${SKILL_KEYS[i] ?? i + 1} — ${id ? sigilDef(id).name : '비어 있음'}`;
+      cell.title = `${this.key(i)} — ${id ? sigilDef(id).name : '비어 있음'}`;
       cell.onclick = () => this.assign(i);
       if (id) cell.onpointerdown = dragCell(i, id);
       pad.appendChild(cell);
@@ -206,7 +230,7 @@ export class SkillUI {
       line.dataset['key'] = `k${i}`;
       line.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;line-height:1;';
       const k = document.createElement('span');
-      k.textContent = SKILL_KEYS[i] ?? String(i + 1);
+      k.textContent = this.key(i);
       k.style.cssText =
         `display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;font-size:10px;` +
         `border:1px solid ${selected ? '#e8c76a' : id ? '#4a6a8a' : '#3a3a44'};color:${selected ? '#e8c76a' : '#8a8f9a'};`;
@@ -221,7 +245,8 @@ export class SkillUI {
         name.style.color = this.picked ? '#e8c76a' : '#555c66';
       }
       line.appendChild(name);
-      if (selected) {
+      if (selected && !this._padMode) {
+        // 가운데 클릭은 마우스 얘기 — 패드는 조합 버튼으로 곧장 시전하니 뺀다
         const tag = document.createElement('span');
         tag.textContent = '가운데 클릭';
         tag.style.cssText = 'font-size:10px;color:#e8c76a;opacity:0.8;';
@@ -289,7 +314,7 @@ export class SkillUI {
 
       const tags = document.createElement('div');
       tags.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:4px;';
-      if (slotIndex >= 0) tags.appendChild(badge(`${SKILL_KEYS[slotIndex]} 칸`, def.color));
+      if (slotIndex >= 0) tags.appendChild(badge(`${this.key(slotIndex)} 칸`, def.color));
       if (picked) tags.appendChild(badge('고름 — 칸을 클릭', '#e8c76a'));
       if (!def.cast) tags.appendChild(badge('이 빌드에선 효과 없음', '#e04444'));
       row.appendChild(tags);

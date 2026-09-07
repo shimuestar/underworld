@@ -332,7 +332,10 @@ inventoryUI.onPlacePouch = () => {
   menuUI.hide();
   Loot.createPlayerPouch(world);
 };
-const skillUI = new SkillUI(world, menuUI.body); // 스킬 탭 — 부위 부착 · 퀵슬롯
+const skillUI = new SkillUI(world, menuUI.body); // 스킬 탭 — 퀵슬롯 마름모 · 익힌 스킬
+// 칸 표기는 HUD 와 같은 장치·바인딩을 따른다 — 패드면 RB 를 누른 채 Y·B·A·X (2026-09-07 사용자: 패드인데 Z·X·C·V 로 나왔다)
+skillUI.keyLabel = (i, pad) => skillSlotKeyLabelFor(i, pad);
+skillUI.padSelectLabel = () => shortPadBtn(input.gamepad.binding('skillSelect'));
 const mapPanel = new MapPanel(world, awareness, (x, z) => minimap.isRevealedAt(x, z), menuUI.body); // 맵 탭 — 큰 지도
 const summonUI = new SummonPanel(world, menuUI.body); // 소환 탭 — 몬스터 시험방에서만 (available)
 summonUI.onEdge = (dir) => menuUI.next(dir);
@@ -3777,6 +3780,8 @@ function simulate(dt: number): void {
       inventoryUI.padY(input.gamepad.rawHeld(3)); // Y 짧게 사용 · 길게 보관 주머니 내려놓기
     }
   }
+  // 스킬 탭 — 칸 표기(Y·B·A·X / Z·X·C·V)가 마지막으로 쓴 장치를 따라간다. 올리기·비우기는 아직 마우스(끌기·클릭)뿐
+  if (skillUI.open) skillUI.padMode = input.lastDevice === 'pad';
   // 소환 탭(몬스터 시험방) — D-패드·왼 스틱 커서([1][3][6] → 오른쪽 패널), A 실행. B·LB/RB 는 셸이 맡는다
   if (summonUI.open) {
     summonUI.padMode = input.lastDevice === 'pad';
@@ -4103,12 +4108,15 @@ events.on('item_used', (payload) => {
 function shortPadBtn(b: number): string {
   return buttonName(b).replace('D-패드 ', '');
 }
-function skillSlotKeyLabel(i: number): string {
-  if (input.usingPad) {
+function skillSlotKeyLabelFor(i: number, pad: boolean): string {
+  if (pad) {
     // 선택 버튼(RB) 접두는 생략 — 칸마다 반복되면 소음이다 (다이아 라벨이 조합을 안내)
     return shortPadBtn(input.gamepad.binding(`skill${i + 1}` as PadAction));
   }
   return keyBindings.label(`skill${i + 1}` as KeyAction);
+}
+function skillSlotKeyLabel(i: number): string {
+  return skillSlotKeyLabelFor(i, input.usingPad);
 }
 function quickSlotKeyLabel(i: number): string {
   if (input.usingPad) {
@@ -4904,6 +4912,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__equipment = Equipment; // 장비 검증용
   (window as unknown as Record<string, unknown>).__compass = compass;
   (window as unknown as Record<string, unknown>).__menuUI = menuUI;
+  (window as unknown as Record<string, unknown>).__skillUI = skillUI;
   (window as unknown as Record<string, unknown>).__loadFloor = loadFloor; // 층 이동 검증용(헤드리스)
   (window as unknown as Record<string, unknown>).__setPaused = setPaused; // 일시정지 메뉴(맵 목록 워프) 검증용 — 헤드리스엔 포인터 락이 없다
   (window as unknown as Record<string, unknown>).__pauseMenu = pauseMenu;
