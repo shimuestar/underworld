@@ -336,6 +336,8 @@ const skillUI = new SkillUI(world, menuUI.body); // 스킬 탭 — 퀵슬롯 마
 // 칸 표기는 HUD 와 같은 장치·바인딩을 따른다 — 패드면 RB 를 누른 채 Y·B·A·X (2026-09-07 사용자: 패드인데 Z·X·C·V 로 나왔다)
 skillUI.keyLabel = (i, pad) => skillSlotKeyLabelFor(i, pad);
 skillUI.padSelectLabel = () => shortPadBtn(input.gamepad.binding('skillSelect'));
+skillUI.onEdge = (dir) => menuUI.next(dir); // 패드 D-패드로 끝(마름모 왼쪽 칸 ← / 목록 →)에서 한 번 더 밀면 옆 탭으로
+skillUI.onClose = () => menuUI.hide(); // B — 고른 것이 없을 때
 const mapPanel = new MapPanel(world, awareness, (x, z) => minimap.isRevealedAt(x, z), menuUI.body); // 맵 탭 — 큰 지도
 const summonUI = new SummonPanel(world, menuUI.body); // 소환 탭 — 몬스터 시험방에서만 (available)
 summonUI.onEdge = (dir) => menuUI.next(dir);
@@ -358,7 +360,7 @@ menuTabsPending.push(
   {
     id: 'skill', label: '스킬',
     status: () => `${world.skillSlots.filter((slot) => slot !== null).length}/${balance.skills.quickslots}`, // 퀵슬롯에 올린 수 ('액티브' 표기는 뺐다 — 2026-09-04 사용자)
-    show: () => skillUI.show(menuUI.altar), hide: () => skillUI.hide(),
+    show: () => { skillUI.padMode = input.lastDevice === 'pad'; skillUI.show(menuUI.altar); }, hide: () => skillUI.hide(), // 첫 그림부터 장치 표기가 맞게
   },
   {
     id: 'summon', label: '소환',
@@ -3750,7 +3752,7 @@ function simulate(dt: number): void {
     menuUI.padMode = input.lastDevice === 'pad';
     if (input.gamepad.rawPressed(4)) menuUI.next(-1); // LB — 왼쪽 탭 (빙글)
     else if (input.gamepad.rawPressed(5)) menuUI.next(1); // RB — 오른쪽 탭
-    else if (input.gamepad.rawPressed(1) && menuUI.active !== 'bag') menuUI.hide(); // B — 가방 탭은 InventoryUI 가 들기·대화상자 취소를 먼저
+    else if (input.gamepad.rawPressed(1) && menuUI.active !== 'bag' && menuUI.active !== 'skill') menuUI.hide(); // B — 가방·스킬 탭은 제 창이 들기·고르기 취소를 먼저 본다
   }
   // 상점 — 일시정지 메뉴와 같은 고정 버튼 규약. uiOpen 중엔 게임 시스템이 다
   // 멈춰 있어서 A·B 가 상호작용·회피로 새지 않는다
@@ -3780,8 +3782,21 @@ function simulate(dt: number): void {
       inventoryUI.padY(input.gamepad.rawHeld(3)); // Y 짧게 사용 · 길게 보관 주머니 내려놓기
     }
   }
-  // 스킬 탭 — 칸 표기(Y·B·A·X / Z·X·C·V)가 마지막으로 쓴 장치를 따라간다. 올리기·비우기는 아직 마우스(끌기·클릭)뿐
-  if (skillUI.open) skillUI.padMode = input.lastDevice === 'pad';
+  // 스킬 탭 — 칸 표기(Y·B·A·X / Z·X·C·V)가 마지막으로 쓴 장치를 따라간다.
+  // 패드: D-패드·왼 스틱 커서(← 마름모 / → 목록), A 고르기/올리기(빈손 = 비우기), X 칸 비우기, B 취소/닫기 (2026-09-07 사용자)
+  if (skillUI.open) {
+    skillUI.padMode = input.lastDevice === 'pad';
+    if (input.gamepad.connected) {
+      if (input.gamepad.rawPressed(13)) skillUI.padMove(0, 1);
+      else if (input.gamepad.rawPressed(12)) skillUI.padMove(0, -1);
+      else if (input.gamepad.rawPressed(15)) skillUI.padMove(1, 0);
+      else if (input.gamepad.rawPressed(14)) skillUI.padMove(-1, 0);
+      else if (stick.dx !== 0 || stick.dy !== 0) skillUI.padMove(stick.dx, stick.dy);
+      else if (input.gamepad.rawPressed(0)) skillUI.padA();
+      else if (input.gamepad.rawPressed(2)) skillUI.padX();
+      else if (input.gamepad.rawPressed(1)) skillUI.padB();
+    }
+  }
   // 소환 탭(몬스터 시험방) — D-패드·왼 스틱 커서([1][3][6] → 오른쪽 패널), A 실행. B·LB/RB 는 셸이 맡는다
   if (summonUI.open) {
     summonUI.padMode = input.lastDevice === 'pad';

@@ -6,6 +6,8 @@
 //   목록의 아이콘을 끌어 칸(또는 칸 이름 줄)에 놓기 = 올리기 / 칸끼리 끌기 = 자리 바꾸기 / 칸을 밖으로 끌기 = 비우기
 //   보조: 스킬 클릭 = 고르기 → 칸 클릭 또는 Z·X·C·V = 올리기 / 빈손으로 찬 칸 클릭 = 비우기
 // 칸 키 표기는 HUD 와 같은 장치를 따른다 — 패드면 RB 를 누른 채 Y·B·A·X, 키보드면 설정된 키 (main 이 keyLabel 을 채운다, 2026-09-07 사용자)
+// 패드(2026-09-07 사용자): D-패드·왼 스틱 커서(← 마름모 / → 목록), A 목록에서 고르기 → 커서가 마름모로 건너가 A 로 올리기(빈손 = 비우기),
+//   X 칸 비우기, B 고르기 취소·닫기. 문구도 패드 모드에선 전부 패드 기준으로 적는다 (가방 탭과 같은 규약)
 
 import { balance } from '../core/Balance';
 import { isActiveSkill, sigilDef } from '../core/SigilData';
@@ -19,6 +21,15 @@ export const SKILL_KEYS = ['Z', 'X', 'C', 'V'];
 const PANEL_PX = 1100; // 가방 탭과 같은 폭 — 탭을 오갈 때 창 크기가 튀지 않는다
 const LEFT_PX = 300; // 왼쪽 기둥: 마름모 십자(160) + 칸 이름 목록
 const ICON_PX = 28; // 목록 아이콘 = 드래그 고스트 크기
+
+/** 마름모 안 패드 커서 이동 — [칸][방향(0 ←, 1 →, 2 ↑, 3 ↓)] → 다음 칸.
+ *  'list' = 오른쪽 목록으로, 'prev' = 왼쪽 탭으로(가방 탭의 -1 규약), null = 제자리 (InventoryUI CROSS_NAV 와 같은 배치) */
+const CROSS_NAV: Record<number, (number | 'list' | 'prev' | null)[]> = {
+  0: [3, 1, null, 2], // 위: ← 왼쪽 · → 오른쪽 · ↓ 아래
+  1: [3, 'list', 0, 2], // 오른쪽: ← 왼쪽 · → 목록으로 · ↑ 위 · ↓ 아래
+  2: [3, 1, 0, null], // 아래: ← 왼쪽 · → 오른쪽 · ↑ 위
+  3: ['prev', 1, 0, 2], // 왼쪽: ← 왼쪽 탭으로 · → 오른쪽 · ↑ 위 · ↓ 아래
+};
 
 /** 드롭 대상 key('k0'~'k3') → 칸 번호. 칸이 아니면 -1 */
 function slotFromKey(key: string | null): number {
@@ -52,6 +63,14 @@ export class SkillUI {
   private key(i: number): string {
     return this.keyLabel(i, this._padMode);
   }
+  /** 패드 커서 — 'slots'(왼쪽 마름모 칸) | 'list'(오른쪽 익힌 스킬 줄). 패드 모드에서만 그린다 */
+  private pane: 'slots' | 'list' = 'list';
+  private selSlot = 0;
+  private selRow = 0;
+  /** 패드 D-패드로 끝에서 한 번 더 밀면 옆 탭으로 (가방 탭과 같은 규약) */
+  onEdge: ((dir: 1 | -1) => void) | null = null;
+  /** B — 고른 것이 없을 때 창을 닫는다 (셸이 uiOpen 을 되돌린다) */
+  onClose: (() => void) | null = null;
 
   constructor(private readonly world: World, parent: HTMLElement) {
     // 메뉴 창(MenuTabs)의 스킬 탭 패널 — 배경·시간 정지는 셸이 맡는다 (2026-09-04)
@@ -74,8 +93,109 @@ export class SkillUI {
     this.altarMode = altarMode;
     this.open = true;
     this.picked = null;
+    // 커서는 목록에서 시작한다 — 익힌 게 없으면 마름모
+    this.pane = this.ownedActives().length > 0 ? 'list' : 'slots';
+    this.selRow = 0;
     this.root.style.display = 'block';
     this.rebuild();
+  }
+
+  private ownedActives(): string[] {
+    return this.world.sigils.inventory.filter((id) => isActiveSkill(sigilDef(id)));
+  }
+
+  // ---- 패드 ----
+
+  /** D-패드·왼 스틱 — 목록은 위아래, ← 로 마름모, → 로 옆 탭. 마름모는 십자 이동표(CROSS_NAV) */
+  padMove(dx: number, dy: number): void {
+    if (!this.open) return;
+    const dir = dx < 0 ? 0 : dx > 0 ? 1 : dy < 0 ? 2 : dy > 0 ? 3 : -1;
+    if (dir < 0) return;
+    if (this.pane === 'list') {
+      if (dir === 0) {
+        this.pane = 'slots';
+      } else if (dir === 1) {
+        this.onEdge?.(1);
+        return;
+      } else {
+        const n = this.ownedActives().length;
+        if (n === 0) return;
+        const next = Math.max(0, Math.min(n - 1, this.selRow + (dir === 3 ? 1 : -1)));
+        if (next === this.selRow) return; // 끝 — 제자리
+        this.selRow = next;
+      }
+    } else {
+      const next = CROSS_NAV[this.selSlot]?.[dir] ?? null;
+      if (next === null) return;
+      if (next === 'list') {
+        if (this.ownedActives().length === 0) return; // 목록이 비어 있으면 건너갈 곳이 없다
+        this.pane = 'list';
+      } else if (next === 'prev') {
+        this.onEdge?.(-1);
+        return;
+      } else {
+        this.selSlot = next;
+      }
+    }
+    this.rebuild();
+  }
+
+  /** A — 목록: 고르기(다시 누르면 취소) → 커서가 올릴 칸으로 건너간다 /
+   *  마름모: 고른 것을 그 칸에 올린다, 빈손이면 찬 칸을 비운다 (가방 탭 퀵슬롯과 같은 '빈손 = 해제') */
+  padA(): void {
+    if (!this.open) return;
+    if (this.pane === 'list') {
+      const id = this.ownedActives()[this.selRow];
+      if (!id) return;
+      if (this.picked === id) {
+        this.picked = null;
+        this.rebuild();
+        return;
+      }
+      this.picked = id;
+      // 이미 올라가 있으면 그 칸, 아니면 첫 빈 칸, 다 찼으면 지금 커서 칸
+      const slots = Sigils.ensureSkillSlots(this.world);
+      const at = slots.indexOf(id);
+      const empty = slots.indexOf(null);
+      this.pane = 'slots';
+      this.selSlot = at >= 0 ? at : empty >= 0 ? empty : this.selSlot;
+      this.rebuild();
+      return;
+    }
+    if (this.picked) {
+      this.assign(this.selSlot);
+      return;
+    }
+    if (Sigils.ensureSkillSlots(this.world)[this.selSlot]) this.assign(this.selSlot); // picked=null → 비우기
+  }
+
+  /** X — 커서 칸을 비운다. 목록 위에서는 그 스킬이 올라간 칸을 비운다 */
+  padX(): void {
+    if (!this.open) return;
+    const slots = Sigils.ensureSkillSlots(this.world);
+    let at = -1;
+    if (this.pane === 'slots') {
+      at = slots[this.selSlot] ? this.selSlot : -1;
+    } else {
+      const id = this.ownedActives()[this.selRow];
+      at = id ? slots.indexOf(id) : -1;
+    }
+    if (at < 0) return;
+    Sigils.assignSkill(this.world, at, null);
+    this.picked = null;
+    this.rebuild();
+  }
+
+  /** B — 고른 것이 있으면 취소(커서는 고른 줄로 돌아간다), 없으면 닫는다 */
+  padB(): void {
+    if (!this.open) return;
+    if (this.picked) {
+      this.picked = null;
+      if (this.ownedActives().length > 0) this.pane = 'list';
+      this.rebuild();
+      return;
+    }
+    this.onClose?.();
   }
 
   hide(): void {
@@ -147,8 +267,8 @@ export class SkillUI {
     const hint = document.createElement('div');
     const keys = world.skillSlots.map((_, i) => this.key(i)).join('·');
     hint.textContent = this._padMode
-      ? '아이콘 끌어 칸에 놓기 = 올리기   ·   칸끼리 끌기 = 자리 바꾸기   ·   칸을 밖으로 끌기(또는 빈손으로 클릭) = 비우기 (마우스)   ·   ' +
-        '패시브 각인은 가방 탭의 몸에 새긴다   ·   LB/RB 탭 전환   ·   B 닫기'
+      ? 'D-패드·왼 스틱 커서 (← 마름모 · → 목록)   A 고르기 → 칸에서 A 올리기 (빈손 = 비우기)   X 칸 비우기   ' +
+        'B 취소 · 닫기   LB/RB 탭 전환   패시브 각인은 가방 탭의 몸에 새긴다'
       : '아이콘 끌어 칸에 놓기 = 올리기   ·   칸끼리 끌기 = 자리 바꾸기   ·   칸을 밖으로 끌기(또는 빈손으로 클릭) = 비우기   ·   ' +
         `스킬 클릭 = 고르기 → ${keys} 로 올리기   ·   패시브 각인은 가방 탭(I)의 몸에 새긴다   ·   Tab 닫기`;
     hint.style.cssText = 'margin-top:14px;color:#6c7280;font-size:11px;';
@@ -170,9 +290,9 @@ export class SkillUI {
     const head = document.createElement('div');
     const keys = slots.map((_, i) => this.key(i)).join('·');
     head.textContent = this.picked
-      ? `스킬 퀵슬롯 — ${sigilDef(this.picked).name} 을(를) 올릴 칸을 고른다`
+      ? `스킬 퀵슬롯 — ${sigilDef(this.picked).name} 을(를) 올릴 칸을 고른다` + (this._padMode ? ' (A 올리기 · B 취소)' : '')
       : this._padMode
-        ? `스킬 퀵슬롯 — 전투 중 ${this.padSelectLabel()} 를 누른 채 ${keys}   ·   아이콘을 끌어 칸에 놓는다`
+        ? `스킬 퀵슬롯 — 전투 중 ${this.padSelectLabel()} 를 누른 채 ${keys}`
         : `스킬 퀵슬롯 — 전투 중 ${keys}   ·   아이콘을 끌어 칸에 놓는다`;
     head.style.cssText = `color:${this.picked ? '#e8c76a' : '#9fe870'};margin-bottom:6px;`;
     col.appendChild(head);
@@ -195,8 +315,9 @@ export class SkillUI {
 
     slots.forEach((id, i) => {
       const selected = world.selectedSkill === i && id !== null;
+      const cursor = this._padMode && this.pane === 'slots' && this.selSlot === i;
       const cell = document.createElement('div');
-      cell.className = `dslot p${i} skill ${id ? 'ready' : 'empty'}${selected ? ' selected' : ''}`;
+      cell.className = `dslot p${i} skill ${id ? 'ready' : 'empty'}${selected ? ' selected' : ''}${cursor ? ' cursor' : ''}`;
       cell.dataset['key'] = `k${i}`;
       const frame = document.createElement('div');
       frame.className = 'frame';
@@ -226,14 +347,18 @@ export class SkillUI {
     legend.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-left:24px;';
     slots.forEach((id, i) => {
       const selected = world.selectedSkill === i && id !== null;
+      const cursor = this._padMode && this.pane === 'slots' && this.selSlot === i;
       const line = document.createElement('div');
       line.dataset['key'] = `k${i}`;
-      line.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;line-height:1;';
+      line.style.cssText =
+        'display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;line-height:1;' +
+        (cursor ? 'background:rgba(127,191,255,0.12);margin:-3px -6px;padding:3px 6px;' : '');
       const k = document.createElement('span');
       k.textContent = this.key(i);
       k.style.cssText =
         `display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;font-size:10px;` +
-        `border:1px solid ${selected ? '#e8c76a' : id ? '#4a6a8a' : '#3a3a44'};color:${selected ? '#e8c76a' : '#8a8f9a'};`;
+        `border:1px solid ${cursor ? '#7fbfff' : selected ? '#e8c76a' : id ? '#4a6a8a' : '#3a3a44'};` +
+        `color:${cursor ? '#7fbfff' : selected ? '#e8c76a' : '#8a8f9a'};`;
       line.appendChild(k);
       const name = document.createElement('span');
       if (id) {
@@ -267,25 +392,28 @@ export class SkillUI {
     const list = document.createElement('div');
     list.style.cssText = 'flex:1;min-width:0;';
     const head = document.createElement('div');
-    head.textContent = '익힌 스킬 — 아이콘을 끌어 퀵슬롯 칸에 놓는다';
+    head.textContent = this._padMode ? '익힌 스킬 — A 로 골라 칸에 올린다' : '익힌 스킬 — 아이콘을 끌어 퀵슬롯 칸에 놓는다';
     head.style.cssText = 'color:#9fe870;margin-bottom:6px;';
     list.appendChild(head);
-    const owned = world.sigils.inventory.map((id) => sigilDef(id)).filter(isActiveSkill);
+    const owned = this.ownedActives().map((id) => sigilDef(id));
+    if (this.selRow >= owned.length) this.selRow = Math.max(0, owned.length - 1);
     if (owned.length === 0) {
       const empty = document.createElement('div');
       empty.textContent = '없음';
       empty.style.color = '#555c66';
       list.appendChild(empty);
     }
-    for (const def of owned) {
+    owned.forEach((def, rowIndex) => {
       const slotIndex = world.skillSlots.indexOf(def.id);
       const picked = this.picked === def.id;
+      const here = this._padMode && this.pane === 'list' && this.selRow === rowIndex;
       const accent = picked ? '#e8c76a' : slotIndex >= 0 ? def.color : null;
       const row = document.createElement('div');
       row.style.cssText =
         `display:grid;grid-template-columns:${ICON_PX + 6}px 118px minmax(0,1fr) auto;gap:0 12px;align-items:center;` +
         'padding:7px 10px;margin:3px 0;cursor:pointer;border-left:3px solid ' +
-        (accent ?? 'transparent') + ';' + (accent ? `background:${accent}14;` : 'background:rgba(255,255,255,0.02);');
+        (here ? '#7fbfff' : accent ?? 'transparent') + ';' +
+        (here ? 'background:rgba(127,191,255,0.12);outline:1px solid rgba(127,191,255,0.5);' : accent ? `background:${accent}14;` : 'background:rgba(255,255,255,0.02);');
 
       const icon = document.createElement('span');
       icon.style.cssText = 'display:block;line-height:0;cursor:grab;';
@@ -315,7 +443,7 @@ export class SkillUI {
       const tags = document.createElement('div');
       tags.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:4px;';
       if (slotIndex >= 0) tags.appendChild(badge(`${this.key(slotIndex)} 칸`, def.color));
-      if (picked) tags.appendChild(badge('고름 — 칸을 클릭', '#e8c76a'));
+      if (picked) tags.appendChild(badge(this._padMode ? '고름 — 칸에서 A' : '고름 — 칸을 클릭', '#e8c76a'));
       if (!def.cast) tags.appendChild(badge('이 빌드에선 효과 없음', '#e04444'));
       row.appendChild(tags);
 
@@ -325,7 +453,7 @@ export class SkillUI {
       };
       row.onpointerdown = (ev) => beginDrag(ev, sigilIconSvg(def.id, ICON_PX), (key) => this.dropSkill(def.id, key));
       list.appendChild(row);
-    }
+    });
     return list;
   }
 }
