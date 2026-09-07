@@ -13,6 +13,7 @@ import * as Reaction from './systems/Reaction';
 import * as Status from './systems/Status';
 import { Level, buildLevelGroup } from './level/GridLoader';
 import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt, spawnNpcs, spawnProps, spawnTraps } from './level/Spawner';
+import { resetFloor, resetFloorDiff } from './level/FloorReset';
 import { Minimap } from './render/Minimap';
 import { Awareness } from './render/Awareness';
 import { Compass } from './render/Compass';
@@ -817,7 +818,7 @@ for (const name of [
   'game_saved',
   'game_loaded',
   'save_deleted',
-  'drops_cleared',
+  'dungeon_reset',
   'lobby_altar_entered',
   'lobby_warp',
   'altar_warp_lobby',
@@ -3003,26 +3004,31 @@ function finishRevive(payload: Record<string, unknown>): void {
 // '최근 접촉한 제단에서 부활'(골드 비용, reviveAtAltar)은 폐지 (2026-09-07 사용자) — 부활은 로비(와 개발 항목)에서만.
 // 제단 진입은 여전히 world.respawn·world.altars 를 적는다 — 로비 대제단 워프 목록이 그것을 쓴다
 
-/** 로비 부활 — 성소 로비의 부활 마법진(스폰)에서 깨어난다. 무료. 죽은 층은 얼려 두되, 바닥 드랍은 모든 층에서 지운다 (비석은 남는다) */
+/** 로비 부활 — 성소 로비의 부활 마법진(스폰)에서 깨어난다. 무료. 로비에 들어오므로 던전은 초기화된다 (비석은 남는다 — resetDungeon) */
 function reviveInLobby(): void {
   restorePlayer();
-  if (balance.lobby.clearDropsOnLobbyRevive) clearDroppedItems();
   loadFloor(LOBBY);
   finishRevive({ x: world.player.x, z: world.player.z, kind: 'lobby' });
 }
 
-/** 죽어서 로비로 돌아갈 때 — 모든 층의 바닥 드랍(주머니·골드·화살·버린 것·각인·열쇠…)과 생명 입자를 지운다 (2026-09-07 사용자).
- *  비석(유품)만 남긴다 — 되찾는 것이 사망 페널티 설계다. 지금 층은 world 에서, 다녀온 층은 얼려 둔 FloorState 에서 */
-function clearDroppedItems(): void {
-  const keep = (items: World['groundItems']) => items.filter((g) => g.kind === 'grave');
-  const removed = world.groundItems.length - keep(world.groundItems).length;
-  world.groundItems = keep(world.groundItems);
-  world.lifeMotes = [];
-  for (const fs of floorStates.values()) {
-    fs.groundItems = keep(fs.groundItems);
-    fs.lifeMotes = [];
+/** 던전 초기화 — 로비에 들어오는 순간 모든 진행 층을 되돌린다 (2026-09-07 사용자). 규칙은 level/FloorReset:
+ *  몬스터 부활(잡은 보스는 제외 — unlockedFloors 가 그 기록), 함정 재무장, 바닥 아이템 삭제(비석은 남긴다).
+ *  얼려 둔 층은 Level 을 그대로 두고 배열만 갈아 끼우니 부서진 균열벽·기둥·문·레버·연 상자(빈 채)는 남는다.
+ *  아직 짓지 않은 층(불러온 세이브의 차이)은 차이 자체를 같은 규칙으로 줄인다 */
+function resetDungeon(): void {
+  let floors = 0;
+  for (const [idx, fs] of floorStates) {
+    if (idx < 0 || idx >= ZONE.length) continue; // 진행 층만 — 시험방·로비는 아니다
+    resetFloor(fs, ZONE[idx]!.entities, fs.level, unlockedFloors.has(idx));
+    floors++;
   }
-  events.emit('drops_cleared', { removed });
+  for (const [k, d] of Object.entries(pendingFloorDiffs)) {
+    const idx = Number(k);
+    if (idx < 0 || idx >= ZONE.length) continue;
+    pendingFloorDiffs[k] = resetFloorDiff(d, ZONE[idx]!.entities, ZONE[idx]!.cellSize, unlockedFloors.has(idx));
+    floors++;
+  }
+  events.emit('dungeon_reset', { floors });
 }
 
 /** (개발) 현재 층에서 즉시 부활 — 죽은 자리에서 자원만 채워 일어난다. 적은 그대로 (슬라이스 검증 시 제거) */
@@ -3160,8 +3166,8 @@ function floorLabel(index: number): string {
   return `지하 ${index + 1}층`;
 }
 
-/** 로비 대제단 워프 — 활성화한 제단이 있는 층으로 가서 그 제단 자리에 선다. 그 층의 몬스터는 전부 되살아난다 (죽인 것 포함, 2026-09-07 사용자).
- *  문·상자·바닥 아이템(비석)은 그대로 — 되살리는 것은 몬스터만이다 */
+/** 로비 대제단 워프 — 활성화한 제단이 있는 층으로 가서 그 제단 자리에 선다.
+ *  몬스터 부활·함정 재무장·바닥 정리는 로비에 들어온 순간 이미 끝났다(resetDungeon) — 여기서는 옮기기만 한다 */
 function warpToAltar(floor: number): void {
   const spot = world.altars.find((a) => a.floor === floor);
   if (!spot || traveling) return;
@@ -3170,12 +3176,6 @@ function warpToAltar(floor: number): void {
   screenFade(1, 320);
   afterMs(340, () => {
     loadFloor(floor);
-    // 몬스터 전부 부활 — 죽인 적 기록을 잊고 배치대로 다시 놓는다. 주인이 되살아나면 쇠창살도 다시 내려온다
-    forgetFloor(floor);
-    world.enemies = spawnEnemies(levelJson.entities, level);
-    if (world.arena) world.arena.bossId = null; // 새 몸은 Arena.tick 이 다시 찾는다
-    world.exitNeedsKey = world.enemies.some((e) => e.floorBoss || enemyDef(e.type).boss);
-    world.exitOpen = false;
     const p = world.player;
     p.x = spot.x;
     p.z = spot.z;
@@ -3186,7 +3186,7 @@ function warpToAltar(floor: number): void {
     if (a) p.yaw = Math.atan2(-(a.x - spot.x), -(a.z - spot.z));
     p.pitch = 0;
     world.altarEnteredThisApproach = true; // 도착하자마자 상점이 다시 열리지 않게
-    events.emit('lobby_warp', { floor, x: spot.x, z: spot.z, revived: world.enemies.length });
+    events.emit('lobby_warp', { floor, x: spot.x, z: spot.z, enemies: world.enemies.filter((e) => e.alive).length });
     screenFade(0, 400);
   });
 }
@@ -3326,9 +3326,9 @@ function warpToLobby(): void {
 }
 events.on('altar_warp_lobby', (payload) => {
   const w = payload as { from: number };
-  showReaction(`성소 로비로 워프 — ${floorLabel(w.from)}은 그대로 남았다 · 대제단에서 돌아갈 수 있다`, 3200);
+  showReaction(`성소 로비로 워프 — 던전이 초기화됐다 (${floorLabel(w.from)} 포함) · 대제단에서 돌아갈 수 있다`, 3200);
 });
-// 로비 대제단 — 활성화한(진입한) 제단 목록. 고르면 그 층으로 워프하고 몬스터가 전부 되살아난다 (2026-09-07 사용자)
+// 로비 대제단 — 활성화한(진입한) 제단 목록. 고르면 그 층으로 워프한다 — 던전은 로비에 들어온 순간 초기화됐다 (2026-09-07 사용자)
 events.on('lobby_altar_entered', () => {
   audio.play('altar_enter');
   const sorted = [...world.altars].sort((a, b) => a.floor - b.floor);
@@ -3343,7 +3343,7 @@ events.on('lobby_altar_entered', () => {
   warpDialog.padMode = input.usingPad;
   warpDialog.show({
     title: '대제단 — 워프',
-    subtitle: '활성화한 제단 자리로 곧장 간다 · 그 층의 몬스터는 전부 되살아난다',
+    subtitle: '활성화한 제단 자리로 곧장 간다 · 던전은 로비에 들어온 순간 초기화됐다 — 몬스터 부활(잡은 보스 제외)·함정 재무장·바닥 아이템 삭제',
     entries,
     tone: 'holy',
     onPick: (id) => {
@@ -3356,8 +3356,8 @@ events.on('lobby_altar_entered', () => {
   setUiOpen(true);
 });
 events.on('lobby_warp', (payload) => {
-  const w = payload as { floor: number; revived: number };
-  showReaction(`${floorLabel(w.floor)} 제단으로 워프 — 몬스터 ${w.revived}마리가 되살아났다`, 3200);
+  const w = payload as { floor: number; enemies: number };
+  showReaction(`${floorLabel(w.floor)} 제단으로 워프 — 던전은 초기화됐다 (몬스터 ${w.enemies}마리, 잡은 보스는 없다)`, 3200);
 });
 
 // ---- NPC (로비) ----
@@ -3852,6 +3852,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance', fre
     npcs: world.npcs,
   });
   if (fresh) floorStates.delete(index); // 새로 짓는다 — 얼려 둔 것이 있어도 버린다 ((개발) 현재 층 새로 시작)
+  if (index === LOBBY && balance.lobby.resetDungeonOnVisit) resetDungeon(); // 로비에 들어오는 순간 — 어떤 길로 왔든
 
   floorIndex = index;
   world.floorIndex = index;
@@ -5063,7 +5064,7 @@ function render(alpha: number): void {
   if (showAltarPrompt && world.lobby) {
     altarPrompt!.textContent =
       `대제단 — ${IK} 활성화한 제단으로 워프  (${world.altars.length}곳)\n` +
-      `지하에서 진입한 제단 자리로 곧장 간다 · 그 층의 몬스터는 전부 되살아난다`;
+      `지하에서 진입한 제단 자리로 곧장 간다 · 던전은 초기화됐다 (몬스터 부활 · 잡은 보스 제외)`;
   } else if (showAltarPrompt && !Altar.isActivated(world)) {
     // 처음 활성화 — 계단처럼 붙들어야 한다 (2026-09-07 사용자). 게이지는 계단과 같은 모양
     const frac = world.altarHoldTicks / balance.altar.activateHoldTicks;
