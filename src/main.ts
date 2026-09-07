@@ -4171,8 +4171,18 @@ function simulate(dt: number): void {
     // 무적(테스트) — 시스템을 손대지 않고 한 곳에서 자원만 되돌린다.
     // HP를 깎는 지점이 여섯 군데라 각각 분기를 심으면 금방 어긋난다
     const keep = world.godMode ? snapshotResources() : null;
+    // 성소 로비 — 총·화살·수류탄을 써도 줄지 않는다 (2026-09-07 사용자). 무적과 같은 방식: 시스템은 손대지 않고 틱 끝에 되돌린다
+    const keepAmmo = world.lobby && !keep
+      ? { mag: world.weapon.mag, reserve: world.weapon.reserve, grenades: world.weapon.grenades, arrows: world.weapon.arrows ?? 0 }
+      : null;
     for (const system of systems) system(world, dt);
     if (keep) restoreResources(keep);
+    if (keepAmmo) {
+      world.weapon.mag = keepAmmo.mag;
+      world.weapon.reserve = keepAmmo.reserve;
+      world.weapon.grenades = keepAmmo.grenades;
+      world.weapon.arrows = keepAmmo.arrows;
+    }
     // 스킬 테스트 — 마나만 무한. 무적과 같은 자리·같은 방식 (시스템은 손대지 않는다)
     if (world.skillTestMode) world.mana.value = balance.mana.max;
     // 몬스터 시험방 — HP·MP 가 소모되되 초당 regen 만큼 자동으로 찬다 (2026-09-04 사용자)
