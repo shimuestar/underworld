@@ -300,40 +300,49 @@ function buildCandle(x: number, z: number): THREE.Group {
   return g;
 }
 
-/** 상인 노점 — 상판·차양·궤짝. 상판은 상인이 서 있는 쪽(dir)을 향한다 */
+/** 상인 노점 — 상판·차양·궤짝. 로컬 좌표로 짓고 그룹을 dir 로 돌린다: 로컬 +Z 가 상인이 바라보는 쪽(손님 쪽).
+ *  상판은 칸 앞쪽(+Z), 차양은 그 위에서 앞이 낮게 기울고, 궤짝은 상인 등 뒤(-Z) 벽 쪽에 놓인다.
+ *  (처음엔 월드 축으로 기울여 동서를 보는 노점의 차양이 긴 축을 따라 비스듬히 걸렸다 — 2026-09-07 사용자 지적) */
 function buildStall(x: number, z: number, n: { x: number; z: number }, cs: number): THREE.Group {
   const g = new THREE.Group();
   const wood = new THREE.MeshLambertMaterial({ color: CHURCH_COLORS.wood });
   const cloth = new THREE.MeshLambertMaterial({ color: 0x9a3a2e });
-  const yaw = Math.atan2(n.x, n.z);
-  const px = n.x * (cs / 2 - STALL_D / 2 - 0.2);
-  const pz = n.z * (cs / 2 - STALL_D / 2 - 0.2);
+  const zc = cs / 2 - STALL_D / 2 - 0.2; // 상판 중심 — decorBlockers 의 차단 상자와 같은 자리
   const counter = new THREE.Mesh(new THREE.BoxGeometry(STALL_W, 0.95, STALL_D), wood);
-  counter.position.set(px, 0.475, pz);
-  counter.rotation.y = yaw;
+  counter.position.set(0, 0.475, zc);
   g.add(counter);
   const top = new THREE.Mesh(new THREE.BoxGeometry(STALL_W + 0.2, 0.06, STALL_D + 0.2), cloth);
-  top.position.set(px, 0.98, pz);
-  top.rotation.y = yaw;
+  top.position.set(0, 0.98, zc);
   g.add(top);
-  // 차양 — 뒤쪽 기둥 둘 + 앞으로 기운 천
-  for (const s of [-1, 1]) {
-    const pole = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.4, 0.08), wood);
-    const ox = s * (STALL_W / 2 + 0.05);
-    pole.position.set(Math.cos(yaw) * ox - n.x * 0.9, 1.2, -Math.sin(yaw) * ox - n.z * 0.9);
-    g.add(pole);
+  // 차양 기둥 넷 — 앞 둘은 상판 양 끝 바깥, 뒤 둘은 상인 등 뒤
+  const poleFrontZ = zc + STALL_D / 2 + 0.1;
+  const poleBackZ = -0.7;
+  for (const sx of [-1, 1]) {
+    for (const [pz, h] of [[poleFrontZ, 2.15], [poleBackZ, 2.5]] as const) {
+      const pole = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, 0.08), wood);
+      pole.position.set(sx * (STALL_W / 2 + 0.08), h / 2, pz);
+      g.add(pole);
+    }
   }
-  const awning = new THREE.Mesh(new THREE.BoxGeometry(STALL_W + 0.5, 0.05, 2.2), cloth);
-  awning.position.set(px - n.x * 0.5, 2.35, pz - n.z * 0.5);
-  awning.rotation.y = yaw;
-  awning.rotation.x = -0.18;
+  // 차양 — 앞(+Z)이 낮고 뒤가 높은 한 장. 기둥 위를 덮는다
+  const depth = poleFrontZ - poleBackZ + 0.4;
+  const awning = new THREE.Mesh(new THREE.BoxGeometry(STALL_W + 0.5, 0.05, depth), cloth);
+  const midZ = (poleFrontZ + poleBackZ) / 2;
+  const tilt = Math.atan2(2.5 - 2.15, poleFrontZ - poleBackZ); // 뒤 기둥과 앞 기둥 높이 차로 기울기를 정한다
+  awning.position.set(0, (2.5 + 2.15) / 2 + 0.03, midZ);
+  awning.rotation.x = tilt; // +Z(앞)가 내려간다
   g.add(awning);
-  // 궤짝 — 노점 뒤
-  for (const [ox, oy, oz] of [[-0.6, 0, -1.7], [0.5, 0, -1.8], [0.5, 0.5, -1.8]] as const) {
+  // 앞 처마 — 늘어진 천 띠
+  const valance = new THREE.Mesh(new THREE.BoxGeometry(STALL_W + 0.5, 0.22, 0.04), cloth);
+  valance.position.set(0, 2.15 - 0.1, poleFrontZ + 0.2);
+  g.add(valance);
+  // 궤짝 — 상인 등 뒤 벽 쪽 (상인은 칸 가운데 z=0 에 선다)
+  for (const [ox, oy, oz] of [[-0.6, 0, -1.45], [0.45, 0, -1.5], [0.45, 0.5, -1.5]] as const) {
     const crate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), wood);
-    crate.position.set(Math.cos(yaw) * ox - n.x * -oz, 0.25 + oy, -Math.sin(yaw) * ox - n.z * -oz);
+    crate.position.set(ox, 0.25 + oy, oz);
     g.add(crate);
   }
+  g.rotation.y = Math.atan2(n.x, n.z); // 로컬 +Z → n
   g.position.set(x, 0, z);
   return g;
 }
