@@ -85,6 +85,12 @@ docs/
 - 시스템 스펙이 필요하면 `docs/systems/` 해당 파일만 읽는다. GDD 전체를 읽지 않는다.
 - 밸런스가 이상하다고 판단되면 코드를 고치지 말고 JSON을 고치고, 그 이유를 커밋 메시지에 남긴다.
 
+### 워크트리 → main 반영 규칙
+
+- 워크트리(`.claude/worktrees/*`, 브랜치 `worktree-*`)에서 한 작업은 **로컬 `main` 에 먼저 머지**한다. 워크트리 브랜치에서 원격 main 으로 바로 밀지 않는다(`push origin HEAD:main` 금지).
+- 푸시는 **로컬 `main` 에 있는 것만** 한다. 순서: 원래 디렉터리(`/Users/shimu/Dev/GameDev/underworld`)의 `main` 에서 pull → `merge worktree-<이름>` → tsc·vitest·build 통과 확인 → `push origin main`.
+- 워크트리 브랜치는 pull 로 origin/main 을 따라가되(upstream 은 origin/main), 그 자체를 원격에 올리지 않는다.
+
 ---
 
 ## 설계 의도 (변경 시 확인 필요)
