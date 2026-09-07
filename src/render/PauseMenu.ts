@@ -10,6 +10,17 @@ import type { World } from '../core/World';
 
 const UP_KEYS = new Set(['KeyW', 'ArrowUp']);
 const DOWN_KEYS = new Set(['KeyS', 'ArrowDown']);
+const LEFT_KEYS = new Set(['KeyA', 'ArrowLeft']);
+const RIGHT_KEYS = new Set(['KeyD', 'ArrowRight']);
+
+/** 오른쫙 맵 목록 한 줄 — main 이 층·시험방을 공급한다 (2026-09-07 사용자: 일시정지 → 맵 선택 → 워프) */
+export interface FloorEntry {
+  id: string;
+  label: string;
+  /** 아래 줄 — 층 이름 */
+  sub?: string;
+  current: boolean;
+}
 
 /** 메뉴가 뜬 직후 ESC 를 무시하는 시간(ms).
  *  멈춤 자체가 ESC 로 시작되는 경우가 많은데, 브라우저가 그 keydown 을 페이지로
@@ -33,6 +44,8 @@ export interface PauseMenuActions {
   /** 미니맵 켜기/끄기 — 왼쪽 위 안내 글도 함께 (키가 아니라 여기서만, 2026-09-04) */
   toggleMinimap(): void;
   minimapOn(): boolean;
+  /** 맵 목록에서 고른 층·시험방으로 워프 (2026-09-07) */
+  warp(id: string): void;
 }
 
 interface MenuItem {
@@ -48,6 +61,14 @@ export class PauseMenu {
   private readonly panel: HTMLDivElement;
   /** 오른쪽 패드 다이어그램 — 패드가 연결돼 있을 때만 보인다 */
   private readonly diagramEl: HTMLDivElement;
+  /** 오른쪽 맵 목록 — 층·시험방. 고르면 워프 */
+  private readonly mapsEl: HTMLDivElement;
+  private mapRows: HTMLDivElement[] = [];
+  private mapEntries: FloorEntry[] = [];
+  private mapsKey = '';
+  /** 커서가 어느 열에 있는가 — 왼쪽 메뉴 / 오른쪽 맵 목록 */
+  private column: 'menu' | 'maps' = 'menu';
+  private selectedMap = 0;
   private readonly rows: HTMLDivElement[] = [];
   private readonly labels: HTMLSpanElement[] = [];
   private readonly hints: HTMLSpanElement[] = [];
@@ -61,9 +82,11 @@ export class PauseMenu {
   constructor(
     private readonly root: HTMLElement,
     private readonly world: World,
-    actions: PauseMenuActions,
+    private readonly actions: PauseMenuActions,
     /** 현재 패드 매핑의 다이어그램 SVG — 패드 미연결이면 null (main 이 공급) */
     private readonly padDiagram?: () => string | null,
+    /** 맵 목록 — 층·시험방과 지금 있는 곳 (main 이 공급). 없으면 목록을 그리지 않는다 */
+    private readonly floors?: () => FloorEntry[],
   ) {
     this.items = [
       {
@@ -134,6 +157,13 @@ export class PauseMenu {
       'background:#15151b;border:1px solid #3a3a44;padding:22px 30px;min-width:420px;' +
       'font:13px/1.6 monospace;letter-spacing:0;text-align:left;';
     row.appendChild(this.panel);
+    // 맵 목록 — 메뉴 오른쪽. 클릭·←→ 로 열을 옮겨 W/S·D-패드로 고르고 Enter/A 로 워프
+    this.mapsEl = document.createElement('div');
+    this.mapsEl.className = 'menu';
+    this.mapsEl.style.cssText =
+      'background:#15151b;border:1px solid #3a3a44;padding:18px 22px;min-width:250px;display:none;' +
+      'font:13px/1.6 monospace;letter-spacing:0;text-align:left;';
+    row.appendChild(this.mapsEl);
     this.diagramEl = document.createElement('div');
     this.diagramEl.className = 'menu'; // 클릭이 재개로 새지 않게 — 메뉴 패널과 같은 예외
     this.diagramEl.style.cssText =
@@ -165,7 +195,7 @@ export class PauseMenu {
     });
 
     const foot = document.createElement('div');
-    foot.textContent = 'W/S·↑↓ 선택   Enter 결정   ESC·화면 클릭으로 바로 계속';
+    foot.textContent = 'W/S·↑↓ 선택   A/D·←→ 맵 목록   Enter 결정   ESC·화면 클릭으로 바로 계속';
     foot.style.cssText = 'color:#6c7280;font-size:11px;margin-top:14px;';
     this.panel.appendChild(foot);
 
@@ -193,9 +223,15 @@ export class PauseMenu {
         this.move(1);
         return;
       }
+      if (LEFT_KEYS.has(e.code) || RIGHT_KEYS.has(e.code)) {
+        e.preventDefault();
+        this.moveColumn(LEFT_KEYS.has(e.code) ? -1 : 1);
+        return;
+      }
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         e.preventDefault();
-        this.activate(this.selected);
+        if (this.column === 'maps') this.warpSelected();
+        else this.activate(this.selected);
         return;
       }
       // ESC 는 "계속" 과 같다 — 멈출 때 누른 키로 그대로 빠져나올 수 있게
@@ -224,18 +260,84 @@ export class PauseMenu {
     this.move(step);
   }
 
+  /** 패드 D-패드 ←→ — 메뉴 열 ↔ 맵 목록 열 */
+  padMoveH(dir: number): void {
+    if (!this.open) return;
+    this.moveColumn(dir);
+  }
+
   /** 패드로 지금 줄을 고른다 */
   padActivate(): void {
     if (!this.open) return;
-    this.activate(this.selected);
+    if (this.column === 'maps') this.warpSelected();
+    else this.activate(this.selected);
   }
 
   show(): void {
     this.open = true;
     this.openedAt = performance.now();
     this.selected = 0;
+    this.column = 'menu';
+    this.mapEntries = this.floors?.() ?? [];
+    const cur = this.mapEntries.findIndex((f) => f.current);
+    this.selectedMap = cur >= 0 ? cur : 0;
     this.root.classList.add('visible');
     this.refresh();
+  }
+
+  /** ←→ — 열을 옮긴다. 맵 목록이 없으면 메뉴에 머문다 */
+  private moveColumn(dir: number): void {
+    if (dir > 0 && this.mapEntries.length > 0) this.column = 'maps';
+    else if (dir < 0) this.column = 'menu';
+    this.refresh();
+  }
+
+  /** 맵 목록의 커서 줄로 워프 — 지금 있는 곳이면 그냥 계속 */
+  private warpSelected(): void {
+    const entry = this.mapEntries[this.selectedMap];
+    if (!entry) return;
+    if (entry.current) { this.actions.resume(); return; }
+    this.actions.warp(entry.id);
+  }
+
+  /** 맵 목록 DOM — 항목(라벨·현재 위치)이 바뀔 때만 다시 만든다 (매 refresh 마다 만들면 마우스가 얹힌 줄이 교체돼 hover 가 튄다) */
+  private rebuildMaps(): void {
+    const key = this.mapEntries.map((f) => `${f.id}:${f.label}:${f.sub ?? ''}:${f.current ? 1 : 0}`).join('|');
+    if (key === this.mapsKey) return;
+    this.mapsKey = key;
+    this.mapsEl.textContent = '';
+    this.mapRows = [];
+    const title = document.createElement('div');
+    title.textContent = '맵 — 고르면 워프';
+    title.style.cssText = 'color:#d8e0ea;font-size:15px;letter-spacing:3px;margin-bottom:12px;';
+    this.mapsEl.appendChild(title);
+    this.mapEntries.forEach((f, i) => {
+      const r = document.createElement('div');
+      r.style.cssText = 'padding:6px 10px;border-left:2px solid transparent;border-top:1px solid #23232b;cursor:pointer;';
+      const label = document.createElement('span');
+      label.textContent = f.current ? `${f.label}  (지금 여기)` : f.label;
+      label.style.cssText = 'font-size:14px;';
+      r.appendChild(label);
+      if (f.sub) {
+        const sub = document.createElement('span');
+        sub.textContent = f.sub;
+        sub.style.cssText = 'display:block;font-size:11px;color:#6c7280;';
+        r.appendChild(sub);
+      }
+      r.addEventListener('mouseenter', () => {
+        if (this.column === 'maps' && this.selectedMap === i) return;
+        this.column = 'maps';
+        this.selectedMap = i;
+        this.refresh();
+      });
+      r.addEventListener('click', () => { this.column = 'maps'; this.selectedMap = i; this.warpSelected(); });
+      this.mapsEl.appendChild(r);
+      this.mapRows.push(r);
+    });
+    const foot = document.createElement('div');
+    foot.textContent = '←→ 열 이동 · W/S 선택 · Enter/A 워프';
+    foot.style.cssText = 'color:#6c7280;font-size:11px;margin-top:12px;';
+    this.mapsEl.appendChild(foot);
   }
 
   hide(): void {
@@ -243,8 +345,14 @@ export class PauseMenu {
     this.root.classList.remove('visible');
   }
 
-  /** 커서 이동 — 비활성 줄은 건너뛰고, 끝에서 반대편으로 돈다 */
+  /** 커서 이동 — 비활성 줄은 건너뛰고, 끝에서 반대편으로 돈다. 맵 열이면 맵 목록 안에서 돈다 */
   private move(step: number): void {
+    if (this.column === 'maps') {
+      const m = this.mapEntries.length;
+      if (m > 0) this.selectedMap = (this.selectedMap + step + m) % m;
+      this.refresh();
+      return;
+    }
     const n = this.items.length;
     for (let i = 1; i <= n; i++) {
       const next = (this.selected + step * i + n * n) % n;
@@ -257,7 +365,9 @@ export class PauseMenu {
   }
 
   private hover(index: number): void {
-    if (this.selected === index || !this.items[index]!.enabled(this.world)) return;
+    if (!this.items[index]!.enabled(this.world)) return;
+    if (this.selected === index && this.column === 'menu') return;
+    this.column = 'menu';
     this.selected = index;
     this.refresh();
   }
@@ -281,9 +391,24 @@ export class PauseMenu {
     } else {
       this.diagramEl.style.display = 'none';
     }
+    // 맵 목록 — 항목이 있으면 보이고, 커서 열에 따라 강조가 옮겨 간다
+    if (this.mapEntries.length > 0) {
+      this.rebuildMaps();
+      this.mapsEl.style.display = 'block';
+      this.mapRows.forEach((r, i) => {
+        const here = this.column === 'maps' && i === this.selectedMap;
+        const f = this.mapEntries[i]!;
+        r.style.borderLeftColor = here ? '#e8c76a' : 'transparent';
+        r.style.background = here ? 'rgba(232,199,106,0.08)' : 'transparent';
+        (r.firstChild as HTMLElement).style.color = here ? '#e8c76a' : f.current ? '#9fe870' : '#cfd2da';
+      });
+    } else {
+      this.mapsEl.style.display = 'none';
+    }
+    const menuFocused = this.column === 'menu';
     this.items.forEach((item, i) => {
       const enabled = item.enabled(this.world);
-      const here = enabled && i === this.selected;
+      const here = enabled && i === this.selected && menuFocused;
       this.rows[i]!.style.borderLeftColor = here ? '#e8c76a' : 'transparent';
       this.rows[i]!.style.background = here ? 'rgba(232,199,106,0.08)' : 'transparent';
       this.rows[i]!.style.cursor = enabled ? 'pointer' : 'default';

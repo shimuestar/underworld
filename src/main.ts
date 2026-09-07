@@ -4705,6 +4705,8 @@ function pollPadWhilePaused(): void {
   // 메뉴에서 못 빠져나오면 손쓸 방법이 없다 (설정 화면과 같은 규약)
   if (pad.rawPressed(12)) pauseMenu.padMove(-1); // D-패드 ↑
   else if (pad.rawPressed(13)) pauseMenu.padMove(1); // D-패드 ↓
+  else if (pad.rawPressed(14)) pauseMenu.padMoveH(-1); // D-패드 ← — 메뉴 열
+  else if (pad.rawPressed(15)) pauseMenu.padMoveH(1); // D-패드 → — 맵 목록
   else if (pad.rawPressed(0)) pauseMenu.padActivate(); // A
   else if (pad.rawPressed(8)) setPaused(false); // View — 다시 눌러 재개
 }
@@ -4752,9 +4754,40 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
     setPaused(false);
     menuUI.show('summon'); // 들어서자마자 소환 탭 — 시간은 멈춰 있다
   },
+  // 맵 목록 워프 (2026-09-07 사용자) — 층은 입구로, 시험방은 각자의 진입 함수로
+  warp: (id) => {
+    if (id === 'trap') {
+      enterTrapRoom();
+    } else if (id === 'monster') {
+      enterMonsterRoom();
+      setPaused(false);
+      menuUI.show('summon');
+      return;
+    } else {
+      const idx = Number.parseInt(id.slice(1), 10);
+      if (Number.isFinite(idx) && idx >= 0 && idx < ZONE.length && idx !== floorIndex) {
+        world.dead = false;
+        loadFloor(idx);
+        showReaction(`${minimap.floorTitleText}로 워프했다`, 2000);
+      }
+    }
+    setPaused(false);
+    input.requestLock();
+  },
 },
 // 패드가 연결돼 있으면 메뉴 오른쪽에 현재 매핑 다이어그램을 함께 띄운다
-() => (input.gamepad.connected ? padDiagramSvg((a) => input.gamepad.binding(a), -1) : null));
+() => (input.gamepad.connected ? padDiagramSvg((a) => input.gamepad.binding(a), -1) : null),
+// 맵 목록 — 층 넷 + 시험방 둘. 지금 있는 곳을 표시한다
+() => [
+  ...ZONE.map((z, i) => ({
+    id: `f${i}`,
+    label: `지하 ${i + 1}층`,
+    sub: ((z as { name?: string }).name ?? '').split(' - ')[1] ?? '',
+    current: floorIndex === i,
+  })),
+  { id: 'trap', label: '트랩 시험방', sub: '함정 8종', current: floorIndex === TRAP_ROOM },
+  { id: 'monster', label: '몬스터 시험방', sub: '소환 탭에서 몬스터를 놓는다', current: floorIndex === MONSTER_ROOM },
+]);
 
 /** 창 포커스 상실(알트탭·다른 창·탭 숨김)로 멈췄는가 — 돌아온 뒤 안내와 재개 규칙이 다르다 */
 let pausedByFocusLoss = false;
@@ -4859,6 +4892,8 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__compass = compass;
   (window as unknown as Record<string, unknown>).__menuUI = menuUI;
   (window as unknown as Record<string, unknown>).__loadFloor = loadFloor; // 층 이동 검증용(헤드리스)
+  (window as unknown as Record<string, unknown>).__setPaused = setPaused; // 일시정지 메뉴(맵 목록 워프) 검증용 — 헤드리스엔 포인터 락이 없다
+  (window as unknown as Record<string, unknown>).__pauseMenu = pauseMenu;
 }
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)
