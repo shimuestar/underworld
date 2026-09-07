@@ -2563,7 +2563,7 @@ export class Stage {
     this.syncEnemies([], 1);
     this.syncBarrels([]);
     this.syncProps([]);
-    this.syncNpcs([], 0);
+    this.syncNpcs([], 0, null, null);
     this.syncTraps([], 4);
     this.syncChests([]);
     this.syncGroundItems([]);
@@ -6702,8 +6702,8 @@ export class Stage {
 
   /** 기믹 동기화 — 부서지면(alive=false) 걷는다 */
   /** NPC — 서 있는 사람 모형 + 머리 위 이름판. 바라보는 대상(focusId)은 이름판이 커지고 또렷해진다.
-   *  숨은 살짝 들썩인다(nowMs) — 죽은 마네킹으로 읽히지 않게 */
-  syncNpcs(npcs: NpcState[], nowMs: number, focusId: number | null = null): void {
+   *  숨은 살짝 들썩인다(nowMs) — 죽은 마네킹으로 읽히지 않게. 플레이어가 lookRadius 안에 오면 고개만 돌려 본다(몸은 그대로, 좌우 lookMaxDeg 까지) */
+  syncNpcs(npcs: NpcState[], nowMs: number, focusId: number | null, player: { x: number; z: number } | null): void {
     const seen = new Set<number>();
     for (const npc of npcs) {
       seen.add(npc.id);
@@ -6718,6 +6718,24 @@ export class Stage {
       const breathe = Math.sin(nowMs / 900 + npc.id) * 0.012;
       const torso = group.getObjectByName('torso');
       if (torso) torso.scale.y = 1 + breathe;
+      // 고개 — 플레이어 쪽으로. 몸 yaw 기준 상대각을 ±lookMaxDeg 로 자르고, 멀면 정면으로 돌아간다. 프레임마다 12% 씩 따라간다
+      const head = group.getObjectByName('head');
+      if (head) {
+        let target = 0;
+        if (player) {
+          const cfg = balance.lobby.npc;
+          const dx = player.x - npc.x;
+          const dz = player.z - npc.z;
+          if (Math.hypot(dx, dz) <= cfg.lookRadius) {
+            // 플레이어를 보는 yaw = atan2(-dx, -dz) (facing = (-sin, -cos)); 몸 yaw 와의 차를 -π..π 로 감는다
+            let rel = Math.atan2(-dx, -dz) - npc.yaw;
+            rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+            const max = (cfg.lookMaxDeg * Math.PI) / 180;
+            target = Math.max(-max, Math.min(max, rel));
+          }
+        }
+        head.rotation.y += (target - head.rotation.y) * 0.12;
+      }
       const plate = group.getObjectByName('nameplate') as THREE.Sprite | undefined;
       if (plate) {
         const focus = focusId === npc.id;
@@ -6796,39 +6814,42 @@ export class Stage {
         torso.add(hand);
       }
     }
-    // 머리
+    // 머리 — 한 그룹(목 위 1.93m 가 피벗). syncNpcs 가 이 그룹만 돌려 플레이어를 본다
+    const headGroup = new THREE.Group();
+    headGroup.name = 'head';
+    headGroup.position.y = 1.93;
+    torso.add(headGroup);
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 10), skin);
-    head.position.y = 1.93;
-    torso.add(head);
+    headGroup.add(head);
     if (priest) {
       // 뒤로 넘긴 은발 + 작은 두건 모양 관
       const cap = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), hair);
-      cap.position.y = 1.97;
-      torso.add(cap);
+      cap.position.y = 0.04;
+      headGroup.add(cap);
       const mitre = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.16, 0.22, 8), new THREE.MeshLambertMaterial({ color: 0xf1ece0 }));
-      mitre.position.y = 2.2;
-      torso.add(mitre);
+      mitre.position.y = 0.27;
+      headGroup.add(mitre);
       const gem = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffe9a8, emissive: 0xffe9a8, emissiveIntensity: 1.2 }));
-      gem.position.set(0, 2.2, -0.13);
-      torso.add(gem);
+      gem.position.set(0, 0.27, -0.13);
+      headGroup.add(gem);
     } else {
       // 챙 넓은 모자 + 턱수염
       const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.03, 16), hair);
-      brim.position.y = 2.06;
-      torso.add(brim);
+      brim.position.y = 0.13;
+      headGroup.add(brim);
       const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 0.22, 12), hair);
-      crown.position.y = 2.18;
-      torso.add(crown);
+      crown.position.y = 0.25;
+      headGroup.add(crown);
       const beard = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), hair);
       beard.scale.set(1, 1.2, 0.6);
-      beard.position.set(0, 1.8, -0.16);
-      torso.add(beard);
+      beard.position.set(0, -0.13, -0.16);
+      headGroup.add(beard);
     }
     // 눈 — 어둡게, 안광 없음 (적이 아니다)
     for (const sx of [-0.07, 0.07]) {
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 4), new THREE.MeshLambertMaterial({ color: 0x1a1410 }));
-      eye.position.set(sx, 1.95, -0.17);
-      torso.add(eye);
+      eye.position.set(sx, 0.02, -0.17);
+      headGroup.add(eye);
     }
     // 이름판 — 바닥 아이템 이름판과 같은 캔버스 (키캡 없이 이름만)
     const plate = new THREE.Sprite(keycapMaterial('', false, priest ? '성직자 사제' : '상인', false).clone());

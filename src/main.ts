@@ -4185,6 +4185,12 @@ function simulate(dt: number): void {
     // 시스템이 멈춘 사이(사망·창 열림·클리어) 채널이 스스로 못 끊는다 —
     // 그냥 두면 빔이 화면에 얼어붙고 전류음이 남는다
     Projectiles.endChannel(world);
+    // 달리다 창을 열면 prev→현재 보간이 매 틱 처음부터 되감겨 카메라가 위아래로 계속 흔들렸다(걷기 bob 이 그 왕복을 걸음으로 본다) —
+    // 멈춘 동안은 지난 자리를 지금 자리에 맞춘다 (2026-09-07 사용자)
+    const p = world.player;
+    p.prevX = p.x;
+    p.prevY = p.y;
+    p.prevZ = p.z;
   }
   world.tick++;
   tpsWindowTicks++;
@@ -4605,7 +4611,7 @@ function render(alpha: number): void {
   stage.syncLifeMotes(world.lifeMotes);
   stage.syncBarrels(world.barrels);
   stage.syncProps(world.props);
-  stage.syncNpcs(world.npcs, performance.now(), world.npcInView?.id ?? null);
+  stage.syncNpcs(world.npcs, performance.now(), world.npcInView?.id ?? null, world.player);
   stage.syncTraps(world.traps, world.level.cellSize);
   stage.syncChests(world.chests);
   const chargeFrac =
