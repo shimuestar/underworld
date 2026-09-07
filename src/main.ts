@@ -405,7 +405,12 @@ function setUiOpen(open: boolean): void {
   else input.requestLock();
 }
 shopUI.onClose = () => setUiOpen(false);
-merchantUI.onClose = () => setUiOpen(false);
+/** NPC 창을 닫았다 — 닫은 그 상호작용 키가 다음 틱에 대화를 도로 열지 않게 잠깐 막는다 (2026-09-07 사용자: E 로 나갈 수 없었다) */
+function closeNpcUi(): void {
+  world.npcReopenGuard = balance.lobby.npc.reopenGuardTicks;
+  setUiOpen(false);
+}
+merchantUI.onClose = closeNpcUi;
 // 루팅 창 — 주머니·상자를 뒤진다. 열리는 건 loot_opened(Loot/Chest 가 낸다), 닫히면 규칙(빈 주머니 정리·재오픈 가드)을 Loot 에 맡긴다
 const lootUI = new LootUI(world);
 lootUI.onClose = () => {
@@ -3286,9 +3291,9 @@ events.on('npc_talked', (payload) => {
         return;
       }
       npcDialog.hide();
-      setUiOpen(false);
+      closeNpcUi();
     },
-    onClose: () => setUiOpen(false),
+    onClose: closeNpcUi,
   });
   setUiOpen(true);
 });

@@ -6,6 +6,9 @@ import { balance } from './Balance';
 import { GamepadInput } from './Gamepad';
 import { keyBindings } from './KeyBindings';
 
+/** Esc 로 창을 닫은 뒤 포인터 락을 다시 걸기까지 기다리는 시간(ms) — 브라우저의 Esc 처리가 끝난 뒤여야 한다 */
+const ESC_RELOCK_DELAY_MS = 150;
+
 export interface InputSnapshot {
   /** -1(A) ~ +1(D) */
   moveX: number;
@@ -235,6 +238,13 @@ export class Input {
 
   /** 포인터 락을 다시 잡는다 — 메뉴를 닫았을 때처럼 클릭 없이 조작으로 돌아가야 할 때 */
   requestLock(): void {
+    // Esc 를 누른 채(창을 Esc 로 닫은 keydown 안)라면 조금 늦춘다 — 그 자리에서 곧바로 걸면 락은 걸리지만
+    // 브라우저가 이어서 같은 Esc 를 '락 해제'로 처리해 도로 풀리고, 풀림을 본 main 이 일시정지를 띄운다
+    // (2026-09-07 사용자: 상인 창을 Esc 로 닫으면 일시정지가 뜬다)
+    if (this.keys.has('Escape')) {
+      window.setTimeout(() => this.tryLock(0), ESC_RELOCK_DELAY_MS);
+      return;
+    }
     this.tryLock(0);
   }
 

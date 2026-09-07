@@ -1600,6 +1600,8 @@ export class World {
   npcs: NpcState[] = [];
   /** 지금 바라보는 NPC (없으면 null) — HUD 안내·상호작용이 읽는다 */
   npcInView: NpcState | null = null;
+  /** 창을 닫은 상호작용 키가 다음 틱에 대화를 도로 열지 않게 — 닫을 때 main 이 채우고 Npc 가 줄인다 */
+  npcReopenGuard = 0;
   /** 사제의 축복 잔여 틱 — 0 이면 없음. 받는 피해 배율은 blessingDamageMul (Npc.bless 가 balance 에서 읽어 넣는다) */
   blessingTicks = 0;
   blessingDamageMul = 1;

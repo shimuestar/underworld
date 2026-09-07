@@ -104,6 +104,17 @@ describe('접근·상호작용', () => {
     expect(world.npcInView).toBeNull();
   });
 
+  it('창을 닫은 키가 도로 열지 않는다 — npcReopenGuard 가 남아 있는 동안은 무시하고, 틱마다 줄어 0 이 되면 다시 열린다', () => {
+    world.player.x = 14 - 1.5;
+    world.player.z = 6;
+    world.player.yaw = -Math.PI / 2;
+    world.npcReopenGuard = 2;
+    expect(press()).toEqual([]); // 가드 2 → 1
+    expect(world.npcReopenGuard).toBe(1);
+    expect(press()).toEqual([]); // 가드 1 → 0 (이 틱까지는 막힌다)
+    expect(press()).toEqual(['priest']);
+  });
+
   it('창이 열려 있거나 죽었으면 상호작용이 새지 않는다', () => {
     world.player.x = 14 - 1.5;
     world.player.z = 6;

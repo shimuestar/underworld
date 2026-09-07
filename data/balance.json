@@ -1078,7 +1078,8 @@
   "lobby": {
     "altarReviveCost": 50,
     "devDeathOptions": true,
-    "npc": { "radius": 2.6, "facingArcDeg": 100, "collisionRadius": 0.4 },
+    "_npcGuardNote": "reopenGuardTicks: 상인·사제 창을 닫은 상호작용 키가 다음 틱에 대화를 도로 열지 않게 (주머니 reopenGuardTicks 와 같은 뜻)",
+    "npc": { "radius": 2.6, "facingArcDeg": 100, "collisionRadius": 0.4, "reopenGuardTicks": 3 },
     "_blessingNote": "사제의 축복 — 체력·마나를 가득 채우고 독·화염·상태이상을 씻는다. 값이 0 이면 무료. durationTicks 동안 받는 피해가 damageTakenMul 배 (3600틱 = 60초). 퀘스트는 추후",
     "blessing": { "cost": 0, "durationTicks": 3600, "damageTakenMul": 0.8 },
     "_merchantNote": "상인 매입 (2026-09-07 사용자: 인벤토리 방식 팔기·사기·퀘스트 메뉴). 소모품 매입가 = 기준가 × sellRatio (버림). 기준가는 제단 상점에 있는 품목이면 그 값(heal·mana·healLarge·manaLarge)이고, 없는 종류(말린 고기)는 basePrice 에서 읽는다. 장비는 equipment.sellRatio, 각인은 sigil.sellGold 그대로. 파는 물건(사기 탭)은 제단 상점과 같은 품목·값·재고를 공유한다",

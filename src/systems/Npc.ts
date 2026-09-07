@@ -13,6 +13,9 @@ export function tick(world: World, _dt: number): void {
     if (world.blessingTicks === 0) world.events.emit('blessing_ended', {});
   }
 
+  // 창을 닫은 키가 도로 열지 않게 — 가드가 남은 틱 동안은 상호작용을 무시한다 (N 이면 N 틱)
+  const guarded = world.npcReopenGuard > 0;
+  if (guarded) world.npcReopenGuard--;
   if (world.npcs.length === 0) {
     world.npcInView = null;
     return;
@@ -38,7 +41,7 @@ export function tick(world: World, _dt: number): void {
 
   // 제단·상자·문이 같은 틱에 상호작용을 먹으면 겹친다 — 로비엔 그런 대상이 대제단뿐이고,
   // 대제단 반경(2.4) 과 NPC 자리는 겹치지 않게 배치한다 (lobby.json)
-  if (best && world.input.interactPressed && !world.uiOpen && !world.dead) {
+  if (best && world.input.interactPressed && !world.uiOpen && !world.dead && !guarded) {
     world.events.emit('npc_talked', { id: best.id, kind: best.kind, x: best.x, z: best.z });
   }
 }
