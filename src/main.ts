@@ -64,6 +64,7 @@ import testMonsters from '../data/levels/test_monsters.json';
 import lobbyJson from '../data/levels/lobby.json';
 import * as Npc from './systems/Npc';
 import { ListDialog } from './render/ListDialog';
+import { MerchantUI } from './render/MerchantUI';
 import * as Summon from './systems/Summon';
 import * as Equipment from './systems/Equipment';
 import { equipDef, slotLabel, type EquipSlot } from './core/EquipData';
@@ -394,6 +395,8 @@ const deathMenu = new ListDialog(deathOverlay);
 const warpDialog = new ListDialog(undefined, 'warpdialog');
 /** 사제 대화 — 축복·(추후) 퀘스트 */
 const npcDialog = new ListDialog(undefined, 'npcdialog');
+/** 상인 창 — 팔기·사기·퀘스트, 인벤토리 방식 (2026-09-07 사용자). 제단 상점(ShopUI)과 품목·재고를 공유한다 */
+const merchantUI = new MerchantUI(world);
 /** UI 오버레이 열기/닫기 — 닫을 때 포인터 락을 바로 되찾는다.
  *  안 그러면 메뉴를 나온 뒤 커서가 남아 화면을 한 번 클릭해야 조작이 돌아온다 */
 function setUiOpen(open: boolean): void {
@@ -402,6 +405,7 @@ function setUiOpen(open: boolean): void {
   else input.requestLock();
 }
 shopUI.onClose = () => setUiOpen(false);
+merchantUI.onClose = () => setUiOpen(false);
 // 루팅 창 — 주머니·상자를 뒤진다. 열리는 건 loot_opened(Loot/Chest 가 낸다), 닫히면 규칙(빈 주머니 정리·재오픈 가드)을 Loot 에 맡긴다
 const lootUI = new LootUI(world);
 lootUI.onClose = () => {
@@ -422,6 +426,7 @@ events.on('loot_opened', (payload) => {
 // 메뉴 창 키 — I·Tab 가방 탭 · M 맵 탭으로 열고, 열려 있으면 어느 키든 닫는다. 스킬 탭은 ←→(LB/RB) 또는 헤더 클릭 (2026-09-04: Tab 기본을 가방으로)
 window.addEventListener('keydown', (e) => {
   if (lootUI.open) return; // 루팅 창은 자기 키(E/Esc)로만 닫는다 — 다른 창을 겹쳐 열지 않게
+  if (merchantUI.open) return; // 상인 창도 — Tab·1/2/3 은 그 안의 탭 전환이다
   if (e.code === 'Tab') {
     e.preventDefault();
     // 상점에서 Tab — 스킬 탭(제단 모드: 패시브를 뗄 수 있다)으로 넘어간다 (둘이 겹쳐 뜨지 않게)
@@ -802,6 +807,8 @@ for (const name of [
   'blessed',
   'blessing_denied',
   'blessing_ended',
+  'item_sold',
+  'item_sell_denied',
   'corruption_applied',
   'corruption_threshold',
   'enemy_cast',
@@ -3260,10 +3267,8 @@ events.on('npc_talked', (payload) => {
   audio.play('ui_tab');
   padRumble('interact');
   if (npc.kind === 'merchant') {
-    shopUI.show({
-      title: '상인 — 사고팔기',
-      subtitle: '제단 상점과 같은 물건과 값이다. 파는 것은 Tab(가방 탭) — 장비·각인을 팔 수 있다',
-    });
+    merchantUI.padMode = input.usingPad;
+    merchantUI.show(); // 팔기·사기·퀘스트 — 인벤토리 방식
     setUiOpen(true);
     return;
   }
@@ -3301,6 +3306,16 @@ events.on('blessing_denied', (payload) => {
   showReaction(`골드 부족 — ◆ ${(payload as { cost: number }).cost} 필요`, 1400);
 });
 events.on('blessing_ended', () => showReaction('축복이 스러졌다', 1600));
+// 상인 매입(소모품) — 장비·각인 매각(equip_sold·sigil_sold)과 같은 소리·문구
+events.on('item_sold', (payload) => {
+  const d = payload as { kind: ItemKind; count: number; gold: number; total: number };
+  audio.play('pickup_gold');
+  showReaction(`${itemDef(d.kind).name} ×${d.count} 을(를) 팔았다 — ◆ +${d.gold} (소지 ◆ ${d.total})`, 2000);
+});
+events.on('item_sell_denied', (payload) => {
+  audio.play('shop_deny');
+  showReaction(`${itemDef((payload as { kind: ItemKind }).kind).name} — 상인이 사지 않는다`, 1600);
+});
 const SHOP_LABEL: Record<string, string> = {
   heal: '체력 물약', mana: '마나 물약', healLarge: '대형 체력 물약', manaLarge: '대형 마나 물약', ammo: '권총탄', arrow: '화살',
   grenade: '수류탄', battery: '배터리',
@@ -4024,6 +4039,23 @@ function simulate(dt: number): void {
     else if (input.gamepad.rawPressed(12)) shopUI.padMove(-1); // D-패드 ↑
     else if (input.gamepad.rawPressed(0)) shopUI.padBuy(); // A
     else if (input.gamepad.rawPressed(1)) shopUI.padClose(); // B
+  }
+  // 상인 창 — 가방 창과 같은 규약: D-패드·왼 스틱 커서, A 팔기(한 개)/구매, X 칸 통째로 팔기, LB/RB 탭, B 닫기
+  if (merchantUI.open) {
+    merchantUI.padMode = input.lastDevice === 'pad';
+    if (input.gamepad.connected) {
+      const ms = menuStickStep();
+      if (input.gamepad.rawPressed(13)) merchantUI.padMove(0, 1);
+      else if (input.gamepad.rawPressed(12)) merchantUI.padMove(0, -1);
+      else if (input.gamepad.rawPressed(15)) merchantUI.padMove(1, 0);
+      else if (input.gamepad.rawPressed(14)) merchantUI.padMove(-1, 0);
+      else if (ms.dx !== 0 || ms.dy !== 0) merchantUI.padMove(ms.dx, ms.dy);
+      else if (input.gamepad.rawPressed(4)) merchantUI.padTab(-1); // LB
+      else if (input.gamepad.rawPressed(5)) merchantUI.padTab(1); // RB
+      else if (input.gamepad.rawPressed(0)) merchantUI.padA();
+      else if (input.gamepad.rawPressed(2)) merchantUI.padX();
+      else if (input.gamepad.rawPressed(1)) merchantUI.padB();
+    }
   }
   // 메뉴 스틱 — 왼 스틱을 D-패드처럼 (한 번 밀면 한 칸, 계속 밀면 반복). 루팅 창·상점 공용
   const stick = menuStickStep();
@@ -5243,6 +5275,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__deathMenu = deathMenu; // 사망 메뉴 검증용
   (window as unknown as Record<string, unknown>).__warpDialog = warpDialog; // 로비 대제단 워프 목록 검증용
   (window as unknown as Record<string, unknown>).__npcDialog = npcDialog;
+  (window as unknown as Record<string, unknown>).__merchantUI = merchantUI; // 상인 창(팔기·사기·퀘스트) 검증용
   (window as unknown as Record<string, unknown>).__LOBBY = LOBBY;
 }
 // ?lobby — 시작부터 성소 로비 (2026-09-07). 지하 1층은 로비 남쪽 현관 계단으로 내려간다
