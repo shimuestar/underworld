@@ -37,6 +37,9 @@ export class ShopUI {
   padMode = false;
   /** 제목·설명 덮어쓰기 — 로비 상인은 같은 상점을 다른 간판으로 연다 (2026-09-07) */
   private heading: { title?: string; subtitle?: string } = {};
+  /** 마지막 줄 '성소 로비로 워프' — 던전 제단에서만 (2026-09-07 사용자). 고르면 onWarp */
+  private warpRow = false;
+  onWarp: (() => void) | null = null;
 
   constructor(private readonly world: World) {
     this.root = document.createElement('div');
@@ -50,11 +53,11 @@ export class ShopUI {
     // WASD/화살표로 커서 이동 + Enter 구매, 숫자키는 바로 구매 (둘 다 지원)
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
-      const digit = ROWS.findIndex((_, i) => e.code === `Digit${i + 1}`);
+      const digit = Array.from({ length: this.rowCount() }, (_, i) => `Digit${i + 1}`).indexOf(e.code);
       if (digit >= 0) {
         e.preventDefault();
-        this.selected = digit; // 숫자로 산 줄에 커서를 남긴다
-        this.buy(ROWS[digit]!.item);
+        this.selected = digit; // 숫자로 고른 줄에 커서를 남긴다
+        this.activate(digit);
         return;
       }
       if (UP_KEYS.has(e.code)) {
@@ -70,7 +73,7 @@ export class ShopUI {
       // Space·Shift 는 일부러 뺐다 — 전투에서 가장 많이 두들기는 키라 오구매가 난다
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         e.preventDefault();
-        this.buy(ROWS[this.selected]!.item);
+        this.activate(this.selected);
         return;
       }
       if (e.code === 'KeyE' || e.code === 'Escape') {
@@ -81,18 +84,32 @@ export class ShopUI {
     });
   }
 
-  show(heading: { title?: string; subtitle?: string } = {}): void {
+  show(heading: { title?: string; subtitle?: string } = {}, opts: { warp?: boolean } = {}): void {
     this.open = true;
     this.selected = 0;
     this.heading = heading;
+    this.warpRow = !!opts.warp;
     this.root.style.display = 'flex';
     this.rebuild();
   }
 
-  /** 커서 이동 — 끝에서 반대편으로 돈다 (5줄뿐이라 감기는 편이 빠르다) */
+  /** 줄 수 — 품목 + (던전 제단이면) 워프 줄 */
+  private rowCount(): number {
+    return ROWS.length + (this.warpRow ? 1 : 0);
+  }
+
+  /** 커서 이동 — 끝에서 반대편으로 돈다 (몇 줄뿐이라 감기는 편이 빠르다) */
   private move(step: number): void {
-    this.selected = (this.selected + step + ROWS.length) % ROWS.length;
+    const n = this.rowCount();
+    this.selected = (this.selected + step + n) % n;
     this.rebuild();
+  }
+
+  /** 커서 줄 실행 — 품목이면 구매, 마지막 워프 줄이면 로비로 */
+  private activate(index: number): void {
+    const row = ROWS[index];
+    if (row) this.buy(row.item);
+    else if (this.warpRow && index === ROWS.length) this.onWarp?.();
   }
 
   hide(): void {
@@ -105,7 +122,7 @@ export class ShopUI {
     if (this.open) this.move(step);
   }
   padBuy(): void {
-    if (this.open) this.buy(ROWS[this.selected]!.item);
+    if (this.open) this.activate(this.selected);
   }
   padClose(): void {
     if (!this.open) return;
@@ -132,7 +149,7 @@ export class ShopUI {
     const sub = document.createElement('div');
     sub.textContent =
       this.heading.subtitle ??
-      `오염 ${world.corruption.applied}/100   여기서 죽으면 이 자리에서 다시 시작한다\n` +
+      `오염 ${world.corruption.applied}/100   활성화된 제단 — 로비 대제단에서 여기로 워프할 수 있다\n` +
         `물약은 그 자리에서 마시는 게 아니라 가방에 담긴다 — 1~5 로 쓴다`;
     sub.style.whiteSpace = 'pre';
     sub.style.cssText = 'color:#8a8f9a;margin-bottom:14px;';
@@ -217,10 +234,41 @@ export class ShopUI {
       panel.appendChild(line);
     });
 
+    if (this.warpRow) {
+      // 성소 로비로 워프 — 품목 줄과 같은 커서·클릭 규약, 색만 다르다 (2026-09-07 사용자)
+      const i = ROWS.length;
+      const here = i === this.selected;
+      const line = document.createElement('div');
+      line.style.cssText =
+        'display:flex;gap:12px;padding:6px 8px;align-items:baseline;border-top:1px solid #3a3a44;margin-top:6px;cursor:pointer;' +
+        (here ? 'background:#242a36;box-shadow:inset 2px 0 0 #7fbfff;' : '');
+      line.onmousemove = (ev) => {
+        if (this.padMode || (ev.movementX === 0 && ev.movementY === 0)) return;
+        if (this.selected === i) return;
+        this.selected = i;
+        this.rebuild();
+      };
+      line.onclick = () => { this.selected = i; this.activate(i); };
+      const cursor = document.createElement('span');
+      cursor.textContent = here ? '▸' : ' ';
+      cursor.style.cssText = 'color:#7fbfff;width:10px;';
+      const key = document.createElement('span');
+      key.textContent = `${i + 1}`;
+      key.style.cssText = 'color:#555c66;width:14px;';
+      const name = document.createElement('span');
+      name.textContent = '성소 로비로 워프';
+      name.style.cssText = 'color:#e8c76a;width:180px;';
+      const desc = document.createElement('span');
+      desc.textContent = '대제단 앞에 도착한다 · 이 층은 그대로 남는다 (대제단에서 여기로 돌아올 수 있다)';
+      desc.style.cssText = 'color:#8a8f9a;';
+      line.append(cursor, key, name, desc);
+      panel.appendChild(line);
+    }
+
     const hint = document.createElement('div');
     hint.textContent = this.padMode
-      ? 'D-패드 ↑↓ 이동   A 구매   Menu 스킬   B 닫기\n재고를 다 쓰면 5분 뒤에 가득 재입고된다'
-      : 'WASD·↑↓ 이동   Enter·좌클릭 구매   1~5 바로 구매   Tab 스킬   E / Esc 닫기\n' +
+      ? 'D-패드 ↑↓ 이동   A 구매·실행   Menu 스킬   B 닫기\n재고를 다 쓰면 5분 뒤에 가득 재입고된다'
+      : `WASD·↑↓ 이동   Enter·좌클릭 구매·실행   1~${this.rowCount()} 바로 고르기   Tab 스킬   E / Esc 닫기\n` +
         '재고를 다 쓰면 5분 뒤에 가득 재입고된다';
     hint.style.cssText =
       'margin-top:16px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;white-space:pre-line;';

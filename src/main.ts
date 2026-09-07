@@ -820,6 +820,7 @@ for (const name of [
   'drops_cleared',
   'lobby_altar_entered',
   'lobby_warp',
+  'altar_warp_lobby',
   'npc_talked',
   'blessed',
   'blessing_denied',
@@ -3302,8 +3303,44 @@ events.on('life_mote_absorbed', (payload) => {
 
 events.on('altar_entered', () => {
   audio.play('altar_enter');
-  shopUI.show(); // 보급 상점 — 무료 보급은 없다. Tab 으로 각인 교체
+  shopUI.show({}, { warp: true }); // 보급 상점 — 무료 보급은 없다. 마지막 줄은 성소 로비로 워프. Tab 으로 각인 교체
   setUiOpen(true);
+});
+shopUI.onWarp = () => warpToLobby();
+
+/** 던전 제단 → 성소 로비 워프 (2026-09-07 사용자). 떠난 층은 그대로 얼려 둔다(몬스터 부활 없음 — 그건 로비→던전 규칙).
+ *  로비 대제단 앞(lobby.warpArriveDistance, 부활 마법진 쪽)에 대제단을 바라보며 도착한다 — 곧장 되돌아갈 수 있게 */
+function warpToLobby(): void {
+  if (traveling || floorIndex === LOBBY) return;
+  traveling = true;
+  const from = floorIndex;
+  shopUI.hide();
+  setUiOpen(false);
+  audio.play('altar_enter');
+  screenFade(1, 320);
+  afterMs(340, () => {
+    loadFloor(LOBBY);
+    const a = level.altarPos;
+    const p = world.player;
+    if (a) {
+      const s = level.spawn;
+      const d = Math.hypot(s.x - a.x, s.z - a.z) || 1;
+      const off = balance.lobby.warpArriveDistance;
+      p.x = a.x + ((s.x - a.x) / d) * off;
+      p.z = a.z + ((s.z - a.z) / d) * off;
+      p.prevX = p.x;
+      p.prevZ = p.z;
+      p.yaw = Math.atan2(-(a.x - p.x), -(a.z - p.z)); // 대제단을 본다 — facing = (-sin yaw, -cos yaw)
+      p.pitch = 0;
+    }
+    world.altarEnteredThisApproach = true; // 도착하자마자 워프 목록이 다시 열리지 않게
+    events.emit('altar_warp_lobby', { from });
+    screenFade(0, 400);
+  });
+}
+events.on('altar_warp_lobby', (payload) => {
+  const w = payload as { from: number };
+  showReaction(`성소 로비로 워프 — ${floorLabel(w.from)}은 그대로 남았다 · 대제단에서 돌아갈 수 있다`, 3200);
 });
 // 로비 대제단 — 활성화한(진입한) 제단 목록. 고르면 그 층으로 워프하고 몬스터가 전부 되살아난다 (2026-09-07 사용자)
 events.on('lobby_altar_entered', () => {
@@ -5053,7 +5090,7 @@ function render(alpha: number): void {
     altarPrompt!.textContent =
       `제단 — ${IK} 보급 상점\n` +
       `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
-      `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 활성화됨 (로비 대제단에서 여기로 워프)`;
+      `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 활성화됨 · 상점 마지막 줄로 성소 로비 워프`;
   } else if (nearNpc) {
     const npc = world.npcInView!;
     altarPrompt!.textContent =
