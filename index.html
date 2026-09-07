@@ -88,6 +88,24 @@
       #death.visible {
         display: flex;
       }
+      /* 사망 머리글 — YOU DIED (2026-09-07 사용자). 클리어 화면도 같은 칸을 쓴다 */
+      #death-title {
+        font-size: 56px;
+        font-weight: bold;
+        letter-spacing: 10px;
+        color: #ff3b3b;
+        text-shadow: 0 0 24px rgba(255, 40, 40, 0.6);
+      }
+      /* 시간 · 이번 플레이 획득 경험치 — 사망 시점에 main 이 채운다 */
+      #death-stats {
+        font-size: 18px;
+        letter-spacing: 1px;
+        color: #ffd9d9;
+        white-space: pre-line;
+        text-align: center;
+        line-height: 1.8;
+        margin-bottom: 6px;
+      }
       #pause {
         position: fixed;
         inset: 0;
@@ -1338,7 +1356,8 @@
     <div id="dmg-taken"></div>
     <div id="gain-center"><div id="gain-center-gold"><span class="gc-icon">◆</span><span class="gc-num"></span></div><div id="gain-center-xp"><span class="gc-icon">✦</span><span class="gc-num"></span></div></div>
     <div id="death">
-      <div>사망</div>
+      <div id="death-title">YOU DIED</div>
+      <div id="death-stats"></div>
       <div id="death-hint" style="font-size: 14px; white-space: pre-line; line-height: 1.7"></div>
     </div>
     <!-- 내용은 PauseMenu 가 만든다 -->

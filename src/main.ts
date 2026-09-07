@@ -112,13 +112,15 @@ const floorStates = new Map<number, FloorState>();
 const app = document.getElementById('app');
 const hud = document.getElementById('hud');
 const deathOverlay = document.getElementById('death');
+const deathTitle = document.getElementById('death-title');
+const deathStats = document.getElementById('death-stats');
 const deathHint = document.getElementById('death-hint');
 const flashOverlay = document.getElementById('flash');
 const hurtOverlay = document.getElementById('hurt');
 const altarPrompt = document.getElementById('altar-prompt');
 const interactKeyEl = document.getElementById('interact-key');
 const crosshairEl = document.getElementById('crosshair')!;
-if (!app || !hud || !deathOverlay || !deathHint || !flashOverlay || !hurtOverlay || !altarPrompt)
+if (!app || !hud || !deathOverlay || !deathTitle || !deathStats || !deathHint || !flashOverlay || !hurtOverlay || !altarPrompt)
   throw new Error('index.html에 필요한 오버레이 요소가 없다');
 
 const events = new Events();
@@ -455,14 +457,11 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'F3') {
     e.preventDefault();
     if (performance.now() < restartConfirmUntil) {
-      // 제단(골드 비용)이 가능하면 제단, 아니면 로비 마법진 — 사망 메뉴와 같은 두 갈래
-      if (!reviveAtAltar()) reviveInLobby();
+      // 로비 마법진에서 — 제단 부활은 폐지 (2026-09-07 사용자)
+      reviveInLobby();
     } else {
       restartConfirmUntil = performance.now() + 2000;
-      showReaction(
-        canReviveAtAltar() ? `F3 한 번 더 — 제단에서 다시 시작 (◆ ${balance.lobby.altarReviveCost})` : 'F3 한 번 더 — 성소 로비에서 다시 시작',
-        2000,
-      );
+      showReaction('F3 한 번 더 — 성소 로비에서 다시 시작', 2000);
     }
   }
   // 테스트용 무적 토글 — HP·마나·탄약·배터리·스태미너가 줄지 않는다 (슬라이스 검증 시 제거).
@@ -2856,32 +2855,56 @@ events.on('player_died', () => {
   // 죽은 자리에 비석 — 가방 소모품만 떨어뜨린다 (스킬·기본 무기·탄약·골드는 그대로).
   // 부활 후 그 자리로 돌아와 밟으면 되찾는다
   spillInventoryToGrave(world, world.player.x, world.player.z);
+  // 사망 화면 — YOU DIED · 시간 · 이번 플레이 획득 경험치 (2026-09-07 사용자). 클리어 화면이 머리글을 바꿨을 수 있어 매번 되돌린다
+  deathTitle!.textContent = 'YOU DIED';
+  deathStats!.textContent = deathSummary();
   deathHint!.textContent = '';
+  (deathOverlay as HTMLElement).style.background = '';
   deathOverlay.classList.add('visible');
-  // 사망 메뉴 — 1) 로비 2) 최근 제단(골드) 3·4) 개발용. 2 를 못 고르고 개발 항목이 꺼져 있으면 메뉴 없이 곧장 로비 (balance.lobby)
-  if (!balance.lobby.devDeathOptions && !canReviveAtAltar()) {
-    afterMs(900, () => reviveInLobby());
+  // 사망 메뉴 — 1) 로비 2·3) 개발용. 개발 항목이 꺼져 있으면 메뉴 없이 사망 화면만 보이다 로비에서 깨어난다 (balance.lobby)
+  if (!balance.lobby.devDeathOptions) {
+    scheduleLobbyRevive();
     return;
   }
   showDeathMenu();
 });
 
-/** 사망 메뉴 항목 — 장치·골드에 따라 설명이 달라지므로 열 때마다 짓는다 */
+/** 이번 플레이(깨어난 뒤)로 얻은 경험치 — 사망 화면에 적는다. finishRevive 가 0 으로 되돌린다 */
+let runXpGained = 0;
+events.on('xp_gained', (payload) => { runXpGained += (payload as { amount: number }).amount; });
+
+/** 틱 수 → 시간: 00:00:00 (시:분:초). 시뮬레이션이 멈춘 동안(창·사망·정지)은 흐르지 않는다 */
+function formatPlayTime(ticks: number): string {
+  const total = Math.floor(ticks / balance.loop.tickRate);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${two(h)}:${two(m)}:${two(s)}`;
+}
+
+/** 사망 화면 본문 — 게임플레이 시간(전체)과 이번 플레이로 얻은 경험치 */
+function deathSummary(): string {
+  return `시간: ${formatPlayTime(world.tick)}\n획득 경험치: ✦ ${runXpGained.toLocaleString()}`;
+}
+
+/** 로비 부활 예약 — 사망 화면을 lobbyReviveDelayMs 동안 보여 준 뒤 로비 마법진에서 깨어난다.
+ *  그 사이 다른 길(F3)로 먼저 살아났으면 아무것도 안 한다 */
+let lobbyReviveToken = 0;
+function scheduleLobbyRevive(): void {
+  deathMenu.hide();
+  const ms = balance.lobby.lobbyReviveDelayMs;
+  deathHint!.textContent = `${Math.round(ms / 1000)}초 뒤 성소 로비의 부활 마법진에서 깨어난다`;
+  const token = ++lobbyReviveToken;
+  afterMs(ms, () => {
+    if (world.dead && token === lobbyReviveToken) reviveInLobby();
+  });
+}
+
+/** 사망 메뉴 항목 — 개발 항목 유무에 따라 달라지므로 열 때마다 짓는다 */
 function showDeathMenu(): void {
-  const cost = balance.lobby.altarReviveCost;
-  const altarFloorName = world.respawn ? floorLabel(world.respawn.floor) : '';
   const entries = [
     { id: 'lobby', label: '성소 로비에서 부활', sub: '로비의 부활 마법진에서 깨어난다 — 무료 · 죽은 자리의 유품(비석)은 그대로 남는다' },
-    {
-      id: 'altar',
-      label: `최근 접촉한 제단에서 부활  (◆ ${cost})`,
-      sub: !world.respawn
-        ? '아직 들른 제단이 없다'
-        : world.gold < cost
-          ? `골드 부족 — ◆ ${world.gold} / ${cost}  (${altarFloorName} 제단)`
-          : `${altarFloorName} 제단 · 살아 있던 적은 자리로 돌아가고, 죽인 적은 안 살아난다`,
-      enabled: canReviveAtAltar(),
-    },
   ];
   if (balance.lobby.devDeathOptions) {
     entries.push(
@@ -2891,13 +2914,11 @@ function showDeathMenu(): void {
   }
   deathMenu.padMode = input.usingPad;
   deathMenu.show({
-    title: '', // 오버레이의 붉은 '사망' 머리글이 이미 있다
-    subtitle: `◆ ${world.gold} 소지`,
+    title: '', // 오버레이의 YOU DIED 머리글·시간·경험치가 이미 있다
     entries,
     closable: false,
     onPick: (id) => {
-      if (id === 'lobby') reviveInLobby();
-      else if (id === 'altar') { if (!reviveAtAltar()) showDeathMenu(); }
+      if (id === 'lobby') scheduleLobbyRevive(); // 사망 화면을 잠시 더 보여 준 뒤 로비 (2026-09-07 사용자)
       else if (id === 'here') reviveHere();
       else if (id === 'restart') restartCurrentFloor();
     },
@@ -2905,9 +2926,8 @@ function showDeathMenu(): void {
 }
 
 events.on('respawned', (payload) => {
-  const r = payload as { tribute?: number; kind?: string };
-  if ((r.tribute ?? 0) > 0) showReaction(`부활의 재물 — 골드 ${r.tribute} 을 제단에 바쳤다`, 3200);
-  else if (r.kind === 'lobby') showReaction('성소의 빛이 몸을 되돌렸다 — 대제단에서 활성화한 제단으로 돌아갈 수 있다', 3600);
+  const r = payload as { kind?: string };
+  if (r.kind === 'lobby') showReaction('성소의 빛이 몸을 되돌렸다 — 대제단에서 활성화한 제단으로 돌아갈 수 있다', 3600);
 });
 
 events.on('grave_dropped', () =>
@@ -2925,10 +2945,6 @@ events.on('grave_recovered', (payload) => {
     1800,
   );
 });
-
-/** 죽인 적의 배치 키(층 번호 포함) — 부활을 거듭해도 안 살아난다.
- *  층 좌표는 층마다 겹치므로 층 번호를 키에 넣는다. 전체 재시작(reload)이 곧 초기화다 */
-const slainSpawnKeys = new Set<string>();
 
 /** 부활 공통 — 체력·상태·탄약·마나를 되돌린다. 자리는 부르는 쪽이 정한다 */
 function restorePlayer(): void {
@@ -2970,79 +2986,14 @@ function restorePlayer(): void {
 /** 사망 화면을 걷고 되살아났음을 알린다 */
 function finishRevive(payload: Record<string, unknown>): void {
   world.dead = false;
+  runXpGained = 0; // 새 플레이 — 사망 화면의 '획득 경험치'는 여기부터 센다
   deathMenu.hide();
   deathOverlay!.classList.remove('visible');
   events.emit('respawned', payload);
 }
 
-/** 지금 층을 제단 부활 규칙으로 되돌린다 — 살아 있던 적만 배치 자리로, 죽인 적(종·홈 좌표로 대조)은 그대로 죽어 있다.
- *  목록(slainSpawnKeys)은 부활을 거듭해도 쌓인다 (죽은 적은 배열에서 빠지므로 매번 다시 봐선 잊는다).
- *  소환수·분열체는 배치에 없으므로 함께 사라진다. 통·기믹·함정은 되살리고, 상자·비석·주머니는 남긴다 */
-function resetFloorForRespawn(): void {
-  for (const e of world.enemies) {
-    if (!e.alive) slainSpawnKeys.add(`${floorIndex}:${e.type}@${e.homeX},${e.homeZ}`);
-  }
-  // 아레나 주인(거수 4층, B3-5) — 되살아난 새 몸에 지속 상태(체력·페이즈·약점 내구·낫 잠김·갑각판…)를 옮긴다. 기획서가 부활 시 보스 체력을 규정하지 않아 유지한다.
-  // 자리는 배치 자리(홈)·잠든 채 — 봉쇄는 사망 순간 Arena 가 풀었고, 다시 들어서 깨우면 다시 닫힌다
-  const prevBoss = world.arena ? world.enemies.find((e) => e.alive && e.id === world.arena!.bossId) : undefined;
-  world.enemies = spawnEnemies(levelJson.entities, level).filter(
-    (e) => !slainSpawnKeys.has(`${floorIndex}:${e.type}@${e.homeX},${e.homeZ}`),
-  );
-  if (prevBoss) {
-    const reborn = world.enemies.find((e) => e.type === prevBoss.type && e.homeX === prevBoss.homeX && e.homeZ === prevBoss.homeZ);
-    if (reborn) Arena.carryOver(prevBoss, reborn);
-  }
-  // 주인을 이미 잡은 층이면 쇠창살은 잠기지 않는다 (죽은 주인은 안 살아난다)
-  world.exitNeedsKey =
-    world.enemies.some((e) => e.floorBoss || enemyDef(e.type).boss) &&
-    !unlockedFloors.has(floorIndex);
-  world.exitOpen = false;
-  // 폭발통도 되살린다 — 남은 차단 블록을 먼저 걷어내야 유령 벽이 쌓이지 않는다
-  for (const barrel of world.barrels) if (barrel.blocker) level.removeBlocker(barrel.blocker);
-  world.barrels = spawnBarrels(levelJson.entities, level);
-  for (const prop of world.props) if (prop.blocker) level.removeBlocker(prop.blocker);
-  world.props = spawnProps(levelJson.entities, level);
-  // 함정도 전부 재무장한다 (spent 포함)
-  for (const trap of world.traps) {
-    if (!trap.blocker) continue;
-    level.removeBlocker(trap.blocker);
-    level.clearPathBlocked(trap.col, trap.row); // 잔해가 막던 경로도 되돌린다
-  }
-  world.traps = spawnTraps(levelJson.entities, level);
-  // 상자는 다시 잠기지 않는다 — 안에 남긴 것도 그대로다 (2026-09-04, 컨테이너). 재롤 파밍도 없다
-  world.chestInView = null;
-  world.projectiles.length = 0;
-  world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
-  Hazards.clearAll(world); // 진액 웅덩이도. 전투 장부(fightPendingIn·fightCleansed)는 아레나 주인이면 Arena.carryOver 가 새 몸에 이어 간다 — 같은 전투(B3-5)
-  world.ghoulHeads = []; // 튀는 머리도 층에 속한다
-  // 바닥 보상은 리셋하되 비석과 주머니는 남긴다 — 유품은 다시 죽어도 그 자리에 있고,
-  // 주머니의 주인(죽인 적)은 되살아나지 않으니 전리품까지 지우면 이중 처벌이다
-  world.groundItems = world.groundItems.filter((g) => g.kind === 'grave' || g.kind === 'pouch');
-}
-
-/** '최근 접촉한 제단에서 부활'을 고를 수 있는가 — 제단을 찍었고 골드가 값을 넘는다 */
-function canReviveAtAltar(): boolean {
-  return world.respawn !== null && world.gold >= balance.lobby.altarReviveCost;
-}
-
-/** 제단 부활 — 값(balance.lobby.altarReviveCost)을 내고 마지막으로 진입한 제단 자리로. 다른 층이면 그 층을 불러온다.
- *  살아 있던 적은 자리로 돌아가고 죽인 적은 안 살아난다 (2026-09). 값이 모자라거나 제단이 없으면 false */
-function reviveAtAltar(): boolean {
-  if (!canReviveAtAltar()) return false;
-  const point = world.respawn!;
-  const tribute = balance.lobby.altarReviveCost;
-  world.gold -= tribute;
-  restorePlayer();
-  if (point.floor !== floorIndex) loadFloor(point.floor);
-  resetFloorForRespawn();
-  const p = world.player;
-  p.x = point.x;
-  p.z = point.z;
-  p.prevX = point.x;
-  p.prevZ = point.z;
-  finishRevive({ x: point.x, z: point.z, tribute, kind: 'altar' });
-  return true;
-}
+// '최근 접촉한 제단에서 부활'(골드 비용, reviveAtAltar)은 폐지 (2026-09-07 사용자) — 부활은 로비(와 개발 항목)에서만.
+// 제단 진입은 여전히 world.respawn·world.altars 를 적는다 — 로비 대제단 워프 목록이 그것을 쓴다
 
 /** 로비 부활 — 성소 로비의 부활 마법진(스폰)에서 깨어난다. 무료. 죽은 층은 그대로 얼려 둔다 (비석도 거기 남는다) */
 function reviveInLobby(): void {
@@ -3065,9 +3016,8 @@ function restartCurrentFloor(): void {
   finishRevive({ x: world.player.x, z: world.player.z, kind: 'restart' });
 }
 
-/** 층 기록을 잊는다 — 죽인 적 목록·봉인 해제·쇠창살 연출 기억. 새로 짓거나 몬스터를 전부 되살릴 때 */
+/** 층 기록을 잊는다 — 봉인 해제·쇠창살 연출 기억. 새로 짓거나 몬스터를 전부 되살릴 때 */
 function forgetFloor(index: number): void {
-  for (const key of [...slainSpawnKeys]) if (key.startsWith(`${index}:`)) slainSpawnKeys.delete(key);
   unlockedFloors.delete(index);
   barsCineSeen.delete(index);
 }
@@ -3927,8 +3877,9 @@ events.on('zone_cleared', () => {
   }
   audio.play('zone_clear');
   deathHint!.textContent = '';
+  deathStats!.textContent = '';
   const clearOverlay = deathOverlay!;
-  clearOverlay.querySelector('div')!.textContent = '1구역 클리어';
+  deathTitle!.textContent = '1구역 클리어';
   (clearOverlay as HTMLElement).style.background = 'rgba(10, 40, 20, 0.6)';
   clearOverlay.classList.add('visible');
 });
@@ -4956,7 +4907,7 @@ function render(alpha: number): void {
     altarPrompt!.textContent =
       `제단 — ${IK} 보급 상점\n` +
       `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
-      `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 리스폰 지점 등록 (◆ ${balance.lobby.altarReviveCost} 로 여기서 부활)`;
+      `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 이 제단을 활성화 (로비 대제단에서 여기로 워프)`;
   } else if (nearNpc) {
     const npc = world.npcInView!;
     altarPrompt!.textContent =
@@ -5151,13 +5102,6 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
     // 일시정지는 유지한 채 설정 화면만 덮는다 — 닫으면 다시 메뉴로 돌아온다
     pauseMenu.hide();
     gamepadUI.show(mode);
-  },
-  loadSave: () => {
-    // 제단(골드 비용) — 사망 메뉴의 '최근 접촉한 제단에서 부활'과 같은 길. 값이 모자라면 메뉴가 비활성이라 여기 못 온다
-    if (reviveAtAltar()) {
-      setPaused(false);
-      input.requestLock();
-    }
   },
   // 미니맵 — 키(M)가 아니라 일시정지 메뉴에서만 켜고 끈다. 꺼지면 왼쪽 위 안내 글도 함께 (render 가 본다)
   toggleMinimap: () => minimap.toggle(),

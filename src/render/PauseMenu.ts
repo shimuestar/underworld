@@ -6,7 +6,6 @@
 // pointer-events:none 으로 두고 메뉴 패널만 클릭을 받는다. 패널 안 클릭이
 // 포인터 락 요청으로 새지 않게 Input 쪽에서 #pause 를 제외 목록에 넣어 둔다.
 
-import { balance } from '../core/Balance';
 import type { World } from '../core/World';
 
 const UP_KEYS = new Set(['KeyW', 'ArrowUp']);
@@ -34,8 +33,6 @@ export interface PauseMenuActions {
   resume(): void;
   /** 처음부터 시작 */
   restart(): void;
-  /** 저장된 곳(제단 체크포인트)에서 시작 */
-  loadSave(): void;
   /** 키 설정 열기 — 키보드 화면 또는 패드 화면 */
   openBindings(mode: 'kb' | 'pad'): void;
   /** 미니맵 켜기/끄기 — 왼쪽 위 안내 글도 함께 (키가 아니라 여기서만, 2026-09-04) */
@@ -98,34 +95,22 @@ export class PauseMenu {
         enabled: () => true,
         run: actions.restart,
       },
+      // '저장된 곳(제단)에서 시작'은 제단 부활 폐지와 함께 뺐다 (2026-09-07 사용자) — 부활은 로비에서만
       {
-        label: '3. 저장된 곳에서 시작',
-        // 저장 = 제단 진입 시 등록되는 리스폰 지점. 사망 시 부활 지점과 같은 곳이다
-        // 사망 메뉴의 '최근 접촉한 제단에서 부활'과 같은 길 — 값(balance.lobby.altarReviveCost)을 낸다 (2026-09-07)
-        hint: (world) =>
-          !world.respawn
-            ? '아직 들른 제단이 없다 — 죽으면 성소 로비에서 깨어난다'
-            : world.gold < balance.lobby.altarReviveCost
-              ? `제단 체크포인트 — 골드 부족 (◆ ${world.gold} / ${balance.lobby.altarReviveCost})`
-              : `제단 체크포인트 — ◆ ${balance.lobby.altarReviveCost} 를 바친다 · 죽인 적은 안 살아난다`,
-        enabled: (world) => world.respawn !== null && world.gold >= balance.lobby.altarReviveCost,
-        run: actions.loadSave,
-      },
-      {
-        label: '4. 키보드 키 설정',
+        label: '3. 키보드 키 설정',
         hint: () => '키보드 키를 기능에 건다',
         enabled: () => true,
         run: () => actions.openBindings('kb'),
       },
       {
-        label: '5. 패드 키 설정',
+        label: '4. 패드 키 설정',
         hint: () => '게임패드 버튼을 기능에 건다',
         enabled: () => true,
         run: () => actions.openBindings('pad'),
       },
       // 시험방 항목 둘은 오른쪽 맵 목록으로 옮겼다 (2026-09-07 사용자 — 중복 제거)
       {
-        label: '6. 미니맵 켜기 / 끄기',
+        label: '5. 미니맵 켜기 / 끄기',
         hint: () =>
           actions.minimapOn()
             ? '지금 켜짐 — 끄면 왼쪽 위 안내 글도 함께 사라진다 (화면을 비운다)'
