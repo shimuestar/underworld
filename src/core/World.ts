@@ -891,6 +891,8 @@ export interface LanternState {
   on: boolean;
   battery: number;
   spares: number;
+  /** 성소 로비에 들어오며 랜턴이 꺼졌다 — 나가면 Lantern 이 다시 켠다 (2026-09-07) */
+  lobbyOff?: boolean;
 }
 
 export type MeleeWeaponKind = 'hammer';

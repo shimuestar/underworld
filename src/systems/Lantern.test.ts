@@ -107,3 +107,58 @@ describe('소모와 방전', () => {
     expect(died).toHaveLength(1);
   });
 });
+
+describe('성소 로비 — 랜턴을 쓰지 않는다 (2026-09-07)', () => {
+  it('로비에 들어오면 꺼지고(lantern_toggled off) 배터리가 닳지 않으며, F 를 눌러도 lantern_denied 만 난다', () => {
+    const toggles: unknown[] = [];
+    const denied: unknown[] = [];
+    world.events.on('lantern_toggled', (p) => toggles.push(p));
+    world.events.on('lantern_denied', (p) => denied.push(p));
+    world.lobby = true;
+    Lantern.tick(world, DT);
+    expect(world.lantern.on).toBe(false);
+    expect(world.lantern.lobbyOff).toBe(true);
+    expect(toggles).toEqual([{ on: false, reason: 'lobby' }]);
+    expect(world.lantern.battery).toBe(100);
+    world.input = { ...Input.emptySnapshot(), lanternToggle: true };
+    Lantern.tick(world, DT);
+    world.input = Input.emptySnapshot();
+    expect(world.lantern.on).toBe(false);
+    expect(denied).toEqual([{ reason: 'lobby' }]);
+    for (let i = 0; i < 60; i++) Lantern.tick(world, DT);
+    expect(world.lantern.battery).toBe(100);
+  });
+
+  it('로비를 나가면 들어올 때 켜져 있던 랜턴이 다시 켜진다 — 처음부터 꺼져 있었다면 그대로', () => {
+    world.lobby = true;
+    Lantern.tick(world, DT);
+    world.lobby = false;
+    Lantern.tick(world, DT);
+    expect(world.lantern.on).toBe(true);
+    expect(world.lantern.lobbyOff).toBe(false);
+
+    // 원래 꺼져 있던 경우
+    world.lantern.on = false;
+    world.lobby = true;
+    Lantern.tick(world, DT);
+    expect(world.lantern.lobbyOff).toBe(false);
+    world.lobby = false;
+    Lantern.tick(world, DT);
+    expect(world.lantern.on).toBe(false);
+  });
+
+  it('로비에서도 전지 교체는 되지만 다시 켜지지는 않는다 — 나갈 때 켜진다', () => {
+    world.lantern.battery = 0;
+    world.lantern.on = false;
+    world.lobby = true;
+    Lantern.tick(world, DT);
+    pressSwap(world);
+    expect(world.lantern.battery).toBe(balance.lantern.batteryMax);
+    expect(world.lantern.spares).toBe(1);
+    expect(world.lantern.on).toBe(false);
+    expect(world.lantern.lobbyOff).toBe(true);
+    world.lobby = false;
+    Lantern.tick(world, DT);
+    expect(world.lantern.on).toBe(true);
+  });
+});

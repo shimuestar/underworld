@@ -572,6 +572,7 @@ stage.setLevel(
 for (const name of [
   'loop_started',
   'lantern_toggled',
+  'lantern_denied',
   'lantern_died',
   'battery_swapped',
   'ammo_spent',
@@ -3311,6 +3312,11 @@ events.on('blessing_denied', (payload) => {
   showReaction(`골드 부족 — ◆ ${(payload as { cost: number }).cost} 필요`, 1400);
 });
 events.on('blessing_ended', () => showReaction('축복이 스러졌다', 1600));
+// 로비에서는 랜턴을 쓰지 않는다 — 켜려 하면 이유만 알린다 (Lantern 이 들어올 때 끄고 나갈 때 되돌린다)
+events.on('lantern_denied', () => {
+  audio.play('shop_deny');
+  showReaction('성소의 빛 아래선 랜턴이 필요 없다 — 지하로 내려가면 다시 켜진다', 1800);
+});
 // 상인 매입(소모품) — 장비·각인 매각(equip_sold·sigil_sold)과 같은 소리·문구
 events.on('item_sold', (payload) => {
   const d = payload as { kind: ItemKind; count: number; gold: number; total: number };
@@ -5283,8 +5289,9 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__merchantUI = merchantUI; // 상인 창(팔기·사기·퀘스트) 검증용
   (window as unknown as Record<string, unknown>).__LOBBY = LOBBY;
 }
-// ?lobby — 시작부터 성소 로비 (2026-09-07). 지하 1층은 로비 남쪽 현관 계단으로 내려간다
-if (new URLSearchParams(location.search).has('lobby')) loadFloor(LOBBY);
+// 게임은 성소 로비에서 시작한다 (2026-09-07 사용자). 지하 1층은 로비 남쪽 현관 계단으로 내려간다.
+// 지하 1층 상태는 여기서 얼려 두었다가 내려갈 때 그대로 되살린다. ?b1 이면 예전처럼 지하 1층 입구에서 시작 (테스트 편의)
+if (!new URLSearchParams(location.search).has('b1')) loadFloor(LOBBY);
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)
 if (new URLSearchParams(location.search).has('skills')) {
