@@ -3,6 +3,7 @@
 // 액티브 스킬은 아이템이 아니다 — 획득하는 순간 이 리스트에 등록된다.
 //
 // 조작: 액티브 클릭 = 고르기 → 스킬 칸 클릭(또는 Z·X·C·V) = 올리기 / 빈손으로 칸 클릭 = 비우기
+// 퀵슬롯 표시는 전투 HUD 와 같은 마름모 십자다 (index.html 의 .dslot 을 공유, 2026-09-07)
 
 import { balance } from '../core/Balance';
 import { isActiveSkill, sigilDef, type SigilDef } from '../core/SigilData';
@@ -101,7 +102,11 @@ export class SkillUI {
     this.root.replaceChildren(panel);
   }
 
-  /** 스킬 퀵슬롯 — Z·X·C·V. 고른 액티브가 있으면 클릭으로 올리고, 없으면 비운다 */
+  /** 스킬 퀵슬롯 — 전투 HUD 와 같은 마름모 십자(Z 위 · X 오른쪽 · C 아래 · V 왼쪽).
+   *  index.html 의 .dslot 규칙을 그대로 쓴다 — HUD 와 모양이 어긋나지 않게 한 곳에서만 고친다.
+   *  마름모 안은 색 원반과 키 글자뿐이라 네 칸의 이름은 오른쪽 목록에 적고,
+   *  가운데 클릭이 쓰는(선택된) 칸 이름은 HUD 처럼 뭉치 위에 한 줄로 올린다.
+   *  고른 액티브가 있으면 칸(또는 목록 줄) 클릭으로 올리고, 없으면 비운다 */
   private buildSkillSlots(): HTMLElement {
     const world = this.world;
     const slots = Sigils.ensureSkillSlots(world);
@@ -112,33 +117,83 @@ export class SkillUI {
       : '스킬 퀵슬롯 — Z·X·C·V 로 바로 쓰거나, Q 로 칸을 돌려 가운데 클릭으로 쓴다';
     head.style.cssText = `color:${this.picked ? '#e8c76a' : '#9fe870'};margin-bottom:6px;`;
     wrap.appendChild(head);
-    const bar = document.createElement('div');
-    bar.style.cssText = 'display:flex;gap:8px;margin-bottom:10px;';
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:26px;margin:0 0 10px 8px;';
+
+    // 마름모 뭉치 — HUD 의 #skill-diamond 와 같은 160px 판, 같은 .dslot 자리(p0~p3)
+    const pad = document.createElement('div');
+    pad.className = 'menu-diamond' + (this.picked ? ' picking' : '');
+    pad.style.cssText =
+      'position:relative;width:160px;height:160px;flex:none;font:10px/1 monospace;margin-top:14px;';
+    const label = document.createElement('div');
+    label.style.cssText =
+      'position:absolute;bottom:100%;left:-20px;right:-20px;text-align:center;font-size:11px;' +
+      'color:#cfd2da;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    const chosen = slots[world.selectedSkill];
+    label.textContent = chosen ? sigilDef(chosen).name : '';
+    pad.appendChild(label);
+
     slots.forEach((id, i) => {
-      const cell = document.createElement('div');
-      cell.style.cssText =
-        'width:132px;height:54px;box-sizing:border-box;position:relative;cursor:pointer;' +
-        'background:rgba(0,0,0,0.55);border:1px solid ' +
-        (this.picked ? '#e8c76a' : id ? '#4a6a8a' : '#3a3a44') + ';padding:4px 6px;';
-      const key = document.createElement('div');
       const selected = world.selectedSkill === i && id !== null;
-      key.textContent = (selected ? '▸ ' : '') + (SKILL_KEYS[i] ?? String(i + 1)) + (selected ? '  선택됨' : '');
-      key.style.cssText = `font-size:10px;color:${selected ? '#e8c76a' : '#8a8f9a'};`;
-      cell.appendChild(key);
-      const name = document.createElement('div');
+      const cell = document.createElement('div');
+      cell.className = `dslot p${i} skill ${id ? 'ready' : 'empty'}${selected ? ' selected' : ''}`;
+      const frame = document.createElement('div');
+      frame.className = 'frame';
+      const key = document.createElement('div');
+      key.className = 'key';
+      key.textContent = SKILL_KEYS[i] ?? String(i + 1);
+      const body = document.createElement('div');
+      body.className = 'body';
+      const mark = document.createElement('span');
+      mark.className = 'mark';
+      if (id) {
+        const def = sigilDef(id);
+        mark.style.background = def.color;
+        mark.style.boxShadow = `0 0 8px ${def.color}`;
+      }
+      body.appendChild(mark);
+      cell.append(frame, key, body);
+      cell.title = `${SKILL_KEYS[i] ?? i + 1} — ${id ? sigilDef(id).name : '비어 있음'}`;
+      cell.onclick = () => this.assign(i);
+      pad.appendChild(cell);
+    });
+    row.appendChild(pad);
+
+    // 오른쪽 목록 — 키 순서로 네 칸의 이름. 줄을 눌러도 그 칸에 올린다
+    const legend = document.createElement('div');
+    legend.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+    slots.forEach((id, i) => {
+      const selected = world.selectedSkill === i && id !== null;
+      const line = document.createElement('div');
+      line.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;line-height:1;';
+      const k = document.createElement('span');
+      k.textContent = SKILL_KEYS[i] ?? String(i + 1);
+      k.style.cssText =
+        `display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;font-size:10px;` +
+        `border:1px solid ${selected ? '#e8c76a' : id ? '#4a6a8a' : '#3a3a44'};color:${selected ? '#e8c76a' : '#8a8f9a'};`;
+      line.appendChild(k);
+      const name = document.createElement('span');
       if (id) {
         const def = sigilDef(id);
         name.textContent = def.name;
-        name.style.cssText = `color:${def.color};font-size:13px;`;
+        name.style.color = def.color;
       } else {
-        name.textContent = '비어 있음';
-        name.style.cssText = 'color:#555c66;font-size:12px;';
+        name.textContent = this.picked ? '여기에 올린다' : '비어 있음';
+        name.style.color = this.picked ? '#e8c76a' : '#555c66';
       }
-      cell.appendChild(name);
-      cell.onclick = () => this.assign(i);
-      bar.appendChild(cell);
+      line.appendChild(name);
+      if (selected) {
+        const tag = document.createElement('span');
+        tag.textContent = '가운데 클릭';
+        tag.style.cssText = 'font-size:10px;color:#e8c76a;opacity:0.8;';
+        line.appendChild(tag);
+      }
+      line.onclick = () => this.assign(i);
+      legend.appendChild(line);
     });
-    wrap.appendChild(bar);
+    row.appendChild(legend);
+    wrap.appendChild(row);
     return wrap;
   }
 

@@ -1255,6 +1255,21 @@
         opacity: 0;
         pointer-events: none;
       }
+      /* 메뉴(스킬 탭) 안의 마름모 십자 — HUD 의 .dslot 을 그대로 쓰되, 여기서는 눌러서 올린다 */
+      .menu-diamond .dslot {
+        cursor: pointer;
+        pointer-events: auto;
+      }
+      .menu-diamond .dslot:hover .frame {
+        border-color: #e8c76a;
+        box-shadow: 0 0 10px rgba(232, 199, 106, 0.45);
+        opacity: 1;
+      }
+      /* 올릴 스킬을 고른 상태 — 네 칸 모두 금빛 테두리로 "이 중 하나를 고르라" */
+      .menu-diamond.picking .dslot .frame {
+        border-color: #e8c76a;
+        opacity: 0.85;
+      }
     </style>
   </head>
   <body>
