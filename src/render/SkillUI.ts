@@ -1,6 +1,8 @@
 // Tab 창 — 스킬(액티브). 익힌 액티브 스킬을 리스트에서 골라 스킬 퀵슬롯(Z·X·C·V)에 올린다.
 // 2026-09-04 개념 변경: 각인은 전부 패시브(가방 아이템)이고 몸 실루엣·새기기는 가방 탭(InventoryUI)으로 옮겼다.
-// 액티브 스킬은 아이템이 아니다 — 획득하는 순간 이 리스트에 등록된다.
+// 액티브 스킬은 아이템이 아니다 — 획득하는 순간 이 리스트에서 켜진다.
+// 목록은 데이터에 정의된 액티브 전부를 데이터 순서로 보인다 (2026-09-07 사용자) — 아직 못 익힌 것은 흐리게(비활성) 두고
+//   끌기·고르기·올리기가 전혀 되지 않는다 (Sigils.assignSkill 도 가진 것만 받는다). 무엇을 더 익힐 수 있는지 미리 보는 용도
 //
 // 조작(2026-09-07 사용자): 왼쪽 마름모 십자(전투 HUD 와 같은 .dslot 공유) + 오른쪽 익힌 스킬 목록.
 //   목록의 아이콘을 끌어 칸(또는 칸 이름 줄)에 놓기 = 올리기 / 칸끼리 끌기 = 자리 바꾸기 / 칸을 밖으로 끌기 = 비우기
@@ -10,7 +12,7 @@
 //   X 칸 비우기, B 고르기 취소·닫기. 문구도 패드 모드에선 전부 패드 기준으로 적는다 (가방 탭과 같은 규약)
 
 import { balance } from '../core/Balance';
-import { isActiveSkill, sigilDef } from '../core/SigilData';
+import { allSigilIds, isActiveSkill, sigilDef } from '../core/SigilData';
 import type { World } from '../core/World';
 import * as Sigils from '../systems/Sigils';
 import { beginDrag } from './DragDrop';
@@ -93,15 +95,21 @@ export class SkillUI {
     this.altarMode = altarMode;
     this.open = true;
     this.picked = null;
-    // 커서는 목록에서 시작한다 — 익힌 게 없으면 마름모
-    this.pane = this.ownedActives().length > 0 ? 'list' : 'slots';
+    // 커서는 목록에서 시작한다 — 목록이 비어 있으면(데이터에 액티브가 없으면) 마름모
+    this.pane = this.listActives().length > 0 ? 'list' : 'slots';
     this.selRow = 0;
     this.root.style.display = 'block';
     this.rebuild();
   }
 
-  private ownedActives(): string[] {
-    return this.world.sigils.inventory.filter((id) => isActiveSkill(sigilDef(id)));
+  /** 목록에 보이는 액티브 전부 — 익힌 것·못 익힌 것 모두, 데이터 순서 */
+  private listActives(): string[] {
+    return allSigilIds().filter((id) => isActiveSkill(sigilDef(id)));
+  }
+
+  /** 익혔는가 — 못 익힌 스킬은 보이기만 하고 고르기·끌기·올리기가 막힌다 */
+  private owned(id: string): boolean {
+    return this.world.sigils.inventory.includes(id);
   }
 
   // ---- 패드 ----
@@ -118,7 +126,7 @@ export class SkillUI {
         this.onEdge?.(1);
         return;
       } else {
-        const n = this.ownedActives().length;
+        const n = this.listActives().length;
         if (n === 0) return;
         const next = Math.max(0, Math.min(n - 1, this.selRow + (dir === 3 ? 1 : -1)));
         if (next === this.selRow) return; // 끝 — 제자리
@@ -128,7 +136,7 @@ export class SkillUI {
       const next = CROSS_NAV[this.selSlot]?.[dir] ?? null;
       if (next === null) return;
       if (next === 'list') {
-        if (this.ownedActives().length === 0) return; // 목록이 비어 있으면 건너갈 곳이 없다
+        if (this.listActives().length === 0) return; // 목록이 비어 있으면 건너갈 곳이 없다
         this.pane = 'list';
       } else if (next === 'prev') {
         this.onEdge?.(-1);
@@ -140,13 +148,13 @@ export class SkillUI {
     this.rebuild();
   }
 
-  /** A — 목록: 고르기(다시 누르면 취소) → 커서가 올릴 칸으로 건너간다 /
+  /** A — 목록: 고르기(다시 누르면 취소) → 커서가 올릴 칸으로 건너간다. 못 익힌 줄에서는 아무 일도 없다 /
    *  마름모: 고른 것을 그 칸에 올린다, 빈손이면 찬 칸을 비운다 (가방 탭 퀵슬롯과 같은 '빈손 = 해제') */
   padA(): void {
     if (!this.open) return;
     if (this.pane === 'list') {
-      const id = this.ownedActives()[this.selRow];
-      if (!id) return;
+      const id = this.listActives()[this.selRow];
+      if (!id || !this.owned(id)) return;
       if (this.picked === id) {
         this.picked = null;
         this.rebuild();
@@ -177,7 +185,7 @@ export class SkillUI {
     if (this.pane === 'slots') {
       at = slots[this.selSlot] ? this.selSlot : -1;
     } else {
-      const id = this.ownedActives()[this.selRow];
+      const id = this.listActives()[this.selRow];
       at = id ? slots.indexOf(id) : -1;
     }
     if (at < 0) return;
@@ -191,7 +199,7 @@ export class SkillUI {
     if (!this.open) return;
     if (this.picked) {
       this.picked = null;
-      if (this.ownedActives().length > 0) this.pane = 'list';
+      if (this.listActives().length > 0) this.pane = 'list';
       this.rebuild();
       return;
     }
@@ -220,6 +228,7 @@ export class SkillUI {
   private dropSkill(sigilId: string, key: string | null): void {
     const to = slotFromKey(key);
     if (to < 0) return; // 칸 밖에 놓았다 — 아무 일도 없다
+    if (!this.owned(sigilId)) return; // 못 익힌 스킬은 끌 수도 없지만 한 번 더 막는다
     Sigils.assignSkill(this.world, to, sigilId);
     this.picked = null;
     this.rebuild();
@@ -389,38 +398,43 @@ export class SkillUI {
     return col;
   }
 
-  /** 익힌 액티브 — 한 줄에 아이콘 · 이름(마나) · 설명 · 표식. 아이콘(줄 어디든)을 끌어 칸에 놓는다.
-   *  클릭은 고르기(그다음 칸 클릭 또는 Z·X·C·V) — 끌기 임계를 넘기지 않으면 클릭이다 */
+  /** 액티브 목록 — 한 줄에 아이콘 · 이름(마나) · 설명 · 표식. 아이콘(줄 어디든)을 끌어 칸에 놓는다.
+   *  클릭은 고르기(그다음 칸 클릭 또는 Z·X·C·V) — 끌기 임계를 넘기지 않으면 클릭이다.
+   *  못 익힌 스킬도 같은 줄 꼴로 보이되 흐리고(비활성) 끌기·클릭이 없다 — 패드 커서는 지나갈 수 있어 설명은 읽힌다 */
   private buildActiveList(): HTMLElement {
     const world = this.world;
     const list = document.createElement('div');
     list.style.cssText = 'flex:1;min-width:0;';
     const head = document.createElement('div');
-    head.textContent = this._padMode ? '익힌 스킬 — A 로 골라 칸에 올린다' : '익힌 스킬 — 아이콘을 끌어 퀵슬롯 칸에 놓는다';
+    head.textContent = this._padMode
+      ? '스킬 — 익힌 것을 A 로 골라 칸에 올린다 (흐린 줄 = 아직 못 익힘)'
+      : '스킬 — 익힌 것의 아이콘을 끌어 퀵슬롯 칸에 놓는다 (흐린 줄 = 아직 못 익힘)';
     head.style.cssText = 'color:#9fe870;margin-bottom:6px;';
     list.appendChild(head);
-    const owned = this.ownedActives().map((id) => sigilDef(id));
-    if (this.selRow >= owned.length) this.selRow = Math.max(0, owned.length - 1);
-    if (owned.length === 0) {
+    const shown = this.listActives().map((id) => sigilDef(id));
+    if (this.selRow >= shown.length) this.selRow = Math.max(0, shown.length - 1);
+    if (shown.length === 0) {
       const empty = document.createElement('div');
       empty.textContent = '없음';
       empty.style.color = '#555c66';
       list.appendChild(empty);
     }
-    owned.forEach((def, rowIndex) => {
-      const slotIndex = world.skillSlots.indexOf(def.id);
-      const picked = this.picked === def.id;
+    shown.forEach((def, rowIndex) => {
+      const has = this.owned(def.id);
+      const slotIndex = has ? world.skillSlots.indexOf(def.id) : -1;
+      const picked = has && this.picked === def.id;
       const here = this._padMode && this.pane === 'list' && this.selRow === rowIndex;
       const accent = picked ? '#e8c76a' : slotIndex >= 0 ? def.color : null;
       const row = document.createElement('div');
       row.style.cssText =
         `display:grid;grid-template-columns:${ICON_PX + 6}px 118px minmax(0,1fr) auto;gap:0 12px;align-items:center;` +
-        'padding:7px 10px;margin:3px 0;cursor:pointer;border-left:3px solid ' +
+        `padding:7px 10px;margin:3px 0;cursor:${has ? 'pointer' : 'default'};border-left:3px solid ` +
         (here ? '#7fbfff' : accent ?? 'transparent') + ';' +
-        (here ? 'background:rgba(127,191,255,0.12);outline:1px solid rgba(127,191,255,0.5);' : accent ? `background:${accent}14;` : 'background:rgba(255,255,255,0.02);');
+        (here ? 'background:rgba(127,191,255,0.12);outline:1px solid rgba(127,191,255,0.5);' : accent ? `background:${accent}14;` : 'background:rgba(255,255,255,0.02);') +
+        (has ? '' : 'opacity:0.38;filter:saturate(0.35);'); // 비활성 — 흐리고 색을 뺀다. 커서 강조는 그대로 보인다
 
       const icon = document.createElement('span');
-      icon.style.cssText = 'display:block;line-height:0;cursor:grab;';
+      icon.style.cssText = `display:block;line-height:0;cursor:${has ? 'grab' : 'default'};`;
       icon.innerHTML = sigilIconSvg(def.id, ICON_PX);
       row.appendChild(icon);
 
@@ -449,14 +463,17 @@ export class SkillUI {
       // 올라간 칸 — 키보드는 'Z 칸', 패드는 버튼 글자만 원 안에 (2026-09-07 사용자)
       if (slotIndex >= 0) tags.appendChild(this._padMode ? keyBadge(this.key(slotIndex), def.color) : badge(`${this.key(slotIndex)} 칸`, def.color));
       if (picked) tags.appendChild(badge(this._padMode ? '고름 — 칸에서 A' : '고름 — 칸을 클릭', '#e8c76a'));
+      if (!has) tags.appendChild(badge('아직 못 익힘', '#8a8f9a'));
       if (!def.cast) tags.appendChild(badge('이 빌드에선 효과 없음', '#e04444'));
       row.appendChild(tags);
 
-      row.onclick = () => {
-        this.picked = picked ? null : def.id;
-        this.rebuild();
-      };
-      row.onpointerdown = (ev) => beginDrag(ev, sigilIconSvg(def.id, ICON_PX), (key) => this.dropSkill(def.id, key));
+      if (has) {
+        row.onclick = () => {
+          this.picked = picked ? null : def.id;
+          this.rebuild();
+        };
+        row.onpointerdown = (ev) => beginDrag(ev, sigilIconSvg(def.id, ICON_PX), (key) => this.dropSkill(def.id, key));
+      }
       list.appendChild(row);
     });
     return list;
