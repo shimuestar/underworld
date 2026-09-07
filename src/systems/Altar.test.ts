@@ -67,13 +67,47 @@ function standAtAltar(world: World, lookAway = false): void {
   world.player.yaw = lookAway ? Math.PI / 2 : -Math.PI / 2; // -π/2 = +X 방향
 }
 
+/** 붙들기 — 처음 활성화는 계단처럼 activateHoldTicks 동안 상호작용을 붙들어야 한다 (2026-09-07 사용자) */
+function holdInteract(world: World, ticks: number): void {
+  world.input = { ...Input.emptySnapshot(), interactHeld: true };
+  for (let i = 0; i < ticks; i++) Altar.tick(world, DT);
+  world.input = Input.emptySnapshot();
+}
+
 function enterAltar(world: World): void {
   standAtAltar(world);
   Altar.tick(world, DT); // 접근 감지
-  pressInteract(world);
+  holdInteract(world, balance.altar.activateHoldTicks);
 }
 
 describe('제단 진입', () => {
+  it('처음 활성화는 한 번 눌러서는 안 되고 activateHoldTicks 동안 붙들어야 한다 — 놓으면 게이지가 0 으로', () => {
+    standAtAltar(world);
+    Altar.tick(world, DT);
+    pressInteract(world);
+    expect(world.altars).toHaveLength(0); // 한 번 누른 것으로는 활성화되지 않는다
+    holdInteract(world, balance.altar.activateHoldTicks - 1);
+    expect(world.altarHoldTicks).toBe(balance.altar.activateHoldTicks - 1);
+    expect(world.altars).toHaveLength(0);
+    Altar.tick(world, DT); // 놓았다
+    expect(world.altarHoldTicks).toBe(0);
+    holdInteract(world, balance.altar.activateHoldTicks);
+    expect(world.altars).toHaveLength(1);
+    expect(world.altarHoldTicks).toBe(0);
+    expect(Altar.isActivated(world)).toBe(true);
+  });
+
+  it('활성화한 층의 제단은 다음부터 한 번 눌러 진입(상점)한다', () => {
+    enterAltar(world);
+    const entered: unknown[] = [];
+    world.events.on('altar_entered', (p) => entered.push(p));
+    world.nearAltar = false;
+    world.altarEnteredThisApproach = false;
+    Altar.tick(world, DT);
+    pressInteract(world);
+    expect(entered).toHaveLength(1);
+  });
+
   it('무료 보급은 없다 — 잔탄·수류탄이 그대로다 (2026-08 폐지)', () => {
     enterAltar(world);
     expect(world.weapon.mag).toBe(5); // 들고 온 그대로
@@ -109,7 +143,9 @@ describe('제단 진입', () => {
     const seen: string[] = [];
     world.events.on('lobby_altar_entered', () => seen.push('warp'));
     world.events.on('altar_entered', () => seen.push('shop'));
-    enterAltar(world);
+    standAtAltar(world);
+    Altar.tick(world, DT);
+    pressInteract(world); // 대제단은 붙들기가 아니라 한 번 눌러서 (활성화 개념이 없다)
     expect(seen).toEqual(['warp']);
     expect(world.respawn).toBeNull();
     expect(world.altars).toHaveLength(0);
@@ -121,13 +157,13 @@ describe('제단 진입', () => {
     Altar.tick(world, DT);
     expect(world.nearAltar).toBe(true); // 거리는 가깝지만
     expect(world.altarInView).toBe(false); // 시선이 아니다
-    pressInteract(world);
-    expect(world.respawn).toBeNull(); // E를 눌러도 진입하지 않는다
+    holdInteract(world, balance.altar.activateHoldTicks);
+    expect(world.respawn).toBeNull(); // E를 붙들어도 진입하지 않는다
 
     standAtAltar(world); // 돌아서면
     Altar.tick(world, DT);
     expect(world.altarInView).toBe(true);
-    pressInteract(world);
+    holdInteract(world, balance.altar.activateHoldTicks);
     expect(world.respawn).not.toBeNull();
   });
 

@@ -43,9 +43,30 @@ export function tick(world: World, _dt: number): void {
     }
   }
 
-  if (world.altarInView && world.input.interactPressed && !world.altarEnteredThisApproach) {
-    enter(world);
+  // 진입 — 이미 활성화한 층의 제단(과 로비 대제단)은 한 번 눌러서. 처음 활성화는 계단처럼 붙들어야 한다 (2026-09-07 사용자)
+  if (!world.altarInView || world.altarEnteredThisApproach) {
+    world.altarHoldTicks = 0;
+    return;
   }
+  if (world.lobby || isActivated(world)) {
+    world.altarHoldTicks = 0;
+    if (world.input.interactPressed) enter(world);
+    return;
+  }
+  const holding = world.input.interactHeld || world.input.meleeHeld; // Exit 과 같은 두 키
+  if (!holding) {
+    world.altarHoldTicks = 0;
+    return;
+  }
+  world.altarHoldTicks++;
+  if (world.altarHoldTicks < balance.altar.activateHoldTicks) return;
+  world.altarHoldTicks = 0;
+  enter(world);
+}
+
+/** 이 층의 제단을 이미 활성화했는가 (로비 대제단 워프 목록에 올라 있다) */
+export function isActivated(world: World): boolean {
+  return world.altars.some((a) => a.floor === world.floorIndex);
 }
 
 function ammoLeftRatio(world: World): number {

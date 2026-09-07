@@ -1536,6 +1536,8 @@ export class World {
   itemCooldown = 0;
   /** 계단 홀드 진행 틱 — 발판에서 상호작용을 붙든 시간. 놓거나 떠나면 0 */
   stairHoldTicks = 0;
+  /** 제단 첫 활성화 홀드 진행 틱 (altar.activateHoldTicks) — 계단과 같은 방식. 놓거나 시선을 돌리면 0 */
+  altarHoldTicks = 0;
   /** 타겟 락온(R3) — 잡힌 적 id. 추적·전환·해제는 PlayerMove 가 맡는다 */
   lockOnId: number | null = null;
   /** 락온 pitch 오프셋(rad) — 오른스틱 상하로 몸통 위/아래를 고른다. 놓으면 복귀 */

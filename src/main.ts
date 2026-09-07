@@ -817,6 +817,7 @@ for (const name of [
   'game_saved',
   'game_loaded',
   'save_deleted',
+  'drops_cleared',
   'lobby_altar_entered',
   'lobby_warp',
   'npc_talked',
@@ -3001,11 +3002,26 @@ function finishRevive(payload: Record<string, unknown>): void {
 // '최근 접촉한 제단에서 부활'(골드 비용, reviveAtAltar)은 폐지 (2026-09-07 사용자) — 부활은 로비(와 개발 항목)에서만.
 // 제단 진입은 여전히 world.respawn·world.altars 를 적는다 — 로비 대제단 워프 목록이 그것을 쓴다
 
-/** 로비 부활 — 성소 로비의 부활 마법진(스폰)에서 깨어난다. 무료. 죽은 층은 그대로 얼려 둔다 (비석도 거기 남는다) */
+/** 로비 부활 — 성소 로비의 부활 마법진(스폰)에서 깨어난다. 무료. 죽은 층은 얼려 두되, 바닥 드랍은 모든 층에서 지운다 (비석은 남는다) */
 function reviveInLobby(): void {
   restorePlayer();
+  if (balance.lobby.clearDropsOnLobbyRevive) clearDroppedItems();
   loadFloor(LOBBY);
   finishRevive({ x: world.player.x, z: world.player.z, kind: 'lobby' });
+}
+
+/** 죽어서 로비로 돌아갈 때 — 모든 층의 바닥 드랍(주머니·골드·화살·버린 것·각인·열쇠…)과 생명 입자를 지운다 (2026-09-07 사용자).
+ *  비석(유품)만 남긴다 — 되찾는 것이 사망 페널티 설계다. 지금 층은 world 에서, 다녀온 층은 얼려 둔 FloorState 에서 */
+function clearDroppedItems(): void {
+  const keep = (items: World['groundItems']) => items.filter((g) => g.kind === 'grave');
+  const removed = world.groundItems.length - keep(world.groundItems).length;
+  world.groundItems = keep(world.groundItems);
+  world.lifeMotes = [];
+  for (const fs of floorStates.values()) {
+    fs.groundItems = keep(fs.groundItems);
+    fs.lifeMotes = [];
+  }
+  events.emit('drops_cleared', { removed });
 }
 
 /** (개발) 현재 층에서 즉시 부활 — 죽은 자리에서 자원만 채워 일어난다. 적은 그대로 (슬라이스 검증 시 제거) */
@@ -5025,11 +5041,19 @@ function render(alpha: number): void {
     altarPrompt!.textContent =
       `대제단 — ${IK} 활성화한 제단으로 워프  (${world.altars.length}곳)\n` +
       `지하에서 진입한 제단 자리로 곧장 간다 · 그 층의 몬스터는 전부 되살아난다`;
+  } else if (showAltarPrompt && !Altar.isActivated(world)) {
+    // 처음 활성화 — 계단처럼 붙들어야 한다 (2026-09-07 사용자). 게이지는 계단과 같은 모양
+    const frac = world.altarHoldTicks / balance.altar.activateHoldTicks;
+    altarPrompt!.textContent =
+      frac > 0
+        ? `제단을 활성화하는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%`
+        : `제단 — ${IK} 길게 — 이 제단을 활성화한다\n` +
+          `활성화하면 로비 대제단에서 여기로 워프할 수 있고, 보급 상점이 열린다 · 오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산`;
   } else if (showAltarPrompt) {
     altarPrompt!.textContent =
       `제단 — ${IK} 보급 상점\n` +
       `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
-      `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 이 제단을 활성화 (로비 대제단에서 여기로 워프)`;
+      `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 활성화됨 (로비 대제단에서 여기로 워프)`;
   } else if (nearNpc) {
     const npc = world.npcInView!;
     altarPrompt!.textContent =
