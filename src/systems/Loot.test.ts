@@ -185,7 +185,7 @@ describe('주머니 드랍', () => {
 
   it('기본은 병합 없음 — 같은 자리에서 여럿을 죽여도 주머니가 각자 떨어지고 서로 minSpacing 이상 떨어진다', () => {
     Loot.init(world);
-    vi.spyOn(Math, 'random').mockReturnValue(0.5); // 호 한가운데 — 같은 각도로 떨어지려 한다
+    vi.spyOn(Math, 'random').mockReturnValue(0.1); // 상수 rng — 넷이 같은 각도로 떨어지려 한다. gold.dropChance(0.195) 아래여야 주머니가 생긴다 (2026-09-07 골드 확률 70% 감소 뒤 0.5 → 0.1)
     for (let i = 0; i < 4; i++) world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 14, z: 10 });
     const pouches = world.groundItems.filter((g) => g.kind === 'pouch');
     expect(pouches).toHaveLength(4);

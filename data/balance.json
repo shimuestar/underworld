@@ -510,7 +510,8 @@
       "noMagnetTicks": 20
     },
     "gold": {
-      "dropChance": 0.65,
+      "_dropChanceNote": "0.65 → 0.195 (2026-09-07 사용자: 처치 골드 드랍 확률 70% 감소). 보스는 확률과 무관하게 항상 떨군다(Loot.rollLoot def.boss)",
+      "dropChance": 0.195,
       "min": 3,
       "max": 9,
       "bossMul": 12,
