@@ -1139,8 +1139,8 @@ events.on('pillar_collapsed', (payload) => {
   stage.collapsePillar(c.row, c.col, c.x, c.z, balance.arena.rubbleHalf);
   audio.play('wall_crumble', panAt(c.x, c.z));
   const d = Math.hypot(world.player.x - c.x, world.player.z - c.z);
-  if (d < 14) {
-    stage.triggerCameraKick(0.7 * (1 - d / 14), 320);
+  if (d < 12) {
+    stage.triggerCameraKick(0.6 * (1 - d / 12), 300); // 함정 낙석(trap_rockfall)과 같은 결
     padRumble('crumble');
   }
   minimap.rebuildBase();
@@ -2010,7 +2010,7 @@ events.on('player_damaged', (payload) => {
     hit.source === 'ghoul_bite' || hit.source === 'leech_suck'
       ? 'drain'
       : hit.source === 'explosion' || hit.source === 'fireball' || hit.source === 'implode' ||
-          hit.source === 'trap_rockfall'
+          hit.source === 'trap_rockfall' || hit.source === 'pillar_rockfall'
         ? 'blast'
         : 'hurt',
   );
@@ -2892,7 +2892,7 @@ function respawnAtAltar(): void {
   world.chestInView = null;
   world.projectiles.length = 0;
   world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
-  Hazards.clearAll(world); // 진액 웅덩이도(거수는 되살아나므로 전투 장부 fightPendingIn 도 새 몸에서 0 부터)
+  Hazards.clearAll(world); // 진액 웅덩이도. 전투 장부(fightPendingIn·fightCleansed)는 아레나 주인이면 Arena.carryOver 가 새 몸에 이어 간다 — 같은 전투(B3-5)
   world.ghoulHeads = []; // 튀는 머리도 층에 속한다
   // 바닥 보상은 리셋하되 비석과 주머니는 남긴다 — 유품은 다시 죽어도 그 자리에 있고,
   // 주머니의 주인(죽인 적)은 되살아나지 않으니 전리품까지 지우면 이중 처벌이다

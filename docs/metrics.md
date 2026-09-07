@@ -155,7 +155,7 @@ zone_cleared    { tick }
 | 카운터 | 이벤트 | 뜻 |
 |---|---|---|
 | `boss.kills` | `boss_phase` (`phase 0`, death) | 페이즈 보스 처치 수(사망 마감 한 번 = 1) |
-| `boss.executeFinishes` | `enemy_died` (`execution && boss`) | 처형으로 마무리한 보스 수 — "처형 마무리 여부" = executeFinishes / kills |
+| `boss.executeFinishes` | `enemy_died` (`execution && phased` — 페이즈 보스만, `kills` 와 같은 모집단) | 처형으로 마무리한 페이즈 보스 수 — "처형 마무리 여부" = executeFinishes / kills (족장 처형은 `kills.execution`) |
 | `boss.cleansed` | `corruption_cleansed` (`source 'boss_death'|'boss_execute'`, `amount` 합) | 보스 사망·처형 정화가 오염 대기에서 깎은 합(−10 / −15) |
 | `boss.statusOn` | `boss_status` (`on`), kind 별 | 보스 상태이상 부여 횟수 — 12종(expose·head_down·daze·rupture·limp·skid·blind·topple·backflow·choke·exhaust·molt) + 자세(rear·roar). 예: `statusOn.expose` = 관절·눈·분출공 노출이 열린 수, `statusOn.head_down` = 머리 내림 수 |
 | `boss.playerStatus` | `numb_arm_applied`·`concussion_applied`·`hobble_applied`·`corrosive_applied`·`cowed_applied`, kind 별 | 플레이어 상태이상 부여 횟수 — `numb_arm` 이 많으면 낫을 막고 있다(튜토리얼 미이해 신호), `concussion` 은 돌격 직격 수 |

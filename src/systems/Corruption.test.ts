@@ -119,13 +119,14 @@ describe('Corruption — 보스 사망·처형 정화 (B3-6, 기획서 §11)', (
     expect(world.corruption.applied).toBe(31);
   });
 
-  it('보스가 아닌 적·소환수(noLoot)는 정화가 없다. 족장(boss)도 정화한다 — 거수 전용 규칙이 아니다', () => {
+  it('정화는 deathCleanse 를 든 보스(거수)만 — 보스가 아닌 적·소환수(noLoot)·족장(boss 지만 deathCleanse 없음)은 정화가 없다 (B3-6 잔여 메모)', () => {
     const log = cleansedLog();
     world.events.emit('enemy_died', { enemyType: 'goblin_runner', x: 0, z: 0, execution: true });
     world.events.emit('enemy_died', { enemyType: 'scythe_behemoth', x: 0, z: 0, noLoot: true });
-    expect(world.corruption.pending).toBe(3);
+    world.events.emit('enemy_died', { enemyType: 'goblin_chieftain', x: 0, z: 0, execution: true, boss: true });
+    expect(world.corruption.pending).toBe(3); // 족장 처형도 오염 여유를 주지 않는다 — 슬라이스 경제 유지
     expect(log).toHaveLength(0);
-    world.events.emit('enemy_died', { enemyType: 'goblin_chieftain', x: 0, z: 0 });
+    world.events.emit('enemy_died', { enemyType: 'scythe_behemoth', x: 0, z: 0 });
     expect(world.corruption.pending).toBe(3 - 10);
     expect(log).toEqual([expect.objectContaining({ amount: 10, source: 'boss_death' })]);
   });

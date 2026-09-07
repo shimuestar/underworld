@@ -297,7 +297,7 @@ export function tick(world: World, _dt: number): void {
           z: enemy.z,
         });
         // execution: 처형으로 마무리했다 — Corruption 이 사망 정화(−10)가 아니라 처형 정화(−15)를 낸다, boss: Metrics 가 데이터를 읽지 않고 처형 마무리를 센다(B3-6, 기획서 §11·§12)
-        world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot, execution: true, boss: true });
+        world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot, execution: true, boss: true, phased: (enemyDef(enemy.type).phases?.length ?? 0) > 0 });
       } else {
         // 스태거는 처형 한 번으로 끝난다 — 여기서 바로 후딜로 넘긴다.
         // timer 만 1로 줄이면 "다음 틱"이 오지 않는다: 처형 연출 동안

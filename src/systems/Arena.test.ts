@@ -220,6 +220,26 @@ describe('아레나 — 봉쇄 조건 (기획서 §10.1 결정 25)', () => {
     expect(w.sealed).toHaveLength(0);
   });
 
+  it('밖에서 깨웠는데 문이 열려 있으면 문을 닫아 시야를 끊는다 — door_closing{sealed:false}, 봉쇄는 아니다(E 로 다시 열 수 있다) (B3-5 잔여 메모: 문 밖 저격 캠핑 방지)', () => {
+    const door = world.doors[0]!;
+    door.opened = true; // 플레이어가 열어 두고 복도로 물러났다
+    const closingLog: { sealed?: boolean }[] = [];
+    world.events.on('door_closing', (p) => closingLog.push(p as { sealed?: boolean }));
+    placeBoss(34, 30);
+    boss.ai = 'chase'; // 밖에서 총격으로 깼다
+    tickAll();
+    expect(world.arena!.sealed).toBe(false);
+    expect(door.sealed ?? false).toBe(false); // 봉쇄가 아니다
+    // Arena 가 닫기를 걸고(door_closing) 같은 틱의 Door.tick 이 되민다 — 미닫이가 0 이면 그 틱에 벽이 된다(opened false), 아니면 closing 중
+    expect(closingLog).toHaveLength(1);
+    expect(closingLog[0]!.sealed).toBe(false);
+    const after = world.doors[0]!; // 새 참조 — 위의 opened = true 대입으로 좁혀진 타입을 피한다
+    expect(after.closing === true || after.opened === false).toBe(true);
+    tickAll(5);
+    expect(closingLog).toHaveLength(1); // 한 번만 — 닫힌 문을 다시 닫지 않는다
+    expect(world.doors[0]!.sealed ?? false).toBe(false);
+  });
+
   it('진입 시 봉쇄 — 경계를 넘는 틱에 arena_sealed + door.sealed, 홈 대기 해제. 이미 안에서 깨웠어도 같다', () => {
     const w = watch();
     boss.ai = 'chase';

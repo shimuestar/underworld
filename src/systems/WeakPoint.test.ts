@@ -131,9 +131,9 @@ describe('데이터 — weakPoints·poseOffsets·hitZonesImmune (기획서 §2·
     expect(def.hitZonesImmune).toBe(true);
     expect(def.weakPoints!.map((w) => w.id)).toEqual(['eye', 'joint_r', 'joint_l', 'heart', 'vent']);
     expect(wp('eye')).toMatchObject({ offset: { x: 0, y: 2.35, z: -1.88 }, radius: 0.26, damageMul: 3.0, facing: { x: 0, y: 0, z: -1 } });
-    // 관절 원뿔(B2-1 잔여 메모 → B3-6): facing (±1, 0.3, −1)·coneDeg 140 — 패링 자리(정면 4.4m·눈높이 1.6)에서 성립(아래 '정면 4.4m' 케이스). 옛 (±1, 0.4, −0.4)·100° 는 정면에서 dot ≈ +0.02 라 못 맞혔다
-    expect(wp('joint_r')).toMatchObject({ offset: { x: 1.15, y: 2.5, z: -0.8 }, radius: 0.3, damageMul: 2.0, hp: 132, facing: { x: 1, y: 0.3, z: -1 }, coneDeg: 140 });
-    expect(wp('joint_l')).toMatchObject({ offset: { x: -1.15, y: 2.5, z: -0.8 }, radius: 0.3, damageMul: 2.0, hp: 132, facing: { x: -1, y: 0.3, z: -1 }, coneDeg: 140 });
+    // 관절 원뿔(B2-1 → B3-6 → 잔여 메모): facing (±0.6, −0.5, −0.6)·coneDeg 140 — 축을 아래로 기울여 정면 2.5~4.4m 어디서나 성립(아래 '정면 4.4m'·'정면 3.0m' 케이스). 옛 (±1, 0.3, −1) 은 정면 4.0m 아래에서 빗나갔다
+    expect(wp('joint_r')).toMatchObject({ offset: { x: 1.15, y: 2.5, z: -0.8 }, radius: 0.3, damageMul: 2.0, hp: 132, facing: { x: 0.6, y: -0.5, z: -0.6 }, coneDeg: 140 });
+    expect(wp('joint_l')).toMatchObject({ offset: { x: -1.15, y: 2.5, z: -0.8 }, radius: 0.3, damageMul: 2.0, hp: 132, facing: { x: -0.6, y: -0.5, z: -0.6 }, coneDeg: 140 });
     expect(wp('heart')).toMatchObject({ offset: { x: 0, y: 0.6, z: -0.4 }, radius: 0.35, damageMul: 3.0 });
     expect(wp('vent')).toMatchObject({ offset: { x: 0, y: 1.65, z: -1.55 }, radius: 0.3, damageMul: 3.0, openRadiusMul: 1.4 }); // 열림 ×1.4 는 판정·그림 공용 데이터(B3-6)
     expect(wp('eye').coneDeg).toBeUndefined(); // 기본 원뿔은 balance.weakPoint.defaultConeDeg
@@ -344,7 +344,7 @@ describe('권총 — 약점 우선 판정 (거수, 근거리 감쇠 없음)', ()
     expect(boss.weakHp!['joint_l']).toBe(132);
   });
 
-  it('정면 4.4m(패링 자리, 눈높이 1.6)에서 joint_r ○·joint_l ○ — 관절 원뿔 facing (±1, 0.3, −1)·140° 가 정면을 품는다(B2-1 잔여 메모 → B3-6). 등 뒤에서는 둘 다 ×', () => {
+  it('정면 4.4m(패링 자리, 눈높이 1.6)에서 joint_r ○·joint_l ○ — 관절 원뿔 facing (±0.6, −0.5, −0.6)·140° 가 정면을 품는다(B2-1 → B3-6 → 잔여 메모). 등 뒤에서는 둘 다 ×', () => {
     const boss = behemothAt(6 + def.attackRange, 10, Math.PI / 2); // 플레이어(6, 10)를 마주 본다 — 어깨 관절이 (9.6, 2.5, 8.85 / 11.15)
     const jr = weakPointWorldPos(boss, def, wp('joint_r'));
     const jl = weakPointWorldPos(boss, def, wp('joint_l'));
@@ -369,6 +369,16 @@ describe('권총 — 약점 우선 판정 (거수, 근거리 감쇠 없음)', ()
     firePistol();
     expect(backHits).toHaveLength(0);
     expect(back.health).toBeCloseTo(def.health - pistol.damage * pistol.hitZones.bodyMul, 5);
+  });
+
+  it('정면 3.0m(패링 뒤 한 걸음 다가선 자리)에서도 joint_r ○ — 원뿔 축을 아래로 기울여 가까운 정면이 빗나가지 않는다(B3-6 잔여 메모; 반대쪽 옆 × 는 위 우측면 케이스)', () => {
+    const near = behemothAt(6 + 3.0, 10, Math.PI / 2); // 플레이어(6, 10)를 마주 본다, 3.0m
+    const jr = weakPointWorldPos(near, def, wp('joint_r'));
+    const hits = collect('weak_point_hit');
+    aimAt(jr.x, jr.y, jr.z);
+    firePistol();
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ id: 'joint_r', damage: pistol.damage * 2.0 });
   });
 
   it('분출공 열림 크기 = 판정 크기(openRadiusMul 1.4, B3-2 잔여 메모 → B3-6) — 열린 분출공은 판정 반지름 0.42: 중심에서 0.38m 위를 지나는 정면 레이가 맞고, 닫히면(0.30) 같은 레이가 빗나간다. 갑각판 ventScale 은 그 위에 곱한다', () => {

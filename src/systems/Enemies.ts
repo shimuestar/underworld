@@ -1648,7 +1648,7 @@ function chargeCollide(
     enemy.chainTurn = false;
   }
   if (!def.flying) enemy.jumpY = 0;
-  const anticamp = enemy.anticampCharge === true;
+  const anticamp = enemy.anticampCharge === true && enemy.anticampTarget !== undefined; // 예고 중 밖으로 나가 목표가 지워졌으면 보통 돌격(전도)
   if (anticamp) {
     enemy.anticampCharge = false;
     enemy.anticampTarget = undefined;

@@ -159,12 +159,12 @@ function arenaDoor(world: World, arena: ArenaState): DoorState | undefined {
 }
 
 /** 열린 문을 닫기 시작한다(Door.tick closing 규약 — 문틈에 몸이 있으면 tickClosing 이 비켜날 때까지 기다린다) */
-function startClosing(world: World, door: DoorState): void {
+function startClosing(world: World, door: DoorState, sealed = true): void {
   if (!door.opened || door.closing) return;
   door.closing = true;
   door.blockedTicks = 0;
   door.prevSlide = door.slide;
-  world.events.emit('door_closing', { row: door.row, col: door.col, x: door.x, z: door.z, sealed: true });
+  world.events.emit('door_closing', { row: door.row, col: door.col, x: door.x, z: door.z, sealed });
 }
 
 function seal(world: World, arena: ArenaState, boss: EnemyState): void {
@@ -229,8 +229,12 @@ export function tick(world: World, _dt: number): void {
     if (!boss.holdHome) {
       boss.holdHome = true;
       boss.anticampTarget = undefined;
+      boss.anticampCharge = false; // 예고 중 밖으로 나갔으면 그 돌격은 보통 돌격으로(전도) — 실신 오판 방지
       world.events.emit('arena_hold', { enemyId: boss.id, enemyType: boss.type, x: boss.x, z: boss.z });
     }
+    // 밖에서 깨웠으면 열린 문을 닫아 시야를 끊는다 — 문 밖 복도에서 홈의 보스를 저격하는 캠핑 방지(B3-5 잔여 메모 (b)).
+    // 봉쇄는 아니다: E 로 다시 열고 들어오면 그때 봉쇄된다
+    if (door && door.opened && !door.closing) startClosing(world, door, false);
     if (boss.anticampBoost) {
       boss.anticampBoost = false;
       world.events.emit('anticamp_far', { enemyId: boss.id, enemyType: boss.type, on: false });

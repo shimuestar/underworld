@@ -82,7 +82,7 @@ describe('Metrics', () => {
     events.emit('corrosive_pending', { amount: 1, total: 1, cap: 8, enemyId: 1 });
     events.emit('corruption_cleansed', { amount: 2, source: 'vent', enemyId: 1, total: 2 });
     events.emit('corruption_cleansed', { amount: 15, source: 'boss_execute', enemyId: 1, total: 15 }); // 보스 처형 정화(B3-6) — boss.cleansed, ventCleanse 아님
-    events.emit('enemy_died', { enemyId: 1, enemyType: 'scythe_behemoth', x: 0, z: 0, execution: true, boss: true }); // 처형 마무리
+    events.emit('enemy_died', { enemyId: 1, enemyType: 'scythe_behemoth', x: 0, z: 0, execution: true, boss: true, phased: true }); // 처형 마무리(페이즈 보스)
     events.emit('enemy_died', { enemyId: 3, enemyType: 'goblin_runner', x: 0, z: 0, execution: true }); // 일반 적 처형은 보스 마무리가 아니다
     events.emit('numb_arm_applied', { kind: 'numb_arm', ticks: 240 }); // 플레이어 상태 부여(팔 저림 — 막기 신호)
     events.emit('boss_status', { enemyId: 1, enemyType: 'scythe_behemoth', kind: 'backflow', on: true, cause: 'vent', ticks: 60, selfDamage: 0 }); // 분출공 역류도 역류

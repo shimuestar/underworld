@@ -403,6 +403,8 @@ export interface EnemyDef {
   kiteMinRange?: number;
   /** 보스 (boss_two_phase) */
   boss?: boolean;
+  /** 사망·처형 마무리에 오염 대기를 씻어 주는 보스(거수) — 족장·어미 슬라임은 아니다 (B3-6 잔여 메모) */
+  deathCleanse?: boolean;
   /** 원거리 보조 공격 (족장 바위 투척 등) */
   rangedAttack?: EnemyAttackDef;
   /** 연사 공격 — 예고 뒤 여러 발을 일정 간격으로 (족장 화살 세례) */

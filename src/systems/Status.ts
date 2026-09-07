@@ -14,7 +14,7 @@
 //                Items.drink(체력 물약이 0 으로) / Inventory.isUseful(지울 상태가 있으면 유용)
 //   hobble    — Reaction.tryDodge(회피 스태미너 ×dodgeStaminaMul), PlayerMove(질주 불가 noSprint). 시간으로만 풀린다(물약 없음)
 //   corrosive — PlayerMove(이속 ×moveSpeedMul). 도트·오염 대기는 여기서: dotIntervalTicks 마다 dotPerTick(corrosive_tick — player_damaged 없음),
-//                pendingPerTicks 마다 오염 대기 +1(전투당 상한 pendingCap — 살아 있는 보스의 EnemyState.fightPendingIn 에 누적, 보스가 없으면 오르지 않는다).
+//                pendingPerTicks 마다 오염 대기 +1(전투당 상한 pendingCap — 살아 있는 보스의 EnemyState.fightPendingIn 에 누적, 보스가 없으면 오르지 않는다. 부활하면 Arena.carryOver 가 장부를 새 몸에 이어 간다 — 같은 전투).
 //                웅덩이 위에선 Hazards 가 매 틱 lingerTicks 로 되살린다. 물약이 지우지 않는다
 //   cowed     — Reaction(일반 패링이 관절을 열지 못함 normalParryOpensJoint·완벽 패링 1회로 해제), Mana(일반 패링 마나 normalParryMana). 거수 P3 포효(Enemies.resolveRoar)가 세운다(B3-4)
 //

@@ -16,7 +16,8 @@ export function init(world: World): void {
   world.events.on('corruption_cleansed', (payload) => cleanse(world, (payload as { amount: number }).amount));
   world.events.on('enemy_died', (payload) => {
     const dead = payload as { enemyId?: number; enemyType: string; noLoot?: boolean; execution?: boolean };
-    if (dead.noLoot || !enemyDef(dead.enemyType).boss) return;
+    const def = enemyDef(dead.enemyType);
+    if (dead.noLoot || !def.boss || !def.deathCleanse) return; // 정화는 deathCleanse 를 든 보스(거수)만 — 족장·어미 슬라임 처치는 오염 여유를 주지 않는다
     bossCleanse(world, dead.execution === true, dead.enemyId, dead.enemyType);
   });
 }

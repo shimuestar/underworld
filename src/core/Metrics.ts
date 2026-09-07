@@ -253,8 +253,8 @@ export class Metrics {
     // 보스 처치·처형 마무리(B3-6) — def.boss 는 시스템이 알지만 Metrics 는 데이터를 읽지 않는다: enemy_died 의 boss 플래그 대신 boss_phase{phase 0, death} 가 페이즈 보스의 사망을,
     // enemy_died{execution} 가 마무리 방식을 알린다. 처치 수는 사망 boss_phase 로(페이즈 없는 족장은 kills.execution/weapon 에 이미 있다)
     events.on('enemy_died', (payload) => {
-      const d = payload as { execution?: boolean; noLoot?: boolean; boss?: boolean };
-      if (d.execution && d.boss) this.bossExecuteFinishes++;
+      const d = payload as { execution?: boolean; noLoot?: boolean; boss?: boolean; phased?: boolean };
+      if (d.execution && d.phased) this.bossExecuteFinishes++; // 페이즈 보스(거수)만 — kills(boss_phase 0) 와 같은 모집단(족장 처형은 kills.execution 에)
     });
     // 플레이어 상태이상 부여(5종 × _applied) — 팔 저림·진탕·절뚝·오염 진액·위압
     for (const kind of ['numb_arm', 'concussion', 'hobble', 'corrosive', 'cowed'] as const) {
