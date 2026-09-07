@@ -112,6 +112,10 @@ export class InventoryUI {
   private split: SplitState | null = null;
   /** 패드로 조작 중 — 안내·글리프를 패드 표기로 (main 이 틱마다 갱신) */
   padMode = false;
+  /** 퀵슬롯 칸 키 표기 — main 이 장치(패드/키보드)와 바인딩을 따라 채운다. 기본은 1~4 */
+  keyLabel: (index: number, pad: boolean) => string = (i) => String(i + 1);
+  /** 패드의 소모품 선택(조합) 버튼 이름 — 기본 'LB'. 퀵슬롯 제목에 쓴다 */
+  padSelectLabel: () => string = () => 'LB';
   /** 보관 주머니 내려놓기 — P 키·패드 Y·버튼. main 이 Loot.createPlayerPouch 로 잇는다 */
   onPlacePouch: (() => void) | null = null;
   /** 창 안에서 닫았다(B·Esc) — main 이 uiOpen 을 되돌린다 */
@@ -670,7 +674,9 @@ export class InventoryUI {
     box.style.cssText = `width:${CELL_PX * 3 + GAP_PX * 2}px;flex:none;`;
 
     const title = document.createElement('div');
-    title.textContent = `퀵슬롯 — 전투 중 1~${world.quickslots.length}`;
+    title.textContent = this.padMode
+      ? `퀵슬롯 — 전투 중 ${this.padSelectLabel()} 를 누른 채 D-패드`
+      : `퀵슬롯 — 전투 중 1~${world.quickslots.length}`;
     title.style.cssText = `color:${this.pane === 'quick' ? '#e8c76a' : '#8a8f9a'};margin-bottom:6px;`;
     box.appendChild(title);
 
@@ -686,7 +692,8 @@ export class InventoryUI {
       center.style.cssText =
         'grid-area:2 / 2;display:flex;align-items:center;justify-content:center;text-align:center;' +
         `font-size:10px;line-height:1.5;white-space:pre;color:${armed ? '#e8c76a' : '#555c66'};`;
-      center.textContent = armed ? '칸을 눌러\n등록' : '1~4';
+      // 가운데 글자도 장치를 따른다 — 패드는 A 로 등록, 평소엔 조합 안내
+      center.textContent = armed ? (this.padMode ? 'A 로\n등록' : '칸을 눌러\n등록') : this.padMode ? 'D-패드' : '1~4';
       grid.appendChild(center);
     }
     world.quickslots.forEach((kind, i) => {
@@ -701,8 +708,12 @@ export class InventoryUI {
         `background:${here ? 'rgba(127,191,255,0.12)' : kind ? 'rgba(232,199,106,0.07)' : 'rgba(255,255,255,0.02)'};cursor:pointer;`;
 
       const key = document.createElement('div');
-      key.textContent = String(i + 1);
-      key.style.cssText = 'position:absolute;top:2px;left:5px;font-size:10px;color:#8a8f9a;';
+      key.textContent = this.keyLabel(i, this.padMode);
+      // 패드면 원 안 글자(.padkey) — HUD 마름모·스킬 탭과 같은 꼴
+      key.className = this.padMode ? 'padkey' : '';
+      key.style.cssText = this.padMode
+        ? 'position:absolute;top:3px;left:3px;width:16px;height:16px;font-size:9px;color:#8a8f9a;'
+        : 'position:absolute;top:2px;left:5px;font-size:10px;color:#8a8f9a;';
       cell.appendChild(key);
 
       if (kind) {

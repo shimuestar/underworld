@@ -317,7 +317,9 @@ export class SkillUI {
       const selected = world.selectedSkill === i && id !== null;
       const cursor = this._padMode && this.pane === 'slots' && this.selSlot === i;
       const cell = document.createElement('div');
-      cell.className = `dslot p${i} skill ${id ? 'ready' : 'empty'}${selected ? ' selected' : ''}${cursor ? ' cursor' : ''}`;
+      cell.className =
+        `dslot p${i} skill ${id ? 'ready' : 'empty'}${selected ? ' selected' : ''}${cursor ? ' cursor' : ''}` +
+        (this._padMode ? ' pad' : ''); // 패드면 키 글자를 원 안에
       cell.dataset['key'] = `k${i}`;
       const frame = document.createElement('div');
       frame.className = 'frame';
@@ -355,8 +357,10 @@ export class SkillUI {
         (cursor ? 'background:rgba(127,191,255,0.12);margin:-3px -6px;padding:3px 6px;' : '');
       const k = document.createElement('span');
       k.textContent = this.key(i);
+      // 패드면 원(버튼 꼴), 키보드면 네모(키캡 꼴)
       k.style.cssText =
-        `display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;font-size:10px;` +
+        `display:inline-block;width:18px;height:18px;line-height:16px;text-align:center;font-size:10px;box-sizing:border-box;` +
+        (this._padMode ? 'border-radius:50%;' : '') +
         `border:1px solid ${cursor ? '#7fbfff' : selected ? '#e8c76a' : id ? '#4a6a8a' : '#3a3a44'};` +
         `color:${cursor ? '#7fbfff' : selected ? '#e8c76a' : '#8a8f9a'};`;
       line.appendChild(k);
@@ -442,7 +446,8 @@ export class SkillUI {
 
       const tags = document.createElement('div');
       tags.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:4px;';
-      if (slotIndex >= 0) tags.appendChild(badge(`${this.key(slotIndex)} 칸`, def.color));
+      // 올라간 칸 — 키보드는 'Z 칸', 패드는 버튼 글자만 원 안에 (2026-09-07 사용자)
+      if (slotIndex >= 0) tags.appendChild(this._padMode ? keyBadge(this.key(slotIndex), def.color) : badge(`${this.key(slotIndex)} 칸`, def.color));
       if (picked) tags.appendChild(badge(this._padMode ? '고름 — 칸에서 A' : '고름 — 칸을 클릭', '#e8c76a'));
       if (!def.cast) tags.appendChild(badge('이 빌드에선 효과 없음', '#e04444'));
       row.appendChild(tags);
@@ -456,6 +461,15 @@ export class SkillUI {
     });
     return list;
   }
+}
+
+/** 패드 버튼 표식 — 원 안에 글자 하나 (index.html .padkey) */
+function keyBadge(text: string, color: string): HTMLElement {
+  const el = document.createElement('span');
+  el.className = 'padkey';
+  el.textContent = text;
+  el.style.color = color;
+  return el;
 }
 
 function badge(text: string, color: string): HTMLElement {

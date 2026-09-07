@@ -1059,6 +1059,41 @@
       .dslot.drinking .frame {
         border-color: #e8c76a;
       }
+      /* 패드 표기 — 키 글자를 버튼처럼 원 안에 (2026-09-07 사용자). HUD·메뉴 마름모 공용.
+         마름모 위 꼭지 안에 들어가야 하니 작게 — 원 중심(y≈15px)에서 마름모 반폭은 27px */
+      .dslot.pad .key {
+        top: 7px;
+        left: 50%;
+        right: auto;
+        width: 15px;
+        height: 15px;
+        margin-left: -8.5px;
+        border: 1px solid #8a8f9a;
+        border-radius: 50%;
+        line-height: 15px;
+        font-size: 9px;
+        box-sizing: content-box;
+      }
+      .dslot.pad.selected .key {
+        border-color: #e8c76a;
+      }
+      .dslot.pad.cursor .key {
+        border-color: #7fbfff;
+      }
+      /* 메뉴 창 안의 패드 버튼 글자 — 원 안에 (색은 글자색을 따른다) */
+      .padkey {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 1px solid currentColor;
+        font-size: 10px;
+        line-height: 1;
+        box-sizing: border-box;
+        flex: none;
+      }
       /* 고른 스킬 이름 — 마름모 안에는 안 들어가므로 뭉치 위에 한 줄로 */
       .dpad .label {
         position: absolute;

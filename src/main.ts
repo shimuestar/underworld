@@ -327,6 +327,9 @@ const menuUI = new MenuTabs(menuTabsPending); // 탭 정의는 아래에서 채�
 const inventoryUI = new InventoryUI(world, menuUI.body); // 가방 탭 — 소모품
 // 보관 주머니 — 가방 탭에서 빈 주머니를 발밑에 내려놓고 곧장 루팅 창으로 (loot_opened 가 창을 연다)
 inventoryUI.onClose = () => menuUI.hide(); // B·Esc 로 창 안에서 닫았다 — 셸이 uiOpen 을 되돌린다
+// 퀵슬롯 칸 표기는 HUD 물약 마름모와 같은 장치·바인딩 — 패드면 LB 를 누른 채 D-패드 (원 안 글자, 2026-09-07 사용자)
+inventoryUI.keyLabel = (i, pad) => quickSlotKeyLabelFor(i, pad);
+inventoryUI.padSelectLabel = () => shortPadBtn(input.gamepad.binding('itemSelect'));
 inventoryUI.onEdge = (dir) => menuUI.next(dir); // 패드 D-패드로 격자 끝에서 한 번 더 밀면 옆 탭으로 (키보드는 화살표가 곧 탭 전환)
 inventoryUI.onPlacePouch = () => {
   menuUI.hide();
@@ -354,7 +357,7 @@ menuTabsPending.push(
   {
     id: 'bag', label: '가방',
     status: () => `${world.inventory.filter((s) => s !== null).length}/${world.inventory.length}`,
-    show: () => { inventoryUI.altar = menuUI.altar; inventoryUI.show(); }, hide: () => inventoryUI.hide(), // 제단 앞이면 각인을 팔 수 있다
+    show: () => { inventoryUI.padMode = input.lastDevice === 'pad'; inventoryUI.altar = menuUI.altar; inventoryUI.show(); }, hide: () => inventoryUI.hide(), // 제단 앞이면 각인을 팔 수 있다. 첫 그림부터 장치 표기가 맞게(틱 갱신은 열린 뒤에만 돈다)
     blocksArrows: () => inventoryUI.splitting, // 수량 나누기 대화상자가 열려 있으면 화살표는 그쪽 몫
   },
   {
@@ -4133,15 +4136,19 @@ function skillSlotKeyLabelFor(i: number, pad: boolean): string {
 function skillSlotKeyLabel(i: number): string {
   return skillSlotKeyLabelFor(i, input.usingPad);
 }
-function quickSlotKeyLabel(i: number): string {
-  if (input.usingPad) {
+function quickSlotKeyLabelFor(i: number, pad: boolean): string {
+  if (pad) {
     if (i >= 4) return '—'; // 패드 조합은 D-패드 4방향까지 — 5번 자리가 없다
     return shortPadBtn(input.gamepad.binding(`slot${i + 1}` as PadAction));
   }
   return keyBindings.label(`slot${i + 1}` as KeyAction);
 }
+function quickSlotKeyLabel(i: number): string {
+  return quickSlotKeyLabelFor(i, input.usingPad);
+}
 
 function syncSkillSlots(): void {
+  const padCls = input.usingPad ? ' pad' : ''; // 패드면 키 글자를 원 안에 (2026-09-07 사용자)
   world.skillSlots.forEach((id, i) => {
     const ui = skillCells[i];
     if (!ui) return;
@@ -4149,7 +4156,7 @@ function syncSkillSlots(): void {
     if (ui.key.textContent !== keyText) ui.key.textContent = keyText;
     const selected = world.selectedSkill === i;
     if (!id) {
-      ui.cell.className = `dslot p${i} skill empty${selected ? ' selected' : ''}`;
+      ui.cell.className = `dslot p${i} skill empty${selected ? ' selected' : ''}${padCls}`;
       ui.mark.style.background = '';
       ui.frame.style.setProperty('--fill', '0%');
       ui.num.textContent = '';
@@ -4164,7 +4171,7 @@ function syncSkillSlots(): void {
     const noMana = world.mana.value < cost;
     ui.cell.className =
       `dslot p${i} skill ${!def.cast ? 'empty' : cooling ? 'cool' : noMana ? 'nomana' : 'ready'}` +
-      (selected ? ' selected' : '');
+      (selected ? ' selected' : '') + padCls;
     ui.mark.style.background = def.color;
     ui.mark.style.boxShadow = def.cast && !noMana && !cooling ? `0 0 8px ${def.color}` : 'none';
     // 쿨다운이 1초를 넘으면 남은 초를 적는다 — 짧은 건 차오름만으로 충분하다
@@ -4187,13 +4194,14 @@ function syncQuickslots(): void {
   const channel = world.itemChannel;
   const chFrac = Items.channelFrac(world);
   let labelText = '';
+  const padCls = input.usingPad ? ' pad' : ''; // 패드면 키 글자를 원 안에 — 스킬 마름모와 같은 꼴
   view.forEach((slot, i) => {
     const ui = quickCells[i];
     if (!ui) return;
     const keyText = quickSlotKeyLabel(i);
     if (ui.key.textContent !== keyText) ui.key.textContent = keyText;
     if (!slot.kind) {
-      ui.cell.className = `dslot p${i} item empty`;
+      ui.cell.className = `dslot p${i} item empty${padCls}`;
       ui.setKind(null);
       ui.num.textContent = '';
       ui.frame.style.setProperty('--fill', '0%');
@@ -4202,7 +4210,7 @@ function syncQuickslots(): void {
     // 다 썼거나 지금 마셔 봐야 소용없는 칸은 흐리게 — 급할 때 눈이 안 간다
     const dim = slot.count <= 0 || !slot.useful;
     const drinking = channel?.index === i;
-    ui.cell.className = `dslot p${i} item ${dim ? 'spent' : 'ready'}${drinking ? ' drinking' : ''}`;
+    ui.cell.className = `dslot p${i} item ${dim ? 'spent' : 'ready'}${drinking ? ' drinking' : ''}${padCls}`;
     ui.setKind(slot.kind);
     ui.num.textContent = String(slot.count);
     // 마시는 중인 칸이 차오른다. 아니면 공용 쿨다운이 차오른다 —
