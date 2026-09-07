@@ -647,6 +647,8 @@ for (const name of [
   'ghoul_ate_mote',
   'slime_spilled',
   'grave_recovered',
+  'grave_channel_started',
+  'grave_channel_broken',
   'boss_brood',
   'brood_pop',
   'enemy_died',
@@ -2825,8 +2827,13 @@ events.on('respawned', (payload) => {
 });
 
 events.on('grave_dropped', () =>
-  showReaction('유품이 비석에 남았다 — 그 자리로 돌아가면 되찾는다', 2600),
+  showReaction('유품이 비석에 남았다 — 그 자리로 돌아가 상호작용으로 거둔다 (문을 열 때처럼 잠시 걸린다)', 3000),
 );
+// 비석에 손을 댔다 — 문 자물쇠와 같은 소리·진동 (채널도 같은 시간)
+events.on('grave_channel_started', () => {
+  audio.play('door_touch');
+  padRumble('interact');
+});
 events.on('grave_recovered', (payload) => {
   audio.play('pickup_gold');
   showReaction(
@@ -4364,7 +4371,7 @@ function render(alpha: number): void {
     blocking: p.blocking,
     chargeFrac,
     bowDrawFrac,
-    doorFrac: Door.channelFrac(world),
+    doorFrac: Math.max(Door.channelFrac(world), Pickups.graveChannelFrac(world)), // 비석 회수도 같은 손 뻗기
     drinkFrac: Items.channelFrac(world),
     drinkColor: world.itemChannel ? itemColor(world.itemChannel.kind) : undefined,
     // 패드에서 조준(LT)을 안 붙들면 총을 내려 쥔다 — 마우스는 항상 견착
@@ -4601,9 +4608,10 @@ function render(alpha: number): void {
   const nearChest = world.chestInView !== null && !world.dead && !world.uiOpen;
   const nearLoot = world.lootInView !== null && !world.dead && !world.uiOpen;
   const nearItem = world.itemInView !== null && !world.dead && !world.uiOpen;
+  const nearGrave = world.graveInView !== null && !world.dead && !world.uiOpen;
   altarPrompt!.classList.toggle(
     'visible',
-    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest || nearLoot || nearItem,
+    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest || nearLoot || nearItem || nearGrave,
   );
   // 상호작용 키 표기 — 전용 키만 상호작용이다 (키보드는 현재 바인딩, 패드는 상호작용 버튼)
   const IK = keyLabel('interact', 'interact');
@@ -4624,6 +4632,16 @@ function render(alpha: number): void {
     altarPrompt!.textContent = `${IK} — ${Loot.titleOf(world, world.lootInView!)}를 뒤진다`;
     centerKeycap = IK;
     keycapWithPrompt = true;
+  } else if (nearGrave) {
+    // 비석 — 문 자물쇠와 같은 채널. 진행 게이지를 프롬프트 안에 그린다 (2026-09-07 사용자)
+    const frac = Pickups.graveChannelFrac(world);
+    if (frac > 0) {
+      altarPrompt!.textContent = `유품을 거두는 중\n${'█'.repeat(Math.round(frac * 20)).padEnd(20, '░')}  ${Math.round(frac * 100)}%`;
+    } else {
+      altarPrompt!.textContent = `${IK} — 비석의 유품을 거둔다 (곁에 서서 기다린다)`;
+      centerKeycap = IK;
+      keycapWithPrompt = true;
+    }
   } else if (nearItem) {
     altarPrompt!.textContent = `${IK} — ${itemDef(world.itemInView!.kind).name} 줍기`;
     centerKeycap = IK;

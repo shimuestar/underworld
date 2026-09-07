@@ -6,7 +6,7 @@ import { balance } from '../core/Balance';
 import { enemyDef } from '../core/Entities';
 import { Events } from '../core/Events';
 import { Input } from '../core/Input';
-import { addItem, countOf, initInventory } from '../core/Inventory';
+import { addItem, countOf, initInventory, spillInventoryToGrave } from '../core/Inventory';
 import { World } from '../core/World';
 import { Level } from '../level/GridLoader';
 import * as Loot from './Loot';
@@ -288,5 +288,64 @@ describe('가방이 가득 찬 뒤', () => {
     expect(world.groundItems[0]!.magnet).toBe(false);
     expect(bounced).toHaveLength(1);
     expect(Math.hypot(world.groundItems[0]!.x - 10, world.groundItems[0]!.z - 8.5)).toBeLessThan(0.001); // 원자리
+  });
+});
+
+describe('비석 회수 채널 (2026-09-07: 문을 열 때처럼 상호작용 뒤 door.openTicks 를 곁에서 기다린다)', () => {
+  it('밟기만으로는 안 돌아온다 — 상호작용으로 시작하고, 반경을 벗어나면 처음으로, 다 차면 회수', () => {
+    addItem(world, 'potion');
+    expect(spillInventoryToGrave(world, 10, 10)).toBe(true);
+    const started: unknown[] = [];
+    const broken: unknown[] = [];
+    world.events.on('grave_channel_started', (p) => started.push(p));
+    world.events.on('grave_channel_broken', (p) => broken.push(p));
+    // 비석 위에 서 있기만 — 아무 일도 없다
+    for (let t = 0; t < 30; t++) Pickups.tick(world, DT);
+    expect(world.graveInView?.kind).toBe('grave');
+    expect(world.graveChannel).toBeNull();
+    expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(true);
+    // E — 채널 시작 (첫 틱이 progress 1, 문과 같은 셈)
+    press(world);
+    expect(started).toHaveLength(1);
+    expect(world.graveChannel?.progress).toBe(1);
+    for (let t = 0; t < 40; t++) Pickups.tick(world, DT);
+    expect(Pickups.graveChannelFrac(world)).toBeCloseTo(41 / balance.door.openTicks, 6);
+    // 반경 밖으로 한 걸음 — 처음으로 되돌아간다
+    world.player.x = 10 + balance.pickups.grave.radius + 0.3;
+    Pickups.tick(world, DT);
+    expect(broken).toHaveLength(1);
+    expect(world.graveChannel).toBeNull();
+    expect(Pickups.graveChannelFrac(world)).toBe(0);
+    expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(true);
+    // 돌아와 다시 E — door.openTicks 째 틱에 회수된다 (한 틱 전엔 아직)
+    world.player.x = 10;
+    press(world);
+    for (let t = 1; t < balance.door.openTicks - 1; t++) Pickups.tick(world, DT);
+    expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(true);
+    Pickups.tick(world, DT);
+    expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(false);
+    expect(world.graveChannel).toBeNull();
+    expect(countOf(world, 'potion')).toBe(1);
+  });
+
+  it('가방이 가득이면 다 차도 하나도 못 담고 비석은 남는다 — 채널만 풀린다 (다시 E 로 재시도)', () => {
+    addItem(world, 'potion');
+    expect(spillInventoryToGrave(world, 10, 10)).toBe(true);
+    fillBag(world);
+    press(world);
+    for (let t = 1; t < balance.door.openTicks; t++) Pickups.tick(world, DT);
+    expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(true);
+    expect(world.graveChannel).toBeNull();
+  });
+
+  it('상자·주머니가 대상이면 E 는 그쪽 몫 — 비석 채널이 시작되지 않는다', () => {
+    addItem(world, 'potion');
+    expect(spillInventoryToGrave(world, 10, 10)).toBe(true);
+    world.lootInView = { id: 700001, kind: 'pouch' };
+    press(world);
+    expect(world.graveChannel).toBeNull();
+    world.lootInView = null;
+    press(world);
+    expect(world.graveChannel?.progress).toBe(1);
   });
 });

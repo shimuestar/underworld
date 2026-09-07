@@ -1,6 +1,8 @@
 // 바닥 아이템 물리와 습득 — 자석(골드·화살·탄약·수류탄·배터리), 소모품 E 집기·튕김, 비석 회수.
 // 각인(Sigils)·주머니(Loot)와 같은 world.groundItems 배열을 쓰되 kind 로 구분한다.
 // 자석 수치는 balance.pickups, 회복량은 balance.items.kinds.
+// 2026-09-07: 비석은 밟아서 즉시 회수하지 않는다 — 반경 안에서 상호작용으로 시작해 문을 여는 시간(door.openTicks)만큼
+// 곁에 서 있어야 유품이 돌아온다(채널, 벗어나면 처음부터). 사용자 지시: 문 여는 시간과 동일.
 //
 // 2026-08: 포션·음식은 몸에 닿아도 즉시 먹지 않는다 — 가방(Items)으로 들어가고,
 // 실제로 마시는 것은 퀵슬롯 1~5 다. 골드만 예전처럼 바로 주머니로 들어간다.
@@ -9,7 +11,7 @@
 import { balance } from '../core/Balance';
 import { isActiveSkill, sigilDef } from '../core/SigilData';
 import { addItem, recoverGrave, addSigil, addEquip } from '../core/Inventory';
-import type { ItemKind, World } from '../core/World';
+import type { GroundItemState, ItemKind, World } from '../core/World';
 
 /** 바닥에 놓인 높이 (kind별) — 자석에 걸리기 전 기준 높이 */
 function restHeight(kind: string): number {
@@ -53,18 +55,78 @@ function findItemInView(world: World): { id: number; kind: ItemKind } | null {
   return best ? { id: best.id, kind: best.kind as ItemKind } : null;
 }
 
+function breakGraveChannel(world: World): void {
+  world.graveChannel = null;
+  world.events.emit('grave_channel_broken', {});
+}
+
+/** 비석 회수 — 문을 여는 것과 같은 채널. 반경(pickups.grave.radius) 안에서 상호작용으로 시작하고
+ *  반경 안에 있는 동안만 오른다. door.openTicks 에 닿으면 유품을 가방에 담는다(가득이면 들어가는 만큼만).
+ *  상자·주머니가 대상이면 상호작용은 그쪽 몫이라 시작하지 않는다. 반환: 가방이 가득해 하나도 못 담았는가 */
+function tickGrave(world: World): boolean {
+  const p = world.player;
+  const radius = balance.pickups.grave.radius;
+  let near: GroundItemState | null = null;
+  let bestDist = Infinity;
+  for (const item of world.groundItems) {
+    if (item.kind !== 'grave') continue;
+    const d = Math.hypot(p.x - item.x, p.z - item.z);
+    if (d <= radius && d < bestDist) {
+      near = item;
+      bestDist = d;
+    }
+  }
+  world.graveInView = near;
+  const ch = world.graveChannel;
+  if (ch && (!near || near.id !== ch.id)) {
+    breakGraveChannel(world); // 반경을 벗어났거나 비석이 사라졌다 — 처음으로
+    return false;
+  }
+  if (!near) return false;
+  if (!ch) {
+    if (!world.input.interactPressed || world.lootOpen !== null || world.chestInView || world.lootInView) return false;
+    world.graveChannel = { id: near.id, progress: 1 };
+    world.events.emit('grave_channel_started', { x: near.x, z: near.z });
+    return false;
+  }
+  ch.progress++;
+  if (ch.progress < balance.door.openTicks) return false;
+  world.graveChannel = null;
+  const result = recoverGrave(world, near);
+  if (result === 'all') {
+    world.groundItems.splice(world.groundItems.indexOf(near), 1);
+    world.events.emit('grave_recovered', { partial: false });
+  } else if (result === 'partial') {
+    world.events.emit('grave_recovered', { partial: true });
+  } else {
+    return true; // 가방이 가득 — 기존 "가방이 가득 찼다" 안내를 그대로 쓴다
+  }
+  return false;
+}
+
+/** 비석 회수 진행률 0~1 — 손 연출과 HUD 게이지가 읽는다 (문 channelFrac 과 같은 꼴) */
+export function graveChannelFrac(world: World): number {
+  const ch = world.graveChannel;
+  if (!ch) return 0;
+  return Math.min(1, ch.progress / balance.door.openTicks);
+}
+
 /** 자석 흡수 + E 집기 — 골드·화살·탄약은 반경에 들면 공중으로 떠올라 가속하며 몸으로 빨려든다
  *  (한 번 걸린 아이템은 플레이어가 멀어져도 계속 따라온다). 소모품은 바라보며 E 를 눌러야
  *  같은 비행으로 날아온다(2026-09-04) — 가방이 가득이면 몸까지 왔다가 원자리로 튕겨 돌아간다 */
 export function tick(world: World, dt: number): void {
   world.itemInView = null;
-  if (world.groundItems.length === 0) return;
+  world.graveInView = null;
+  if (world.groundItems.length === 0) {
+    if (world.graveChannel) breakGraveChannel(world);
+    return;
+  }
   const p = world.player;
   const cfg = balance.pickups;
   const mag = cfg.magnet;
   const targetY = balance.player.eyeHeight * mag.targetHeightMul; // 가슴 높이
   // 반경 안에 들어왔는데 화살통이 가득이라 못 문 것이 있었는가 (틱당 한 번만 알린다)
-  let blocked = false;
+  let blocked = tickGrave(world);
   let quiverBlocked = false;
   // 집기 대상 — 컨테이너(상자·주머니)가 대상이면 양보한다 (우선순위 상자 > 주머니 > 바닥 아이템)
   const inView = world.chestInView || world.lootInView ? null : findItemInView(world);
@@ -74,20 +136,7 @@ export function tick(world: World, dt: number): void {
   for (let i = world.groundItems.length - 1; i >= 0; i--) {
     const item = world.groundItems[i]!;
     if (item.kind === 'pouch') continue; // 주머니는 Loot 담당 (각인은 소모품처럼 E 로 집는다)
-    // 비석 — 돌이라 자석에 걸리지 않는다. 밟을 만큼 다가가야 유품을 다시 담아 간다
-    if (item.kind === 'grave') {
-      if (Math.hypot(p.x - item.x, p.z - item.z) > balance.pickups.grave.radius) continue;
-      const result = recoverGrave(world, item);
-      if (result === 'all') {
-        world.groundItems.splice(i, 1);
-        world.events.emit('grave_recovered', { partial: false });
-      } else if (result === 'partial') {
-        world.events.emit('grave_recovered', { partial: true });
-      } else {
-        blocked = true; // 가방이 가득 — 기존 "가방이 가득 찼다" 안내를 그대로 쓴다
-      }
-      continue;
-    }
+    if (item.kind === 'grave') continue; // 비석 — 돌이라 자석에 걸리지 않는다. 회수는 tickGrave 의 채널
 
     // 튕겨 돌아가는 중 — 몸 앞에서 원자리로 포물선 (가방이 가득이었다)
     if ((item.bounceTicks ?? 0) > 0) {

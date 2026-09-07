@@ -607,7 +607,7 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     expect(unlocked).toBe(1);
   });
 
-  it('죽으면 가방 소모품만 비석에 남고, 그 자리를 밟으면 되찾는다', () => {
+  it('죽으면 가방 소모품만 비석에 남고, 그 자리에서 상호작용 뒤 문 여는 시간만큼 기다리면 되찾는다', () => {
     initInventory(world);
     addItem(world, 'potion');
     addItem(world, 'potion');
@@ -620,9 +620,16 @@ describe('스킬 시전 — 뇌창·서리·그림자', () => {
     Pickups.tick(world, DT);
     expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(true);
     expect(world.inventory.every((s2) => s2 === null)).toBe(true);
-    // 밟으면 전부 회수
+    // 밟기만 해서는 안 돌아온다 (2026-09-07) — 상호작용으로 시작해 door.openTicks 만큼 곁에 있어야 한다
     world.player.x = 12;
     world.player.z = 6;
+    for (let t = 0; t < 30; t++) Pickups.tick(world, DT);
+    expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(true);
+    world.input = { ...world.input, interactPressed: true };
+    Pickups.tick(world, DT);
+    world.input = { ...world.input, interactPressed: false };
+    for (let t = 1; t < balance.door.openTicks - 1; t++) Pickups.tick(world, DT);
+    expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(true); // 한 틱 모자라다
     Pickups.tick(world, DT);
     expect(world.groundItems.some((g) => g.kind === 'grave')).toBe(false);
     expect(world.inventory.filter((s2) => s2 !== null).length).toBeGreaterThan(0);

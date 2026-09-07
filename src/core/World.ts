@@ -1633,6 +1633,12 @@ export class World {
   /** 당겨진 레버 ("row-col") — 레버는 1회용 */
   pulledLevers = new Set<string>();
 
+  /** 비석 회수 채널 — 문(door.openTicks)과 같은 시간. 반경 안에서 상호작용으로 시작하고,
+   *  반경 안에 있는 동안만 오른다. 벗어나면 처음으로 (2026-09-07 사용자: 문을 열 때처럼 기다려야 회수) */
+  graveChannel: { id: number; progress: number } | null = null;
+  /** 반경 안의 비석 (없으면 null) — HUD 안내가 읽는다 */
+  graveInView: GroundItemState | null = null;
+
   /** 지금 바라보고 있는 아직 안 당긴 레버 (없으면 null) — HUD 안내가 읽는다 */
   leverInView: { row: number; col: number } | null = null;
 
