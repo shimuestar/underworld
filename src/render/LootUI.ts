@@ -4,7 +4,7 @@
 // 그리기·입력·연출만 — 아이콘이 반대 칸으로 날아가고 골드·화살 카운터가 오르는 것으로
 // '옮겨지는 것'이 눈에 보이게 한다.
 //
-// 조작: WASD/화살표 이동(←→ 로 칸 전환), Enter·좌클릭 = 가져오기/넣기, T = 모두 가져오기,
+// 조작: WASD/화살표 이동(←→ 로 칸 전환), Enter·좌클릭 = 가져오기/넣기, T = 모두 가져오기(주머니가 다 비면 창이 저절로 닫힌다),
 // X·Delete·우클릭 = 바닥에 버리기, E/Esc 닫기. 패드는 main 이 padMove/padActivate/... 로 부른다.
 // Space·Shift 는 일부러 안 쓴다 — 전투에서 가장 많이 두들기는 키라 오조작이 난다 (ShopUI 와 같다).
 
@@ -611,6 +611,9 @@ export class LootUI {
     const c = Loot.container(this.world);
     if (!c) { this.close(); return; }
     const res = Loot.takeAll(this.world);
+    // 주머니가 다 비었으면 창을 자동으로 닫는다 — 더 볼 것도 할 것도 없다 (2026-09-07 사용자).
+    // 뒤지지 않은 칸이 남았으면(entries 에 남는다) 열어 두고, 상자는 비어도 남으니 열어 둔다
+    if (c.ref.kind === 'pouch' && c.entries.length === 0) { this.close(); return; }
     if (res.denied && c.entries.length > 0) this.shakeKey = `c${Math.min(this.selC, c.entries.length - 1)}`;
     this.clampSel();
     this.rebuild();
