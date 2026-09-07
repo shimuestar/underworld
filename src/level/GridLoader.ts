@@ -9,6 +9,7 @@ import {
   dungeonWallTexture,
 } from '../render/DungeonTextures';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildDecor, buildGrandAltar, buildRespawnCircle, CHURCH_COLORS, decorBlockers } from './ChurchDecor';
 
 export interface GlyphDef {
   cell: number[];
@@ -49,13 +50,30 @@ export interface LevelDef {
   arena?: ArenaDef;
   /** 입구 계단(스폰이 등진 벽감)을 그리는가 — 기본 true. 시험방처럼 "내려온 자리"가 없는 층은 false (2026-09-04) */
   entranceStairs?: boolean;
-  /** 바닥 표식 — 'center' 는 방 가운데를 알리는 고리+십자 (몬스터 시험방) */
+  /** 바닥 표식 — 'center' 는 방 가운데를 알리는 고리+십자 (몬스터 시험방), 'circle' 은 부활 마법진 (성소 로비) */
   floorMarks?: FloorMarkDef[];
+  /** 시각 테마 — 'church' 는 밝은 상아빛 돌 + 대제단 (성소 로비, 2026-09-07). 없으면 던전 */
+  theme?: 'church';
+  /** 시작 시선을 벽과 무관하게 고정한다 (N = -Z). 벽에 붙지 않은 스폰(로비 마법진)이 제단을 보게 */
+  spawnFacing?: 'N' | 'S' | 'E' | 'W';
+  /** 장식 — 열주·장의자·색유리창·촛대·노점 (ChurchDecor). column/pew/stall 은 이동 차단 상자도 만든다 */
+  decor?: DecorDef[];
 }
 
 export interface FloorMarkDef {
   cell: number[];
-  kind: 'center';
+  kind: 'center' | 'circle';
+}
+
+export interface DecorDef {
+  type: 'column' | 'pew' | 'window' | 'candle' | 'stall';
+  cell: number[];
+  /** window·stall — 벽 칸에서 안쪽(또는 노점이 향하는 쪽)을 가리키는 방향 */
+  dir?: string;
+  /** pew — 가로로 걸치는 칸 수 (첫 칸에서 오른쪽으로) */
+  span?: number;
+  /** window — 'rose' 면 원형 장미창 */
+  kind?: string;
 }
 
 /** 격자에서 찾아낸 잠긴 문 하나. dirX/dirZ 는 미닫이가 밀려 들어갈 방향(셀 단위) */
@@ -111,6 +129,10 @@ export class Level {
   readonly entranceStairs: boolean;
   /** 바닥 표식 (LevelDef.floorMarks) */
   readonly floorMarks: FloorMarkDef[];
+  /** 시각 테마 (LevelDef.theme) — 렌더 팔레트·제단 모양이 갈린다 */
+  readonly theme: 'dungeon' | 'church';
+  /** 장식 (LevelDef.decor) */
+  readonly decor: DecorDef[];
   /** 잠긴 문(D·G) — 미닫이가 밀려 들어갈 축도 여기서 정한다 */
   readonly doors: DoorCell[];
 
@@ -143,6 +165,12 @@ export class Level {
     this.spawnWall = { dc: wall[0], dr: wall[1] };
     // facing = (-sin yaw, -cos yaw). 벽 반대(-dc, -dr) 를 보려면 yaw = atan2(dc, dr)
     this.spawnYaw = Math.atan2(wall[0], wall[1]);
+    if (def.spawnFacing) {
+      // 시선 고정 — 벽에 붙지 않은 스폰(로비 부활 마법진)이 제단을 보게. 등진 벽은 그 반대
+      const f = def.spawnFacing === 'N' ? [0, -1] : def.spawnFacing === 'S' ? [0, 1] : def.spawnFacing === 'E' ? [1, 0] : [-1, 0];
+      this.spawnWall = { dc: -f[0]! || 0, dr: -f[1]! || 0 }; // -0 이 새지 않게
+      this.spawnYaw = Math.atan2(-f[0]! || 0, -f[1]! || 0);
+    }
     this.spawn = {
       x: (spawn.col + 0.5) * this.cellSize,
       z: (spawn.row + 0.5) * this.cellSize,
@@ -182,6 +210,10 @@ export class Level {
     this.glyphs = def.glyphs ?? [];
     this.entranceStairs = def.entranceStairs ?? true;
     this.floorMarks = def.floorMarks ?? [];
+    this.theme = def.theme ?? 'dungeon';
+    this.decor = def.decor ?? [];
+    // 장식 중 몸으로 막히는 것(열주·장의자·노점 상판) — 제단 기둥과 같은 차단 상자
+    for (const rect of decorBlockers(this.decor, this.cellSize)) this.props.push(rect);
     this.bossArena = def.bossArena ?? false;
     this.arena = def.arena ?? null;
     this.levers = (def.triggers ?? []).filter(
@@ -951,6 +983,11 @@ function buildStairwell(
 export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   const group = new THREE.Group();
   const cs = level.cellSize;
+  // 팔레트 — 던전(갈색 돌·어두운 바닥) / 교회(상아빛 돌·크림 천장). 텍스처는 회색조라 이 색이 그대로 돌빛이다
+  const church = level.theme === 'church';
+  const pal = church
+    ? { wall: CHURCH_COLORS.wall, floor: CHURCH_COLORS.floor, ceiling: CHURCH_COLORS.ceiling, altar: CHURCH_COLORS.altar, altarLight: CHURCH_COLORS.altarLight }
+    : { wall: COLOR_WALL, floor: COLOR_FLOOR, ceiling: COLOR_CEILING, altar: COLOR_ALTAR, altarLight: COLOR_ALTAR_LIGHT };
   const width = level.cols * cs;
   const depth = level.rows * cs;
 
@@ -1071,7 +1108,7 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
         group.add(built.mount);
         continue;
       }
-      const color = COLOR_WALL;
+      const color = pal.wall;
       // 시작 계단이 파고 들어갈 벽 칸 — 통짜 상자 대신 개구부를 낸 테두리를 넣는다.
       // 별도 메시로 세우면 벽과 재질·이음매가 갈려 "벽에 상자를 끼운" 것처럼 보인다.
       // 같은 병합 목록에 넣으므로 벽과 문자 그대로 한 몸이다.
@@ -1151,7 +1188,7 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   const floor = new THREE.Mesh(
     mergeGeometries(floorTiles),
     new THREE.MeshLambertMaterial({
-      color: COLOR_FLOOR,
+      color: pal.floor,
       map: dungeonFloorTexture(),
       bumpMap: dungeonFloorTexture(),
       bumpScale: FLOOR_BUMP,
@@ -1165,10 +1202,13 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   const ceiling = new THREE.Mesh(
     new THREE.PlaneGeometry(width, depth),
     new THREE.MeshLambertMaterial({
-      color: COLOR_CEILING,
+      color: pal.ceiling,
       map: ceilingTex,
       bumpMap: ceilingTex,
       bumpScale: CEILING_BUMP,
+      // 교회 천장은 살짝 스스로 밝다 — 점광원이 닿지 않는 높은 천장(6m)이 잿빛 하늘처럼 보이지 않게
+      emissive: church ? CHURCH_COLORS.ceiling : 0x000000,
+      emissiveIntensity: church ? 0.16 : 0,
     }),
   );
   ceiling.rotation.x = Math.PI / 2;
@@ -1182,12 +1222,17 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       if (level.charAt(col, row) !== 'A') continue;
       const x = (col + 0.5) * cs;
       const z = (row + 0.5) * cs;
+      if (church) {
+        // 로비 대제단 — 상점이 아니라 워프의 문. 제대 + 오벨리스크 + 후광 구 (ChurchDecor)
+        group.add(buildGrandAltar(x, z, level.ceiling, ALTAR_FOOTPRINT));
+        continue;
+      }
       // 성소답게 빛난다 — 멀리서도 '저기가 제단'이 읽히는 밝기 (2026-09-01 증광)
       const pillar = new THREE.Mesh(
         new THREE.BoxGeometry(ALTAR_FOOTPRINT, 2.1, ALTAR_FOOTPRINT),
         new THREE.MeshLambertMaterial({
-          color: COLOR_ALTAR,
-          emissive: COLOR_ALTAR,
+          color: pal.altar,
+          emissive: pal.altar,
           emissiveIntensity: 0.6,
         }),
       );
@@ -1196,14 +1241,14 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       const cap = new THREE.Mesh(
         new THREE.BoxGeometry(1.5, 0.18, 1.5),
         new THREE.MeshLambertMaterial({
-          color: COLOR_ALTAR,
-          emissive: COLOR_ALTAR,
+          color: pal.altar,
+          emissive: pal.altar,
           emissiveIntensity: 0.85,
         }),
       );
       cap.position.set(x, 2.2, z);
       group.add(cap);
-      const light = new THREE.PointLight(COLOR_ALTAR_LIGHT, 2.4, 14, 0);
+      const light = new THREE.PointLight(pal.altarLight, 2.4, 14, 0);
       light.position.set(x, 2.6, z);
       group.add(light);
     }
@@ -1284,6 +1329,11 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
   for (const mark of level.floorMarks) {
     const mx = (mark.cell[1]! + 0.5) * cs;
     const mz = (mark.cell[0]! + 0.5) * cs;
+    if (mark.kind === 'circle') {
+      // 부활 마법진 (성소 로비) — 로비에서 부활하면 여기서 깨어난다
+      group.add(buildRespawnCircle(mx, mz, cs, level.ceiling));
+      continue;
+    }
     const markMat = new THREE.MeshBasicMaterial({ color: 0xd8c27a, transparent: true, opacity: 0.85 });
     const ring = new THREE.Mesh(new THREE.RingGeometry(cs * 0.28, cs * 0.32, 48), markMat);
     ring.rotation.x = -Math.PI / 2;
@@ -1355,15 +1405,17 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
 
   // 계단 문(입구·출구 벽감) 양옆 — 문틀 기둥에 하나씩, 데이터와 무관하게 자동으로.
   // 관문은 멀리서도 눈에 걸려야 한다 (내려온 자리·내려갈 자리 둘 다)
-  const doorFlanks: { ax: number; az: number; yaw: number; offs: [number, number] }[] = [
-    {
+  const doorFlanks: { ax: number; az: number; yaw: number; offs: [number, number] }[] = [];
+  // 입구 계단이 없는 층(시험방·로비)은 벽감도 없다 — 허공에 횃불만 걸리지 않게
+  if (level.entranceStairs) {
+    doorFlanks.push({
       ax: alcove.x,
       az: alcove.z,
       yaw: alcove.yaw,
       // 입구 문은 동쪽으로 치우쳐 있다 — 동쪽 기둥 가운데 / 문 서쪽 30cm
       offs: [cs / 2 - EAST_JAMB / 2, cs / 2 - EAST_JAMB - ALCOVE_OPEN_W - 0.3],
-    },
-  ];
+    });
+  }
   if (exitCell) {
     doorFlanks.push({
       ax: exitAlcove.x,
@@ -1385,6 +1437,9 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
       );
     }
   }
+
+  // 장식 (교회 테마 — 열주·장의자·색유리창·촛대·노점). decor 가 빈 층은 아무것도 안 한다
+  buildDecor(level, group);
 
   return group;
 }

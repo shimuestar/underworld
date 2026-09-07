@@ -54,14 +54,24 @@ function ammoLeftRatio(world: World): number {
 }
 
 export function enter(world: World): void {
+  world.altarEnteredThisApproach = true;
+
+  // 성소 로비의 대제단 — 저장도 상점도 아니다. 활성화한 제단 목록을 띄우는 워프의 문 (main 이 UI 를 연다)
+  if (world.lobby) {
+    world.events.emit('lobby_altar_entered', { altars: world.altars.length });
+    return;
+  }
+
   // 보급 없음 — 상점에서 골드로 산다. 제단은 이제 "쉬는 곳"이 아니라 "쓰는 곳"이다.
   // 부활 지점은 제단 중심이 아니라 "지금 서 있는 자리" — 기둥이 막혀 있어서
-  // 중심 좌표로 되살리면 구조물 안에 파묻힌다
-  const spot = { x: world.player.x, z: world.player.z };
+  // 중심 좌표로 되살리면 구조물 안에 파묻힌다. 층 번호를 함께 적는다 — 다른 층에서 죽어도 여기로 돌아온다
+  const spot = { floor: world.floorIndex, x: world.player.x, z: world.player.z };
   world.respawn = spot;
+  // 활성화한 제단 — 층마다 하나. 다시 들르면 자리만 갱신한다 (로비 대제단 워프 목록)
+  const known = world.altars.findIndex((a) => a.floor === spot.floor);
+  if (known >= 0) world.altars[known] = spot;
+  else world.altars.push(spot);
   world.events.emit('respawn_registered', spot);
-
-  world.altarEnteredThisApproach = true;
 
   // 오염 정산은 Corruption이, 상점 UI는 main이 이 이벤트를 구독해 처리
   world.events.emit('altar_entered', {

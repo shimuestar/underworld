@@ -16,6 +16,7 @@ import type {
   LifeMoteState,
   PoolState,
   ProjectileState,
+  NpcState,
 } from '../core/World';
 import { FINISHER_CONTACT_MS, HandModel } from './HandModel';
 import { animateTrap, buildTrapGroup, type TrapView } from './TrapVisuals';
@@ -2168,6 +2169,8 @@ export class Stage {
   private readonly chestVisuals = new Map<number, { group: THREE.Group; lid: THREE.Object3D }>();
   /** 기믹(파괴물) 시각 — 배열에서 빠지면(파괴) 걷는다 (syncBarrels 와 같은 규약) */
   private readonly propVisuals = new Map<number, THREE.Group>();
+  /** NPC(로비의 사제·상인) 시각 — id 캐시, 층이 바뀌어 배열이 비면 걷는다 */
+  private readonly npcVisuals = new Map<number, THREE.Group>();
   private readonly trapVisuals = new Map<number, THREE.Group>();
   /** 심지 불빛 — 폭발 당첨 기믹의 치익 반짝임 */
   private fuseGlows: { light: THREE.PointLight; bornMs: number; ttlMs: number }[] = [];
@@ -2560,6 +2563,7 @@ export class Stage {
     this.syncEnemies([], 1);
     this.syncBarrels([]);
     this.syncProps([]);
+    this.syncNpcs([], 0);
     this.syncTraps([], 4);
     this.syncChests([]);
     this.syncGroundItems([]);
@@ -6697,6 +6701,145 @@ export class Stage {
   }
 
   /** 기믹 동기화 — 부서지면(alive=false) 걷는다 */
+  /** NPC — 서 있는 사람 모형 + 머리 위 이름판. 바라보는 대상(focusId)은 이름판이 커지고 또렷해진다.
+   *  숨은 살짝 들썩인다(nowMs) — 죽은 마네킹으로 읽히지 않게 */
+  syncNpcs(npcs: NpcState[], nowMs: number, focusId: number | null = null): void {
+    const seen = new Set<number>();
+    for (const npc of npcs) {
+      seen.add(npc.id);
+      let group = this.npcVisuals.get(npc.id);
+      if (!group) {
+        group = this.makeNpc(npc.kind);
+        group.position.set(npc.x, 0, npc.z);
+        group.rotation.y = npc.yaw;
+        this.npcVisuals.set(npc.id, group);
+        this.scene.add(group);
+      }
+      const breathe = Math.sin(nowMs / 900 + npc.id) * 0.012;
+      const torso = group.getObjectByName('torso');
+      if (torso) torso.scale.y = 1 + breathe;
+      const plate = group.getObjectByName('nameplate') as THREE.Sprite | undefined;
+      if (plate) {
+        const focus = focusId === npc.id;
+        const layout = keycapLayout(plate.material);
+        const unit = focus ? KEYCAP_SIZE * 1.25 : KEYCAP_SIZE * 0.95;
+        const height = unit * layout.heightUnits;
+        plate.scale.set(height * layout.aspect, height, 1);
+        plate.material.opacity = focus ? 1 : 0.75;
+      }
+    }
+    for (const [id, group] of this.npcVisuals) {
+      if (seen.has(id)) continue;
+      this.disposeGroup(group);
+      this.npcVisuals.delete(id);
+    }
+  }
+
+  /** NPC 모형 — 사제: 흰 장의에 금 띠·스톨, 두 손을 모은 자세. 상인: 갈색 조끼·앞치마·챙 넓은 모자·허리 주머니 */
+  private makeNpc(kind: NpcState['kind']): THREE.Group {
+    const g = new THREE.Group();
+    const priest = kind === 'priest';
+    const robe = new THREE.MeshLambertMaterial({ color: priest ? 0xf1ece0 : 0x6b4a2f });
+    const trim = new THREE.MeshLambertMaterial({ color: priest ? 0xd4af37 : 0x9a3a2e, emissive: priest ? 0xd4af37 : 0x000000, emissiveIntensity: priest ? 0.25 : 0 });
+    const skin = new THREE.MeshLambertMaterial({ color: 0xd8b090 });
+    const hair = new THREE.MeshLambertMaterial({ color: priest ? 0xbdb6a8 : 0x3a2a1c });
+    const torso = new THREE.Group();
+    torso.name = 'torso';
+    g.add(torso);
+    // 장의(사제) / 몸통(상인) — 발까지 내려오는 원뿔대
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(priest ? 0.3 : 0.32, priest ? 0.42 : 0.36, 1.35, 12), robe);
+    body.position.y = 0.675;
+    torso.add(body);
+    const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.3, 0.32, 12), robe);
+    chest.position.y = 1.5;
+    torso.add(chest);
+    const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.14, 0.32), robe);
+    shoulders.position.y = 1.62;
+    torso.add(shoulders);
+    if (priest) {
+      // 스톨 — 목에서 앞으로 늘어진 금빛 띠 둘
+      for (const sx of [-0.12, 0.12]) {
+        const stole = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.1, 0.03), trim);
+        stole.position.set(sx, 1.1, -0.31);
+        torso.add(stole);
+      }
+      // 모은 두 손
+      const hands = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), skin);
+      hands.scale.set(1.4, 0.8, 0.9);
+      hands.position.set(0, 1.15, -0.34);
+      torso.add(hands);
+      // 어깨 위 금 띠 (장의 목둘레)
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.03, 8, 20), trim);
+      collar.position.y = 1.7;
+      collar.rotation.x = Math.PI / 2;
+      torso.add(collar);
+    } else {
+      // 앞치마 + 허리띠·주머니
+      const apron = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.9, 0.04), new THREE.MeshLambertMaterial({ color: 0xc8b48a }));
+      apron.position.set(0, 0.72, -0.35);
+      torso.add(apron);
+      const belt = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.035, 8, 20), trim);
+      belt.position.y = 1.05;
+      belt.rotation.x = Math.PI / 2;
+      torso.add(belt);
+      const pouch = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshLambertMaterial({ color: 0x4a3320 }));
+      pouch.position.set(0.3, 0.95, -0.12);
+      torso.add(pouch);
+      // 팔 — 앞으로 내밀어 물건을 권하는 자세
+      for (const sx of [-1, 1]) {
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.6, 8), robe);
+        arm.position.set(sx * 0.3, 1.32, -0.22);
+        arm.rotation.x = -1.1;
+        torso.add(arm);
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), skin);
+        hand.position.set(sx * 0.3, 1.2, -0.5);
+        torso.add(hand);
+      }
+    }
+    // 머리
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 10), skin);
+    head.position.y = 1.93;
+    torso.add(head);
+    if (priest) {
+      // 뒤로 넘긴 은발 + 작은 두건 모양 관
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), hair);
+      cap.position.y = 1.97;
+      torso.add(cap);
+      const mitre = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.16, 0.22, 8), new THREE.MeshLambertMaterial({ color: 0xf1ece0 }));
+      mitre.position.y = 2.2;
+      torso.add(mitre);
+      const gem = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshLambertMaterial({ color: 0xffe9a8, emissive: 0xffe9a8, emissiveIntensity: 1.2 }));
+      gem.position.set(0, 2.2, -0.13);
+      torso.add(gem);
+    } else {
+      // 챙 넓은 모자 + 턱수염
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.03, 16), hair);
+      brim.position.y = 2.06;
+      torso.add(brim);
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 0.22, 12), hair);
+      crown.position.y = 2.18;
+      torso.add(crown);
+      const beard = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), hair);
+      beard.scale.set(1, 1.2, 0.6);
+      beard.position.set(0, 1.8, -0.16);
+      torso.add(beard);
+    }
+    // 눈 — 어둡게, 안광 없음 (적이 아니다)
+    for (const sx of [-0.07, 0.07]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 4), new THREE.MeshLambertMaterial({ color: 0x1a1410 }));
+      eye.position.set(sx, 1.95, -0.17);
+      torso.add(eye);
+    }
+    // 이름판 — 바닥 아이템 이름판과 같은 캔버스 (키캡 없이 이름만)
+    const plate = new THREE.Sprite(keycapMaterial('', false, priest ? '성직자 사제' : '상인', false).clone());
+    const layout = keycapLayout(plate.material);
+    plate.center.set(layout.anchorX, 0);
+    plate.position.y = 2.42;
+    plate.name = 'nameplate';
+    g.add(plate);
+    return g;
+  }
+
   syncProps(props: { id: number; type: string; x: number; z: number; alive: boolean }[]): void {
     const seen = new Set<number>();
     for (const prop of props) {

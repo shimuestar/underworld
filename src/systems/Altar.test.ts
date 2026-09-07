@@ -84,8 +84,36 @@ describe('제단 진입', () => {
   it('부활 지점은 제단 중심이 아니라 서 있던 자리 — 기둥 안에 되살아나지 않게', () => {
     enterAltar(world);
     const a = world.level.altarPos!;
-    expect(world.respawn).toEqual({ x: a.x - 1.2, z: a.z });
-    expect(world.respawn).not.toEqual(a);
+    expect(world.respawn).toEqual({ floor: 0, x: a.x - 1.2, z: a.z });
+    expect(world.respawn).not.toMatchObject({ x: a.x, z: a.z });
+  });
+
+  it('진입한 제단은 층 번호와 함께 활성화 목록(altars)에 오른다 — 층마다 하나, 다시 들르면 자리만 갱신 (로비 대제단 워프)', () => {
+    world.floorIndex = 2;
+    enterAltar(world);
+    expect(world.respawn!.floor).toBe(2);
+    expect(world.altars).toHaveLength(1);
+    expect(world.altars[0]).toEqual(world.respawn);
+    // 다른 자리에서 다시 진입 — 목록은 늘지 않고 자리만 바뀐다
+    world.nearAltar = false;
+    world.altarEnteredThisApproach = false;
+    world.player.z += 0.5;
+    Altar.tick(world, DT);
+    pressInteract(world);
+    expect(world.altars).toHaveLength(1);
+    expect(world.altars[0]!.z).toBe(world.level.altarPos!.z + 0.5);
+  });
+
+  it('성소 로비의 대제단 — 저장도 상점도 아니다: respawn·altars 를 건드리지 않고 lobby_altar_entered 만 낸다', () => {
+    world.lobby = true;
+    const seen: string[] = [];
+    world.events.on('lobby_altar_entered', () => seen.push('warp'));
+    world.events.on('altar_entered', () => seen.push('shop'));
+    enterAltar(world);
+    expect(seen).toEqual(['warp']);
+    expect(world.respawn).toBeNull();
+    expect(world.altars).toHaveLength(0);
+    expect(world.altarEnteredThisApproach).toBe(true); // 같은 접근에서 두 번 열리지 않는다
   });
 
   it('등지고 있으면 안내도 진입도 없다 — 바라봐야 한다', () => {

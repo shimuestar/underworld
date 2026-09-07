@@ -10,7 +10,7 @@ import { countOf, initInventory, spillInventoryToGrave, itemColor, itemDef } fro
 import * as Reaction from './systems/Reaction';
 import * as Status from './systems/Status';
 import { Level, buildLevelGroup } from './level/GridLoader';
-import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt, spawnProps, spawnTraps } from './level/Spawner';
+import { spawnBarrels, spawnChests, spawnEnemies, spawnEnemyAt, spawnNpcs, spawnProps, spawnTraps } from './level/Spawner';
 import { Minimap } from './render/Minimap';
 import { Awareness } from './render/Awareness';
 import { Compass } from './render/Compass';
@@ -61,6 +61,9 @@ import z01f3 from '../data/levels/z01_f3.json';
 import z01f4 from '../data/levels/z01_f4.json';
 import testTraps from '../data/levels/test_traps.json';
 import testMonsters from '../data/levels/test_monsters.json';
+import lobbyJson from '../data/levels/lobby.json';
+import * as Npc from './systems/Npc';
+import { ListDialog } from './render/ListDialog';
 import * as Summon from './systems/Summon';
 import * as Equipment from './systems/Equipment';
 import { equipDef, slotLabel, type EquipSlot } from './core/EquipData';
@@ -74,6 +77,9 @@ const ZONE = [z01f1, z01f2, z01f3, z01f4]; // 4층 = 거수 결투 층 「무저
 const TRAP_ROOM = 99;
 /** 몬스터 시험방 층 번호 — 소환 탭으로 종족별 마리 수를 골라 무한 사냥 (2026-09-04) */
 const MONSTER_ROOM = 98;
+/** 성소 로비 — 지하 1층 위의 예배당 (2026-09-07 사용자 기획). 죽으면 여기 부활 마법진에서 깨어난다.
+ *  대제단은 활성화한 제단으로 워프(그 층 몬스터 전부 부활), 사제(축복)·상인(상점). 남쪽 현관 계단이 지하 1층으로 이어진다 */
+const LOBBY = 97;
 let floorIndex = 0;
 let levelJson: (typeof ZONE)[number] = ZONE[0]!;
 /** 열쇠로 자물쇠를 딴 층 — 오르내리거나 부활해도 다시 잠기지 않는다 */
@@ -97,6 +103,8 @@ interface FloorState {
   pulledLevers: World['pulledLevers'];
   /** 보스 아레나 상태(거수 4층, B3-5) — 봉쇄·기둥 내구·잔해. 아레나 없는 층은 null */
   arena: World['arena'];
+  /** NPC(로비의 사제·상인) — 다른 층은 빈 배열 */
+  npcs: World['npcs'];
 }
 const floorStates = new Map<number, FloorState>();
 
@@ -286,6 +294,7 @@ const world = new World(events, {
 // 시작 층(지하 1층)은 loadFloor 를 거치지 않는다 — 봉인 여부를 여기서 한 번 세운다.
 // 이게 없으면 기본값 false 로 남아 첫 틱에 출구가 열려 버린다 (슬라임 보스 생존 중인데도)
 world.exitNeedsKey = world.enemies.some((e) => e.floorBoss || enemyDef(e.type).boss);
+world.canAscend = true; // 지하 1층 입구 계단은 성소 로비로 올라간다 (2026-09-07)
 world.arena = Arena.fromLevel(level); // 시작 층에 아레나가 있으면(테스트 ?f4 는 loadFloor 를 탄다) 여기서 짓는다 — 보통 null
 
 const stage = new Stage(app);
@@ -379,6 +388,12 @@ menuUI.onTabChange = () => {
 };
 events.on('player_died', () => menuUI.hide());
 const shopUI = new ShopUI(world);
+/** 사망 메뉴 — #death 오버레이 안에 패널로 뜬다 (2026-09-07 로비 도입). 항목은 showDeathMenu 가 짓는다 */
+const deathMenu = new ListDialog(deathOverlay);
+/** 로비 대제단 — 활성화한 제단 목록. 고르면 그 층 제단 자리로 워프(몬스터 전부 부활) */
+const warpDialog = new ListDialog(undefined, 'warpdialog');
+/** 사제 대화 — 축복·(추후) 퀘스트 */
+const npcDialog = new ListDialog(undefined, 'npcdialog');
 /** UI 오버레이 열기/닫기 — 닫을 때 포인터 락을 바로 되찾는다.
  *  안 그러면 메뉴를 나온 뒤 커서가 남아 화면을 한 번 클릭해야 조작이 돌아온다 */
 function setUiOpen(open: boolean): void {
@@ -430,16 +445,12 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'F3') {
     e.preventDefault();
     if (performance.now() < restartConfirmUntil) {
-      if (world.respawn) {
-        world.dead = false;
-        respawnAtAltar();
-      } else {
-        reloadClean();
-      }
+      // 제단(골드 비용)이 가능하면 제단, 아니면 로비 마법진 — 사망 메뉴와 같은 두 갈래
+      if (!reviveAtAltar()) reviveInLobby();
     } else {
       restartConfirmUntil = performance.now() + 2000;
       showReaction(
-        world.respawn ? 'F3 한 번 더 — 제단에서 다시 시작' : 'F3 한 번 더 — 처음부터 다시 시작',
+        canReviveAtAltar() ? `F3 한 번 더 — 제단에서 다시 시작 (◆ ${balance.lobby.altarReviveCost})` : 'F3 한 번 더 — 성소 로비에서 다시 시작',
         2000,
       );
     }
@@ -785,6 +796,12 @@ for (const name of [
   'shop_denied',
   'respawn_registered',
   'respawned',
+  'lobby_altar_entered',
+  'lobby_warp',
+  'npc_talked',
+  'blessed',
+  'blessing_denied',
+  'blessing_ended',
   'corruption_applied',
   'corruption_threshold',
   'enemy_cast',
@@ -2817,13 +2834,58 @@ events.on('player_died', () => {
   // 죽은 자리에 비석 — 가방 소모품만 떨어뜨린다 (스킬·기본 무기·탄약·골드는 그대로).
   // 부활 후 그 자리로 돌아와 밟으면 되찾는다
   spillInventoryToGrave(world, world.player.x, world.player.z);
-  deathHint!.textContent = deathHintText();
+  deathHint!.textContent = '';
   deathOverlay.classList.add('visible');
+  // 사망 메뉴 — 1) 로비 2) 최근 제단(골드) 3·4) 개발용. 2 를 못 고르고 개발 항목이 꺼져 있으면 메뉴 없이 곧장 로비 (balance.lobby)
+  if (!balance.lobby.devDeathOptions && !canReviveAtAltar()) {
+    afterMs(900, () => reviveInLobby());
+    return;
+  }
+  showDeathMenu();
 });
 
+/** 사망 메뉴 항목 — 장치·골드에 따라 설명이 달라지므로 열 때마다 짓는다 */
+function showDeathMenu(): void {
+  const cost = balance.lobby.altarReviveCost;
+  const altarFloorName = world.respawn ? floorLabel(world.respawn.floor) : '';
+  const entries = [
+    { id: 'lobby', label: '성소 로비에서 부활', sub: '로비의 부활 마법진에서 깨어난다 — 무료 · 죽은 자리의 유품(비석)은 그대로 남는다' },
+    {
+      id: 'altar',
+      label: `최근 접촉한 제단에서 부활  (◆ ${cost})`,
+      sub: !world.respawn
+        ? '아직 들른 제단이 없다'
+        : world.gold < cost
+          ? `골드 부족 — ◆ ${world.gold} / ${cost}  (${altarFloorName} 제단)`
+          : `${altarFloorName} 제단 · 살아 있던 적은 자리로 돌아가고, 죽인 적은 안 살아난다`,
+      enabled: canReviveAtAltar(),
+    },
+  ];
+  if (balance.lobby.devDeathOptions) {
+    entries.push(
+      { id: 'here', label: '(개발) 현재 층에서 즉시 부활', sub: '죽은 그 자리에서 체력·마나만 채워 일어난다 — 적은 그대로다' },
+      { id: 'restart', label: '(개발) 현재 층에서 새로 시작', sub: '이 층을 처음 들어온 상태로 되돌린다 (적·문·상자·바닥 아이템 전부)' },
+    );
+  }
+  deathMenu.padMode = input.usingPad;
+  deathMenu.show({
+    title: '', // 오버레이의 붉은 '사망' 머리글이 이미 있다
+    subtitle: `◆ ${world.gold} 소지`,
+    entries,
+    closable: false,
+    onPick: (id) => {
+      if (id === 'lobby') reviveInLobby();
+      else if (id === 'altar') { if (!reviveAtAltar()) showDeathMenu(); }
+      else if (id === 'here') reviveHere();
+      else if (id === 'restart') restartCurrentFloor();
+    },
+  });
+}
+
 events.on('respawned', (payload) => {
-  const tribute = (payload as { tribute?: number }).tribute ?? 0;
-  if (tribute > 0) showReaction(`부활의 재물 — 골드 ${tribute} 을 제단에 바쳤다`, 3200);
+  const r = payload as { tribute?: number; kind?: string };
+  if ((r.tribute ?? 0) > 0) showReaction(`부활의 재물 — 골드 ${r.tribute} 을 제단에 바쳤다`, 3200);
+  else if (r.kind === 'lobby') showReaction('성소의 빛이 몸을 되돌렸다 — 대제단에서 활성화한 제단으로 돌아갈 수 있다', 3600);
 });
 
 events.on('grave_dropped', () =>
@@ -2846,17 +2908,9 @@ events.on('grave_recovered', (payload) => {
  *  층 좌표는 층마다 겹치므로 층 번호를 키에 넣는다. 전체 재시작(reload)이 곧 초기화다 */
 const slainSpawnKeys = new Set<string>();
 
-/** 제단 리스폰 — 위치·체력 복원, 탄약 상한, 마나 0, 각인·오염 유지.
- *  부활의 대가로 골드 전액을 재물로 바치고, 죽였던 적은 되살아나지 않는다 (2026-09) */
-function respawnAtAltar(): void {
+/** 부활 공통 — 체력·상태·탄약·마나를 되돌린다. 자리는 부르는 쪽이 정한다 */
+function restorePlayer(): void {
   const p = world.player;
-  const point = world.respawn!;
-  const tribute = world.gold;
-  world.gold = 0;
-  p.x = point.x;
-  p.z = point.z;
-  p.prevX = point.x;
-  p.prevZ = point.z;
   p.health = balance.player.healthMax;
   p.dots = {}; // 독·화염도 씻긴다
   Status.clearAll(world); // 팔 저림·진탕도
@@ -2880,9 +2934,29 @@ function respawnAtAltar(): void {
   world.mana.chainIndex = 0;
   world.mana.outOfCombatTicks = 0;
   world.mana.inCombat = false;
-  // 살아 있던 적만 배치 자리로 되돌린다 — 죽인 적(종·홈 좌표로 대조)은 그대로 죽어 있다.
-  // 목록은 부활을 거듭해도 쌓인다 (죽은 적은 배열에서 빠지므로 매번 다시 봐선 잊는다).
-  // 소환수·분열체는 배치에 없으므로 함께 사라진다
+  world.freezeTicks = 0;
+  world.grappleEnemyId = null;
+  world.grappleMash = 0;
+  world.faceLeechId = null;
+  world.faceLeechMash = 0;
+  world.lootOpen = null;
+  world.lootInView = null;
+  world.itemInView = null;
+  lootUI.hide();
+}
+
+/** 사망 화면을 걷고 되살아났음을 알린다 */
+function finishRevive(payload: Record<string, unknown>): void {
+  world.dead = false;
+  deathMenu.hide();
+  deathOverlay!.classList.remove('visible');
+  events.emit('respawned', payload);
+}
+
+/** 지금 층을 제단 부활 규칙으로 되돌린다 — 살아 있던 적만 배치 자리로, 죽인 적(종·홈 좌표로 대조)은 그대로 죽어 있다.
+ *  목록(slainSpawnKeys)은 부활을 거듭해도 쌓인다 (죽은 적은 배열에서 빠지므로 매번 다시 봐선 잊는다).
+ *  소환수·분열체는 배치에 없으므로 함께 사라진다. 통·기믹·함정은 되살리고, 상자·비석·주머니는 남긴다 */
+function resetFloorForRespawn(): void {
   for (const e of world.enemies) {
     if (!e.alive) slainSpawnKeys.add(`${floorIndex}:${e.type}@${e.homeX},${e.homeZ}`);
   }
@@ -2906,7 +2980,7 @@ function respawnAtAltar(): void {
   world.barrels = spawnBarrels(levelJson.entities, level);
   for (const prop of world.props) if (prop.blocker) level.removeBlocker(prop.blocker);
   world.props = spawnProps(levelJson.entities, level);
-  // 함정도 전부 재무장한다 (spent 포함) — 부활은 골드 전액이라 파밍 악용이 안 된다
+  // 함정도 전부 재무장한다 (spent 포함)
   for (const trap of world.traps) {
     if (!trap.blocker) continue;
     level.removeBlocker(trap.blocker);
@@ -2922,18 +2996,97 @@ function respawnAtAltar(): void {
   // 바닥 보상은 리셋하되 비석과 주머니는 남긴다 — 유품은 다시 죽어도 그 자리에 있고,
   // 주머니의 주인(죽인 적)은 되살아나지 않으니 전리품까지 지우면 이중 처벌이다
   world.groundItems = world.groundItems.filter((g) => g.kind === 'grave' || g.kind === 'pouch');
-  world.lootOpen = null;
-  world.lootInView = null;
-  world.itemInView = null;
-  lootUI.hide();
-  world.freezeTicks = 0;
-  world.grappleEnemyId = null;
-  world.grappleMash = 0;
-  world.faceLeechId = null;
-  world.faceLeechMash = 0;
-  world.dead = false;
-  deathOverlay!.classList.remove('visible');
-  events.emit('respawned', { x: point.x, z: point.z, tribute });
+}
+
+/** '최근 접촉한 제단에서 부활'을 고를 수 있는가 — 제단을 찍었고 골드가 값을 넘는다 */
+function canReviveAtAltar(): boolean {
+  return world.respawn !== null && world.gold >= balance.lobby.altarReviveCost;
+}
+
+/** 제단 부활 — 값(balance.lobby.altarReviveCost)을 내고 마지막으로 진입한 제단 자리로. 다른 층이면 그 층을 불러온다.
+ *  살아 있던 적은 자리로 돌아가고 죽인 적은 안 살아난다 (2026-09). 값이 모자라거나 제단이 없으면 false */
+function reviveAtAltar(): boolean {
+  if (!canReviveAtAltar()) return false;
+  const point = world.respawn!;
+  const tribute = balance.lobby.altarReviveCost;
+  world.gold -= tribute;
+  restorePlayer();
+  if (point.floor !== floorIndex) loadFloor(point.floor);
+  resetFloorForRespawn();
+  const p = world.player;
+  p.x = point.x;
+  p.z = point.z;
+  p.prevX = point.x;
+  p.prevZ = point.z;
+  finishRevive({ x: point.x, z: point.z, tribute, kind: 'altar' });
+  return true;
+}
+
+/** 로비 부활 — 성소 로비의 부활 마법진(스폰)에서 깨어난다. 무료. 죽은 층은 그대로 얼려 둔다 (비석도 거기 남는다) */
+function reviveInLobby(): void {
+  restorePlayer();
+  loadFloor(LOBBY);
+  finishRevive({ x: world.player.x, z: world.player.z, kind: 'lobby' });
+}
+
+/** (개발) 현재 층에서 즉시 부활 — 죽은 자리에서 자원만 채워 일어난다. 적은 그대로 (슬라이스 검증 시 제거) */
+function reviveHere(): void {
+  restorePlayer();
+  finishRevive({ x: world.player.x, z: world.player.z, kind: 'here' });
+}
+
+/** (개발) 현재 층에서 새로 시작 — 얼려 둔 상태·죽인 적 기록·봉인 해제를 버리고 층을 처음처럼 다시 짓는다 (슬라이스 검증 시 제거) */
+function restartCurrentFloor(): void {
+  restorePlayer();
+  forgetFloor(floorIndex);
+  loadFloor(floorIndex, 'entrance', true);
+  finishRevive({ x: world.player.x, z: world.player.z, kind: 'restart' });
+}
+
+/** 층 기록을 잊는다 — 죽인 적 목록·봉인 해제·쇠창살 연출 기억. 새로 짓거나 몬스터를 전부 되살릴 때 */
+function forgetFloor(index: number): void {
+  for (const key of [...slainSpawnKeys]) if (key.startsWith(`${index}:`)) slainSpawnKeys.delete(key);
+  unlockedFloors.delete(index);
+  barsCineSeen.delete(index);
+}
+
+/** 층 이름 — 사망 메뉴·워프 목록용. 진행 층은 '지하 N층', 특수 층은 제 이름 */
+function floorLabel(index: number): string {
+  if (index === LOBBY) return '성소 로비';
+  if (index === TRAP_ROOM) return '트랩 시험방';
+  if (index === MONSTER_ROOM) return '몬스터 시험방';
+  return `지하 ${index + 1}층`;
+}
+
+/** 로비 대제단 워프 — 활성화한 제단이 있는 층으로 가서 그 제단 자리에 선다. 그 층의 몬스터는 전부 되살아난다 (죽인 것 포함, 2026-09-07 사용자).
+ *  문·상자·바닥 아이템(비석)은 그대로 — 되살리는 것은 몬스터만이다 */
+function warpToAltar(floor: number): void {
+  const spot = world.altars.find((a) => a.floor === floor);
+  if (!spot || traveling) return;
+  traveling = true;
+  audio.play('altar_enter');
+  screenFade(1, 320);
+  afterMs(340, () => {
+    loadFloor(floor);
+    // 몬스터 전부 부활 — 죽인 적 기록을 잊고 배치대로 다시 놓는다. 주인이 되살아나면 쇠창살도 다시 내려온다
+    forgetFloor(floor);
+    world.enemies = spawnEnemies(levelJson.entities, level);
+    if (world.arena) world.arena.bossId = null; // 새 몸은 Arena.tick 이 다시 찾는다
+    world.exitNeedsKey = world.enemies.some((e) => e.floorBoss || enemyDef(e.type).boss);
+    world.exitOpen = false;
+    const p = world.player;
+    p.x = spot.x;
+    p.z = spot.z;
+    p.prevX = spot.x;
+    p.prevZ = spot.z;
+    // 도착한 제단을 바라본다 (어디에 왔는지 먼저 읽히게) — facing = (-sin yaw, -cos yaw)
+    const a = level.altarPos;
+    if (a) p.yaw = Math.atan2(-(a.x - spot.x), -(a.z - spot.z));
+    p.pitch = 0;
+    world.altarEnteredThisApproach = true; // 도착하자마자 상점이 다시 열리지 않게
+    events.emit('lobby_warp', { floor, x: spot.x, z: spot.z, revived: world.enemies.length });
+    screenFade(0, 400);
+  });
 }
 
 /** 마지막으로 총을 쏜 시각 — 그 뒤 afterShotMs 동안 십자선을 유지한다 (키보드도 패드와 같은 조준 느낌) */
@@ -3037,29 +3190,6 @@ function grantActiveSkills(): number {
   return grantSkills((def) => isActiveSkill(def));
 }
 
-function restartAfterDeath(): void {
-  if (world.respawn) respawnAtAltar();
-  else reloadClean();
-}
-/** 사망 화면 안내 — 두 갈래: 부활(골드 재물) / 던전 처음부터. 장치 바뀌면 표기도 따라온다 */
-function deathHintText(): string {
-  const reviveKey = keyLabel('Enter', 'interact');
-  const restartKey = keyLabel('R', 'reload');
-  if (!world.respawn) return `${reviveKey} — 던전 다시 공략 (처음부터)`;
-  const atFloorStart =
-    Math.hypot(world.respawn.x - level.spawn.x, world.respawn.z - level.spawn.z) < 0.01;
-  return (
-    `${reviveKey} — ${atFloorStart ? '층 입구에서 부활' : '제단에서 부활'}` +
-    ` (골드 전액을 재물로 · 죽인 적은 안 살아난다)\n` +
-    `${restartKey} — 던전 다시 공략 (처음부터)`
-  );
-}
-window.addEventListener('keydown', (e) => {
-  if (!world.dead) return;
-  if (e.code === 'Enter') restartAfterDeath();
-  else if (e.code === 'KeyR') reloadClean();
-});
-
 // ---- 제단 ----
 events.on('life_mote_absorbed', (payload) => {
   const healed = (payload as { healed?: number }).healed ?? 0;
@@ -3074,6 +3204,103 @@ events.on('altar_entered', () => {
   shopUI.show(); // 보급 상점 — 무료 보급은 없다. Tab 으로 각인 교체
   setUiOpen(true);
 });
+// 로비 대제단 — 활성화한(진입한) 제단 목록. 고르면 그 층으로 워프하고 몬스터가 전부 되살아난다 (2026-09-07 사용자)
+events.on('lobby_altar_entered', () => {
+  audio.play('altar_enter');
+  const sorted = [...world.altars].sort((a, b) => a.floor - b.floor);
+  const entries = sorted.map((a) => ({
+    id: `f${a.floor}`,
+    label: `${floorLabel(a.floor)} 제단`,
+    sub: ((ZONE[a.floor] as { name?: string } | undefined)?.name ?? '').split(' - ')[1] ?? '',
+  }));
+  if (entries.length === 0) {
+    entries.push({ id: 'none', label: '활성화한 제단이 없다', sub: '지하의 제단에 들러(상호작용) 활성화하면 여기서 바로 갈 수 있다. 지하 1층은 남쪽 현관 계단으로', enabled: false } as typeof entries[number]);
+  }
+  warpDialog.padMode = input.usingPad;
+  warpDialog.show({
+    title: '대제단 — 워프',
+    subtitle: '활성화한 제단 자리로 곧장 간다 · 그 층의 몬스터는 전부 되살아난다',
+    entries,
+    tone: 'holy',
+    onPick: (id) => {
+      setUiOpen(false);
+      const floor = Number.parseInt(id.slice(1), 10);
+      if (Number.isFinite(floor)) warpToAltar(floor);
+    },
+    onClose: () => setUiOpen(false),
+  });
+  setUiOpen(true);
+});
+events.on('lobby_warp', (payload) => {
+  const w = payload as { floor: number; revived: number };
+  showReaction(`${floorLabel(w.floor)} 제단으로 워프 — 몬스터 ${w.revived}마리가 되살아났다`, 3200);
+});
+
+// ---- NPC (로비) ----
+/** 사제 대화 항목 — 축복 값·상태에 따라 설명이 바뀌므로 매번 짓는다 */
+function priestEntries(): { id: string; label: string; sub: string; enabled?: boolean }[] {
+  const b = balance.lobby.blessing;
+  const sec = Math.round(b.durationTicks / balance.loop.tickRate);
+  const pct = Math.round((1 - b.damageTakenMul) * 100);
+  return [
+    {
+      id: 'bless',
+      label: b.cost > 0 ? `축복을 받는다  (◆ ${b.cost})` : '축복을 받는다',
+      sub:
+        `체력·마나를 가득 채우고 독·화염·상태이상을 씻는다 · ${sec}초 동안 받는 피해 ${pct}% 감소` +
+        (world.blessingTicks > 0 ? `\n(축복 중 — ${Math.ceil(world.blessingTicks / balance.loop.tickRate)}초 남음, 다시 받으면 새로 센다)` : ''),
+      enabled: world.gold >= b.cost,
+    },
+    { id: 'quest', label: '퀘스트', sub: '아직 준비 중이다 — "빛이 닿지 않는 곳의 이야기는 곧 들려주겠네"', enabled: false },
+    { id: 'leave', label: '물러난다', sub: '' },
+  ];
+}
+events.on('npc_talked', (payload) => {
+  const npc = payload as { kind: 'priest' | 'merchant' };
+  audio.play('ui_tab');
+  padRumble('interact');
+  if (npc.kind === 'merchant') {
+    shopUI.show({
+      title: '상인 — 사고팔기',
+      subtitle: '제단 상점과 같은 물건과 값이다. 파는 것은 Tab(가방 탭) — 장비·각인을 팔 수 있다',
+    });
+    setUiOpen(true);
+    return;
+  }
+  npcDialog.padMode = input.usingPad;
+  npcDialog.show({
+    title: '성직자 사제',
+    subtitle: '"빛이 그대와 함께하기를. 지하에서 돌아온 이에게 성소는 늘 열려 있네."',
+    entries: priestEntries(),
+    tone: 'holy',
+    closeOnPick: false,
+    onPick: (id) => {
+      if (id === 'bless') {
+        if (Npc.bless(world)) npcDialog.refresh(priestEntries(), '"가거라. 빛이 그대의 상처를 감쌀 것이다."');
+        else npcDialog.refresh(priestEntries());
+        return;
+      }
+      npcDialog.hide();
+      setUiOpen(false);
+    },
+    onClose: () => setUiOpen(false),
+  });
+  setUiOpen(true);
+});
+events.on('blessed', (payload) => {
+  const b = payload as { healed: number; durationTicks: number };
+  audio.play('altar_enter');
+  padRumble('pickup');
+  if (b.healed > 0) showStatNumber(Math.round(b.healed), 'heal', 'hp');
+  flashRestoreBar('status-hp-fill', false);
+  flashRestoreBar('status-mana-fill', false);
+  showReaction(`사제의 축복 — 체력·마나 회복 · ${Math.round(b.durationTicks / balance.loop.tickRate)}초 동안 받는 피해 감소`, 3000);
+});
+events.on('blessing_denied', (payload) => {
+  audio.play('shop_deny');
+  showReaction(`골드 부족 — ◆ ${(payload as { cost: number }).cost} 필요`, 1400);
+});
+events.on('blessing_ended', () => showReaction('축복이 스러졌다', 1600));
 const SHOP_LABEL: Record<string, string> = {
   heal: '체력 물약', mana: '마나 물약', healLarge: '대형 체력 물약', manaLarge: '대형 마나 물약', ammo: '권총탄', arrow: '화살',
   grenade: '수류탄', battery: '배터리',
@@ -3471,7 +3698,7 @@ function syncArenaVisuals(): void {
 
 /** 층을 갈아 끼운다 — 처음 밟는 층은 새로 짓고, 와 본 층은 얼려 둔 그대로 되살린다.
  *  들고 있던 것(체력·마나·탄약·스킬·가방·골드·오염·열쇠)은 전부 따라간다 */
-function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): void {
+function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance', fresh = false): void {
   // 떠나는 층을 얼려 둔다
   floorStates.set(floorIndex, {
     level,
@@ -3485,22 +3712,29 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     lifeMotes: world.lifeMotes,
     pulledLevers: world.pulledLevers,
     arena: world.arena,
+    npcs: world.npcs,
   });
+  if (fresh) floorStates.delete(index); // 새로 짓는다 — 얼려 둔 것이 있어도 버린다 ((개발) 현재 층 새로 시작)
 
   floorIndex = index;
+  world.floorIndex = index;
   const trapRoom = index === TRAP_ROOM;
   const monsterRoom = index === MONSTER_ROOM;
+  const lobby = index === LOBBY;
   world.monsterRoom = monsterRoom;
+  world.lobby = lobby;
   // 소환 상태는 시험방 것 — 층을 옮기면 비운다 (들어올 때도 새로 시작)
   world.summonTargets = {};
   world.summonQueue = [];
   world.summonAuto = false;
-  minimap.setFloorTitle(trapRoom ? '트랩 시험방' : monsterRoom ? '몬스터 시험방' : `지하 ${index + 1}층`); // 맵 탭은 미니맵의 층 이름을 그대로 읽는다
+  minimap.setFloorTitle(floorLabel(index)); // 맵 탭은 미니맵의 층 이름을 그대로 읽는다
   levelJson = trapRoom
     ? (testTraps as unknown as typeof z01f1)
     : monsterRoom
       ? (testMonsters as unknown as typeof z01f1)
-      : ZONE[index]!;
+      : lobby
+        ? (lobbyJson as unknown as typeof z01f1)
+        : ZONE[index]!;
   traveling = false;
 
   const saved = floorStates.get(index);
@@ -3518,6 +3752,7 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     world.lifeMotes = saved.lifeMotes;
     world.pulledLevers = saved.pulledLevers;
     world.arena = saved.arena; // 봉쇄·기둥 내구·잔해도 그대로(기둥 칸은 Level 격자에, 잔해 차단은 Level.props 에 이미 살아 있다)
+    world.npcs = saved.npcs;
   } else {
     // 처음 밟는 층 — 새로 짓는다. 앞 층의 차단 블록은 그 층 Level 과 함께 얼었다
     level = new Level(levelJson);
@@ -3536,7 +3771,9 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
     world.lifeMotes = [];
     world.pulledLevers = new Set();
     world.arena = Arena.fromLevel(level); // 아레나(거수 4층, B3-5) — arena 정의가 없는 층은 null
+    world.npcs = spawnNpcs(levelJson.entities, level); // 로비의 사제·상인 — 다른 층은 빈 배열
   }
+  world.npcInView = null;
   world.projectiles.length = 0;
   world.gooPuddles = []; // 점액은 층/판에 속한다 — 새 판에 들고 가지 않는다
   Hazards.clearAll(world); // 진액 웅덩이도
@@ -3554,21 +3791,21 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
   world.leverInView = null;
   world.altarInView = false;
   world.altarEnteredThisApproach = false;
-  // 도착한 계단이 곧 부활 지점이다 — 3층에서 죽었다고 1층부터 다시 하게 만들지 않는다.
-  // 제단을 밟으면 그쪽으로 옮겨 가므로 제단은 여전히 "더 가까운 저장점" 값을 한다
-  world.respawn = { x: at.x, z: at.z };
+  // 부활 지점은 제단만이다 (2026-09-07 로비 도입) — 계단 도착 자리는 더 이상 저장점이 아니다.
+  // 제단을 안 찍었으면 죽어서 성소 로비로 돌아간다
   // 출구 봉인 — 주인이 배치된 층에서 아직 딴 적이 없으면 쇠창살이 내려온다.
   // 층을 새로 로드하면 적이 초기화되므로, 이미 딴 층(unlockedFloors)만 예외다
   world.exitNeedsKey =
     levelJson.entities.some(
       (e) =>
         e.type !== 'barrel' && e.type !== 'chest' && !e.type.startsWith('prop_') &&
-        !e.type.startsWith('trap_') && // 함정은 적이 아니다 — enemyDef 가 던진다
+        !e.type.startsWith('trap_') && !e.type.startsWith('npc_') && // 함정·NPC 는 적이 아니다 — enemyDef 가 던진다
         (enemyDef(e.type).boss || (e as { boss?: boolean }).boss === true),
     ) && !unlockedFloors.has(index);
   if (trapRoom) world.exitNeedsKey = true; // 시험방 출구는 영구 봉인 — 진행과 섞이지 않는다
   if (monsterRoom) world.exitNeedsKey = false; // 출구가 없다 — Exit 은 시험방에서 돌지 않는다
-  world.canAscend = index > 0 && !trapRoom && !monsterRoom;
+  if (lobby) world.exitNeedsKey = false; // 로비 현관 계단은 늘 열려 있다 — 지하 1층으로 내려간다
+  world.canAscend = !trapRoom && !monsterRoom && !lobby; // 지하 1층의 입구 계단은 성소 로비로 올라간다
   world.onEntrancePad = false;
   world.exitOpen = false; // 잠기지 않은 층은 Exit 의 첫 틱이 열어 준다
   world.onExitPad = false;
@@ -3623,6 +3860,18 @@ function loadFloor(index: number, arrival: 'entrance' | 'exit' = 'entrance'): vo
 }
 
 events.on('zone_cleared', () => {
+  // 성소 로비의 현관 계단 — 구역 클리어가 아니라 지하 1층으로 내려가는 길이다
+  if (floorIndex === LOBBY) {
+    traveling = true;
+    audio.play('stairs_travel');
+    stage.startDescent(DESCENT_MS, 1, level.exitYaw + Math.PI);
+    screenFade(1, DESCENT_MS);
+    afterMs(DESCENT_MS + 40, () => {
+      loadFloor(0);
+      screenFade(0, DESCENT_FADE_IN_MS);
+    });
+    return;
+  }
   // 내려갔다는 것은 자물쇠가 열려 있었다는 뜻 — 어떤 경로로 열렸든 여기서 못 박는다.
   // (E 언락 이벤트 한 곳에만 의존하면, 흐름을 우회한 층이 되돌아올 때 다시 잠겨 보인다)
   unlockedFloors.add(floorIndex);
@@ -3651,14 +3900,15 @@ events.on('zone_cleared', () => {
 
 // 입구 계단으로 위층에 되돌아간다 — 내려갈 때와 같은 연출, 방향만 반대
 events.on('floor_ascend', () => {
-  if (floorIndex === 0 || traveling) return;
+  if (traveling || floorIndex >= ZONE.length) return;
   traveling = true;
   audio.play('stairs_travel');
-  // 입구 계단 입 쪽으로 몸을 돌리며 올라간다
+  // 입구 계단 입 쪽으로 몸을 돌리며 올라간다. 지하 1층 위는 성소 로비 — 현관 계단(출구 X) 앞에 도착한다
+  const target = floorIndex === 0 ? LOBBY : floorIndex - 1;
   stage.startDescent(DESCENT_MS, -1, level.spawnYaw + Math.PI);
   screenFade(1, DESCENT_MS);
   afterMs(DESCENT_MS + 40, () => {
-    loadFloor(floorIndex - 1, 'exit');
+    loadFloor(target, 'exit');
     screenFade(0, DESCENT_FADE_IN_MS);
   });
 });
@@ -3667,7 +3917,8 @@ events.on('floor_ascend', () => {
 events.on('floor_entered', (payload) => {
   const f = payload as { index: number; name: string; total: number };
   audio.play('door_slide');
-  showReaction(`${f.name}  (${f.index + 1}/${f.total})`, 2600);
+  // 특수 층(로비·시험방)은 번호가 없다
+  showReaction(f.index < f.total ? `${f.name}  (${f.index + 1}/${f.total})` : f.name, 2600);
 });
 
 events.on('corruption_threshold', (payload) => {
@@ -3722,6 +3973,7 @@ const systems = [
   Hazards.tick, // 진액 웅덩이 — 같은 틱의 착지·착탄(Enemies·Projectiles)이 만든 웅덩이를 말리고, 불붙은 기름(Traps) 뒤에서 증발·접촉을 본다
   Mana.tick,
   Altar.tick,
+  Npc.tick, // 로비의 사제·상인 — 제단과 같은 접근 규약. 축복 잔여 틱도 여기서 줄인다
   Door.tick,
   Lever.tick,
   Chest.tick,
@@ -3845,9 +4097,16 @@ function simulate(dt: number): void {
     else if (input.gamepad.rawPressed(1)) lootUI.padClose();
     lootUI.padX(input.gamepad.rawHeld(2)); // X 짧게 모두 가져오기 · 길게 수량 나누기 (홀드 판정이라 매 틱)
   }
-  if (world.dead) {
-    if (input.gamepad.pressed('interact')) restartAfterDeath();
-    else if (input.gamepad.pressed('reload')) reloadClean();
+  // 사망 메뉴·워프 목록·사제 대화 — 일시정지 메뉴와 같은 고정 버튼 규약 (D-패드 ↑↓, A 결정, B 닫기)
+  for (const dlg of [deathMenu, warpDialog, npcDialog]) {
+    if (!dlg.open) continue;
+    dlg.padMode = input.usingPad;
+    if (!input.gamepad.connected) continue;
+    if (input.gamepad.rawPressed(13)) dlg.padMove(1);
+    else if (input.gamepad.rawPressed(12)) dlg.padMove(-1);
+    else if (stick.dy !== 0) dlg.padMove(stick.dy);
+    else if (input.gamepad.rawPressed(0)) dlg.padActivate();
+    else if (input.gamepad.rawPressed(1)) dlg.padClose();
   }
 
   // 히트스톱 — simulate를 건너뛰되 반응 입력(릴리즈)은 버퍼에 보관 (docs/architecture.md §1)
@@ -4303,6 +4562,7 @@ function render(alpha: number): void {
   stage.syncLifeMotes(world.lifeMotes);
   stage.syncBarrels(world.barrels);
   stage.syncProps(world.props);
+  stage.syncNpcs(world.npcs, performance.now(), world.npcInView?.id ?? null);
   stage.syncTraps(world.traps, world.level.cellSize);
   stage.syncChests(world.chests);
   const chargeFrac =
@@ -4609,9 +4869,10 @@ function render(alpha: number): void {
   const nearLoot = world.lootInView !== null && !world.dead && !world.uiOpen;
   const nearItem = world.itemInView !== null && !world.dead && !world.uiOpen;
   const nearGrave = world.graveInView !== null && !world.dead && !world.uiOpen;
+  const nearNpc = world.npcInView !== null && !world.dead && !world.uiOpen;
   altarPrompt!.classList.toggle(
     'visible',
-    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest || nearLoot || nearItem || nearGrave,
+    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest || nearLoot || nearItem || nearGrave || nearNpc,
   );
   // 상호작용 키 표기 — 전용 키만 상호작용이다 (키보드는 현재 바인딩, 패드는 상호작용 버튼)
   const IK = keyLabel('interact', 'interact');
@@ -4619,12 +4880,23 @@ function render(alpha: number): void {
   let centerKeycap: string | null = null;
   let keycapWithPrompt = false; // 키캡과 하단 설명을 함께 (주머니·바닥 아이템)
   // 사망 화면 힌트 — 죽은 뒤에 패드를 집거나 내려놔도 표기가 따라온다
-  if (world.dead) deathHint!.textContent = deathHintText();
-  if (showAltarPrompt) {
+  if (showAltarPrompt && world.lobby) {
+    altarPrompt!.textContent =
+      `대제단 — ${IK} 활성화한 제단으로 워프  (${world.altars.length}곳)\n` +
+      `지하에서 진입한 제단 자리로 곧장 간다 · 그 층의 몬스터는 전부 되살아난다`;
+  } else if (showAltarPrompt) {
     altarPrompt!.textContent =
       `제단 — ${IK} 보급 상점\n` +
       `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
-      `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 리스폰 지점 등록`;
+      `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 리스폰 지점 등록 (◆ ${balance.lobby.altarReviveCost} 로 여기서 부활)`;
+  } else if (nearNpc) {
+    const npc = world.npcInView!;
+    altarPrompt!.textContent =
+      npc.kind === 'priest'
+        ? `${IK} — 성직자 사제와 이야기한다  (축복 · 퀘스트)`
+        : `${IK} — 상인과 거래한다  (◆ ${world.gold} 소지 · 사고팔기)`;
+    centerKeycap = IK;
+    keycapWithPrompt = true;
   } else if (nearChest) {
     altarPrompt!.textContent = `${IK} — ${world.chestInView!.opened ? '보물상자를 뒤진다' : '보물상자를 연다'}`;
   } else if (nearLoot) {
@@ -4665,8 +4937,9 @@ function render(alpha: number): void {
       centerKeycap = IK;
     }
   } else if (onExit) {
-    // 마지막 층에서만 "나간다" 다 — 그 앞은 아래층으로 내려가는 계단이다
-    const last = floorIndex + 1 >= ZONE.length;
+    // 마지막 층에서만 "나간다" 다 — 그 앞은 아래층으로 내려가는 계단이다. 로비 현관 계단은 지하 1층으로
+    const lobbyStairs = floorIndex === LOBBY;
+    const last = !lobbyStairs && floorIndex + 1 >= ZONE.length;
     const stairFrac = world.stairHoldTicks / balance.stairs.holdTicks;
     altarPrompt!.textContent = world.exitNeedsKey
       ? '붉은 쇠창살이 내려와 있다 — 이 층의 주인을 잡아야 올라간다'
@@ -4674,13 +4947,17 @@ function render(alpha: number): void {
         ? `${last ? '구역을 벗어나는 중' : '내려가는 중'}\n${'█'.repeat(Math.round(stairFrac * 20)).padEnd(20, '░')}  ${Math.round(stairFrac * 100)}%`
         : last
           ? `${IK} 길게 — 구역을 벗어난다`
-          : `${IK} 길게 — 아래층으로 내려간다  (${floorIndex + 2}/${ZONE.length})`;
+          : lobbyStairs
+            ? `${IK} 길게 — 지하 1층으로 내려간다`
+            : `${IK} 길게 — 아래층으로 내려간다  (${floorIndex + 2}/${ZONE.length})`;
   } else if (onEntrance) {
     const stairFrac = world.stairHoldTicks / balance.stairs.holdTicks;
     altarPrompt!.textContent =
       stairFrac > 0
         ? `올라가는 중\n${'█'.repeat(Math.round(stairFrac * 20)).padEnd(20, '░')}  ${Math.round(stairFrac * 100)}%`
-        : `${IK} 길게 — 위층으로 올라간다  (${floorIndex}/${ZONE.length})`;
+        : floorIndex === 0
+          ? `${IK} 길게 — 성소 로비로 올라간다`
+          : `${IK} 길게 — 위층으로 올라간다  (${floorIndex}/${ZONE.length})`;
   }
   if (centerKeycap !== null) {
     interactKeyEl!.textContent = centerKeycap;
@@ -4722,7 +4999,7 @@ function render(alpha: number): void {
     `tick ${world.tick}  (${measuredTps.toFixed(1)}/s)\n` +
     // 좌표 — 월드(m)와 격자 칸 [행,열]. 칸 표기는 레벨 JSON entities/torches 와 같은 규약이라
     // "이 자리 이상해" 를 그대로 데이터 좌표로 옮길 수 있다
-    `위치 ${floorIndex + 1}층  (${p.x.toFixed(1)}, ${p.z.toFixed(1)})  칸 [${Math.floor(p.z / level.cellSize)},${Math.floor(p.x / level.cellSize)}]\n` +
+    `위치 ${floorLabel(floorIndex)}  (${p.x.toFixed(1)}, ${p.z.toFixed(1)})  칸 [${Math.floor(p.z / level.cellSize)},${Math.floor(p.x / level.cellSize)}]\n` +
     `9mm ${w.mag}/${w.reserve}${w.reloading > 0 ? '  [장전중]' : ''}${p.stunTicks > 0 ? '  [경직]' : ''}${p.blocking ? '  [방어]' : ''}\n` +
     `spell ${spellHudText()}   스킬 ${world.sigils.inventory.length}개   chain ×${chainMult}\n` +
     `corruption ${world.corruption.applied}${world.corruption.pending !== 0 ? ` (${world.corruption.pending > 0 ? '+' : ''}${world.corruption.pending} 대기)` : ''}/100${world.canReadGlyphs ? '  [해독]' : ''}\n` +
@@ -4808,10 +5085,11 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
     gamepadUI.show(mode);
   },
   loadSave: () => {
-    world.dead = false;
-    respawnAtAltar();
-    setPaused(false);
-    input.requestLock();
+    // 제단(골드 비용) — 사망 메뉴의 '최근 접촉한 제단에서 부활'과 같은 길. 값이 모자라면 메뉴가 비활성이라 여기 못 온다
+    if (reviveAtAltar()) {
+      setPaused(false);
+      input.requestLock();
+    }
   },
   // 미니맵 — 키(M)가 아니라 일시정지 메뉴에서만 켜고 끈다. 꺼지면 왼쪽 위 안내 글도 함께 (render 가 본다)
   toggleMinimap: () => minimap.toggle(),
@@ -4820,6 +5098,10 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
   warp: (id) => {
     if (id === 'trap') {
       enterTrapRoom();
+    } else if (id === 'lobby') {
+      world.dead = false;
+      loadFloor(LOBBY);
+      showReaction('성소 로비로 워프했다', 2000);
     } else if (id === 'monster') {
       enterMonsterRoom();
       setPaused(false);
@@ -4841,6 +5123,7 @@ const pauseMenu = new PauseMenu(pauseOverlay, world, {
 () => (input.gamepad.connected ? padDiagramSvg((a) => input.gamepad.binding(a), -1) : null),
 // 맵 목록 — 층 넷 + 시험방 둘. 지금 있는 곳을 표시한다
 () => [
+  { id: 'lobby', label: '성소 로비', sub: '부활 마법진 · 대제단(워프) · 사제 · 상인', current: floorIndex === LOBBY },
   ...ZONE.map((z, i) => ({
     id: `f${i}`,
     label: `지하 ${i + 1}층`,
@@ -4957,7 +5240,13 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__loadFloor = loadFloor; // 층 이동 검증용(헤드리스)
   (window as unknown as Record<string, unknown>).__setPaused = setPaused; // 일시정지 메뉴(맵 목록 워프) 검증용 — 헤드리스엔 포인터 락이 없다
   (window as unknown as Record<string, unknown>).__pauseMenu = pauseMenu;
+  (window as unknown as Record<string, unknown>).__deathMenu = deathMenu; // 사망 메뉴 검증용
+  (window as unknown as Record<string, unknown>).__warpDialog = warpDialog; // 로비 대제단 워프 목록 검증용
+  (window as unknown as Record<string, unknown>).__npcDialog = npcDialog;
+  (window as unknown as Record<string, unknown>).__LOBBY = LOBBY;
 }
+// ?lobby — 시작부터 성소 로비 (2026-09-07). 지하 1층은 로비 남쪽 현관 계단으로 내려간다
+if (new URLSearchParams(location.search).has('lobby')) loadFloor(LOBBY);
 
 // ?skills — 시작부터 구현된 스킬을 전부 갖는다 (테스트 편의, U 키와 같다)
 if (new URLSearchParams(location.search).has('skills')) {

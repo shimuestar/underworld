@@ -6,6 +6,7 @@
 // pointer-events:none 으로 두고 메뉴 패널만 클릭을 받는다. 패널 안 클릭이
 // 포인터 락 요청으로 새지 않게 Input 쪽에서 #pause 를 제외 목록에 넣어 둔다.
 
+import { balance } from '../core/Balance';
 import type { World } from '../core/World';
 
 const UP_KEYS = new Set(['KeyW', 'ArrowUp']);
@@ -100,11 +101,14 @@ export class PauseMenu {
       {
         label: '3. 저장된 곳에서 시작',
         // 저장 = 제단 진입 시 등록되는 리스폰 지점. 사망 시 부활 지점과 같은 곳이다
+        // 사망 메뉴의 '최근 접촉한 제단에서 부활'과 같은 길 — 값(balance.lobby.altarReviveCost)을 낸다 (2026-09-07)
         hint: (world) =>
-          world.respawn
-            ? '제단 체크포인트 — 골드 전액을 재물로 바친다 · 죽인 적은 안 살아난다'
-            : '아직 들른 제단이 없다',
-        enabled: (world) => world.respawn !== null,
+          !world.respawn
+            ? '아직 들른 제단이 없다 — 죽으면 성소 로비에서 깨어난다'
+            : world.gold < balance.lobby.altarReviveCost
+              ? `제단 체크포인트 — 골드 부족 (◆ ${world.gold} / ${balance.lobby.altarReviveCost})`
+              : `제단 체크포인트 — ◆ ${balance.lobby.altarReviveCost} 를 바친다 · 죽인 적은 안 살아난다`,
+        enabled: (world) => world.respawn !== null && world.gold >= balance.lobby.altarReviveCost,
         run: actions.loadSave,
       },
       {

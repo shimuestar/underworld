@@ -1,0 +1,82 @@
+{
+  "id": "lobby",
+  "name": "성소 로비 - 빛의 예배당",
+  "cellSize": 4,
+  "ceiling": 6,
+  "theme": "church",
+  "entranceStairs": false,
+  "spawnFacing": "N",
+  "grid": [
+    "###############",
+    "#####.....#####",
+    "#####..A..#####",
+    "#####.....#####",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#......S......#",
+    "#.............#",
+    "####.......####",
+    "####.......####",
+    "####.......####",
+    "####.......####",
+    "####...X...####",
+    "###############"
+  ],
+  "legend": {
+    "#": "wall",
+    ".": "floor",
+    "S": "spawn (부활 마법진 — 로비 부활 시 여기서 깨어난다)",
+    "A": "altar (대제단 — 상점이 아니라 활성화한 제단으로 워프)",
+    "X": "exit (남쪽 현관 계단 — 지하 1층으로 내려간다)"
+  },
+  "_layout": "지하 1층 위의 성소 로비 (2026-09-07 사용자 기획). 15×15, 십자형 예배당 — 북쪽 성단(5칸 폭, 대제단 A), 가운데 익랑(전폭, 중심 [7,7] 에 부활 마법진 S), 남쪽 회중석(7칸 폭, 장의자·중앙 통로, 남쪽 끝 X 가 지하 1층으로 내려가는 현관 계단). 적 없음, 문 없음. 성직자 사제는 성단 계단 서쪽([5,5]), 상인은 동쪽 익랑 끝([6,12]) 노점 상판 뒤. 밝은 분위기 — 환경광을 높이고 색유리창(decor window)이 빛을 낸다",
+  "entities": [
+    { "type": "npc_priest", "cell": [5, 5], "facing": "S", "note": "성직자 사제 — 축복(체력·마나 회복·상태 정화), 추후 퀘스트" },
+    { "type": "npc_merchant", "cell": [6, 12], "facing": "W", "note": "상인 — 제단 상점과 같은 사고팔기. 노점(decor stall, 같은 칸) 상판 뒤에 서서 서쪽(익랑)을 본다" }
+  ],
+  "decor": [
+    { "type": "column", "cell": [4, 4] },
+    { "type": "column", "cell": [4, 10] },
+    { "type": "column", "cell": [8, 4] },
+    { "type": "column", "cell": [8, 10] },
+    { "type": "column", "cell": [10, 4] },
+    { "type": "column", "cell": [12, 4] },
+    { "type": "column", "cell": [10, 10] },
+    { "type": "column", "cell": [12, 10] },
+    { "type": "pew", "cell": [10, 5], "span": 2 },
+    { "type": "pew", "cell": [11, 5], "span": 2 },
+    { "type": "pew", "cell": [12, 5], "span": 2 },
+    { "type": "pew", "cell": [10, 8], "span": 2 },
+    { "type": "pew", "cell": [11, 8], "span": 2 },
+    { "type": "pew", "cell": [12, 8], "span": 2 },
+    { "type": "window", "cell": [0, 7], "dir": "S", "kind": "rose" },
+    { "type": "window", "cell": [1, 4], "dir": "E" },
+    { "type": "window", "cell": [3, 4], "dir": "E" },
+    { "type": "window", "cell": [1, 10], "dir": "W" },
+    { "type": "window", "cell": [3, 10], "dir": "W" },
+    { "type": "window", "cell": [3, 2], "dir": "S" },
+    { "type": "window", "cell": [3, 12], "dir": "S" },
+    { "type": "window", "cell": [5, 0], "dir": "E" },
+    { "type": "window", "cell": [7, 0], "dir": "E" },
+    { "type": "window", "cell": [5, 14], "dir": "W" },
+    { "type": "window", "cell": [7, 14], "dir": "W" },
+    { "type": "window", "cell": [10, 3], "dir": "E" },
+    { "type": "window", "cell": [12, 3], "dir": "E" },
+    { "type": "window", "cell": [10, 11], "dir": "W" },
+    { "type": "window", "cell": [12, 11], "dir": "W" },
+    { "type": "candle", "cell": [1, 5] },
+    { "type": "candle", "cell": [1, 9] },
+    { "type": "candle", "cell": [3, 6] },
+    { "type": "candle", "cell": [3, 8] },
+    { "type": "stall", "cell": [6, 12], "dir": "W" }
+  ],
+  "floorMarks": [
+    { "cell": [7, 7], "kind": "circle" }
+  ],
+  "lighting": {
+    "_note": "밝은 예배당 — 환경광을 던전(0.04)보다 훨씬 높인다. 벽걸이 횃불 대신 색유리창(decor window)이 빛을 낸다",
+    "ambient": 0.62,
+    "torches": []
+  }
+}

@@ -517,6 +517,17 @@ export interface DoorState {
 
 /** 기믹(파괴물) 하나 — 항아리·궤짝·뼈 무더기·석관·광차. 부수면 결과(전리품/매복/폭발
  *  심지)는 Props 시스템이 prop_broken 구독으로 굴린다 (겉보기 같아도 매번 다르다) */
+/** NPC — 성소 로비의 성직자 사제·상인. 움직이지 않고 서서 플레이어를 기다린다 */
+export interface NpcState {
+  id: number;
+  kind: 'priest' | 'merchant';
+  x: number;
+  z: number;
+  /** 서 있는 방향 (facing = (-sin yaw, -cos yaw), 플레이어와 같은 규약) */
+  yaw: number;
+  blocker?: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
 export interface PropState {
   id: number;
   /** balance.props.types 의 키 — 'prop_jar' 등 */
@@ -1402,6 +1413,8 @@ export function beginPose(world: World, enemy: EnemyState, pose: string, ticks: 
 export function damagePlayer(world: World, amount: number, opts?: { trap?: boolean }): number {
   let applied = amount * world.modifiers.damageTakenMul;
   if (opts?.trap) applied *= world.modifiers.trapDamageMul;
+  // 사제의 축복(로비) — 배율은 데이터라 World 가 직접 읽지 않는다. Npc 시스템이 blessingDamageMul 을 여기 꽂아 둔다
+  if (world.blessingTicks > 0) applied *= world.blessingDamageMul;
   world.player.health -= applied;
   return applied;
 }
@@ -1575,8 +1588,21 @@ export class World {
   /** 처형 연출 잔여 틱 — 그동안 모든 적이 멈춘다 (플레이어 동작을 보여주는 시간) */
   executeFocusTicks = 0;
 
-  /** 마지막으로 진입한 제단 (리스폰 지점). 없으면 사망 시 완전 재시작 */
-  respawn: { x: number; z: number } | null = null;
+  /** 마지막으로 진입한 제단 (리스폰 지점) — 층 번호까지. 없으면 사망 메뉴의 '제단에서 부활'을 고를 수 없다 (2026-09-07 로비 도입) */
+  respawn: { floor: number; x: number; z: number } | null = null;
+  /** 활성화한(한 번 진입한) 제단 목록 — 층마다 하나. 로비 대제단의 워프 목록이 이걸 읽는다 */
+  altars: { floor: number; x: number; z: number }[] = [];
+  /** 지금 있는 층 번호 — main 이 loadFloor 에서 갱신한다. 제단이 respawn.floor 를 여기서 읽는다 */
+  floorIndex = 0;
+  /** 성소 로비 — 제단은 상점·저장이 아니라 워프, 적 없음, 출구는 지하 1층 현관 계단 (2026-09-07) */
+  lobby = false;
+  /** NPC (로비의 사제·상인) — Npc 시스템이 시선·상호작용을 본다. 층에 속한다 */
+  npcs: NpcState[] = [];
+  /** 지금 바라보는 NPC (없으면 null) — HUD 안내·상호작용이 읽는다 */
+  npcInView: NpcState | null = null;
+  /** 사제의 축복 잔여 틱 — 0 이면 없음. 받는 피해 배율은 blessingDamageMul (Npc.bless 가 balance 에서 읽어 넣는다) */
+  blessingTicks = 0;
+  blessingDamageMul = 1;
 
   /** 제단 반경 안 (프롬프트 표시용, Altar가 갱신) */
   nearAltar = false;

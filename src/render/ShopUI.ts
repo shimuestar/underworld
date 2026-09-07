@@ -35,6 +35,8 @@ export class ShopUI {
   onClose: (() => void) | null = null;
   /** 패드로 조작 중 — 하단 힌트를 패드 표기로 바꾼다 (main 이 틱마다 갱신) */
   padMode = false;
+  /** 제목·설명 덮어쓰기 — 로비 상인은 같은 상점을 다른 간판으로 연다 (2026-09-07) */
+  private heading: { title?: string; subtitle?: string } = {};
 
   constructor(private readonly world: World) {
     this.root = document.createElement('div');
@@ -79,9 +81,10 @@ export class ShopUI {
     });
   }
 
-  show(): void {
+  show(heading: { title?: string; subtitle?: string } = {}): void {
     this.open = true;
     this.selected = 0;
+    this.heading = heading;
     this.root.style.display = 'flex';
     this.rebuild();
   }
@@ -122,14 +125,15 @@ export class ShopUI {
       'background:#15151b;border:1px solid #3a3a44;padding:20px 26px;min-width:560px;';
 
     const title = document.createElement('div');
-    title.textContent = `제단 — 보급 상점   ◆ ${world.gold}`;
+    title.textContent = `${this.heading.title ?? '제단 — 보급 상점'}   ◆ ${world.gold}`;
     title.style.cssText = 'color:#e8c76a;margin-bottom:4px;font-size:15px;';
     panel.appendChild(title);
 
     const sub = document.createElement('div');
     sub.textContent =
+      this.heading.subtitle ??
       `오염 ${world.corruption.applied}/100   여기서 죽으면 이 자리에서 다시 시작한다\n` +
-      `물약은 그 자리에서 마시는 게 아니라 가방에 담긴다 — 1~5 로 쓴다`;
+        `물약은 그 자리에서 마시는 게 아니라 가방에 담긴다 — 1~5 로 쓴다`;
     sub.style.whiteSpace = 'pre';
     sub.style.cssText = 'color:#8a8f9a;margin-bottom:14px;';
     panel.appendChild(sub);

@@ -6,6 +6,7 @@ import { Level, buildLevelGroup } from '../src/level/GridLoader';
 import z01f1 from '../data/levels/z01_f1.json';
 import z01f2 from '../data/levels/z01_f2.json';
 import z01f3 from '../data/levels/z01_f3.json';
+import lobbyJson from '../data/levels/lobby.json';
 
 const def = {
   id: 'debug',
@@ -18,7 +19,7 @@ const def = {
 };
 
 // ?level=z01_f1 → 실제 층을 통째로 짓는다 (레벨 구조 확인용 — view=map 과 함께 쓴다)
-const REAL: Record<string, unknown> = { z01_f1: z01f1, z01_f2: z01f2, z01_f3: z01f3 };
+const REAL: Record<string, unknown> = { z01_f1: z01f1, z01_f2: z01f2, z01_f3: z01f3, lobby: lobbyJson };
 const lvParam = new URLSearchParams(location.search).get('level');
 const level = new Level(((lvParam && REAL[lvParam]) || def) as never);
 const group = buildLevelGroup(level, {
@@ -33,10 +34,15 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a0c);
 scene.add(group);
 // 확인용 조명 — 게임 환경광(0.04)으로는 스크린샷이 새까맣다
-scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-const key = new THREE.PointLight(0xffe0b0, 1.6, 30, 0);
-key.position.set(10, 3.2, 8);
-scene.add(key);
+// 로비는 제 조명(환경광 0.62 + 색유리창)으로 본다 — 실제 게임의 밝기를 그대로 확인하는 게 목적
+if (level.theme === 'church') {
+  scene.add(new THREE.AmbientLight(0xffffff, level.ambient));
+} else {
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const key = new THREE.PointLight(0xffe0b0, 1.6, 30, 0);
+  key.position.set(10, 3.2, 8);
+  scene.add(key);
+}
 
 const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 100);
 const sx = level.spawn.x; // 10 (칸 [1,2] 중심)
@@ -49,7 +55,23 @@ if (new URLSearchParams(location.search).get('bars') === 'up') {
   const bars = group.getObjectByName('exitBars');
   if (bars) bars.position.y = 2.55;
 }
-if (view === 'front') {
+if (view === 'lobby') {
+  // 부활 마법진에서 일어나 북쪽 대제단을 본 그림 (플레이어 눈높이)
+  camera.position.set(sx, 1.6, sz + 0.5);
+  camera.lookAt(level.altarPos!.x, 1.8, level.altarPos!.z);
+} else if (view === 'lobbyback') {
+  // 성단 앞에서 뒤돌아 회중석·현관을 본 그림
+  camera.position.set(sx, 1.6, sz - 6);
+  camera.lookAt(sx, 1.2, sz + 20);
+} else if (view === 'lobbyside') {
+  // 동쪽 익랑에서 상인 노점·열주를 본 그림
+  camera.position.set(sx + 6, 1.6, sz - 3);
+  camera.lookAt(sx + 16, 1.4, sz - 4);
+} else if (view === 'lobbyhigh') {
+  // 회중석 뒤 높은 곳에서 성단을 향해 내려다본 전경 — 장의자·열주·마법진·대제단이 한눈에
+  camera.position.set(sx, 5.4, sz + 22);
+  camera.lookAt(sx, 1.0, sz - 8);
+} else if (view === 'front') {
   // 플레이어가 뒤돌아 입구 계단을 본 그림
   camera.position.set(sx, 1.6, sz + 3.2);
   camera.lookAt(sx, 1.5, sz - 4);

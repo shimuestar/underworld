@@ -3,7 +3,7 @@
 
 import { balance } from '../core/Balance';
 import { enemyDef, healthBarState } from '../core/Entities';
-import { findWallNormal, type BarrelState, type ChestState, type EnemyState, type PropState, type TrapState } from '../core/World';
+import { findWallNormal, type BarrelState, type ChestState, type EnemyState, type NpcState, type PropState, type TrapState } from '../core/World';
 import type { Level } from './GridLoader';
 
 export interface EntityPlacement {
@@ -170,6 +170,36 @@ export function spawnProps(placements: EntityPlacement[], level: Level): PropSta
 }
 
 let nextTrapId = 1;
+let nextNpcId = 1;
+
+/** 레벨의 npc_* 배치 → NPC 상태 (성소 로비의 사제·상인). 몸으로 막게 차단 상자도 등록한다.
+ *  facing 은 'N'|'S'|'E'|'W' — 서서 바라보는 쪽 (기본 S: 남쪽에서 다가오는 플레이어를 본다) */
+export function spawnNpcs(placements: EntityPlacement[], level: Level): NpcState[] {
+  const npcs: NpcState[] = [];
+  const radius = balance.lobby.npc.collisionRadius;
+  for (const placement of placements) {
+    if (!placement.type.startsWith('npc_')) continue;
+    const kind = placement.type.slice('npc_'.length);
+    if (kind !== 'priest' && kind !== 'merchant') {
+      console.warn(`[Spawner] 미정의 NPC 건너뜀: ${placement.type}`);
+      continue;
+    }
+    const [row, col] = placement.cell;
+    if (row === undefined || col === undefined) continue;
+    if (level.solidAt(col, row)) {
+      console.warn(`[Spawner] 벽 안의 NPC 건너뜀: [${row}, ${col}]`);
+      continue;
+    }
+    const x = (col + 0.5) * level.cellSize;
+    const z = (row + 0.5) * level.cellSize;
+    const { dirX, dirZ } = dirVector((placement as { facing?: string }).facing ?? 'S');
+    // facing = (-sin yaw, -cos yaw) → yaw = atan2(-dirX, -dirZ)
+    const npc: NpcState = { id: nextNpcId++, kind, x, z, yaw: Math.atan2(-dirX, -dirZ) };
+    npc.blocker = level.addBlocker(x, z, radius);
+    npcs.push(npc);
+  }
+  return npcs;
+}
 
 /** 배치 dir 표기('N'|'S'|'E'|'W') → 단위 벡터. 글리프 dir 과 같은 규약(N = -Z) */
 function dirVector(dir: string | undefined): { dirX: number; dirZ: number } {
@@ -225,6 +255,7 @@ export function spawnEnemies(placements: EntityPlacement[], level: Level): Enemy
     if (placement.group) continue; // 매복 대기조
     if (placement.type.startsWith('prop_')) continue; // 기믹 — spawnProps 몫 (경고 없이)
     if (placement.type.startsWith('trap_')) continue; // 함정 — spawnTraps 몫
+    if (placement.type.startsWith('npc_')) continue; // NPC — spawnNpcs 몫 (로비의 사제·상인)
     if (!IMPLEMENTED.has(placement.type)) {
       console.warn(`[Spawner] 미구현 적 타입 건너뜀: ${placement.type}`);
       continue;
