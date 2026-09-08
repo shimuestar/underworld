@@ -142,6 +142,23 @@ describe('E 채널', () => {
     expect(world.doors[0]!.progress).toBe(30);
   });
 
+  it('피격(breakChannel)이 채널을 끊는다 — 처음부터. 밀리는 중이거나 안 만진 문은 그대로 (2026-09-08)', () => {
+    const broken: unknown[] = [];
+    world.events.on('door_channel_broken', (p) => broken.push(p));
+    expect(Door.breakChannel(world)).toBe(false); // 만지는 문이 없다
+    press(world);
+    idle(world, 10);
+    expect(world.doors[0]!.progress).toBe(11);
+    expect(Door.breakChannel(world)).toBe(true);
+    expect(world.doors[0]!.progress).toBe(0);
+    expect(broken).toEqual([{ row: world.doors[0]!.row, col: world.doors[0]!.col, reason: 'damage' }]);
+    // 잠금이 풀려 밀리는 중이면 끊지 않는다
+    press(world);
+    idle(world, CFG.openTicks);
+    expect(world.doors[0]!.progress).toBeGreaterThanOrEqual(CFG.openTicks);
+    expect(Door.breakChannel(world)).toBe(false);
+  });
+
   it('openTicks 를 채우면 잠금이 풀린다 — 그 전에는 아직 벽이다', () => {
     const unlocked: unknown[] = [];
     world.events.on('door_unlocked', (p) => unlocked.push(p));

@@ -97,6 +97,19 @@ describe('제단 진입', () => {
     expect(Altar.isActivated(world)).toBe(true);
   });
 
+  it('피격(breakHold)이 붙들기를 끊는다 — 게이지 0, 다시 붙들어야 한다 (2026-09-08)', () => {
+    standAtAltar(world);
+    Altar.tick(world, DT);
+    expect(Altar.breakHold(world)).toBe(false); // 붙들고 있지 않다
+    holdInteract(world, 20);
+    expect(world.altarHoldTicks).toBe(20);
+    expect(Altar.breakHold(world)).toBe(true);
+    expect(world.altarHoldTicks).toBe(0);
+    expect(world.altars).toHaveLength(0);
+    holdInteract(world, balance.altar.activateHoldTicks - 1);
+    expect(world.altars).toHaveLength(0); // 이어지지 않고 처음부터
+  });
+
   it('활성화한 층의 제단은 다음부터 한 번 눌러 진입(상점)한다', () => {
     enterAltar(world);
     const entered: unknown[] = [];

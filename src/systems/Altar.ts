@@ -64,6 +64,14 @@ export function tick(world: World, _dt: number): void {
   enter(world);
 }
 
+/** 첫 활성화 붙들기를 끊는다 — 피격(main 이 player_damaged 로 부른다). 끊긴 게 있으면 true */
+export function breakHold(world: World): boolean {
+  if (world.altarHoldTicks <= 0) return false;
+  world.altarHoldTicks = 0;
+  world.events.emit('altar_hold_broken', { reason: 'damage' });
+  return true;
+}
+
 /** 이 층의 제단을 이미 활성화했는가 (로비 대제단 워프 목록에 올라 있다) */
 export function isActivated(world: World): boolean {
   return world.altars.some((a) => a.floor === world.floorIndex);

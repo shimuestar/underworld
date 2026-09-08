@@ -312,6 +312,26 @@ describe('사용', () => {
 });
 
 describe('시전 시간', () => {
+  it('피격 스위치(interruptOnDamage.potion)는 꺼져 있다 — 마시기는 맞아도 안 끊긴다 (2026-09-08 사용자). breakChannel 은 스위치를 켰을 때만 main 이 부른다', () => {
+    expect(balance.interruptOnDamage.potion).toBe(false);
+    addItem(world, 'potion');
+    world.player.health = 10;
+    press(world, 1);
+    idle(world, 5);
+    world.player.health -= 7; // 경직 없는 보통 피격
+    idle(world, CFG.channelTicks);
+    expect(countOf(world, 'potion')).toBe(0); // 마셨다
+    // 스위치가 켜졌을 때의 길 — 채널을 끊고 아이템은 남는다
+    idle(world, CFG.useCooldownTicks); // 연속 사용 쿨다운
+    addItem(world, 'potion');
+    press(world, 1);
+    idle(world, 3);
+    expect(Items.breakChannel(world)).toBe(true);
+    expect(world.itemChannel).toBeNull();
+    expect(countOf(world, 'potion')).toBe(1);
+    expect(Items.breakChannel(world)).toBe(false);
+  });
+
   it('누른 즉시가 아니라 channelTicks 를 다 채워야 효과가 난다', () => {
     addItem(world, 'potion');
     world.player.health = 10;

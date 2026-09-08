@@ -180,6 +180,20 @@ export function tick(world: World, _dt: number): void {
   }
 }
 
+/** 자물쇠 채널을 끊는다 — 피격(main 이 player_damaged 로 부른다). 밀리는 중(progress ≥ openTicks)·열린 문은 건드리지 않는다.
+ *  끊긴 게 있으면 true */
+export function breakChannel(world: World): boolean {
+  const openTicks = balance.door.openTicks;
+  let broke = false;
+  for (const door of world.doors) {
+    if (door.opened || door.progress <= 0 || door.progress >= openTicks) continue;
+    door.progress = 0;
+    world.events.emit('door_channel_broken', { row: door.row, col: door.col, reason: 'damage' });
+    broke = true;
+  }
+  return broke;
+}
+
 /** 지금 손대고 있는 문의 진행률 0~1 — 손 연출과 HUD 게이지가 읽는다.
  *  미닫이가 밀리는 동안은 손을 떼므로 0 이다 */
 export function channelFrac(world: World): number {

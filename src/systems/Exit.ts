@@ -16,6 +16,14 @@ const EXIT_RADIUS = 2.3;
 /** 구독 자리 — 봉인 해제는 tick 이 주인 생사를 매 틱 확인한다 (이벤트 불요) */
 export function init(_world: World): void {}
 
+/** 계단 붙들기를 끊는다 — 피격(main 이 player_damaged 로 부른다). 끊긴 게 있으면 true */
+export function breakHold(world: World): boolean {
+  if (world.stairHoldTicks <= 0) return false;
+  world.stairHoldTicks = 0;
+  world.events.emit('stairs_hold_broken', { reason: 'damage' });
+  return true;
+}
+
 export function tick(world: World, _dt: number): void {
   if (world.cleared) return;
   if (world.monsterRoom) return; // 몬스터 시험방 — 출구가 없고 보스를 잡아도 봉인 해제 개념이 없다 (2026-09-04)

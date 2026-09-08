@@ -55,7 +55,8 @@ function findItemInView(world: World): { id: number; kind: ItemKind } | null {
   return best ? { id: best.id, kind: best.kind as ItemKind } : null;
 }
 
-function breakGraveChannel(world: World): void {
+/** 비석 회수 채널을 끊는다 — 반경 이탈·비석 소멸, 그리고 피격(main 이 player_damaged 로 부른다) */
+export function breakGraveChannel(world: World): void {
   world.graveChannel = null;
   world.events.emit('grave_channel_broken', {});
 }

@@ -823,6 +823,8 @@ for (const name of [
   'respawned',
   'game_saved',
   'game_loaded',
+  'altar_hold_broken',
+  'stairs_hold_broken',
   'save_deleted',
   'dungeon_reset',
   'lobby_altar_entered',
@@ -2078,6 +2080,15 @@ events.on('player_damaged', (payload) => {
     amount?: number; blocked?: boolean; srcX?: number; srcZ?: number; srcId?: number; source?: string;
   };
   if (balance.loot.live.interruptOnDamage) interruptLoot('damage'); // 실시간 루팅 — 맞으면 창이 닫힌다 (도트 틱은 player_damaged 가 아니다)
+  // 진행 중인 행동도 끊는다 (2026-09-08 사용자) — 문 자물쇠·제단 활성화·계단·비석. 물약은 스위치가 꺼져 있어 계속 마신다
+  const cut = balance.interruptOnDamage;
+  let interrupted = false;
+  if (cut.door && Door.breakChannel(world)) interrupted = true;
+  if (cut.altar && Altar.breakHold(world)) interrupted = true;
+  if (cut.stairs && Exit.breakHold(world)) interrupted = true;
+  if (cut.grave && world.graveChannel) { Pickups.breakGraveChannel(world); interrupted = true; }
+  if (cut.potion && Items.breakChannel(world)) interrupted = true;
+  if (interrupted) showReaction('공격을 받아 행동이 끊겼다', 1400);
   // 받은 피해 숫자 — 막힌 타격도 칩 피해가 있으면 회색으로 보여 준다
   if (hit.amount !== undefined) showDamageTaken(hit.amount, hit.blocked ? 'blocked' : 'hit');
   if (hit.blocked) return;

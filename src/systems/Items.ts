@@ -133,6 +133,15 @@ function queueRegen(r: { amount: number; ticks: number }, amount: number, ticks:
   r.ticks = Math.max(r.ticks, ticks);
 }
 
+/** 마시기를 끊는다 — 피격 스위치(interruptOnDamage.potion, 기본 꺼짐)가 켜졌을 때 main 이 부른다. 끊긴 게 있으면 true */
+export function breakChannel(world: World): boolean {
+  const channel = world.itemChannel;
+  if (!channel) return false;
+  world.itemChannel = null;
+  world.events.emit('item_channel_broken', { kind: channel.kind, index: channel.index, reason: 'damage' });
+  return true;
+}
+
 /** 퀵슬롯 하나를 쓰기 시작한다. 실패 이유는 item_denied 로 알린다 —
  *  "왜 안 마셔지지"를 화면에서 바로 읽을 수 있어야 한다 */
 export function use(world: World, index: number): boolean {

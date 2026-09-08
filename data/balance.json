@@ -618,6 +618,8 @@
     }
   },
 
+  "_interruptNote": "피격 시 취소 (2026-09-08 사용자). 공격을 받으면(player_damaged — 도트 틱은 이 이벤트가 아니다) 진행 중인 행동을 끊는다: door 문 자물쇠 채널 / altar 제단 첫 활성화 붙들기 / stairs 계단 오르내리기 붙들기 / grave 비석 회수 채널. potion 은 물약 마시기 — 사용자 결정으로 끄기(맞아도 계속 마신다; 경직·회피·방어·다른 행동으로만 끊긴다). 루팅 창은 loot.live.interruptOnDamage 가 따로 맡는다. main 이 이벤트를 받아 각 시스템의 break 를 부른다",
+  "interruptOnDamage": { "door": true, "altar": true, "stairs": true, "grave": true, "potion": false },
   "door": {
     "_note": "잠긴 문. D 는 문 앞에서 E 를 눌러 직접 열고(openTicks 동안 손으로 잠금을 푼다), G(관문)는 떨어진 레버로만 열린다 — 여는 곳과 열리는 곳을 떼어 놓는 게 관문의 값이다. 어느 쪽이든 잠금이 풀리면 slideTicks 동안 옆으로 밀리고 다 밀린 틱에 통행이 열린다. 시간 수치는 둘이 공유한다",
     "_radiusNote": "문 중심 기준. 문은 셀을 통째로 채우므로 몸이 닿아도 중심에서 2+플레이어 반경(≈2.4m) 이 한계다 — 제단·상자(2.4)와 달리 그보다 넉넉해야 문 앞에 설 자리가 생긴다",
