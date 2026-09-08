@@ -4,7 +4,7 @@
 //    두 자원 경제를 분리하는 유일한 규칙이다 — docs/systems/combat.md §5.
 
 import { balance } from '../core/Balance';
-import { barrierUp, enemyDef, headDownPose, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, ventCleanseAmount, weakPointDamageMul, weakPointOpen, weakPointWorldPos, type WeakPointDef } from '../core/Entities';
+import { barrierUp, enemyDef, headDownPose, shieldBlocks, shieldBlocksProjectile, rayHitsEnemy, rayHitsWeakPoint, ventCleanseAmount, weakPointDamageMul, weakPointOpen, weakPointWorldPos, type WeakPointDef, inSuperArmor, poiseInterruptible } from '../core/Entities';
 
 /** 머리 내림·탈진 중 해머가 집계되는 약점 id — 기획서 §4 "머리 내림·탈진 중 해머 타격 = 눈 집계(hammerEyeMul)" (자세 판정은 Entities.headDownPose) */
 const HAMMER_EYE_ID = 'eye';
@@ -281,6 +281,15 @@ function resolveHammerHit(world: World, heavy: boolean): void {
         });
       }
 
+      // 방패 반격(해골 방패병, def.shieldRiposte) — 막힌 그 순간 곧바로 찌른다(실행은 Enemies — wantsRiposte, 시스템끼리 부르지 않는다).
+      // 마무리 타는 아래 넉백 규약대로 방패째 밀려나므로 반격이 없다. 쿨다운 안의 연타는 그냥 막히며 방패만 깎인다
+      if (!heavy && def.shieldRiposte && (enemy.riposteCooldown ?? 0) <= 0) {
+        enemy.riposteCooldown = def.shieldRiposte.cooldownTicks ?? 0;
+        enemy.wantsRiposte = true;
+        hitAny = true;
+        continue;
+      }
+
       // 연타를 멈추지 않으면 방패로 밀쳐낸다 — 얼굴에 붙어 무한히 때리지 못하게
       // 마무리 타도 막아낸 것으로 센다 — 콤보를 이어 붙이면 결국 밀쳐낸다
       enemy.blockedStreak = (enemy.blockedStreak ?? 0) + 1;
@@ -350,7 +359,11 @@ function resolveHammerHit(world: World, heavy: boolean): void {
     if (enemy.ai === 'idle') enemy.ai = 'chase';
     // 피격음 — 맞은 적 코앞의 동료도 깬다 (권총은 착탄 소음 12m 가 이미 대신한다)
     alertNearbyAt(world, enemy.x, enemy.z, balance.enemyAi.hitNoiseRadius, balance.enemyAi.noticeDelayTicks);
-    if (heavy) {
+    // 슈퍼아머(해골, attack.superArmor) — 그 공격 중엔 굳지도 밀리지도 않는다. 피해는 그대로. 연출(불꽃·둔탁음)은 main
+    const armored = inSuperArmor(def, enemy);
+    if (armored) {
+      world.events.emit('armored_hit', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, heavy });
+    } else if (heavy) {
       // 경직한 적에게 3타를 모두 꽂았다 — 체급을 무시하고 크게 날린다.
       // 경직은 유지된다(밀리는 동안 타이머가 멈춘다) — 쫓아가 처형할 수 있다.
       // staggerFlingImmune(거수 혼절)은 면제 — 처형 반경(4.6) 밖으로 날아가면 혼절의 보상이 사라진다(결정 33)
@@ -386,9 +399,10 @@ function resolveHammerHit(world: World, heavy: boolean): void {
           enemy.kbZ = (toZ / dist) * ((knockback * weightMul) / kbTicks);
         }
       }
-    } else {
+    } else if (!((enemy.ai === 'windup' || enemy.ai === 'charging') && poiseInterruptible(def))) {
       // 1·2타는 밀치지 않고 그 자리에 굳힌다 — 밀려나면 연속타가 이어지지 않는다.
-      // 공격 중이었다면 그 동작 그대로 얼어붙는다 (해머는 흐름을 끊을 수 있다)
+      // 공격 중이었다면 그 동작 그대로 얼어붙는다 (해머는 흐름을 끊을 수 있다).
+      // 자세(poise)가 끊기는 적의 예고는 굳히지 않는다 — 다음 틱 Enemies 가 끊어 튕겨 뻗게 한다(굳혔다 끊기면 두 번 멈춘다)
       enemy.attackFreezeTicks = Math.max(enemy.attackFreezeTicks ?? 0, combo.chainFlinchTicks);
     }
     hitAny = true;
@@ -1034,6 +1048,7 @@ function fire(world: World): void {
   // 같은 이유로 총알은 돌진 캔슬(cancelOnHit)도 못 끊는다 — 기준선을 같이 내린다.
   // 물어뜯기를 끊는 건 활·수류탄·해머·스킬의 몫이다 (2026-09-01 사용자 지시)
   if (hit.enemy.chargeHealthRef !== undefined) hit.enemy.chargeHealthRef = hit.enemy.health;
+  if (hit.enemy.poiseHealthRef !== undefined) hit.enemy.poiseHealthRef = hit.enemy.health; // 자세(poise)도 총알엔 끊기지 않는다
   if (hit.enemy.health <= 0) {
     hit.enemy.alive = false;
     // 총기 처치는 마나 0 — 여기서 마나 이벤트를 발행하지 않는다 (하드 룰)

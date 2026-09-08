@@ -24,8 +24,15 @@ export interface EnemyAttackDef {
   cancelOnHit?: boolean;
   /** 끊겼을 때 뻗는 틱 — 반격 창 */
   cancelStaggerTicks?: number;
-  /** 참 = 플레이어가 방패를 들고(blocking) 있을 때만 고른다(해골 해머병 지면 강타 — 방패 부수기). closeAttack 슬롯의 선택 조건 */
+  /** 참 = 플레이어가 방패를 들고(blocking) 있을 때만 고른다(해골 방패병 방패 찍기 — 가드 부수기). closeAttack 슬롯의 선택 조건 */
   requiresBlocking?: boolean;
+  /** 슈퍼아머(해골) — 이 공격 중(windup~impact)에는 플레이어 피해가 예고를 끊지 못하고(poise), 해머에 굳지도(attackFreeze) 밀리지도(넉백) 않는다. 피해는 그대로.
+   *  예고 중 호박색 발광(Stage) + armor_up 소리(main). 없으면 def.interruptible 규칙 */
+  superArmor?: boolean;
+  /** 광역 안쪽 빈 반경(m) — aoeRadius 고리의 안쪽(해골 해머병 여진: 3.2~6.5 만 맞는다). attackReaches 가 같은 값을 읽는다 */
+  aoeInnerRadius?: number;
+  /** 가드 부수기(해골 방패병 방패 찍기) — 막은 플레이어를 stunTicks 동안 굳힌다(막기 경직 10 대신) + guard_broken */
+  guardBreak?: { stunTicks: number };
   type: string;
   windupTicks: number;
   recoverTicks: number;
@@ -292,6 +299,10 @@ export interface EnemyDef {
   /** 정면 방패 — 전방 투사체 무효 (goblin_spear) */
   frontalShieldBlocksProjectiles?: boolean;
   shieldArcDeg?: number;
+  /** 방패 반격(해골 방패병) — 해머가 정면 방패에 막힌 틱에 Weapons 가 wantsRiposte 를 세우고 Enemies 가 이 공격을 낸다(attackMode 'riposte'). cooldownTicks 는 riposteCooldown */
+  shieldRiposte?: EnemyAttackDef;
+  /** 자세(poise) — 참이면 예고·질주 중 해머·화살·폭발·스킬 피해에 공격이 끊긴다(balance.poise.interruptTicks). superArmor 공격은 예외. 없으면 balance.poise.defaultInterruptible */
+  interruptible?: boolean;
   /** 처형 시 드랍하는 각인 id 목록 */
   drops?: string[];
   /** true면 처형이 아니라 사망 시 드랍 (처형 불가능한 적/보스) */
@@ -655,6 +666,7 @@ export function currentAttack(
   let slot: string | undefined;
   if (enemy.attackMode === 'summon' && def.summonAttack) base = def.summonAttack;
   else if (enemy.attackMode === 'bash' && def.shieldBash) base = def.shieldBash;
+  else if (enemy.attackMode === 'riposte' && def.shieldRiposte) base = def.shieldRiposte;
   else if (enemy.attackMode === 'charge' && def.chargeAttack) base = def.chargeAttack;
   else if (enemy.attackMode === 'volley' && def.volleyAttack) base = def.volleyAttack;
   else if (enemy.attackMode === 'ranged' && def.rangedAttack) base = def.rangedAttack;
@@ -673,6 +685,19 @@ export function currentAttack(
   }
   if (!def.phases) return base;
   return attackInPhase(def, enemy, slot ?? (base === def.attack ? 'attack' : slotOfMode(enemy.attackMode)), base);
+}
+
+/** 슈퍼아머 중인가 — 지금 공격(currentAttack)에 superArmor 가 붙어 있고 그 공격 동작(windup·charging·active·impact) 안이다.
+ *  Weapons(굳힘·넉백 면제)·Enemies(끊김 면제)·Stage(호박색 발광)가 같은 판정을 읽는다 */
+export function inSuperArmor(def: EnemyDef, enemy: { ai: string; attackMode?: string; phase?: number; wakeSlam?: boolean; despairSlam?: boolean; despairRoar?: boolean; comboStep?: number }): boolean {
+  if (!ATTACKING_STATES.has(enemy.ai)) return false;
+  return currentAttack(def, enemy).superArmor === true;
+}
+const ATTACKING_STATES = new Set(['windup', 'charging', 'active_perfect', 'active_normal', 'impact']);
+
+/** 자세(poise) — 이 적의 예고를 플레이어 피해가 끊을 수 있는가(def.interruptible, 없으면 balance.poise.defaultInterruptible) */
+export function poiseInterruptible(def: EnemyDef): boolean {
+  return def.interruptible ?? balance.poise.defaultInterruptible;
 }
 
 /** 체력 바 분할 — healthBars 만큼 나눠 표시한다 (보스는 2칸).
@@ -704,7 +729,7 @@ export function attackReaches(
   const dx = x - enemy.x;
   const dz = z - enemy.z;
   const dist = Math.hypot(dx, dz);
-  if (attack.aoeRadius !== undefined) return dist <= attack.aoeRadius;
+  if (attack.aoeRadius !== undefined) return dist <= attack.aoeRadius && dist >= (attack.aoeInnerRadius ?? 0); // 고리(aoeInnerRadius)는 안쪽이 비어 있다
   if (dist > def.attackRange * attack.impactRangeMul) return false;
   if (attack.arcDeg === undefined || dist === 0) return true;
   const facingX = -Math.sin(enemy.yaw);

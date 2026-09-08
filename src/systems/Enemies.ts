@@ -31,7 +31,7 @@
 // holdHome(홈 칸 복귀·대기 — holdAtHome), 반캠핑 자발 돌격(anticampTarget → 기둥 칸 중심으로 돌격 예고, 박히면 전도 대신 pillarStunTicks 실신 — chargeCollide), 접근 가속(anticampBoost → moveSpeed).
 
 import { balance } from '../core/Balance';
-import { VENT_WEAK_POINT, attackInPhase, attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, comboChain, comboStepAttack, currentAttack, enemyDef, headDownPose, healthBarState, jointOfBlade, poolsOn, resolvePhase, slotUnlocked, type BladeSide, type EnemyAttackDef } from '../core/Entities';
+import { VENT_WEAK_POINT, attackInPhase, attackReaches, bladeLocked, bladeOfJoint, bothBladesLocked, comboChain, comboStepAttack, currentAttack, enemyDef, headDownPose, healthBarState, inSuperArmor, jointOfBlade, poiseInterruptible, poolsOn, resolvePhase, slotUnlocked, type BladeSide, type EnemyAttackDef } from '../core/Entities';
 import { shedShellPlates } from '../core/ShellPlates';
 import { rayVsAabb } from '../core/Ray';
 import { alertEnemy, alertNearbyAt, beginPose, breakCrackWalls, closeExposure, findWallNormal, noiseField, openExposure, playerBlocks, pushEnemy, pushPlayer, scatterAwayFromPlayer, setPlayerStatus, statusDurationOf, PLAYER_STATUS_CFG, type EnemyState, type World, damagePlayer } from '../core/World';
@@ -2118,6 +2118,18 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     return;
   }
 
+  // 방패 반격(해골 방패병, def.shieldRiposte) — 해머가 방패에 막힌 틱에 Weapons 가 세웠다: 웅크림을 풀고 곧바로 찌른다
+  if (enemy.wantsRiposte && def.shieldRiposte) {
+    enemy.wantsRiposte = false;
+    enemy.braceTicks = 0;
+    enemy.attackFreezeTicks = 0;
+    enemy.attackMode = 'riposte';
+    enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));
+    startWindup(world, enemy, def.shieldRiposte);
+    world.events.emit('shield_riposte_start', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z });
+    return;
+  }
+
   if ((enemy.volleyCooldown ?? 0) > 0) enemy.volleyCooldown = (enemy.volleyCooldown ?? 0) - 1;
   if ((enemy.summonCooldown ?? 0) > 0) enemy.summonCooldown = (enemy.summonCooldown ?? 0) - 1;
   if ((enemy.chargeCooldown ?? 0) > 0) enemy.chargeCooldown = (enemy.chargeCooldown ?? 0) - 1;
@@ -2126,6 +2138,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   if ((enemy.roarCooldown ?? 0) > 0) enemy.roarCooldown = (enemy.roarCooldown ?? 0) - 1;
   if ((enemy.comboCooldown ?? 0) > 0) enemy.comboCooldown = (enemy.comboCooldown ?? 0) - 1;
   if ((enemy.evadeCooldown ?? 0) > 0) enemy.evadeCooldown = (enemy.evadeCooldown ?? 0) - 1;
+  if ((enemy.riposteCooldown ?? 0) > 0) enemy.riposteCooldown = (enemy.riposteCooldown ?? 0) - 1;
+  if ((enemy.rangedCooldown ?? 0) > 0) enemy.rangedCooldown = (enemy.rangedCooldown ?? 0) - 1;
+  if ((enemy.armlessTicks ?? 0) > 0) enemy.armlessTicks = (enemy.armlessTicks ?? 0) - 1;
 
   // 새끼 분리 — 타이머 구동 (2026-09-01): 전투에 들어오면 즉시 5마리, 그 뒤로는
   // 10초 박자(cooldownTicks)마다 살아 있는 새끼를 빼고 부족분만 시전 없이 충원한다.
@@ -2166,6 +2181,19 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));
     if ((enemy.hopTicks ?? 0) <= 0 && def.evade?.lungeAfter && def.chargeAttack) enemy.wantsCharge = true;
     return;
+  }
+
+  // 자세(poise, balance.poise) — 끊길 수 있는 예고·질주(poiseHealthRef 가 서 있다) 중 체력이 기준보다 낮아졌으면 공격이 끊긴다.
+  // 총알은 Weapons 가 기준을 되맞춰 끊지 못한다(패링 게임을 지우지 않는다). 슈퍼아머 공격은 기준이 서지 않는다(startWindup) — 여기서도 한 번 더 거른다
+  if (enemy.poiseHealthRef !== undefined) {
+    if (enemy.ai === 'windup' || enemy.ai === 'charging') {
+      if (enemy.health < enemy.poiseHealthRef && !inSuperArmor(def, enemy)) {
+        interruptAttack(world, enemy, def);
+        return;
+      }
+    } else {
+      enemy.poiseHealthRef = undefined; // 동작이 타격·후딜로 넘어갔다 — 이제는 끊기지 않는다
+    }
   }
 
   // 방패로 버티는 중 — 웅크린 채 아무 행동도 하지 않는다 (해머 연타를 받아내는 동안)
@@ -2484,10 +2512,12 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
       // 원거리 보조 공격 (족장 바위 투척) — 근접 거리 밖 + 시야 확보 시
       if (
         def.rangedAttack &&
+        (enemy.rangedCooldown ?? 0) <= 0 && // 쿨다운(해골 검사 뼈 투척 300) — 정의에 없으면 0(족장 바위: 옛 그대로)
         dist >= (def.rangedAttack.minRange ?? 0) &&
         world.level.hasLineOfSight(enemy.x, enemy.z, p.x, p.z)
       ) {
         enemy.attackMode = 'ranged';
+        enemy.rangedCooldown = def.rangedAttack.cooldownTicks ?? 0;
         startWindup(world, enemy, def.rangedAttack);
         break;
       }
@@ -2605,6 +2635,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           break;
         }
         fireProjectile(world, enemy, attack);
+        // 뼈 투척(해골 검사) — 왼팔뼈를 뽑아 던졌다: 한동안 왼팔이 없다(연출, Stage 가 맨팔을 숨긴다)
+        if (attack.projectileKind === 'bone') enemy.armlessTicks = balance.skeleton.boneThrow.armlessTicks;
         enemy.ai = 'recover';
         enemy.timer = attack.recoverTicks;
       } else if (attack.chargeRunTicks) {
@@ -2878,6 +2910,11 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           // 플레이어만 굳는다. 보스는 패링하거나 비켜야 한다
           const clash = balance.block;
           p.stunTicks = Math.max(p.stunTicks, Math.round(clash.clashPlayerStunTicks * world.modifiers.stunMul)); // 쇠 투구·인내 반지
+          // 가드 부수기(해골 방패병 방패 찍기, attack.guardBreak) — 막은 쪽이 길게 굳는다. 막기가 답이 아닌 공격
+          if (attack.guardBreak) {
+            p.stunTicks = Math.max(p.stunTicks, Math.round(attack.guardBreak.stunTicks * world.modifiers.stunMul));
+            world.events.emit('guard_broken', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, ticks: attack.guardBreak.stunTicks });
+          }
           world.events.emit('block_hit', { amount: damage, kind: 'melee' });
           if (!def.blockCannotStagger) {
             enemy.recoiled = true;
@@ -3694,12 +3731,30 @@ function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): v
   enemy.despairSlam = false; // 절망의 포효 연계 표식도 resolveRoar 가 이 뒤에 세운다(B3-4)
   enemy.strikeProgress = 0;
   enemy.weaponTipDist = fullReach(enemyDef(enemy.type), attack) * balance.parrySpace.pullbackRatio;
+  // 자세(poise) — 끊길 수 있는 적의 슈퍼아머 아닌 공격만 기준 체력을 세운다. 나머지는 옛 규칙(끊기지 않음)
+  enemy.poiseHealthRef = poiseInterruptible(enemyDef(enemy.type)) && attack.superArmor !== true ? enemy.health : undefined;
   world.events.emit('enemy_windup', {
     enemyId: enemy.id,
     enemyType: enemy.type,
     telegraph: attack.telegraph ?? 'blue',
     perfectOnly: attack.perfectOnly === true, // 완벽 전용 타(거수 삼연낫 ③) — main 이 예고음을 고음으로(결정 17)
+    superArmor: attack.superArmor === true, // 슈퍼아머 예고(해골) — main 이 armor_up 소리를 얹는다
   });
+}
+
+/** 자세 끊김(poise) — 예고·질주가 끊겨 튕겨 뻗는다(balance.poise.interruptTicks, recoiled 자세). 콤보는 여기서 끝난다. enemy_interrupted 는 main 이 소리·안내로 */
+function interruptAttack(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): void {
+  enemy.poiseHealthRef = undefined;
+  enemy.chargeHealthRef = undefined;
+  enemy.ai = 'recover';
+  enemy.timer = balance.poise.interruptTicks;
+  enemy.recoiled = true;
+  enemy.whiffed = false;
+  enemy.attackFreezeTicks = 0;
+  enemy.strikeProgress = 0;
+  if (!def.flying) enemy.jumpY = 0;
+  if (enemy.attackMode === 'combo') enemy.attackMode = 'melee';
+  world.events.emit('enemy_interrupted', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, ticks: enemy.timer });
 }
 
 function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef): void {
@@ -3752,7 +3807,7 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
     casterId: enemy.id,
     deflectable: attack.deflectable ?? false,
     kind:
-      (attack.projectileKind as 'rock' | 'web' | 'goo' | undefined) ??
+      (attack.projectileKind as 'rock' | 'web' | 'goo' | 'bone' | undefined) ??
       ((attack.deflectable ?? false) ? 'magic' : 'arrow'),
     // 광역 효과는 투사체가 들고 간다 — 시전자가 먼저 죽어도, 반사돼도 그대로 터진다
     splash: attack.splash,

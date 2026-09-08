@@ -881,14 +881,15 @@ for (const name of [
 const audio = new GameAudio();
 app.addEventListener('click', () => audio.unlock());
 events.on('enemy_windup', (payload) => {
-  const wind = payload as { telegraph?: string; enemyType?: string; perfectOnly?: boolean };
+  const wind = payload as { telegraph?: string; enemyType?: string; perfectOnly?: boolean; superArmor?: boolean };
   // 박쥐 박치기는 예고 시작이 '조용한 정지 비행'이다 — 신호는 발사 순간의 비명(bat_swoop)
   if (wind.enemyType === 'bat') return;
   const at = panOf(payload); // 예고음에 방향을 싣는다 — 등 뒤 공격을 귀가 먼저 안다
   // 슬라임 — 몸이 부풀어 오르는 꿀렁임을 텔레그래프 소리에 얹는다
   if (wind.enemyType?.startsWith('slime')) audio.play('slime_windup', at);
-  // 해골 — 마른 뼈 달그락을 얹는다(어느 병사든)
+  // 해골 — 마른 뼈 달그락을 얹는다(어느 병사든). 슈퍼아머 예고(끊을 수 없다)는 낮은 울림을 깔아 귀로도 구분되게
   if (wind.enemyType !== undefined && SKELETON_TYPES.has(wind.enemyType)) audio.play('bone_rattle', at);
+  if (wind.superArmor) audio.play('armor_up', at);
   const telegraph = wind.telegraph;
   // 완벽 전용 파랑(거수 삼연낫 ③, attack.perfectOnly — 결정 17)은 같은 파랑 예고음을 고음으로
   audio.play(
@@ -1536,6 +1537,7 @@ events.on('enemy_frozen', (payload) => {
 events.on('enemy_cast', (payload) => {
   const info = payload as { enemyType: string; enemyId: number };
   if (info.enemyType === 'goblin_archer') audio.play('bow_twang');
+  if (SKELETON_TYPES.has(info.enemyType)) audio.play('bone_rattle', panOf(payload)); // 뼈 투척 — 팔뼈를 뽑는 달그락
   // 족장 화살 세례 — 발사할 때마다 시위 소리 (바위 투척과 구분). 거수 갑각 떨기(진액 구슬, B3-2)는 젖은 분출음
   const boss = world.enemies.find((e) => e.id === info.enemyId);
   if (boss?.ai === 'volley') {
@@ -3698,9 +3700,10 @@ events.on('boss_roar_hit', (payload) => {
 // 삼연낫(거수 P3, B3-4) — ① 시작·② ③ 진행 안내. 예고음은 enemy_windup 이 타마다 낸다(③ 은 고음 telegraph_blue_high)
 events.on('enemy_combo_start', (payload) => {
   const c = payload as { enemyType: string };
-  // 해골 검사 이연격 — ①을 일반 패링해도 ②가 온다: 두 번 막거나 ①을 완벽 패링해 무너뜨려라
   if (SKELETON_TYPES.has(c.enemyType)) {
-    showReaction('이연격 — ①베기 ②역베기: 두 번 패링하거나 ①을 완벽 패링해 무너뜨려라', 1300);
+    // 해골 해머병 지진(광역 콤보) / 해골 검사 찌르기 난무(슈퍼아머 — 끊을 수 없다: 세 번 패링하거나 한 번 완벽하게)
+    const quake = enemyDef(c.enemyType).comboAttack?.aoeRadius !== undefined;
+    showReaction(quake ? '지진 — 강타 뒤 여진(고리): 안쪽으로 붙거나 6.5m 밖으로' : '찌르기 난무 — 끊을 수 없다: 세 번 패링하거나 한 번 완벽하게', 1300);
     return;
   }
   showReaction('삼연낫 — ①오른 ②왼 ③양낫(완벽만): 셋 다 완벽이면 탈진', 1400);
@@ -3708,7 +3711,8 @@ events.on('enemy_combo_start', (payload) => {
 events.on('enemy_combo_step', (payload) => {
   const c = payload as { enemyType: string; step: number; steps: number; perfectOnly: boolean };
   if (SKELETON_TYPES.has(c.enemyType)) {
-    showReaction(`이연격 ${c.step + 1}/${c.steps} — 역베기, 더 빠르다`, 900);
+    const quake = enemyDef(c.enemyType).comboAttack?.aoeRadius !== undefined;
+    showReaction(quake ? '여진 — 고리가 온다: 안쪽으로 붙거나 밖으로!' : `찌르기 난무 ${c.step + 1}/${c.steps}`, 900);
     return;
   }
   showReaction(c.perfectOnly ? `삼연낫 ③ 양낫 내려찍기 — 완벽 패링만 통한다(일반 대역은 실패), 아니면 3.2m 밖으로` : `삼연낫 ${c.step + 1}/${c.steps} — 왼낫`, 1100);
@@ -3719,6 +3723,29 @@ events.on('enemy_evade', (payload) => {
   audio.play('bone_rattle', panAt(ev.x, ev.z));
   showReaction(`${enemyDef(ev.enemyType).name ?? '적'}이 물러난다 — 곧 찔러 들어온다`, 900);
 });
+// 자세 끊김(poise) — 예고·질주 중 피해를 입어 공격이 끊겼다: 둔탁음(해골은 뼈 달그락) + 안내
+events.on('enemy_interrupted', (payload) => {
+  const it = payload as { enemyType: string; x: number; z: number };
+  audio.play(SKELETON_TYPES.has(it.enemyType) ? 'bone_rattle' : 'thud', panAt(it.x, it.z));
+  showReaction('공격을 끊었다 — 반격 기회!', 900);
+});
+// 슈퍼아머 피격 — 해머가 들어갔지만 굳지도 밀리지도 않았다: 불꽃 + 둔탁음 + 안내
+events.on('armored_hit', (payload) => {
+  const ah = payload as { x: number; z: number };
+  const p2 = world.player;
+  stage.spawnGuardSparks((p2.x + ah.x) / 2, (p2.z + ah.z) / 2, 1.1, 0xe8b45a, 0.6);
+  audio.play('thud', panAt(ah.x, ah.z));
+  showReaction('슈퍼아머 — 끊기지 않는다, 패링하거나 비켜라', 700);
+});
+// 가드 부수기(해골 방패병 방패 찍기) — 막았는데 길게 굳었다: 무거운 타격음 + 카메라 킥 + 안내
+events.on('guard_broken', (payload) => {
+  const gb = payload as { x: number; z: number; ticks: number };
+  audio.play('heavy_hit', panAt(gb.x, gb.z));
+  stage.triggerCameraKick(0.5, 220);
+  showReaction('가드가 깨졌다! — 방패 찍기는 막지 말고 비켜라', 1200);
+});
+// 방패 반격(해골 방패병) — 해머가 방패에 막힌 순간 찌른다: 안내(예고음은 enemy_windup 이 낸다)
+events.on('shield_riposte_start', () => showReaction('방패 반격! — 방패를 두들기면 찔린다', 900));
 // 해골 방패병 엄호(def.coverAllies) — 혼절한 동료와 플레이어 사이로 끼어든다: 방패 소리 + 안내
 events.on('enemy_cover_start', (payload) => {
   const cv = payload as { enemyType: string; allyType: string; x: number; z: number };

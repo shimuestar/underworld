@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { equipColor } from '../core/EquipData';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
-import { bladeLocked, bladeOfJoint, currentAttack, enemyDef, headDownPose, healthBarState, jointOfBlade, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, weakPointScaleMul, type EnemyDef, type ResolvedPhase, type WeakPointDef } from '../core/Entities';
+import { bladeLocked, bladeOfJoint, comboChain, currentAttack, enemyDef, inSuperArmor, headDownPose, healthBarState, jointOfBlade, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, weakPointScaleMul, type EnemyDef, type ResolvedPhase, type WeakPointDef } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, COLOR_PILLAR, DOOR_OPEN_HEIGHT, DOOR_OPEN_WIDTH, STAIR_STONE } from '../level/GridLoader';
 import type {
@@ -450,6 +450,13 @@ const EXIT_FLASH_MS = 900; // 출구가 열리는 순간의 섬광
 /** 지면 강타 범위 원 — 예고 중 바닥에 그려진다. 안쪽 반지름은 바깥 대비 비율 */
 const AOE_RING_COLOR = 0xff5a3c;
 const AOE_RING_INNER = 0.9;
+// 해골 병사 연출 상수 — 팔이 치고 몸은 거의 서 있다(사용자: 몸을 기울이는 인간형 기본 동작이 어색하다)
+const SKELETON_LEAN_MUL = 0.15; // 인간형 기본 기울임·전진의 배율
+const SKELETON_WHIRL_COIL = 0.7; // 회전 베기 예고에 반대로 감는 각(rad)
+const SKELETON_WHIRL_ARM = 0.15; // 회전 베기 타격 중 팔 각 — 수평으로 뻗어 휘두른다
+const SUPER_ARMOR_TINT = 0x9c6418; // 슈퍼아머 예고 — 호박색(뼈가 굳는다). 텔레그래프 3색과 겹치지 않는다. 밝은 뼛빛 위라 옅으면 안 보인다(헤드리스 실측)
+const BONE_PROJECTILE_COLOR = 0xd8d0bc;
+const BONE_PROJECTILE_GLOW = 0x2a1440; // 반사 가능 규약(보라)을 옅게
 
 const SHIELD_COLOR = 0x6f7480;
 const SHIELD_CRACKED_COLOR = 0x4a4238; // 반파 — 그을리고 쪼개진 판
@@ -588,6 +595,9 @@ interface EnemyVisual {
   /** 지면 강타 범위 표시 — 예고 중 바닥에 그려지는 원 */
   aoeRing?: THREE.Mesh;
   aoeRingMaterial?: THREE.MeshBasicMaterial;
+  /** 고리 광역(aoeInnerRadius — 해골 해머병 여진) 표시 — 안쪽이 빈 띠. 비율은 정의에서 읽어 지오메트리에 굽는다 */
+  aoeBand?: THREE.Mesh;
+  aoeBandMaterial?: THREE.MeshBasicMaterial;
   /** 시전 충전 구체 (warden) */
   chargeOrb?: THREE.Mesh;
   chargeOrbLight?: THREE.PointLight;
@@ -4112,8 +4122,9 @@ export class Stage {
 
     // 지면 강타 범위 원 — 예고 중에만 보인다. 반경은 매 프레임 attack.aoeRadius 로 맞춘다.
     // 화면 UI 가 아니라 월드 바닥에 놓인 표식이다 (몸이 기울어도 바닥에 붙어 있게 group 소속)
-    // closeAttack 에 광역이 있는 적(해골 해머병 지면 강타)도 같은 원을 쓴다 — 그 공격이 예고될 때 currentAttack 이 그 반경을 준다
-    if (def.attack.aoeRadius || def.closeAttack?.aoeRadius) {
+    // closeAttack·콤보 타에 광역이 있는 적(해골 해머병 지진)도 같은 원을 쓴다 — 그 공격이 예고될 때 currentAttack 이 그 반경을 준다
+    const chainAoe = comboChain(def).filter((a) => a.aoeRadius !== undefined);
+    if (def.attack.aoeRadius || def.closeAttack?.aoeRadius || chainAoe.length > 0) {
       visual.aoeRingMaterial = new THREE.MeshBasicMaterial({
         color: AOE_RING_COLOR,
         transparent: true,
@@ -4129,6 +4140,16 @@ export class Stage {
       visual.aoeRing.position.y = 0.03;
       visual.aoeRing.visible = false;
       group.add(visual.aoeRing);
+      // 고리 광역(여진) — 안쪽 빈 반경 비율을 지오메트리에 굽는다(정의가 하나라는 전제 — 해골 해머병 여진 3.2/6.5)
+      const band = chainAoe.find((a) => a.aoeInnerRadius !== undefined);
+      if (band) {
+        visual.aoeBandMaterial = new THREE.MeshBasicMaterial({ color: AOE_RING_COLOR, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+        visual.aoeBand = new THREE.Mesh(new THREE.RingGeometry(band.aoeInnerRadius! / band.aoeRadius!, 1, 64), visual.aoeBandMaterial);
+        visual.aoeBand.rotation.x = -Math.PI / 2;
+        visual.aoeBand.position.y = 0.03;
+        visual.aoeBand.visible = false;
+        group.add(visual.aoeBand);
+      }
     }
 
     // 시전 충전 구체 (마법 투사체 캐스터) —
@@ -4411,7 +4432,8 @@ export class Stage {
         enemy.ai === 'active_normal';
       let emissive = 0x000000;
       if (flashing) emissive = new THREE.Color(telegraphColor).getHex();
-      else if (enemy.ai === 'windup' || wallWind) emissive = WINDUP_TINT;
+      else if (enemy.ai === 'windup' || wallWind) emissive = inSuperArmor(def2, enemy) ? SUPER_ARMOR_TINT : WINDUP_TINT; // 슈퍼아머 예고(해골)는 호박색 — 끊을 수 없다는 신호
+      else if (enemy.ai === 'charging' && inSuperArmor(def2, enemy)) emissive = SUPER_ARMOR_TINT;
       else if (enemy.ai === 'staggered') emissive = STAGGER_COLOR;
       else if (enemy.burnTicks > 0) emissive = BURN_TINT;
       else if ((enemy.freezeTicks ?? 0) > 0) emissive = FREEZE_TINT;
@@ -4652,7 +4674,9 @@ export class Stage {
       const isMelee = attack.type !== 'projectile';
       const trembling = inWindup && enemy.timer <= balance.telegraph.visualLeadTicks;
 
-      const isThrust = (MELEE_WEAPONS[enemy.type]?.style ?? 'smash') === 'thrust';
+      // 해골은 공격마다 다르다 — 찌르기 난무·방패 반격은 thrust, 베기·회전 베기는 smash. 나머지 적은 무기 규격이 정한다
+      const isThrust = SKELETON_TYPES.has(enemy.type) && isMelee ? attack.type === 'thrust' : (MELEE_WEAPONS[enemy.type]?.style ?? 'smash') === 'thrust';
+      const whirl = SKELETON_TYPES.has(enemy.type) && isMelee && (attack.arcDeg ?? 0) >= 300; // 회전 베기(해골 검사) — 몸이 한 바퀴 돈다
       let leanTarget: number;
       let lungeTarget: number;
       let crouchTarget = 0;
@@ -4707,6 +4731,21 @@ export class Stage {
         leanTarget = 0.12;
         lungeTarget = 0.14;
         crouchTarget = -def2.height * 0.1;
+      }
+
+      // 해골 병사 — 팔이 치고 몸통은 거의 서 있다(기울임·전진 ×0.15). 회전 베기는 몸통이 예고에 반대로 감겼다가 타격에 한 바퀴 돈다(그림 = 판정: strikeProgress)
+      if (SKELETON_TYPES.has(enemy.type)) {
+        leanTarget *= SKELETON_LEAN_MUL;
+        lungeTarget *= SKELETON_LEAN_MUL;
+        let spinTarget = 0;
+        if (whirl && inWindup) spinTarget = -SKELETON_WHIRL_COIL * windupProgress;
+        else if (whirl && striking) spinTarget = -SKELETON_WHIRL_COIL + (Math.PI * 2 + SKELETON_WHIRL_COIL) * (enemy.strikeProgress ?? 0);
+        if (whirl && striking) visual.torso.rotation.y = spinTarget;
+        else {
+          // 한 바퀴 돈 뒤(≈2π)엔 0 과 같은 각이다 — 거꾸로 되감지 않게 접는다
+          if (visual.torso.rotation.y > Math.PI) visual.torso.rotation.y -= Math.PI * 2;
+          visual.torso.rotation.y += (spinTarget - visual.torso.rotation.y) * 0.3;
+        }
       }
 
       // 낫뿔 거수 — 4족 갑각이라 인간형 기본 자세(앞으로 24° 숙임·0.5m 전진)를 그대로 쓰면
@@ -4863,7 +4902,7 @@ export class Stage {
       // 보이는 창끝 = 패링 판정에 쓰이는 창끝 (시간 기반 스냅 애니메이션 금지)
       if (visual.arm) {
         const spec = MELEE_WEAPONS[enemy.type];
-        const style = spec?.style ?? 'smash';
+        const style: 'smash' | 'thrust' = isThrust ? 'thrust' : 'smash'; // 해골은 공격마다(isThrust 참조), 나머지는 무기 규격
         const strikeProgress = enemy.strikeProgress ?? 0;
         let armRotTarget: number;
         let armZTarget = 0;
@@ -4910,9 +4949,11 @@ export class Stage {
             armRotTarget = ARM_REST + (ARM_RAISED - ARM_REST) * windupProgress;
             if (trembling) armRotTarget += Math.sin(now / 12) * 0.08;
           } else if (isMelee && striking) {
-            // 호를 그리는 무기는 진행도로 각도를 몰아준다 (도달 시점이 판정과 일치)
-            armRotTarget = ARM_RAISED + (ARM_SMASH - ARM_RAISED) * strikeProgress;
+            // 호를 그리는 무기는 진행도로 각도를 몰아준다 (도달 시점이 판정과 일치). 회전 베기는 팔을 수평으로 뻗은 채 몸이 돈다
+            armRotTarget = whirl ? SKELETON_WHIRL_ARM : ARM_RAISED + (ARM_SMASH - ARM_RAISED) * strikeProgress;
             direct = true;
+          } else if (whirl && inWindup) {
+            armRotTarget = ARM_REST + (SKELETON_WHIRL_ARM - ARM_REST) * windupProgress; // 회전 베기 예고 — 팔을 수평으로 올린다(치켜들지 않는다)
           }
         }
         if (direct) {
@@ -5026,12 +5067,17 @@ export class Stage {
         const aoe = attack.aoeRadius;
         // 달려오는 동안에도 보여준다 — 위험 범위가 밀려오는 게 보여야 물러날 수 있다
         const show = aoe !== undefined && (inWindup || charging || striking);
-        visual.aoeRing.visible = show;
+        // 고리 광역(aoeInnerRadius — 여진)은 안쪽이 빈 띠로, 나머지는 꽉 찬 원으로
+        const useBand = show && attack.aoeInnerRadius !== undefined && visual.aoeBand !== undefined;
+        const ring = useBand ? visual.aoeBand! : visual.aoeRing;
+        const ringMat = useBand ? visual.aoeBandMaterial! : visual.aoeRingMaterial;
+        visual.aoeRing.visible = show && !useBand;
+        if (visual.aoeBand) visual.aoeBand.visible = useBand;
         if (show) {
-          visual.aoeRing.scale.set(aoe!, aoe!, 1);
+          ring.scale.set(aoe!, aoe!, 1);
           // 예고 중엔 차오르고, 내리치는 순간 가장 진하다
-          visual.aoeRingMaterial.opacity = inWindup ? 0.18 + 0.42 * windupProgress : 0.75;
-          if (charging) visual.aoeRingMaterial.opacity = 0.6;
+          ringMat.opacity = inWindup ? 0.18 + 0.42 * windupProgress : 0.75;
+          if (charging) ringMat.opacity = 0.6;
         }
       }
 
@@ -5199,6 +5245,9 @@ export class Stage {
       // 반파 — 3대째부터 금이 드러나고 판이 그을린다. 6대째에 부서진다
       const halfBroken = (enemy.shieldHits ?? 0) >= balance.shieldBreak.hammerHitsToCrack;
       if (visual.shieldCracks) visual.shieldCracks.visible = halfBroken;
+      // 뼈 투척 뒤(해골 검사, armlessTicks) — 던진 왼팔이 없다. 맨팔 첫 번째가 왼팔(무기 팔은 오른쪽)
+      if (visual.plainArms?.[0]) visual.plainArms[0].visible = (enemy.armlessTicks ?? 0) <= 0;
+
       if (visual.shield && visual.shieldMaterial) {
         visual.shieldMaterial.color.set(halfBroken ? SHIELD_CRACKED_COLOR : SHIELD_COLOR);
         visual.shieldMaterial.emissive.set(now < visual.shieldFlashUntil ? 0xffffff : 0x000000);
@@ -5208,9 +5257,18 @@ export class Stage {
         const down = shoved || shieldLowered(enemy);
         // torso 의 자식이라 웅크림(position.y)·전진(z)·기울기(rotation.x)는
         // 부모가 이미 반영한다 — 여기서 다시 더하면 두 번 움직인다
-        const targetY = down ? def.height * SHIELD_DOWN_Y : def.height * 0.5;
-        const targetTilt = down ? SHIELD_DOWN_TILT : 0;
+        let targetY = down ? def.height * SHIELD_DOWN_Y : def.height * 0.5;
+        let targetTilt = down ? SHIELD_DOWN_TILT : 0;
         const targetX = down ? SHIELD_DOWN_X : SHIELD_BASE_X;
+        // 방패 찍기(해골 방패병 closeAttack) — 방패가 무기다: 예고에 높이 치켜들고(뒤로 젖힘) 타격·착지에 앞아래로 내리찍는다
+        const shieldSlam = enemy.attackMode === 'close' && def.closeAttack?.type === 'bash';
+        if (shieldSlam && inWindup) {
+          targetY = def.height * (0.5 + 0.22 * windupProgress);
+          targetTilt = 0.45 * windupProgress;
+        } else if (shieldSlam && (striking || enemy.ai === 'impact' || (enemy.ai === 'recover' && !recoiled))) {
+          targetY = def.height * 0.26;
+          targetTilt = -1.15;
+        }
         if (!down && visual.shieldDown) {
           // 밀림이 끝나는 순간 즉시 다시 든다 — 방어가 켜지는 시점과 그림이 어긋나면 안 된다
           visual.shield.position.y = targetY;
@@ -5355,6 +5413,16 @@ export class Stage {
               new THREE.MeshLambertMaterial({ color: 0x3d4a2e, emissive: 0x141a10 }),
             ),
           );
+        } else if (proj.kind === 'bone') {
+          // 뼈다귀(해골 검사 투척) — 마디 두 개 달린 뼛빛 막대, 반사 가능 규약(보라)을 옅게 띤다. 날면서 빙글빙글 돈다(아래)
+          const boneMat = new THREE.MeshLambertMaterial({ color: BONE_PROJECTILE_COLOR, emissive: BONE_PROJECTILE_GLOW });
+          const shaft = new THREE.Mesh(new THREE.BoxGeometry(proj.radius * 0.5, proj.radius * 0.5, proj.radius * 2.6), boneMat);
+          group.add(shaft);
+          for (const end of [-1, 1]) {
+            const knob = new THREE.Mesh(new THREE.SphereGeometry(proj.radius * 0.42, 6, 5), boneMat);
+            knob.position.z = end * proj.radius * 1.3;
+            group.add(knob);
+          }
         } else if (proj.kind === 'rock') {
           // 바위 — 크고 어두운 덩어리, 무발광
           group.add(
@@ -5462,6 +5530,7 @@ export class Stage {
         pz = launch.from.z + (pz - launch.from.z) * k;
       }
       group.position.set(px, py, pz);
+      if (proj.kind === 'bone') group.rotation.set(group.rotation.x + 0.22, group.rotation.y + 0.09, 0); // 던진 뼈는 빙글빙글
       if (proj.kind === 'arrow' || proj.kind === 'frost' || proj.kind === 'goo') {
         // 화살대·얼음 결정·진액 구슬 꼬리를 비행 방향으로 정렬 (로컬 -Z가 진행 방향)
         group.lookAt(px - proj.vx, py - proj.vy, pz - proj.vz);

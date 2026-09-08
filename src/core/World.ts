@@ -222,7 +222,7 @@ export interface ProjectileState {
   /** 반응 버튼으로 반사 가능한가 (마법탄 true, 화살 false) */
   deflectable?: boolean;
   /** 렌더 형태. 'goo' = 거수 진액 구슬(보라 구 + 꼬리, 반사 가능·부술 수 있음, 착탄 웅덩이·오염 진액 — B3-2) */
-  kind?: 'fireball' | 'frost' | 'magic' | 'arrow' | 'rock' | 'grenade' | 'web' | 'goo';
+  kind?: 'fireball' | 'frost' | 'magic' | 'arrow' | 'rock' | 'grenade' | 'web' | 'goo' | 'bone';
   /** 반사된 채 시전자 몸에 되돌아가면 시전자의 분출공(vent)에 넣는 고정 피해(거수 진액 구슬 33 — 배율·열림 무관, 기획서 §4.1 vent). 없으면 반사 마법의 옛 경로(×1.5 몸 피해) */
   deflectSelfDamage?: number;
   /** 착탄 자리에 남기는 진액 웅덩이 종류(balance.hazards.pools 키 — 거수 진액 구슬 'orb'). 분출공으로 되돌아간 반사 구슬은 남기지 않는다 */
@@ -1163,7 +1163,7 @@ export interface EnemyState {
   parryStreak?: number;
   /** 현재 공격이 근접인지 원거리인지 (windup~recover 동안 유지). 'alt' = 교대 근접(거수 왼낫), 'close' = 밀착 공격(거수 들이받기), 'slam' = 발구르기(거수 P2),
    *  'roar' = 포효(거수 P3 — impact 파이프를 타지 않는다), 'combo' = 삼연낫(거수 P3 — comboStep 이 몇 타째인지) */
-  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley' | 'summon' | 'alt' | 'close' | 'slam' | 'roar' | 'combo';
+  attackMode?: 'melee' | 'ranged' | 'charge' | 'bash' | 'volley' | 'summon' | 'alt' | 'close' | 'slam' | 'roar' | 'combo' | 'riposte';
   /** 포효 간격(거수 P3, B3-4 — roarAttack.intervalTicks) 잔여 틱. 슬롯이 열린 첫 추격 틱에 간격으로 세우고 포효마다 다시 센다. undefined = 아직 안 셈 */
   roarCooldown?: number;
   /** 페이즈 전환 복귀 후 첫 선택 슬롯(phases[].firstPick — P3 'roar', B3-4). beginPhaseShift 가 세우고 첫 추격 틱이 소모한다(쿨다운·거리 무관) */
@@ -1335,6 +1335,15 @@ export interface EnemyState {
   holding?: boolean;
   /** 엄호(def.coverAllies) 중 — 혼절한 동료와 플레이어 사이로 끼어들고 있다 */
   covering?: boolean;
+  /** 자세(poise) 기준 체력 — 끊길 수 있는 예고가 시작될 때의 체력. 이보다 낮아진 틱에 공격이 끊긴다. 권총은 되맞춰 끊지 못한다 */
+  poiseHealthRef?: number;
+  /** 방패 반격(해골 방패병) — Weapons 가 해머가 방패에 막힌 틱에 세우고 Enemies 가 다음 틱에 소모한다 */
+  wantsRiposte?: boolean;
+  riposteCooldown?: number;
+  /** 원거리 보조 공격(rangedAttack.cooldownTicks) 잔여 틱 — 해골 검사 뼈 투척. 정의에 쿨이 없는 적(족장 바위)은 0 */
+  rangedCooldown?: number;
+  /** 뼈 투척 뒤 왼팔이 없는 잔여 틱(연출 — Stage 가 맨팔을 숨긴다) */
+  armlessTicks?: number;
 }
 
 /** 약점 명중 정산 — weak_point_hit 발행 + 이번 노출 장부(횟수·누적 피해) + 내구(weakHp)가 있으면 그만큼 깎고 0 에 닿는 순간
