@@ -19,8 +19,8 @@
 
 | 공간 | 위치 | 용량 | 죽으면 | 로비 진입(던전 초기화) |
 |---|---|---|---|---|
-| 가방 | 몸 | `items.cols×rows` + 안전주머니(pack) 장비 `bagSlots` | 비석으로 떨어진다 | 비석과 함께 사라진다 |
-| 안전 주머니 속 | 캐릭터 (가방 탭 몸 패널의 안전주머니(pack) 칸 바로 아래, 어디서든 넣고 뺀다) | `lobby.stash.secure.baseSlots`(1) 열림 → 최대 `maxSlots`(2). 남은 칸은 잠긴 채 보이고 나중에 특정 조건이 `Stash.unlockSecureSlot` 로 연다 | **그대로 남는다** | 그대로 |
+| 가방 | 몸 | `items.cols×rows` + 가방 칸(pack: 벨트·가방) 장비 `bagSlots` | 비석으로 떨어진다 | 비석과 함께 사라진다 |
+| 안전 주머니 | 캐릭터 (가방 탭 몸 패널의 가방(pack) 칸 바로 아래, 어디서든 넣고 뺀다) | `lobby.stash.secure.baseSlots`(1) 열림 → 최대 `maxSlots`(2). 남은 칸은 잠긴 채 보이고 나중에 특정 조건이 `Stash.unlockSecureSlot` 로 연다 | **그대로 남는다** | 그대로 |
 | 창고 | 로비 성물함 오브젝트 | 한 페이지 5×7 = 35칸(`lobby.stash.cols×rows`), 페이지 4개를 탭으로 본다. 시작은 1페이지(`baseSlots` 35), 단계마다 한 페이지씩 열린다(35·70·105·140) | 무관 | 무관 |
 
 - 창고·안전 칸의 한 칸 규약은 가방과 같다(`InventorySlot`). 창고 스택 상한은 `lobby.stash.stackMax`(20) — 가방(5)보다 크다.

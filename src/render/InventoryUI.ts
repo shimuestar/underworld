@@ -331,7 +331,7 @@ export class InventoryUI {
     const q = this.world.quickslots.length;
     const pouch = this.world.secure.length;
     if (this.pane === 'pouch') {
-      // 안전 주머니 속 — 몸 패널의 안전주머니(pack) 칸 바로 아래. ↑ 로 그 칸, → 끝에서 가방, ←→ 로 칸
+      // 안전 주머니 — 몸 패널의 가방(pack) 칸 바로 아래. ↑ 로 그 칸, → 끝에서 가방 격자, ←→ 로 칸
       if (dy < 0) { this.pane = 'doll'; this.selD = Math.max(0, DOLL_CELLS.findIndex((c) => c.key === 'd6')); }
       else if (dx > 0 && this.selP >= pouch - 1) { this.pane = 'bag'; this.sel = Math.min(slots - 1, (rows - 1) * cols); }
       else if (dx !== 0) this.selP = Math.max(0, Math.min(pouch - 1, this.selP + dx));
@@ -355,7 +355,7 @@ export class InventoryUI {
         if (score < bestScore) { bestScore = score; best = i; }
       });
       if (best >= 0) this.selD = best;
-      else if (dy > 0 && pouch > 0) { this.pane = 'pouch'; this.selP = 0; } // 안전주머니 칸 아래로 — 주머니 속
+      else if (dy > 0 && pouch > 0) { this.pane = 'pouch'; this.selP = 0; } // 가방(pack) 칸 아래로 — 안전 주머니
       else if (dx > 0) { this.pane = 'bag'; this.sel = 0; }
       else if (dx < 0 && !this.carry) { this.onEdge?.(-1); return; }
       this.rebuild();
@@ -852,7 +852,7 @@ export class InventoryUI {
 
     DOLL_CELLS.forEach((c, i) => area.appendChild(c.kind === 'equip' ? this.equipCell(c, i) : this.socketOverlay(c, i)));
     box.appendChild(area);
-    // 안전 주머니 내용 — 캐릭터 아래 안전주머니(pack) 칸 바로 밑. 같은 개념이라 한 자리에 (2026-09-08 사용자)
+    // 안전 주머니 — 캐릭터 아래 가방(pack: 벨트·가방) 칸 바로 밑. 몸에 지니는 것들을 한 자리에 (2026-09-08 사용자)
     box.appendChild(this.buildPouch());
     return box;
   }
@@ -1084,7 +1084,7 @@ export class InventoryUI {
     const used = world.secure.filter((s) => s).length;
     const locked = Stash.lockedSecureSlots(world);
     const title = document.createElement('div');
-    title.textContent = `안전 주머니 속 ${used}/${world.secure.length}칸 — 죽어도 남는다${locked > 0 ? ` · 잠긴 칸 ${locked}` : ''}`;
+    title.textContent = `안전 주머니 ${used}/${world.secure.length}칸 — 죽어도 남는다${locked > 0 ? ` · 잠긴 칸 ${locked}` : ''}`;
     title.style.cssText = `color:${this.pane === 'pouch' ? '#9fe870' : '#8a8f9a'};margin-bottom:6px;font-size:12px;`;
     box.appendChild(title);
     const grid = document.createElement('div');
