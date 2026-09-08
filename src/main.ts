@@ -838,6 +838,7 @@ for (const name of [
   'stash_expanded',
   'stash_denied',
   'item_secured',
+  'secure_unlocked',
   'corruption_applied',
   'corruption_threshold',
   'enemy_cast',
@@ -4233,7 +4234,7 @@ function simulate(dt: number): void {
       else if (input.gamepad.rawPressed(1)) merchantUI.padB();
     }
   }
-  // 창고 창 — 상인 창과 같은 규약 + Y 안전 칸, LT 가방 전부 넣기
+  // 창고 창 — 상인 창과 같은 규약 + LT 가방 전부 넣기
   if (stashUI.open) {
     stashUI.padMode = input.lastDevice === 'pad';
     if (input.gamepad.connected) {
@@ -4248,7 +4249,6 @@ function simulate(dt: number): void {
       else if (input.gamepad.rawPressed(6)) stashUI.padLT(); // LT — 가방 전부 넣기
       else if (input.gamepad.rawPressed(0)) stashUI.padA();
       else if (input.gamepad.rawPressed(2)) stashUI.padX();
-      else if (input.gamepad.rawPressed(3)) stashUI.padY();
       else if (input.gamepad.rawPressed(1)) stashUI.padB();
     }
   }

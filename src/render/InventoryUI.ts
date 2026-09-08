@@ -1082,12 +1082,13 @@ export class InventoryUI {
     const box = document.createElement('div');
     box.style.cssText = 'margin-top:14px;';
     const used = world.secure.filter((s) => s).length;
+    const locked = Stash.lockedSecureSlots(world);
     const title = document.createElement('div');
-    title.textContent = `안전 주머니 ${used}/${world.secure.length}칸 — 죽어도 남는다 (드래그로 넣고 뺀다)`;
+    title.textContent = `안전 주머니 ${used}/${world.secure.length}칸 — 죽어도 남는다 (드래그로 넣고 뺀다)${locked > 0 ? `  · 잠긴 칸 ${locked}` : ''}`;
     title.style.cssText = `color:${this.pane === 'pouch' ? '#9fe870' : '#8a8f9a'};margin-bottom:6px;`;
     box.appendChild(title);
     const grid = document.createElement('div');
-    grid.style.cssText = `display:grid;grid-template-columns:repeat(${Math.max(1, world.secure.length)}, ${CELL_PX}px);gap:${GAP_PX}px;`;
+    grid.style.cssText = `display:grid;grid-template-columns:repeat(${Math.max(1, world.secure.length + locked)}, ${CELL_PX}px);gap:${GAP_PX}px;`;
     world.secure.forEach((slot, i) => {
       const cell = document.createElement('div');
       cell.dataset['key'] = `p${i}`;
@@ -1142,6 +1143,20 @@ export class InventoryUI {
       }
       grid.appendChild(cell);
     });
+    // 잠긴 칸 — 아직 열리지 않은 자리. 나중에 특정 조건으로 열린다 (Stash.unlockSecureSlot)
+    for (let i = 0; i < locked; i++) {
+      const cell = document.createElement('div');
+      cell.style.cssText = CELL + 'border:1px dashed #3a3a44;background:rgba(255,255,255,0.01);cursor:default;';
+      const lock = document.createElement('div');
+      lock.textContent = '🔒';
+      lock.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-55%);font-size:18px;opacity:0.45;';
+      cell.appendChild(lock);
+      const sub = document.createElement('div');
+      sub.textContent = '잠김';
+      sub.style.cssText = 'position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:#555c66;';
+      cell.appendChild(sub);
+      grid.appendChild(cell);
+    }
     box.appendChild(grid);
     return box;
   }

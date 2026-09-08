@@ -132,6 +132,7 @@ describe('옮기기', () => {
 
 describe('그 칸에 놓기 (place — 가방 탭 드래그·집어 옮기기)', () => {
   it('빈 칸이면 옮기고, 같은 종류면 합치고(상한까지), 다른 종류면 맞바꾼다 — 가방 ↔ 안전 주머니', () => {
+    Stash.unlockSecureSlot(world); // 두 칸으로 — 1번 칸에 놓는다
     for (let i = 0; i < 4; i++) addItem(world, 'potion');
     addItem(world, 'food');
     expect(Stash.place(world, 'bag', 0, 'secure', 1)).toBe('moved');
@@ -161,8 +162,8 @@ describe('안전 주머니', () => {
     expect(world.secure[0]).toEqual({ kind: 'key_s', count: 1 });
     expect(world.inventory.every((s) => s === null)).toBe(true);
     expect(secured).toHaveLength(1);
-    // 안전 칸 2칸을 다른 종류로 채우면 가방으로
-    world.secure = [{ kind: 'key_m', count: 1 }, { kind: 'key_l', count: 1 }];
+    // 안전 주머니가 다른 종류로 가득이면 가방으로
+    world.secure = world.secure.map(() => ({ kind: 'key_m', count: 1 }));
     expect(addItem(world, 'key_s')).toBe(true);
     expect(world.inventory[0]).toEqual({ kind: 'key_s', count: 1 });
   });
@@ -171,7 +172,11 @@ describe('안전 주머니', () => {
     addItem(world, 'key_s');
     addItem(world, 'potion');
     addItem(world, 'food');
-    Stash.move(world, 'bag', 0, 'secure'); // 물약 하나를 안전 칸에 — 고기는 가방에 남는다
+    // 지금은 한 칸만 열려 있다 — 잠긴 칸을 하나 열고(나중의 조건이 부르는 길) 물약을 넣는다. 고기는 가방에 남는다
+    expect(Stash.lockedSecureSlots(world)).toBe(cfg.secure.maxSlots - cfg.secure.baseSlots);
+    expect(Stash.unlockSecureSlot(world)).toBe(true);
+    expect(world.secure).toHaveLength(cfg.secure.baseSlots + 1);
+    Stash.move(world, 'bag', 0, 'secure');
     spillInventoryToGrave(world, 6, 6);
     expect(world.inventory.every((s) => s === null)).toBe(true);
     expect(world.secure.filter((s) => s)).toHaveLength(2);
@@ -184,6 +189,14 @@ describe('안전 주머니', () => {
     world.secure = world.secure.map(() => ({ kind: 'food', count: 1 }));
     addItem(world, 'key_m'); // 가방으로
     expect(world.quickslots.every((q) => q === null)).toBe(true);
+  });
+
+  it('잠긴 칸은 maxSlots 까지만 열린다 — 다 열리면 false', () => {
+    let opened = 0;
+    while (Stash.unlockSecureSlot(world)) opened++;
+    expect(opened).toBe(cfg.secure.maxSlots - cfg.secure.baseSlots);
+    expect(world.secure).toHaveLength(cfg.secure.maxSlots);
+    expect(Stash.lockedSecureSlots(world)).toBe(0);
   });
 });
 

@@ -39,6 +39,19 @@ export function initStash(world: World): void {
   world.secure = fit(world.secure, Math.min(secureSize, balance.lobby.stash.secure.maxSlots));
 }
 
+/** 안전 주머니의 잠긴 칸 수 — maxSlots 까지 남은 칸. 가방 탭이 잠금 표시로 그린다 */
+export function lockedSecureSlots(world: World): number {
+  return Math.max(0, balance.lobby.stash.secure.maxSlots - world.secure.length);
+}
+
+/** 안전 주머니 한 칸을 연다 — 나중에 특정 조건(축복·퀘스트 등)이 부른다. maxSlots 를 넘지 않는다. 열었으면 true (secure_unlocked) */
+export function unlockSecureSlot(world: World): boolean {
+  if (lockedSecureSlots(world) <= 0) return false;
+  world.secure = fit(world.secure, world.secure.length + 1);
+  world.events.emit('secure_unlocked', { slots: world.secure.length });
+  return true;
+}
+
 // ---- 접근 ----
 
 export function tick(world: World, _dt: number): void {

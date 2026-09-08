@@ -1101,7 +1101,7 @@
       "sellRatio": 0.5,
       "basePrice": { "food": 8 }
     },
-    "_stashNote": "창고(성물함, stash.md, 2026-09-08). baseSlots 에서 tiers 를 차례로 사서 넓힌다 — 단계마다 slots 만큼 늘고 gold 와 key(열쇠 종류, null 이면 골드만) 한 개를 낸다. stackMax 는 창고 한 칸 스택 상한(가방 items.stackMax 보다 크다). cols 는 창고 격자 열 수(그리기). secure: 캐릭터의 안전 주머니(Duckov 애완견 가방) — 창고가 아니라 몸에 지닌다, 가방 탭 아래 칸. 죽어도 남아 로비로 돌아온다, baseSlots 에서 maxSlots 까지(축복·퀘스트로 늘릴 자리). radius·facingArcDeg 는 NPC 와 같은 접근 규약, collisionHalf 는 성물함 차단 상자 반폭",
+    "_stashNote": "창고(성물함, stash.md, 2026-09-08). baseSlots 에서 tiers 를 차례로 사서 넓힌다 — 단계마다 slots 만큼 늘고 gold 와 key(열쇠 종류, null 이면 골드만) 한 개를 낸다. stackMax 는 창고 한 칸 스택 상한(가방 items.stackMax 보다 크다). cols 는 창고 격자 열 수(그리기). secure: 캐릭터의 안전 주머니(Duckov 애완견 가방) — 창고가 아니라 몸에 지닌다, 가방 탭 아래 칸. 죽어도 남아 로비로 돌아온다. 지금은 baseSlots(1)만 열려 있고 maxSlots(2)까지 — 남은 칸은 잠긴 채 보이며 나중에 특정 조건으로 Stash.unlockSecureSlot 이 연다 (2026-09-08 사용자). radius·facingArcDeg 는 NPC 와 같은 접근 규약, collisionHalf 는 성물함 차단 상자 반폭",
     "stash": {
       "cols": 10,
       "baseSlots": 20,
@@ -1111,7 +1111,7 @@
         { "slots": 10, "gold": 400, "key": "key_s" },
         { "slots": 20, "gold": 900, "key": "key_m" }
       ],
-      "secure": { "baseSlots": 2, "maxSlots": 4 },
+      "secure": { "baseSlots": 1, "maxSlots": 2 },
       "radius": 2.6,
       "facingArcDeg": 100,
       "collisionHalf": { "x": 0.75, "z": 0.45 }

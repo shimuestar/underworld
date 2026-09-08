@@ -1,7 +1,8 @@
 // 창고(성물함) 창 — 보관 · 확장 두 탭. DOM 오버레이, 열려 있는 동안 시뮬레이션은 main 이 멈춘다. docs/systems/stash.md §5.
-// 보관: 왼쪽 열 = 내 가방 격자 + 캐릭터의 안전 주머니 + 설명 칸, 오른쪽 = 창고 격자(lobby.stash.cols 열).
-//   커서 하나(마우스·키보드·패드 공용). ←→ 로 가방 ↔ 창고, 가방 아래 ↓ 로 안전 칸.
-//   Enter·A·클릭 = 한 개 옮기기(가방·안전 칸 → 창고, 창고 → 가방) · X·우클릭 = 칸 통째로 · Shift+Enter·패드 Y = 안전 주머니로/에서 · Q·패드 LT = 가방 전부 넣기.
+// 보관: 왼쪽 열 = 내 가방 격자 + 설명 칸, 오른쪽 = 창고 격자(lobby.stash.cols 열).
+//   커서 하나(마우스·키보드·패드 공용). ←→ 로 가방 ↔ 창고.
+//   Enter·A·클릭 = 한 개 옮기기(가방 → 창고, 창고 → 가방) · X·우클릭 = 칸 통째로 · Q·패드 LT = 가방 전부 넣기.
+//   안전 주머니는 여기 없다 — 캐릭터의 것이라 가방 탭(InventoryUI)에서만 다룬다 (2026-09-08 사용자).
 // 확장: 현재 용량·다음 단계 비용·열쇠 보유, Enter·A·클릭으로 확장.
 // 옮기기·확장 규칙은 전부 systems/Stash — 여기는 그리기와 입력만.
 
@@ -32,13 +33,15 @@ const DOWN_KEYS = new Set(['KeyS', 'ArrowDown']);
 const LEFT_KEYS = new Set(['KeyA', 'ArrowLeft']);
 const RIGHT_KEYS = new Set(['KeyD', 'ArrowRight']);
 
-const PANE_LABEL: Record<Stash.StashPane, string> = { bag: '가방', stash: '창고', secure: '안전 주머니' };
+/** 이 창이 다루는 격자 — 가방·창고. (안전 주머니는 가방 탭의 것) */
+type Pane = 'bag' | 'stash';
+const PANE_LABEL: Record<Pane, string> = { bag: '가방', stash: '창고' };
 
 export class StashUI {
   private readonly root: HTMLDivElement;
   open = false;
   private tab: Tab = 'store';
-  private pane: Stash.StashPane = 'bag';
+  private pane: Pane = 'bag';
   private sel = 0;
   private openedAt = 0;
   /** 패드로 조작 중 — 안내·키캡을 패드 표기로 (main 이 틱마다 갱신) */
@@ -63,7 +66,7 @@ export class StashUI {
       if (DOWN_KEYS.has(e.code)) { e.preventDefault(); this.move(0, 1); return; }
       if (LEFT_KEYS.has(e.code)) { e.preventDefault(); this.move(-1, 0); return; }
       if (RIGHT_KEYS.has(e.code)) { e.preventDefault(); this.move(1, 0); return; }
-      if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); if (e.shiftKey) this.actSecure(); else this.act(); return; }
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); this.act(); return; }
       if (e.code === 'KeyX') { e.preventDefault(); this.actAll(); return; }
       if (e.code === 'KeyQ') { e.preventDefault(); this.depositAll(); return; }
       if ((e.code === 'Escape' || e.code === 'KeyE') && performance.now() - this.openedAt > 250) {
@@ -97,7 +100,6 @@ export class StashUI {
   padMove(dx: number, dy: number): void { if (this.open) this.move(dx, dy); }
   padA(): void { if (this.open) this.act(); }
   padX(): void { if (this.open) this.actAll(); }
-  padY(): void { if (this.open) this.actSecure(); }
   padLT(): void { if (this.open) this.depositAll(); }
   padB(): void { this.close(); }
   padTab(dir: number): void { if (this.open) this.cycleTab(dir); }
@@ -115,15 +117,15 @@ export class StashUI {
     this.setTab(TABS[(i + dir + TABS.length) % TABS.length]!.id);
   }
 
-  private slots(pane: Stash.StashPane): (InventorySlot | null)[] {
-    return pane === 'bag' ? this.world.inventory : pane === 'stash' ? this.world.stash : this.world.secure;
+  private slots(pane: Pane): (InventorySlot | null)[] {
+    return pane === 'bag' ? this.world.inventory : this.world.stash;
   }
 
-  private cols(pane: Stash.StashPane): number {
-    return pane === 'stash' ? balance.lobby.stash.cols : pane === 'bag' ? balance.items.cols : Math.max(1, this.world.secure.length);
+  private cols(pane: Pane): number {
+    return pane === 'stash' ? balance.lobby.stash.cols : balance.items.cols;
   }
 
-  /** 커서 이동 — 격자 안에서는 칸을, 가장자리에서는 옆 격자로 (가방 ↔ 창고 좌우, 가방 ↕ 안전 칸) */
+  /** 커서 이동 — 격자 안에서는 칸을, 가장자리에서는 옆 격자로 (가방 ↔ 창고 좌우) */
   private move(dx: number, dy: number): void {
     if (this.tab !== 'store') return;
     const count = this.slots(this.pane).length;
@@ -134,10 +136,7 @@ export class StashUI {
     let nc = c + dx;
     let nr = r + dy;
     if (nc >= cols && this.pane === 'bag') return this.jump('stash', r);
-    if (nc >= cols && this.pane === 'secure') return this.jump('stash', 0);
     if (nc < 0 && this.pane === 'stash') return this.jump('bag', r);
-    if (nr >= rows && this.pane === 'bag' && this.world.secure.length > 0) return this.jump('secure', 0);
-    if (nr < 0 && this.pane === 'secure') return this.jump('bag', Math.ceil(this.world.inventory.length / this.cols('bag')) - 1);
     nc = Math.max(0, Math.min(cols - 1, nc));
     nr = Math.max(0, Math.min(rows - 1, nr));
     const next = Math.min(count - 1, nr * cols + nc);
@@ -146,7 +145,7 @@ export class StashUI {
     this.rebuild();
   }
 
-  private jump(pane: Stash.StashPane, row: number): void {
+  private jump(pane: Pane, row: number): void {
     const count = this.slots(pane).length;
     if (count === 0) return;
     const cols = this.cols(pane);
@@ -168,13 +167,6 @@ export class StashUI {
   private actAll(): void {
     if (this.tab !== 'store') return;
     Stash.move(this.world, this.pane, this.sel, this.pane === 'stash' ? 'bag' : 'stash', true);
-    this.rebuild();
-  }
-
-  /** Shift+Enter·패드 Y — 안전 칸으로 (가방·창고에서), 안전 칸에서는 가방으로 */
-  private actSecure(): void {
-    if (this.tab !== 'store') return;
-    Stash.move(this.world, this.pane, this.sel, this.pane === 'secure' ? 'bag' : 'secure', false);
     this.rebuild();
   }
 
@@ -222,8 +214,8 @@ export class StashUI {
 
     const hint = document.createElement('div');
     hint.textContent = this.padMode
-      ? 'D-패드·왼 스틱 커서(←→ 가방↔창고, ↓ 안전 주머니)   A 한 개 옮기기   X 칸 통째로   Y 안전 주머니로/에서   LT 가방 전부 넣기   LB/RB 탭   B 닫기'
-      : 'WASD·화살표 커서(←→ 가방↔창고, ↓ 안전 주머니)   Enter·클릭 한 개   X·우클릭 칸 통째로   Shift+Enter 안전 주머니로/에서   Q 가방 전부 넣기   Tab·1/2 탭   E / Esc 닫기';
+      ? 'D-패드·왼 스틱 커서(←→ 가방↔창고)   A 한 개 옮기기   X 칸 통째로   LT 가방 전부 넣기   LB/RB 탭   B 닫기'
+      : 'WASD·화살표 커서(←→ 가방↔창고)   Enter·클릭 한 개   X·우클릭 칸 통째로   Q 가방 전부 넣기   Tab·1/2 탭   E / Esc 닫기';
     hint.style.cssText = 'margin-top:16px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;white-space:pre-line;';
     panel.appendChild(hint);
     this.root.replaceChildren(panel);
@@ -238,7 +230,6 @@ export class StashUI {
     const left = document.createElement('div');
     left.style.cssText = 'flex:none;display:flex;flex-direction:column;gap:14px;';
     left.appendChild(this.grid('bag', `내 가방 ${world.inventory.filter((s) => s).length}/${world.inventory.length}칸`, '#7fbfff'));
-    left.appendChild(this.grid('secure', `안전 주머니(캐릭터) ${world.secure.filter((s) => s).length}/${world.secure.length} — 죽어도 로비로 돌아온다`, '#9fe870'));
     const cur = this.slots(this.pane)[this.sel];
     left.appendChild(this.descBox(cur ? this.itemPopup(cur) : { title: `${PANE_LABEL[this.pane]} — 빈 칸`, lines: ['옮길 물건을 고른다'] }));
     row.appendChild(left);
@@ -252,14 +243,14 @@ export class StashUI {
     deposit.onclick = () => this.depositAll();
     right.appendChild(deposit);
     const note = document.createElement('div');
-    note.textContent = `창고 한 칸에 ${balance.lobby.stash.stackMax}개까지 · 로비에 들어오면 던전의 비석은 사라진다 — 창고에 넣은 것만 안전하다`;
+    note.textContent = `창고 한 칸에 ${balance.lobby.stash.stackMax}개까지 · 로비에 들어오면 던전의 비석은 사라진다 — 창고에 넣은 것만 안전하다 (몸에 지키려면 가방 탭의 안전 주머니)`;
     note.style.cssText = 'margin-top:8px;color:#8a8f9a;font-size:11px;';
     right.appendChild(note);
     row.appendChild(right);
     return row;
   }
 
-  private grid(pane: Stash.StashPane, titleText: string, accent: string): HTMLElement {
+  private grid(pane: Pane, titleText: string, accent: string): HTMLElement {
     const box = document.createElement('div');
     const slots = this.slots(pane);
     const title = document.createElement('div');
@@ -273,7 +264,7 @@ export class StashUI {
       const here = this.pane === pane && this.sel === i;
       cell.style.cssText =
         CELL +
-        `border:1px solid ${here ? accent : pane === 'secure' ? '#3f5a3a' : '#3a3a44'};` +
+        `border:1px solid ${here ? accent : '#3a3a44'};` +
         `background:${here ? 'rgba(127,191,255,0.12)' : 'rgba(255,255,255,0.02)'};cursor:${slot ? 'pointer' : 'default'};`;
       if (slot) {
         const isSigil = slot.kind === 'sigil' && !!slot.sigilId;
@@ -288,7 +279,7 @@ export class StashUI {
           : 'position:absolute;bottom:3px;right:5px;font-size:11px;color:#cfd2da;';
         cell.appendChild(label);
       }
-      cell.onclick = (ev) => { this.pane = pane; this.sel = i; if (ev.shiftKey) this.actSecure(); else this.act(); };
+      cell.onclick = () => { this.pane = pane; this.sel = i; this.act(); };
       cell.oncontextmenu = (e) => { e.preventDefault(); this.pane = pane; this.sel = i; this.actAll(); };
       cell.onmousemove = (ev) => {
         if (!this.hoverAllowed(ev) || (this.pane === pane && this.sel === i)) return;
@@ -316,7 +307,6 @@ export class StashUI {
     const to = this.pane === 'stash' ? '가방' : '창고';
     content.actions = [{ key: this.key('A', 'Enter'), label: `${to}로 한 개` }];
     if (slot.count > 1) content.actions.push({ key: this.key('X', 'X'), label: `${to}로 전부 (×${slot.count})` });
-    content.actions.push({ key: this.key('Y', 'Shift+Enter'), label: this.pane === 'secure' ? '가방으로' : '안전 주머니로 (죽어도 남는다)' });
     return content;
   }
 
@@ -363,7 +353,7 @@ export class StashUI {
     const box = document.createElement('div');
     box.style.cssText = 'padding:6px 4px;min-height:200px;';
     const cur = document.createElement('div');
-    cur.textContent = `지금 창고 ${world.stash.length}칸 · 안전 주머니 ${world.secure.length}칸`;
+    cur.textContent = `지금 창고 ${world.stash.length}칸`;
     cur.style.cssText = 'color:#cfd2da;font-size:14px;margin-bottom:12px;';
     box.appendChild(cur);
 
