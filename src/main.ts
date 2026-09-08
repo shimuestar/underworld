@@ -4237,7 +4237,7 @@ function simulate(dt: number): void {
       else if (input.gamepad.rawPressed(1)) merchantUI.padB();
     }
   }
-  // 창고 창 — 상인 창과 같은 규약 + LT 가방 전부 넣기
+  // 창고 창 — 상인 창과 같은 규약 + Y 장착·새기기, LT 가방 전부 넣기. 창고 페이지는 D-패드 ←→ 로 격자 끝에서 넘어간다
   if (stashUI.open) {
     stashUI.padMode = input.lastDevice === 'pad';
     if (input.gamepad.connected) {
@@ -4251,6 +4251,7 @@ function simulate(dt: number): void {
       else if (input.gamepad.rawPressed(5)) stashUI.padTab(1); // RB
       else if (input.gamepad.rawPressed(6)) stashUI.padLT(); // LT — 가방 전부 넣기
       else if (input.gamepad.rawPressed(2)) stashUI.padX();
+      else if (input.gamepad.rawPressed(3)) stashUI.padY(); // Y — 장착·새기기 / 벗기·떼기
       else if (input.gamepad.rawPressed(1)) stashUI.padB();
       stashUI.padA(input.gamepad.rawHeld(0)); // A 짧게 옮기기/놓기 · 길게 집어 들기 — 홀드 판정이라 매 틱 상태를 넘긴다 (가방 탭과 같다)
     }

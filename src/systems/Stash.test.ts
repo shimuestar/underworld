@@ -58,6 +58,20 @@ describe('칸 수', () => {
   });
 });
 
+describe('페이지 (5×7 = 35칸, 탭 4개)', () => {
+  it('한 페이지는 cols×rows, 전체는 기본 + 모든 단계 = 4페이지, 시작은 1페이지만 열려 있다', () => {
+    expect(Stash.pageSlots()).toBe(cfg.cols * cfg.rows);
+    expect(Stash.pageSlots()).toBe(35);
+    expect(Stash.pageCount()).toBe(4);
+    expect(Stash.unlockedPages(world)).toBe(1);
+    expect(world.stash).toHaveLength(35);
+    world.gold = 1e6;
+    Stash.expand(world);
+    expect(Stash.unlockedPages(world)).toBe(2);
+    expect(world.stash).toHaveLength(70);
+  });
+});
+
 describe('접근', () => {
   it('반경 안에서 바라보고 상호작용하면 stash_opened — 등지면 안 된다, 재진입 가드 중엔 무시', () => {
     const opened: unknown[] = [];

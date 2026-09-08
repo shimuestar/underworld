@@ -18,6 +18,23 @@ function tiers(): Tier[] {
   return balance.lobby.stash.tiers as Tier[];
 }
 
+/** 창고 한 페이지의 칸 수 — cols×rows (5×7 = 35). 탭 하나가 한 페이지다 */
+export function pageSlots(): number {
+  return balance.lobby.stash.cols * balance.lobby.stash.rows;
+}
+
+/** 전체 페이지 수 — 기본 + 모든 단계를 다 샀을 때 (4) */
+export function pageCount(): number {
+  let total = balance.lobby.stash.baseSlots;
+  for (const t of tiers()) total += t.slots;
+  return Math.ceil(total / pageSlots());
+}
+
+/** 지금 열린 페이지 수 */
+export function unlockedPages(world: World): number {
+  return Math.ceil(world.stash.length / pageSlots());
+}
+
 /** 지금 단계의 창고 칸 수 */
 export function capacity(world: World): number {
   let n = balance.lobby.stash.baseSlots;
