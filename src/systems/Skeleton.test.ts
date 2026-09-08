@@ -227,6 +227,40 @@ describe('자세(poise) — 끊김과 슈퍼아머', () => {
     expect(interrupted).toHaveLength(0);
   });
 
+  it('슈퍼아머는 무적이 아니다 — 피해는 전부 들어가고 체력이 0 이면 그 자리에서 죽는다(melee_kill·enemy_died)', () => {
+    const world = arena();
+    const hammer = add(world, 'skeleton_hammer', 22.6, 16, 1);
+    hammer.comboCooldown = 9999;
+    ticks(world, 1);
+    expect(inSuperArmor(enemyDef('skeleton_hammer'), hammer)).toBe(true);
+    hammer.health = balance.weapons.hammer.damage * 1.5; // 두 타면 죽는 체력
+    const kills = record(world, 'melee_kill');
+    const died = record(world, 'enemy_died');
+    hammerSwing(world);
+    expect(hammer.alive).toBe(true);
+    expect(hammer.health).toBeCloseTo(balance.weapons.hammer.damage * 0.5, 5);
+    hammerSwing(world);
+    expect(hammer.alive).toBe(false);
+    expect(kills).toHaveLength(1);
+    expect(died).toHaveLength(1);
+    expect(died[0]).toMatchObject({ enemyType: 'skeleton_hammer', enemyId: hammer.id });
+  });
+
+  it('슈퍼아머 예고 이벤트에는 superArmor 표지와 자리(x,z)가 실린다 — main 이 잠기는 소리·발밑 먼지를 낸다', () => {
+    const world = arena();
+    const hammer = add(world, 'skeleton_hammer', 22.6, 16, 1);
+    hammer.comboCooldown = 9999;
+    const windups = record(world, 'enemy_windup');
+    ticks(world, 1);
+    expect(windups[0]).toMatchObject({ enemyType: 'skeleton_hammer', superArmor: true, x: hammer.x, z: hammer.z });
+    const w2 = arena();
+    const s2 = add(w2, 'skeleton_shield', 22.4, 16, 1);
+    const wu2 = record(w2, 'enemy_windup');
+    ticks(w2, 1);
+    expect(s2.attackMode).toBe('melee');
+    expect(wu2[0]).toMatchObject({ superArmor: false });
+  });
+
   it('총알은 끊지 못한다 — 기준 체력이 되맞춰진다(패링 게임을 지우지 않는다)', () => {
     const world = arena();
     const shield = add(world, 'skeleton_shield', 22.4, 16, 1);

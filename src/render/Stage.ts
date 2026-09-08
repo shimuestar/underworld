@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { equipColor } from '../core/EquipData';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
-import { bladeLocked, bladeOfJoint, comboChain, currentAttack, enemyDef, inSuperArmor, headDownPose, healthBarState, jointOfBlade, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, weakPointScaleMul, type EnemyDef, type ResolvedPhase, type WeakPointDef } from '../core/Entities';
+import { bladeLocked, bladeOfJoint, comboChain, currentAttack, enemyDef, hasSuperArmorAttack, inSuperArmor, headDownPose, healthBarState, jointOfBlade, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, weakPointScaleMul, type EnemyDef, type ResolvedPhase, type WeakPointDef } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, COLOR_PILLAR, DOOR_OPEN_HEIGHT, DOOR_OPEN_WIDTH, STAIR_STONE } from '../level/GridLoader';
 import type {
@@ -454,7 +454,15 @@ const AOE_RING_INNER = 0.9;
 const SKELETON_LEAN_MUL = 0.15; // 인간형 기본 기울임·전진의 배율
 const SKELETON_WHIRL_COIL = 0.7; // 회전 베기 예고에 반대로 감는 각(rad)
 const SKELETON_WHIRL_ARM = 0.15; // 회전 베기 타격 중 팔 각 — 수평으로 뻗어 휘두른다
-const SUPER_ARMOR_TINT = 0x9c6418; // 슈퍼아머 예고 — 호박색(뼈가 굳는다). 텔레그래프 3색과 겹치지 않는다. 밝은 뼛빛 위라 옅으면 안 보인다(헤드리스 실측)
+// 슈퍼아머 표현(사용자 결정 2026-09-08: 시작 신호 + 지속 껍질만) — 몸의 파랑·빨강 예고색은 그대로 두고 그 위에 금빛 반투명 껍질을 씌운다(주술사 방어막 껍질과 같은 방식).
+// 눈빛도 금빛으로. 시작 3틱은 발을 굳게 딛는다(웅크림 + 앞발 내딛음, 먼지·잠기는 소리는 main). 텔레그래프 3색과 겹치지 않는 네 번째 신호
+const ARMOR_SHELL_COLOR = 0xf2c14e;
+const ARMOR_SHELL_EMISSIVE = 0x6a4f12;
+const ARMOR_SHELL_OPACITY = 0.22;
+const ARMOR_EYE_COLOR = 0xffd24a;
+const ARMOR_STANCE_TICKS = 3; // 시작 신호 — 발 딛는 웅크림이 유지되는 틱
+const ARMOR_STANCE_CROUCH = 0.07; // 시작 신호 웅크림(height 비율)
+const ARMOR_STANCE_LEG = 0.45; // 슈퍼아머 동안 앞발을 내딛는 각(rad) — 뒤로 물러서지 않는 자세
 const BONE_PROJECTILE_COLOR = 0xd8d0bc;
 const BONE_PROJECTILE_GLOW = 0x2a1440; // 반사 가능 규약(보라)을 옅게
 
@@ -598,6 +606,12 @@ interface EnemyVisual {
   /** 고리 광역(aoeInnerRadius — 해골 해머병 여진) 표시 — 안쪽이 빈 띠. 비율은 정의에서 읽어 지오메트리에 굽는다 */
   aoeBand?: THREE.Mesh;
   aoeBandMaterial?: THREE.MeshBasicMaterial;
+  /** 슈퍼아머 껍질 — 슈퍼아머 공격이 있는 적만 만든다. inSuperArmor 동안 금빛으로 떠오른다(armorBlend 0~1 보간) */
+  armorShell?: THREE.Mesh;
+  armorShellMaterial?: THREE.MeshLambertMaterial;
+  armorBlend?: number;
+  /** 안광 구체 재질 — 슈퍼아머 동안 금빛으로 물든다 */
+  eyeMat?: THREE.MeshBasicMaterial;
   /** 시전 충전 구체 (warden) */
   chargeOrb?: THREE.Mesh;
   chargeOrbLight?: THREE.PointLight;
@@ -4098,6 +4112,7 @@ export class Stage {
     const visual: EnemyVisual = {
       group,
       eyeHalo: eyes.haloMat,
+      eyeMat: eyes.eyeMat,
       eyeHalos: eyes.halos,
       eyeHaloBase: eyes.halos[0]?.scale.x ?? 0,
       torso,
@@ -4196,6 +4211,22 @@ export class Stage {
       );
       visual.barrier.position.y = def.height * 0.55;
       group.add(visual.barrier);
+    }
+
+    // 슈퍼아머 껍질(2층) — 몸을 감싸는 캡슐. torso 의 자식이라 기울임·전진을 따라간다. 보이는 건 inSuperArmor 동안만(syncEnemies)
+    if (hasSuperArmorAttack(def)) {
+      const shellR = def.radius * 1.18;
+      visual.armorShellMaterial = new THREE.MeshLambertMaterial({
+        color: ARMOR_SHELL_COLOR,
+        emissive: ARMOR_SHELL_EMISSIVE,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      });
+      visual.armorShell = new THREE.Mesh(new THREE.CapsuleGeometry(shellR, Math.max(0.1, def.height * 0.92 - shellR * 2), 4, 14), visual.armorShellMaterial);
+      visual.armorShell.position.y = def.height * 0.5;
+      visual.armorShell.visible = false;
+      torso.add(visual.armorShell);
     }
 
     if (def.frontalShieldBlocksProjectiles) {
@@ -4432,8 +4463,7 @@ export class Stage {
         enemy.ai === 'active_normal';
       let emissive = 0x000000;
       if (flashing) emissive = new THREE.Color(telegraphColor).getHex();
-      else if (enemy.ai === 'windup' || wallWind) emissive = inSuperArmor(def2, enemy) ? SUPER_ARMOR_TINT : WINDUP_TINT; // 슈퍼아머 예고(해골)는 호박색 — 끊을 수 없다는 신호
-      else if (enemy.ai === 'charging' && inSuperArmor(def2, enemy)) emissive = SUPER_ARMOR_TINT;
+      else if (enemy.ai === 'windup' || wallWind) emissive = WINDUP_TINT;
       else if (enemy.ai === 'staggered') emissive = STAGGER_COLOR;
       else if (enemy.burnTicks > 0) emissive = BURN_TINT;
       else if ((enemy.freezeTicks ?? 0) > 0) emissive = FREEZE_TINT;
@@ -4731,6 +4761,29 @@ export class Stage {
         leanTarget = 0.12;
         lungeTarget = 0.14;
         crouchTarget = -def2.height * 0.1;
+      }
+
+      // 슈퍼아머(1·2층) — 껍질이 금빛으로 떠오르고 눈이 금빛으로, 시작 ARMOR_STANCE_TICKS 동안 웅크려 발을 딛고 공격 내내 앞발을 내딛은 채 버틴다
+      const armored = inSuperArmor(def2, enemy);
+      visual.armorBlend = (visual.armorBlend ?? 0) + ((armored ? 1 : 0) - (visual.armorBlend ?? 0)) * (armored ? 0.35 : 0.2);
+      if (visual.armorShell && visual.armorShellMaterial) {
+        const k = visual.armorBlend;
+        visual.armorShell.visible = k > 0.02;
+        visual.armorShellMaterial.opacity = k * (ARMOR_SHELL_OPACITY + 0.05 * Math.sin(now / 90));
+        const pulse = 1 + 0.025 * Math.sin(now / 120) * k;
+        visual.armorShell.scale.set(pulse, 1, pulse);
+      }
+      if (visual.eyeMat) {
+        const base = new THREE.Color(balance.lighting.enemyEyes.color);
+        visual.eyeMat.color.copy(base).lerp(new THREE.Color(ARMOR_EYE_COLOR), visual.armorBlend);
+        visual.eyeHalo.color.copy(visual.eyeMat.color);
+      }
+      if (armored) {
+        if (inWindup && attack.windupTicks - enemy.timer <= ARMOR_STANCE_TICKS) crouchTarget -= def2.height * ARMOR_STANCE_CROUCH; // 발 딛는 순간
+        if (visual.legs) {
+          visual.legs.right.rotation.x += (-ARMOR_STANCE_LEG - visual.legs.right.rotation.x) * 0.3;
+          visual.legs.left.rotation.x += (ARMOR_STANCE_LEG * 0.5 - visual.legs.left.rotation.x) * 0.3;
+        }
       }
 
       // 해골 병사 — 팔이 치고 몸통은 거의 서 있다(기울임·전진 ×0.15). 회전 베기는 몸통이 예고에 반대로 감겼다가 타격에 한 바퀴 돈다(그림 = 판정: strikeProgress)

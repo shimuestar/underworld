@@ -25,7 +25,7 @@
 - **언데드** — 피가 없다. 피격 파편은 뼛가루, 사망은 뼈 흩어짐(§6).
 - **관통은 뼈 사이로** — 권총·플레이어 화살은 `pierceDamageMul 0.5`. 화염구·수류탄·해머는 온전히.
 - **자세(poise)** — 셋 다 `interruptible: true`. 슈퍼아머가 없는 기술의 예고·질주는 해머·화살·폭발·스킬에 끊긴다(§2).
-- 근접 규약대로 `hitOnContact`. 텔레그래프 문법 그대로(파랑 = 패링, 빨강 = 회피, 보라 = 반사). 슈퍼아머는 **네 번째 신호**(호박색 발광 + 낮은 울림)다 — 세 색과 겹치지 않는다.
+- 근접 규약대로 `hitOnContact`. 텔레그래프 문법 그대로(파랑 = 패링, 빨강 = 회피, 보라 = 반사). 슈퍼아머는 **네 번째 신호**(금빛 껍질·금빛 눈 + 발 딛기·잠기는 소리)다 — 세 색과 겹치지 않는다.
 - `statusOnHit`/`statusOnBlock` 없음.
 
 ## 2. 자세(poise) — 끊김과 슈퍼아머 (공용 시스템, `balance.poise`)
@@ -35,8 +35,11 @@
 - `EnemyDef.interruptible`(없으면 `poise.defaultInterruptible` = false). 참인 적의 예고(windup)·질주(charging)는 **체력이 예고 시작 때보다 낮아진 틱**에 끊긴다: `recover` `poise.interruptTicks`(36) 동안 튕겨 뻗고(`recoiled` 자세), 콤보는 끝나고, `enemy_interrupted` — 소리 + "공격을 끊었다 — 반격 기회!".
 - **총알은 어떤 적도 끊지 못한다**(하드 룰 — 패링 게임을 지우지 않는다). Weapons 의 권총 경로가 기준 체력(`poiseHealthRef`)을 되맞춘다. 끊는 것은 해머·화살·폭발·스킬(구울 물어뜯기 캔슬과 같은 결).
 - 끊길 예고에 해머 1·2타가 들어가면 **굳히지 않는다**(굳혔다 끊기면 두 번 멈춘다) — 다음 틱 Enemies 가 끊는다.
-- `EnemyAttackDef.superArmor: true` 인 기술은 그 동작(windup~impact) 동안 **끊기지 않고, 해머에 굳지도(attackFreeze) 밀리지도(넉백) 않는다**. 피해는 그대로. 해머가 들어가면 `armored_hit`(호박 불꽃 + 둔탁음 + "슈퍼아머 — 끊기지 않는다, 패링하거나 비켜라").
-- 신호: 슈퍼아머 예고는 몸이 **호박색**(`SUPER_ARMOR_TINT`)으로 물들고 예고음 밑에 `armor_up`(낮은 울림)이 깔린다. 마지막 4틱·타격 창은 평소처럼 파랑/빨강.
+- `EnemyAttackDef.superArmor: true` 인 기술은 그 동작(windup~impact) 동안 **끊기지 않고, 해머에 굳지도(attackFreeze) 밀리지도(넉백) 않는다**. **무적이 아니다** — 피해는 전부 들어가고 체력이 0 이면 그 자리에서 죽는다(Skeleton.test). 해머가 들어가면 `armored_hit` 이벤트만 난다(연출 없음 — 피격 명멸·뼛가루는 평소와 같다).
+- 신호(사용자 결정 2026-09-08 — 두 층만):
+  1. **시작 신호** — 예고 첫 3틱에 발을 굳게 딛는다(웅크림 + 앞발 내딛음, `ARMOR_STANCE_*`), 발밑 먼지(`spawnDust`), 금속성 **잠기는 소리** `armor_lock`(매번 같은 소리 — 학습용). `enemy_windup{superArmor, x, z}`.
+  2. **지속 신호** — 공격이 끝날 때까지 몸을 감싸는 **금빛 반투명 껍질**(`armorShell`, 주술사 방어막 껍질과 같은 방식)과 **금빛 눈**. 몸 자체의 파랑·빨강 예고색은 그대로라 "패링 가능한가"와 "끊을 수 있는가"가 동시에 읽힌다.
+  이름표 표기·피격 문구는 쓰지 않는다. 옛 호박색 틴트는 뼛빛에 묻혀 폐기.
 - 기존 적(고블린 등)은 `defaultInterruptible false` 라 옛 행동 그대로. 전체 게임에 끊김을 켜려면 이 스위치 하나다.
 
 **설계 원칙**: 슈퍼아머 기술에는 반드시 다른 답이 있다 — 파랑이면 패링(완벽 = 처형), 빨강이면 거리. 기본기는 끊겨야 해머로 흐름을 잡을 수 있다.
@@ -87,7 +90,7 @@
 - `buildSkeletonBody`: 골반, 척추, 갈비 4대, 쇄골, 두개골+턱, 뼈다귀 다리. 팔은 공용 무기 팔·맨팔. 전부 `flashMaterials`.
 - **팔이 치고 몸은 서 있다** — 인간형 기본 동작(예고에 몸 젖힘·타격에 24° 숙임·0.5m 전진)을 해골은 ×0.15(`SKELETON_LEAN_MUL`). 사용자 지적("몸을 기울이니 어색하다").
 - 공격마다 팔 스타일이 다르다 — thrust(찌르기 난무·방패 반격·찌르기)는 팔을 수평으로 내지르고(창끝 = `weaponTipDist`), smash(베기·내려치기)는 치켜들었다 내리친다. 회전 베기는 팔을 수평으로 뻗은 채 몸통이 감겼다 한 바퀴 돈다.
-- 슈퍼아머 예고: `SUPER_ARMOR_TINT` 호박색. 방패 찍기: 방패가 예고에 치켜들리고 타격에 앞아래로. 뼈 투척 뒤 왼팔 숨김(`armlessTicks`). 뼈 투사체: 마디 둘 달린 막대, 옅은 보라, 빙글빙글. 여진: 띠(`aoeBand`, 안쪽 비율은 정의에서).
+- 슈퍼아머: 금빛 껍질 `armorShell` + 금빛 눈 + 시작 발 딛기(§2). 방패 찍기: 방패가 예고에 치켜들리고 타격에 앞아래로. 뼈 투척 뒤 왼팔 숨김(`armlessTicks`). 뼈 투사체: 마디 둘 달린 막대, 옅은 보라, 빙글빙글. 여진: 띠(`aoeBand`, 안쪽 비율은 정의에서).
 
 ## 8. 배치
 
@@ -97,9 +100,9 @@ B2 북동 위병소(방패 1·검사 2), B3 남서·남쪽 위병소(방패·해
 
 | 이벤트 | 페이로드 | 뜻 |
 |---|---|---|
-| `enemy_windup` (+`superArmor`) | … | 슈퍼아머 예고면 `armor_up` |
+| `enemy_windup` (+`superArmor`, `x`, `z`) | … | 슈퍼아머 예고면 `armor_lock` + 발밑 먼지 |
 | `enemy_interrupted` | enemyId, enemyType, x, z, ticks | 자세 끊김 |
-| `armored_hit` | enemyId, enemyType, x, z, heavy | 슈퍼아머 중 해머 피격(굳지도 밀리지도 않음) |
+| `armored_hit` | enemyId, enemyType, x, z, heavy | 슈퍼아머 중 해머 피격(굳지도 밀리지도 않음) — 연출 없음, 계측용 |
 | `shield_riposte_start` | enemyId, enemyType, x, z | 방패 반격 시작 |
 | `guard_broken` | enemyId, enemyType, x, z, ticks | 가드 부수기 성립 |
 | `enemy_evade` / `enemy_cover_start` | … | 백스텝 / 엄호 |

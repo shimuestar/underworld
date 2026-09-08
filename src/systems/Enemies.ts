@@ -3738,7 +3738,9 @@ function startWindup(world: World, enemy: EnemyState, attack: EnemyAttackDef): v
     enemyType: enemy.type,
     telegraph: attack.telegraph ?? 'blue',
     perfectOnly: attack.perfectOnly === true, // 완벽 전용 타(거수 삼연낫 ③) — main 이 예고음을 고음으로(결정 17)
-    superArmor: attack.superArmor === true, // 슈퍼아머 예고(해골) — main 이 armor_up 소리를 얹는다
+    superArmor: attack.superArmor === true, // 슈퍼아머 예고(해골) — main 이 잠기는 소리·발밑 먼지를 얹는다
+    x: enemy.x,
+    z: enemy.z,
   });
 }
 

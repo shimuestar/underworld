@@ -695,6 +695,12 @@ export function inSuperArmor(def: EnemyDef, enemy: { ai: string; attackMode?: st
 }
 const ATTACKING_STATES = new Set(['windup', 'charging', 'active_perfect', 'active_normal', 'impact']);
 
+/** 이 적에게 슈퍼아머 공격이 하나라도 있는가 — Stage 가 금빛 껍질(armorShell)을 미리 만들어 둘지 정한다 */
+export function hasSuperArmorAttack(def: EnemyDef): boolean {
+  const slots = [def.attack, def.attackAlt, def.closeAttack, def.chargeAttack, def.shieldBash, def.shieldRiposte, def.rangedAttack, def.volleyAttack, def.slamAttack, def.roarAttack, ...comboChain(def)];
+  return slots.some((a) => a?.superArmor === true);
+}
+
 /** 자세(poise) — 이 적의 예고를 플레이어 피해가 끊을 수 있는가(def.interruptible, 없으면 balance.poise.defaultInterruptible) */
 export function poiseInterruptible(def: EnemyDef): boolean {
   return def.interruptible ?? balance.poise.defaultInterruptible;

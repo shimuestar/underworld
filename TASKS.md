@@ -246,6 +246,8 @@ B3-5(2026-09-06)가 문서 드리프트(B3-1)·돌격 장부(B3-4 chainLeg)를 �
 
 - [x] **해골 병사 기술 개편 + 자세(poise)·슈퍼아머** (2026-09-08 사용자: 고블린과 흡사·방패병은 창병 리스킨·몸을 기울이는 타격 동작 어색·플레이어 공격에 캔슬되지 않는 슈퍼아머 상태 부재) — 공용 자세 시스템 `balance.poise`(`def.interruptible` 적의 예고·질주는 체력이 예고 시작보다 낮아진 틱에 끊김 → recover interruptTicks·recoiled·`enemy_interrupted`; 총알은 `poiseHealthRef` 되맞춤으로 못 끊음; `attack.superArmor` 면 끊기지도 굳지도(attackFreeze) 밀리지도(넉백) 않음 + `armored_hit`; 예고 호박색 `SUPER_ARMOR_TINT` + `armor_up`; 기존 적은 `defaultInterruptible false` 로 옛 그대로). 검사: 베기↔**회전 베기(360°, 몸이 한 바퀴)** 교대, **찌르기 난무 3타(슈퍼아머·①②continueOnParry)**, 찔러 들어오기(슈퍼아머), **뼈 투척**(`projectileKind bone`·보라 반사·`rangedAttack.cooldownTicks`·`armlessTicks` 왼팔 숨김). 해머병: 내려치기(슈퍼아머), **지진 = 강타 3.4 → 여진 고리 3.2~6.5(`aoeInnerRadius`, 띠 `aoeBand`)**, 달려와 내려치기(끊김). 방패병: 찌르기, **방패 반격(`shieldRiposte` — 해머가 막힌 순간 `wantsRiposte`, 슈퍼아머, 쿨 150; 밀쳐내기 슬롯 제거)**, **방패 찍기(closeAttack requiresBlocking·`guardBreak` 40틱·막아도 그대로·방패가 치켜들렸다 내리찍힘)**, 밀어붙이기. Stage: 해골은 몸 기울임·전진 ×0.15(팔이 친다), 공격별 thrust/smash, 회전 연출, 뼈 투사체. Skeleton.test 25건, docs/systems/skeletons.md 개편, 헤드리스 스크린샷(예고 발광·회전·여진 띠·방패 찍기·팔 없음·뼈 투사체) 확인
 
+- [x] **슈퍼아머 표현 확정** (2026-09-08 사용자: 1·2번만 — 시작 신호 + 지속 껍질. 슈퍼아머는 무적이 아니다 — 피해는 들어가고 죽는다) — 예고 시작 3틱 발 딛기(웅크림·앞발 내딛음 `ARMOR_STANCE_*`) + 발밑 먼지 + 금속성 잠기는 소리 `armor_lock`(`enemy_windup{superArmor,x,z}`); 공격 내내 금빛 반투명 캡슐 껍질 `armorShell`(`hasSuperArmorAttack` 인 적만 생성, torso 자식) + 금빛 눈(`eyeMat`·후광). 옛 호박색 틴트·`armor_up`·`armored_hit` 불꽃/문구 제거(이벤트는 계측용으로 남김). Skeleton.test: 슈퍼아머 중 해머 두 타로 죽는다(melee_kill·enemy_died), 예고 이벤트 표지. 헤드리스 확인: 껍질·금빛 눈이 슈퍼아머(해머병·검사 난무)에만 뜨고 끊기는 공격(방패병 찌르기)엔 없다. 공격 기술표 개편(3차)은 사용자 결정 대기
+
 ## 의존성 주의
 
 - M3 이전에 M4를 건드리지 않는다. 패링 감각이 확정되기 전 마나 수치를 잡으면 전부 다시 한다

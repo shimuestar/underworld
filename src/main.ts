@@ -881,15 +881,19 @@ for (const name of [
 const audio = new GameAudio();
 app.addEventListener('click', () => audio.unlock());
 events.on('enemy_windup', (payload) => {
-  const wind = payload as { telegraph?: string; enemyType?: string; perfectOnly?: boolean; superArmor?: boolean };
+  const wind = payload as { telegraph?: string; enemyType?: string; perfectOnly?: boolean; superArmor?: boolean; x?: number; z?: number };
   // 박쥐 박치기는 예고 시작이 '조용한 정지 비행'이다 — 신호는 발사 순간의 비명(bat_swoop)
   if (wind.enemyType === 'bat') return;
   const at = panOf(payload); // 예고음에 방향을 싣는다 — 등 뒤 공격을 귀가 먼저 안다
   // 슬라임 — 몸이 부풀어 오르는 꿀렁임을 텔레그래프 소리에 얹는다
   if (wind.enemyType?.startsWith('slime')) audio.play('slime_windup', at);
-  // 해골 — 마른 뼈 달그락을 얹는다(어느 병사든). 슈퍼아머 예고(끊을 수 없다)는 낮은 울림을 깔아 귀로도 구분되게
+  // 해골 — 마른 뼈 달그락을 얹는다(어느 병사든)
   if (wind.enemyType !== undefined && SKELETON_TYPES.has(wind.enemyType)) audio.play('bone_rattle', at);
-  if (wind.superArmor) audio.play('armor_up', at);
+  // 슈퍼아머 시작 신호(1층) — 발을 굳게 딛는 순간: 잠기는 쇳소리 + 발밑 먼지. 몸의 금빛 껍질(2층)은 Stage 가 inSuperArmor 로 매 프레임 그린다
+  if (wind.superArmor) {
+    audio.play('armor_lock', at);
+    if (wind.x !== undefined && wind.z !== undefined) stage.spawnDust(wind.x, wind.z, 0.8);
+  }
   const telegraph = wind.telegraph;
   // 완벽 전용 파랑(거수 삼연낫 ③, attack.perfectOnly — 결정 17)은 같은 파랑 예고음을 고음으로
   audio.play(
@@ -3729,14 +3733,7 @@ events.on('enemy_interrupted', (payload) => {
   audio.play(SKELETON_TYPES.has(it.enemyType) ? 'bone_rattle' : 'thud', panAt(it.x, it.z));
   showReaction('공격을 끊었다 — 반격 기회!', 900);
 });
-// 슈퍼아머 피격 — 해머가 들어갔지만 굳지도 밀리지도 않았다: 불꽃 + 둔탁음 + 안내
-events.on('armored_hit', (payload) => {
-  const ah = payload as { x: number; z: number };
-  const p2 = world.player;
-  stage.spawnGuardSparks((p2.x + ah.x) / 2, (p2.z + ah.z) / 2, 1.1, 0xe8b45a, 0.6);
-  audio.play('thud', panAt(ah.x, ah.z));
-  showReaction('슈퍼아머 — 끊기지 않는다, 패링하거나 비켜라', 700);
-});
+// 슈퍼아머 피격(armored_hit) — 굳지도 밀리지도 않았을 뿐 피해·피격 연출은 평소와 같다. 별도 연출 없음(사용자 결정: 시작 신호·금빛 껍질만)
 // 가드 부수기(해골 방패병 방패 찍기) — 막았는데 길게 굳었다: 무거운 타격음 + 카메라 킥 + 안내
 events.on('guard_broken', (payload) => {
   const gb = payload as { x: number; z: number; ticks: number };

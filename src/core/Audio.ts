@@ -131,7 +131,7 @@ export type SoundName =
   | 'prop_break_bone'
   | 'bone_rattle'
   | 'skeleton_death'
-  | 'armor_up'
+  | 'armor_lock'
   | 'prop_break_stone'
   | 'prop_break_metal'
   | 'prop_fuse'
@@ -827,11 +827,14 @@ export class GameAudio {
         this.noise(0.04, 0.7, 3800, 0.06);
         this.tone(1100, 0.05, 'square', 0.3, 0.07, 700);
         break;
-      case 'armor_up':
-        // 슈퍼아머 예고 — 뼈가 굳는 낮은 울림. 텔레그래프 소리 밑에 깔린다(끊을 수 없다는 신호)
-        this.tone(70, 0.28, 'sine', 1.1, 0, 95);
-        this.tone(140, 0.2, 'triangle', 0.5, 0.02, 180);
-        this.noise(0.08, 0.5, 900, 0.04);
+      case 'armor_lock':
+        // 슈퍼아머 시작 — 뼈가 맞물려 잠기는 금속성 딸깍 두 번(0·45ms) + 짧은 쇳소리 꼬리. 예고음 밑에 깔려도 또렷한 고음.
+        // 매번 같은 소리라 "이 소리 = 끊을 수 없다"로 학습된다
+        this.tone(2400, 0.03, 'square', 0.55, 0, 1900);
+        this.noise(0.02, 0.9, 6000);
+        this.tone(1800, 0.04, 'square', 0.5, 0.045, 1200);
+        this.noise(0.03, 0.7, 5200, 0.045);
+        this.tone(620, 0.12, 'triangle', 0.35, 0.05, 520);
         break;
       case 'skeleton_death':
         // 해골 무너짐 — 뼈가 쏟아져 바닥에 흩어지며 몇 번 튕긴다. 마른 파열(prop_break_bone)보다 길고 잔뼈 톡톡이 이어진다
