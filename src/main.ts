@@ -412,6 +412,7 @@ const saveDialog = new ListDialog(undefined, 'savedialog');
 const merchantUI = new MerchantUI(world);
 /** 창고(성물함) 창 — 보관·확장 (stash.md §5). 로비 성물함 앞에서 E */
 const stashUI = new StashUI(world);
+stashUI.keyLabel = (i, pad) => quickSlotKeyLabelFor(i, pad); // 퀵슬롯 칸 키 표기 — 가방 탭과 같다
 /** UI 오버레이 열기/닫기 — 닫을 때 포인터 락을 바로 되찾는다.
  *  안 그러면 메뉴를 나온 뒤 커서가 남아 화면을 한 번 클릭해야 조작이 돌아온다 */
 function setUiOpen(open: boolean): void {
@@ -839,6 +840,7 @@ for (const name of [
   'stash_denied',
   'item_secured',
   'secure_unlocked',
+  'stash_quickbound',
   'corruption_applied',
   'corruption_threshold',
   'enemy_cast',
@@ -3466,11 +3468,12 @@ events.on('stash_expanded', (payload) => {
   showReaction(`창고를 넓혔다 — ${d.slots}칸 (◆ ${d.gold}${d.key ? ` · ${itemDef(d.key as ItemKind).name}` : ''})`, 2600);
 });
 events.on('stash_denied', (payload) => {
-  const d = payload as { reason: string; to?: string; kind?: ItemKind };
+  const d = payload as { reason: string; from?: string; to?: string; kind?: ItemKind };
   audio.play('shop_deny');
-  const target = d.to === 'bag' ? '가방' : d.to === 'secure' ? '안전 주머니' : '창고';
+  const target = d.to === 'bag' ? '가방' : d.to === 'secure' ? '안전 주머니' : d.to === 'quick' ? '퀵슬롯' : '창고';
   showReaction(
-    d.reason === 'full' ? `${target}이(가) 가득 찼다`
+    d.reason === 'full' ? `${target}이(가) 가득 찼다${d.from === 'stash' && d.to === 'bag' ? ' — 창고의 것을 퀵슬롯에 올리려면 가방 자리가 필요하다' : ''}`
+      : d.reason === 'not_bindable' ? `${d.kind ? itemDef(d.kind).name : '이것'}은(는) 퀵슬롯에 올릴 수 없다`
       : d.reason === 'no_gold' ? '골드가 모자란다'
         : d.reason === 'no_key' ? '성물함 열쇠가 없다 — 상자·보스 주머니에서 나온다'
           : d.reason === 'max' ? '더 넓힐 수 없다' : '',
@@ -4247,9 +4250,9 @@ function simulate(dt: number): void {
       else if (input.gamepad.rawPressed(4)) stashUI.padTab(-1); // LB
       else if (input.gamepad.rawPressed(5)) stashUI.padTab(1); // RB
       else if (input.gamepad.rawPressed(6)) stashUI.padLT(); // LT — 가방 전부 넣기
-      else if (input.gamepad.rawPressed(0)) stashUI.padA();
       else if (input.gamepad.rawPressed(2)) stashUI.padX();
       else if (input.gamepad.rawPressed(1)) stashUI.padB();
+      stashUI.padA(input.gamepad.rawHeld(0)); // A 짧게 옮기기/놓기 · 길게 집어 들기 — 홀드 판정이라 매 틱 상태를 넘긴다 (가방 탭과 같다)
     }
   }
   // 메뉴 스틱 — 왼 스틱을 D-패드처럼 (한 번 밀면 한 칸, 계속 밀면 반복). 루팅 창·상점 공용

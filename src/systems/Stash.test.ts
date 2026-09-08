@@ -154,6 +154,38 @@ describe('그 칸에 놓기 (place — 가방 탭 드래그·집어 옮기기)',
   });
 });
 
+describe('창고 → 퀵슬롯 (toBagAndBind)', () => {
+  it('창고 칸을 퀵슬롯에 올리면 가방으로 들어오며 등록된다 — 가방에 자리가 없으면 거절, 열쇠·장비는 못 올린다', () => {
+    world.stash[0] = { kind: 'mana', count: 3 };
+    const bound: unknown[] = [];
+    world.events.on('stash_quickbound', (p) => bound.push(p));
+    expect(Stash.toBagAndBind(world, 0, 2)).toBe(true);
+    expect(world.stash[0]).toBeNull();
+    expect(countOf(world, 'mana')).toBe(3);
+    expect(world.quickslots[2]).toBe('mana');
+    expect(bound).toEqual([{ kind: 'mana', index: 2 }]);
+    // 가방이 가득 — 거절
+    world.inventory = world.inventory.map(() => ({ kind: 'food', count: balance.items.stackMax }));
+    world.stash[1] = { kind: 'potion', count: 1 };
+    const denied: unknown[] = [];
+    world.events.on('stash_denied', (p) => denied.push(p));
+    expect(Stash.toBagAndBind(world, 1, 0)).toBe(false);
+    expect(world.stash[1]).toEqual({ kind: 'potion', count: 1 });
+    expect(world.quickslots[0]).toBeNull();
+    expect(denied[0]).toMatchObject({ reason: 'full', from: 'stash', to: 'bag' });
+    // 열쇠·장비는 퀵슬롯에 못 올린다
+    world.inventory = world.inventory.map(() => null);
+    world.stash[2] = { kind: 'key_s', count: 1 };
+    world.stash[3] = { kind: 'equip', count: 1, equipId: 'helm_leather' };
+    expect(Stash.toBagAndBind(world, 2, 0)).toBe(false);
+    expect(Stash.toBagAndBind(world, 3, 0)).toBe(false);
+    expect(world.stash[2]).not.toBeNull();
+    expect(denied.slice(1).every((d) => (d as { reason: string }).reason === 'not_bindable')).toBe(true);
+    expect(Stash.isBindable('potion')).toBe(true);
+    expect(Stash.isBindable('key_m')).toBe(false);
+  });
+});
+
 describe('안전 주머니', () => {
   it('열쇠는 주우면(addItem) 안전 칸으로 먼저 — item_secured. 가득이면 가방으로', () => {
     const secured: unknown[] = [];

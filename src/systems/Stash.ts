@@ -3,7 +3,7 @@
 // 옮기기·확장은 순수 함수(Vitest). 칸 규약은 가방과 같다(InventorySlot). 창고 스택 상한(lobby.stash.stackMax)은 가방(items.stackMax)보다 크다.
 
 import { balance } from '../core/Balance';
-import { countOf, isSecureKind, putOne } from '../core/Inventory';
+import { bindQuickslot, countOf, hasRoom, isPassiveKind, isSecureKind, putOne } from '../core/Inventory';
 import type { InventorySlot, ItemKind, World } from '../core/World';
 
 export type StashPane = 'bag' | 'stash' | 'secure';
@@ -141,6 +141,34 @@ export function place(world: World, from: StashPane, i: number, to: StashPane, j
   }
   if (result !== 'none') world.events.emit('stash_moved', { from, to, kind: a.kind, count: a.count, result });
   return result;
+}
+
+/** 퀵슬롯에 올릴 수 있는 종류인가 — 마시는 소모품만 (각인·장비·열쇠는 아니다) */
+export function isBindable(kind: ItemKind): boolean {
+  return kind !== 'sigil' && kind !== 'equip' && !isPassiveKind(kind);
+}
+
+/** 창고 칸을 퀵슬롯 q 에 — 창고에서 곧장 등록하면 물건은 가방으로 들어온다 (2026-09-08 사용자). 가방에 자리가 없으면 안 된다(stash_denied full).
+ *  들어가는 만큼 옮기고(칸 통째로 시도) 그 종류를 퀵슬롯에 건다. 성공하면 true */
+export function toBagAndBind(world: World, stashIndex: number, quickIndex: number): boolean {
+  const slot = world.stash[stashIndex];
+  if (!slot) {
+    world.events.emit('stash_denied', { reason: 'empty', from: 'stash', to: 'bag' });
+    return false;
+  }
+  if (!isBindable(slot.kind)) {
+    world.events.emit('stash_denied', { reason: 'not_bindable', from: 'stash', to: 'quick', kind: slot.kind });
+    return false;
+  }
+  if (!hasRoom(world, slot.kind)) {
+    world.events.emit('stash_denied', { reason: 'full', from: 'stash', to: 'bag', kind: slot.kind });
+    return false;
+  }
+  const kind = slot.kind;
+  if (move(world, 'stash', stashIndex, 'bag', true) <= 0) return false;
+  bindQuickslot(world, quickIndex, kind);
+  world.events.emit('stash_quickbound', { kind, index: quickIndex });
+  return true;
 }
 
 /** 가방 전부 창고에 — 들어가는 만큼. 옮긴 개수 합 */

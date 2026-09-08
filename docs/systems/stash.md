@@ -60,13 +60,14 @@
 ## 5. 창고 창 (`render/StashUI.ts`)
 
 - 탭: **보관** / **확장**. 상인 창과 같은 틀(Tab·1/2·LB/RB, E/Esc/B 닫기).
-- 보관: 왼쪽 열 = 내 가방 격자 + 설명 칸. 오른쪽 = 창고 격자(10열). 안전 주머니는 없다.
-  - 커서 하나(마우스·키보드·패드 공용). ←→ 로 격자 사이를 건너간다.
+- 보관: 왼쪽 = 내 가방(인벤토리) + 설명 칸, 오른쪽 = 창고 격자(10열), 가운데 아래 = 퀵슬롯 십자. 안전 주머니는 없다 (2026-09-08 사용자 배치).
+  - 커서 하나(마우스·키보드·패드 공용). ←→ 로 가방↔창고, ↓ 로 퀵슬롯.
   - Enter·A·클릭: 가방 → 창고 한 개, 창고 → 가방 한 개.
-  - X·우클릭: 칸 통째로.
+  - X·우클릭: 칸 통째로. 퀵슬롯 칸에서는 등록 해제.
+  - 퀵슬롯 등록: 칸을 퀵슬롯에 드래그(또는 A 길게 집어 옮기기·숫자키). **창고 칸이면 물건이 가방으로 들어오며 등록된다** — 가방에 자리가 없으면 거절(`stash_denied full`). 각인·장비·열쇠는 올릴 수 없다(`Stash.isBindable`).
   - Q·패드 LT: 가방 전부 창고에 넣기.
 - 확장: 현재 용량, 다음 단계 비용, 열쇠 보유 여부, 확장 실행.
-- 이벤트: `stash_opened`, `stash_moved{from,to,kind,count}`, `stash_expanded{tier,slots}`, `stash_denied{reason}`, `item_secured`.
+- 이벤트: `stash_opened`, `stash_moved{from,to,kind,count}`, `stash_expanded{tier,slots}`, `stash_denied{reason}`, `stash_quickbound{kind,index}`, `item_secured`, `secure_unlocked`.
 
 ## 6. 오브젝트
 
