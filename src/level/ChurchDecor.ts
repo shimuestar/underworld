@@ -347,6 +347,55 @@ function buildStall(x: number, z: number, n: { x: number; z: number }, cs: numbe
   return g;
 }
 
+/** 창고 성물함(stash.md §6) — 돌 받침 위 금띠 두른 상아빛 궤, 뚜껑 위 작은 십자 문양과 은은한 빛. 로컬 +Z 가 상판이 향하는 쪽(손님 쪽).
+ *  차단 상자(lobby.stash.collisionHalf)는 Level 이 등록한다 — 여기서는 그리기만 */
+export function buildReliquary(x: number, z: number, n: { x: number; z: number }): THREE.Group {
+  const g = new THREE.Group();
+  const stone = new THREE.MeshLambertMaterial({ color: CHURCH_COLORS.stone });
+  const ivory = new THREE.MeshLambertMaterial({ color: CHURCH_COLORS.altar, emissive: CHURCH_COLORS.altar, emissiveIntensity: 0.12 });
+  const gold = new THREE.MeshLambertMaterial({ color: CHURCH_COLORS.gold, emissive: CHURCH_COLORS.gold, emissiveIntensity: 0.4 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 0.95), stone);
+  base.position.y = 0.15;
+  g.add(base);
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.7, 0.8), ivory);
+  chest.position.y = 0.3 + 0.35;
+  g.add(chest);
+  // 금띠 — 세로 셋
+  for (const ox of [-0.5, 0, 0.5]) {
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.74, 0.84), gold);
+    band.position.set(ox, 0.65, 0);
+    g.add(band);
+  }
+  // 뚜껑 — 완만한 지붕꼴 (앞뒤로 기운 두 판)
+  for (const s of [-1, 1]) {
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(1.48, 0.06, 0.46), ivory);
+    lid.position.set(0, 1.12, s * 0.2);
+    lid.rotation.x = -s * 0.5;
+    g.add(lid);
+  }
+  const ridge = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.08), gold);
+  ridge.position.y = 1.24;
+  g.add(ridge);
+  // 십자 문양 — 앞면(+Z) 가운데
+  const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.34, 0.03), gold);
+  crossV.position.set(0.25, 0.68, 0.415);
+  g.add(crossV);
+  const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.03), gold);
+  crossH.position.set(0.25, 0.74, 0.415);
+  g.add(crossH);
+  // 잠금 고리 — 앞면 왼쪽
+  const lock = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.02, 8, 16), gold);
+  lock.position.set(-0.25, 0.6, 0.42);
+  g.add(lock);
+  const light = new THREE.PointLight(CHURCH_COLORS.altarLight, 0.9, 6, 0);
+  light.position.set(0, 1.5, 0.3);
+  g.add(light);
+  g.rotation.y = Math.atan2(n.x, n.z); // 로컬 +Z → n
+  g.position.set(x, 0, z);
+  g.name = 'reliquary';
+  return g;
+}
+
 /** 대제단 — 대리석 제대 위에 금빛 오벨리스크와 후광 구(球). 발자국(1.1m 정방) 안에 다 들어간다 —
  *  Level 이 'A' 칸에 등록하는 차단 상자가 그 크기라 밖으로 나간 부분은 몸이 뚫는다 */
 export function buildGrandAltar(x: number, z: number, ceiling: number, footprint: number): THREE.Group {

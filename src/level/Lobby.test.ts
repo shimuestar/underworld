@@ -95,8 +95,9 @@ describe('성소 로비', () => {
         if (d.type !== 'candle') blockers++;
       }
     }
-    // 제단 기둥 1 + 장식 차단 상자
-    expect(level.props).toHaveLength(1 + blockers);
+    // 제단 기둥 1 + 창고 성물함 1 + 장식 차단 상자
+    expect(level.props).toHaveLength(2 + blockers);
+    expect(level.stashPos).toEqual({ x: (1 + 0.5) * 4, z: (6 + 0.5) * 4, dirX: 1, dirZ: 0 });
     // 스폰 자리(마법진)와 대제단 앞은 막히지 않는다
     for (const rect of level.props) {
       const inside = (x: number, z: number): boolean => x > rect.minX && x < rect.maxX && z > rect.minZ && z < rect.maxZ;

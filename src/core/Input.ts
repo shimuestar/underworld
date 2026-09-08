@@ -136,7 +136,7 @@ export class Input {
       (e) => {
         if (this.pointerLocked) return;
         // UI 오버레이 안을 클릭할 때는 제외 — 거기선 커서를 써야 한다
-        if ((e.target as HTMLElement | null)?.closest?.('#menuui, #shopui, #merchantui, #lootui, #pause .menu, #death .menu, #warpdialog .menu, #npcdialog .menu, #savedialog .menu, #gamepadui')) return; // savedialog: 삭제 버튼은 창을 열어 둔 채라 락이 걸리면 커서가 사라진다 (2026-09-07)
+        if ((e.target as HTMLElement | null)?.closest?.('#menuui, #shopui, #merchantui, #stashui, #lootui, #pause .menu, #death .menu, #warpdialog .menu, #npcdialog .menu, #savedialog .menu, #gamepadui')) return; // savedialog: 삭제 버튼은 창을 열어 둔 채라 락이 걸리면 커서가 사라진다 (2026-09-07)
         this.tryLock(0);
       },
       { capture: true },

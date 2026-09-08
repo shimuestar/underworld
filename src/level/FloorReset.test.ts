@@ -1,4 +1,4 @@
-// 던전 초기화 — 로비에 들어오면 몬스터 부활(잡은 보스 제외)·함정 재무장·바닥 아이템 삭제(비석 제외)·연 상자는 빈 채로.
+// 던전 초기화 — 로비에 들어오면 몬스터 부활(잡은 보스 제외)·함정 재무장·바닥 아이템 삭제(비석 포함, stash.md §3)·연 상자는 빈 채로.
 
 import { describe, expect, it } from 'vitest';
 import { Events } from '../core/Events';
@@ -42,7 +42,7 @@ function makeFloor() {
 }
 
 describe('resetFloor', () => {
-  it('몬스터는 배치대로 전부 돌아오고, 함정은 재무장(잔해 차단 걷힘), 바닥은 비석만, 연 상자는 빈 채로', () => {
+  it('몬스터는 배치대로 전부 돌아오고, 함정은 재무장(잔해 차단 걷힘), 바닥은 비석까지 전부 비우고, 연 상자는 빈 채로', () => {
     const { world, level } = makeFloor();
     world.enemies[0]!.alive = false;
     world.enemies.splice(1, 1); // 시체가 치워진 적
@@ -65,7 +65,7 @@ describe('resetFloor', () => {
     expect(world.traps[0]!.blocker).toBeUndefined();
     expect(world.chests[0]!.opened).toBe(true);
     expect(world.chests[0]!.chestItems).toEqual([]);
-    expect(world.groundItems.map((g) => g.kind)).toEqual(['grave']);
+    expect(world.groundItems).toEqual([]);
     expect(world.lifeMotes).toEqual([]);
     expect(level.charAt(3, 2)).toBe('.'); // 격자 변경은 그대로
   });
@@ -97,11 +97,11 @@ describe('resetFloorDiff (세이브의 미방문 층)', () => {
     expect(isBossKey('goblin_runner@18,6', PLACEMENTS, 4)).toBe(false);
   });
 
-  it('보스를 잡은 층은 보스 처치만 남고, 함정·바닥(비석 제외)은 비우고, 상자는 빈 채로, 문·레버·통은 그대로', () => {
+  it('보스를 잡은 층은 보스 처치만 남고, 함정·바닥(비석 포함)은 비우고, 상자는 빈 채로, 문·레버·통은 그대로', () => {
     const r = resetFloorDiff(diff, PLACEMENTS, 4, true);
     expect(r.slain).toEqual(['goblin_runner@30,10', 'slime_mother@10,10']);
     expect(r.traps).toEqual([]);
-    expect(r.groundItems.map((g) => g.kind)).toEqual(['grave']);
+    expect(r.groundItems).toEqual([]);
     expect(r.chests).toEqual([{ key: '10,10', items: [] }]);
     expect(r).toMatchObject({ levers: ['1-1'], doorsUnlocked: ['1,2'], barrelsBroken: ['a'], propsBroken: ['b'] });
   });

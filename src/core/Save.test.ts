@@ -67,6 +67,29 @@ beforeEach(() => {
   world = makeWorld();
 });
 
+describe('창고(stash.md §7) — 왕복', () => {
+  it('창고·안전 칸·확장 단계가 그대로 돌아오고, 옛 저장(필드 없음)은 빈 창고·0단계로 읽힌다', () => {
+    world.stash = [{ kind: 'potion', count: 7 }, null, { kind: 'equip', count: 1, equipId: 'helm_leather' }];
+    world.stashTier = 2;
+    world.secure = [{ kind: 'key_s', count: 1 }, null];
+    const data = Save.serialize(world, { kind: 'manual', floorLabel: '', floors: {}, unlockedFloors: [], barsCineSeen: [], now: 1000 });
+    const back = JSON.parse(JSON.stringify(data)) as Save.SaveData;
+    const fresh = makeWorld();
+    Save.restoreProgress(fresh, back);
+    expect(fresh.stash).toEqual(world.stash);
+    expect(fresh.stashTier).toBe(2);
+    expect(fresh.secure).toEqual(world.secure);
+    delete back.stash;
+    delete back.stashTier;
+    delete back.secure;
+    const old = makeWorld();
+    Save.restoreProgress(old, back);
+    expect(old.stash).toEqual([]);
+    expect(old.stashTier).toBe(0);
+    expect(old.secure).toEqual([]);
+  });
+});
+
 describe('캐릭터 진행 — 왕복', () => {
   it('골드·XP·가방·장비·각인·탄약·오염·제단·상점 재고가 JSON 을 거쳐 그대로 돌아온다', () => {
     world.gold = 123;

@@ -29,7 +29,7 @@ import {
 /** Loot 이 만드는 바닥 아이템 id 대역 — 각인 1 / 픽업 500000 / 버림 700000 / 상자 800000·900000 / 비석 960000 / 기믹 990000 과 구분 */
 let nextLootId = 1200000;
 
-const CONSUMABLES: ReadonlySet<string> = new Set(['potion', 'mana', 'food']);
+const CONSUMABLES: ReadonlySet<string> = new Set(['potion', 'mana', 'potion_large', 'mana_large', 'food', 'key_s', 'key_m', 'key_l']);
 export function isConsumable(kind: LootKind): kind is ItemKind {
   return CONSUMABLES.has(kind);
 }
@@ -91,6 +91,12 @@ export function rollLoot(enemyType: string, rng: () => number = Math.random): Lo
   for (const id of def.equipDrops ?? []) {
     equipDef(id);
     mergeEntry(out, { kind: 'equip', count: 1, equipId: id });
+  }
+  // 성물함 열쇠 — 보스 주머니 확정 한 개 (stash.md §4). 종은 pickups.stashKey.bossKinds[적 종] 또는 default
+  if (def.boss) {
+    const kinds = cfg.stashKey.bossKinds as Record<string, ItemKind>;
+    const key = kinds[enemyType] ?? kinds['default'];
+    if (key) mergeEntry(out, { kind: key, count: 1 });
   }
   return out;
 }
@@ -492,7 +498,7 @@ export function takeOne(world: World, index: number): TakeResult {
   return takeOneImpl(world, c, index, true);
 }
 
-const TAKE_ORDER: Record<LootKind, number> = { gold: 0, sigil: 1, equip: 1, arrow: 2, potion: 3, mana: 3, potion_large: 3, mana_large: 3, food: 3 };
+const TAKE_ORDER: Record<LootKind, number> = { gold: 0, key_s: 1, key_m: 1, key_l: 1, sigil: 1, equip: 1, arrow: 2, potion: 3, mana: 3, potion_large: 3, mana_large: 3, food: 3 }; // 열쇠는 각인처럼 먼저 — 안전 칸으로 간다
 
 /** 모두 가져오기 — 골드 → 각인 → 화살 → 소모품 순. 못 들어간 것은 남고, 거부 알림은 한 번만
  *  (소모품이 남았으면 '가방 가득', 화살만 남았으면 '화살통 가득') */

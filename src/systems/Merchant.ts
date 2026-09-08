@@ -34,8 +34,8 @@ export function slotSellPrice(slot: InventorySlot | null, count = slot?.count ??
 }
 
 /** 소모품 매각 — all 이면 칸 통째로, 아니면 한 개. 받은 골드를 돌려준다 (0 = 못 팔았다: item_sell_denied) */
-export function sellConsumable(world: World, slotIndex: number, all = false): number {
-  const slot = world.inventory[slotIndex];
+export function sellConsumable(world: World, slotIndex: number, all = false, slots: World['inventory'] = world.inventory): number {
+  const slot = slots[slotIndex];
   if (!slot || slot.kind === 'sigil' || slot.kind === 'equip') return 0;
   const unit = unitSellPrice(slot.kind);
   if (unit === null) {
@@ -45,7 +45,7 @@ export function sellConsumable(world: World, slotIndex: number, all = false): nu
   const count = all ? slot.count : 1;
   const gold = unit * count;
   slot.count -= count;
-  if (slot.count <= 0) world.inventory[slotIndex] = null;
+  if (slot.count <= 0) slots[slotIndex] = null;
   world.gold += gold;
   world.events.emit('item_sold', { kind: slot.kind, count, gold, total: world.gold });
   return gold;

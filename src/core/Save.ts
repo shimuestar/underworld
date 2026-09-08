@@ -74,6 +74,10 @@ export interface SaveData {
   gold: number;
   xp: number;
   inventory: (InventorySlot | null)[];
+  /** 창고·안전 칸·확장 단계 (stash.md §7). 옛 저장엔 없다 — 비어 있는 것으로 읽는다 */
+  stash?: (InventorySlot | null)[];
+  stashTier?: number;
+  secure?: (InventorySlot | null)[];
   quickslots: (ItemKind | null)[];
   skillSlots: (string | null)[];
   selectedSkill: number;
@@ -220,6 +224,9 @@ export function serialize(world: World, extras: SerializeExtras): SaveData {
     gold: world.gold,
     xp: world.xp,
     inventory: clone(world.inventory),
+    stash: clone(world.stash),
+    stashTier: world.stashTier,
+    secure: clone(world.secure),
     quickslots: clone(world.quickslots),
     skillSlots: clone(world.skillSlots),
     selectedSkill: world.selectedSkill,
@@ -264,6 +271,10 @@ export function restoreProgress(world: World, data: SaveData): void {
   world.gold = data.gold;
   world.xp = data.xp;
   world.inventory = clone(data.inventory);
+  // 창고 — 옛 저장(필드 없음)은 빈 창고·0단계·빈 안전 칸. 칸 수 맞추기는 부르는 쪽이 Stash.initStash 로
+  world.stash = data.stash ? clone(data.stash) : [];
+  world.stashTier = data.stashTier ?? 0;
+  world.secure = data.secure ? clone(data.secure) : [];
   world.quickslots = clone(data.quickslots);
   world.skillSlots = clone(data.skillSlots);
   world.selectedSkill = data.selectedSkill;

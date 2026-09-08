@@ -157,12 +157,12 @@ export function learnFromBag(world: World, slotIndex: number): LearnResult {
 }
 
 /** 제단에서 가방의 각인을 판다 — 티어별 골드(sigil.sellGold). 중복 각인의 출구 */
-export function sellFromBag(world: World, slotIndex: number): number {
-  const slot = world.inventory[slotIndex];
+export function sellFromBag(world: World, slotIndex: number, slots: World['inventory'] = world.inventory): number {
+  const slot = slots[slotIndex];
   if (!slot || slot.kind !== 'sigil' || !slot.sigilId) return 0;
   const def = sigilDef(slot.sigilId);
   const gold = (balance.sigil.sellGold as Record<string, number>)[def.tier] ?? 0;
-  world.inventory[slotIndex] = null;
+  slots[slotIndex] = null;
   world.gold += gold;
   world.events.emit('sigil_sold', { id: slot.sigilId, gold, total: world.gold });
   return gold;

@@ -63,7 +63,18 @@ function flaskLarge(color: string): string {
   );
 }
 
-const SHAPES: Record<string, (color: string) => string> = { flask, flaskLarge, meat };
+/** 열쇠 — 고리·대·이빨 둘. 바닥 모형(Stage 의 key)과 같은 실루엣 (성물함 열쇠, stash.md) */
+function key(color: string): string {
+  return (
+    `<circle cx="8" cy="8" r="4.2" fill="none" stroke="${color}" stroke-width="2.6"/>` +
+    `<circle cx="8" cy="8" r="4.2" fill="none" stroke="${OUTLINE}" stroke-width="0.8"/>` +
+    `<path d="M11 11L20 20" stroke="${color}" stroke-width="2.6" stroke-linecap="round"/>` +
+    `<path d="M16.5 16.5l2.6-2.6M18.6 18.6l2.4-2.4" stroke="${color}" stroke-width="2.2" stroke-linecap="round"/>` +
+    `<path d="M11 11L20 20" stroke="${OUTLINE}" stroke-width="0.7" stroke-linecap="round"/>`
+  );
+}
+
+const SHAPES: Record<string, (color: string) => string> = { flask, flaskLarge, meat, key };
 
 /** 아이콘 SVG 문자열. 모르는 icon 이름이면 색 네모로 물러난다 (없는 것보다 낫다) */
 /** 각인 팔면체 — 가방·전리품 공용 (색은 그 각인의 색) */
@@ -154,7 +165,8 @@ const ARROW_WOOD = '#d8d0b8';
 
 /** 전리품 줄 아이콘 — 소모품은 가방 아이콘 그대로, 골드는 ◆, 화살은 대·촉·깃, 각인은 그 각인 색 팔면체 */
 export function lootIconSvg(entry: LootEntry, size: number): string {
-  if (entry.kind === 'potion' || entry.kind === 'mana' || entry.kind === 'food') return itemIconSvg(entry.kind, size);
+  // 가방 소모품(물약·고기·열쇠)은 가방 아이콘 그대로 — 골드·화살·장비·각인만 여기서 따로 그린다
+  if (entry.kind !== 'gold' && entry.kind !== 'arrow' && entry.kind !== 'equip' && entry.kind !== 'sigil') return itemIconSvg(entry.kind, size);
   let body: string;
   let glow: string;
   if (entry.kind === 'gold') {

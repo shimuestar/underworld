@@ -67,15 +67,15 @@ export function unequip(world: World, slot: EquipSlot): 'ok' | 'bag_full' | 'non
 }
 
 /** 제단에서 가방의 장비를 판다 — 정가 × equipment.sellRatio. 유일 장비(sellable false — 낫뿔 반지, B3-6)는 팔 수 없다: equip_sell_denied 만 내고 그대로 둔다 */
-export function sellFromBag(world: World, slotIndex: number): number {
-  const slot = world.inventory[slotIndex];
+export function sellFromBag(world: World, slotIndex: number, slots: World['inventory'] = world.inventory): number {
+  const slot = slots[slotIndex];
   if (!slot || slot.kind !== 'equip' || !slot.equipId) return 0;
   if (!equipSellable(slot.equipId)) {
     world.events.emit('equip_sell_denied', { id: slot.equipId, reason: 'unique' });
     return 0;
   }
   const gold = Math.round(equipDef(slot.equipId).price * balance.equipment.sellRatio);
-  world.inventory[slotIndex] = null;
+  slots[slotIndex] = null;
   world.gold += gold;
   world.events.emit('equip_sold', { id: slot.equipId, gold, total: world.gold });
   return gold;

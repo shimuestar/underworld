@@ -11,7 +11,7 @@ import { balance } from '../core/Balance';
 import { equipDef, equipSellable } from '../core/EquipData';
 import { countOf, isUseful } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
-import type { ItemKind, LootEntry, World } from '../core/World';
+import type { InventorySlot, ItemKind, LootEntry, World } from '../core/World';
 import * as Altar from '../systems/Altar';
 import * as Equipment from '../systems/Equipment';
 import * as Merchant from '../systems/Merchant';
@@ -95,8 +95,10 @@ export class MerchantUI {
   private readonly root: HTMLDivElement;
   open = false;
   private tab: Tab = 'sell';
-  /** 커서 — 활성 격자의 칸 번호 (팔기: 가방 / 사기: 상인 물건) */
+  /** 커서 — 활성 격자의 칸 번호 (팔기: 가방 또는 창고 / 사기: 상인 물건) */
   private sel = 0;
+  /** 팔기 탭의 격자 — 가방 위, 창고 아래 (창고 물건도 바로 판다, stash.md §2) */
+  private pane: 'bag' | 'stash' = 'bag';
   private openedAt = 0;
   /** 패드로 조작 중 — 안내·키캡을 패드 표기로 (main 이 틱마다 갱신) */
   padMode = false;
@@ -168,7 +170,13 @@ export class MerchantUI {
     if (this.tab === tab) return;
     this.tab = tab;
     this.sel = 0;
+    this.pane = 'bag';
     this.rebuild();
+  }
+
+  /** 팔기 탭에서 커서가 가리키는 칸 배열 */
+  private sellSlots(): (InventorySlot | null)[] {
+    return this.pane === 'stash' ? this.world.stash : this.world.inventory;
   }
 
   private cycleTab(dir: number): void {
@@ -178,7 +186,11 @@ export class MerchantUI {
 
   /** 활성 격자의 열 수·칸 수 */
   private gridShape(): { cols: number; count: number } {
-    if (this.tab === 'sell') return { cols: balance.items.cols, count: this.world.inventory.length };
+    if (this.tab === 'sell') {
+      return this.pane === 'stash'
+        ? { cols: balance.lobby.stash.cols, count: this.world.stash.length }
+        : { cols: balance.items.cols, count: this.world.inventory.length };
+    }
     if (this.tab === 'buy') return { cols: GOODS_COLS, count: GOODS.length };
     return { cols: 1, count: 0 };
   }
@@ -190,6 +202,21 @@ export class MerchantUI {
     const rows = Math.ceil(count / cols);
     let c = this.sel % cols;
     let r = Math.floor(this.sel / cols);
+    // 팔기 탭 — 가방 아래로 나가면 창고, 창고 위로 나가면 가방
+    if (this.tab === 'sell' && dy > 0 && r + dy >= rows && this.pane === 'bag' && this.world.stash.length > 0) {
+      this.pane = 'stash';
+      this.sel = Math.min(this.world.stash.length - 1, c);
+      this.rebuild();
+      return;
+    }
+    if (this.tab === 'sell' && dy < 0 && r + dy < 0 && this.pane === 'stash') {
+      this.pane = 'bag';
+      const bagCols = balance.items.cols;
+      const bagRows = Math.ceil(this.world.inventory.length / bagCols);
+      this.sel = Math.min(this.world.inventory.length - 1, (bagRows - 1) * bagCols + Math.min(c, bagCols - 1));
+      this.rebuild();
+      return;
+    }
     c = Math.max(0, Math.min(cols - 1, c + dx));
     r = Math.max(0, Math.min(rows - 1, r + dy));
     const next = Math.min(count - 1, r * cols + c);
@@ -216,11 +243,12 @@ export class MerchantUI {
 
   private sellCursor(all: boolean): void {
     const world = this.world;
-    const slot = world.inventory[this.sel];
+    const slots = this.sellSlots();
+    const slot = slots[this.sel];
     if (!slot) return;
-    if (slot.kind === 'sigil') Sigils.sellFromBag(world, this.sel);
-    else if (slot.kind === 'equip') Equipment.sellFromBag(world, this.sel);
-    else Merchant.sellConsumable(world, this.sel, all);
+    if (slot.kind === 'sigil') Sigils.sellFromBag(world, this.sel, slots);
+    else if (slot.kind === 'equip') Equipment.sellFromBag(world, this.sel, slots);
+    else Merchant.sellConsumable(world, this.sel, all, slots);
     this.rebuild();
   }
 
@@ -277,8 +305,10 @@ export class MerchantUI {
 
   // ---- 팔기 — 내 가방 격자 + 매입 안내 ----
   private buildSell(): HTMLElement {
+    const wrap = document.createElement('div');
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;gap:28px;align-items:flex-start;';
+    wrap.appendChild(row);
     row.appendChild(this.bagGrid(true));
 
     // 매입 규칙 — 가운데 열
@@ -302,9 +332,64 @@ export class MerchantUI {
     }
     row.appendChild(info);
     // 커서 칸 설명 — 오른쪽 고정 칸
-    const slot = this.world.inventory[this.sel];
-    row.appendChild(this.descBox(slot ? this.sellPopup(this.sel) : { title: '빈 칸', lines: ['팔 물건을 고른다 — 커서를 가방 칸으로'] }));
-    return row;
+    const slot = this.sellSlots()[this.sel];
+    row.appendChild(this.descBox(slot ? this.sellPopup(this.sel) : { title: '빈 칸', lines: ['팔 물건을 고른다 — 커서를 가방·창고 칸으로'] }));
+    // 창고 — 아래 전폭. 로비 성물함의 물건을 여기서도 판다 (stash.md §2)
+    wrap.appendChild(this.stashGrid());
+    return wrap;
+  }
+
+  /** 창고 격자(팔기 탭 아래) — 가방 격자와 같은 칸, 매입가 표기 */
+  private stashGrid(): HTMLElement {
+    const world = this.world;
+    const box = document.createElement('div');
+    box.style.cssText = 'margin-top:16px;';
+    const title = document.createElement('div');
+    title.textContent = `창고 ${world.stash.filter((s) => s).length}/${world.stash.length}칸 — 여기서도 판다`;
+    title.style.cssText = `color:${this.pane === 'stash' ? '#7fbfff' : '#8a8f9a'};margin-bottom:6px;`;
+    box.appendChild(title);
+    const grid = document.createElement('div');
+    grid.style.cssText = `display:grid;grid-template-columns:repeat(${balance.lobby.stash.cols}, ${CELL_PX}px);gap:${GAP_PX}px;`;
+    world.stash.forEach((slot, i) => grid.appendChild(this.sellCell(slot, i, 'stash')));
+    box.appendChild(grid);
+    return box;
+  }
+
+  /** 팔기 칸 하나 — 가방·창고 공용 */
+  private sellCell(slot: InventorySlot | null, i: number, pane: 'bag' | 'stash'): HTMLDivElement {
+    const cell = document.createElement('div');
+    const here = this.pane === pane && this.sel === i;
+    cell.style.cssText =
+      CELL +
+      `border:1px solid ${here ? '#7fbfff' : '#3a3a44'};` +
+      `background:${here ? 'rgba(127,191,255,0.12)' : 'rgba(255,255,255,0.02)'};cursor:${slot ? 'pointer' : 'default'};`;
+    if (slot) {
+      const isSigil = slot.kind === 'sigil' && !!slot.sigilId;
+      const isEquip = slot.kind === 'equip' && !!slot.equipId;
+      const icon = isSigil ? sigilIcon(slot.sigilId!, ICON_PX) : isEquip ? equipIcon(slot.equipId!, ICON_PX) : itemIcon(slot.kind, ICON_PX);
+      icon.style.cssText += 'position:absolute;left:50%;top:24px;transform:translate(-50%,-50%);';
+      cell.appendChild(icon);
+      const label = document.createElement('div');
+      label.textContent = isSigil ? sigilDef(slot.sigilId!).name.slice(0, 4) : isEquip ? equipDef(slot.equipId!).name.slice(0, 5) : `×${slot.count}`;
+      label.style.cssText = isSigil || isEquip
+        ? `position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:${isSigil ? sigilDef(slot.sigilId!).color : equipDef(slot.equipId!).color};`
+        : 'position:absolute;bottom:3px;right:5px;font-size:11px;color:#cfd2da;';
+      cell.appendChild(label);
+      const price = this.priceOfSlot(slot);
+      const tag = document.createElement('div');
+      tag.textContent = price === null ? '×' : `◆${price.unit}`;
+      tag.style.cssText = `position:absolute;top:2px;left:4px;font-size:10px;color:${price === null ? '#a05050' : '#e8c76a'};`;
+      cell.appendChild(tag);
+    }
+    cell.onclick = () => { this.pane = pane; this.sel = i; this.act(); };
+    cell.oncontextmenu = (e) => { e.preventDefault(); this.pane = pane; this.sel = i; this.sellAll(); };
+    cell.onmousemove = (ev) => {
+      if (!this.hoverAllowed(ev) || (this.pane === pane && this.sel === i)) return;
+      this.pane = pane;
+      this.sel = i;
+      this.rebuild();
+    };
+    return cell;
   }
 
   /** 오른쪽 고정 설명 칸 — 팝업 내용(제목·설명·값어치·조작)을 같은 자리에 그린다 */
@@ -345,9 +430,13 @@ export class MerchantUI {
     return box;
   }
 
-  /** 칸의 매입가 — { 한 개, 전부 }. 못 파는 칸(유일 장비·값 없는 종류)은 null */
+  /** 커서 격자의 index 칸 매입가 */
   private sellPriceOf(index: number): { unit: number; all: number } | null {
-    const slot = this.world.inventory[index];
+    return this.priceOfSlot(this.sellSlots()[index] ?? null);
+  }
+
+  /** 칸의 매입가 — { 한 개, 전부 }. 못 파는 칸(유일 장비·값 없는 종류)은 null */
+  private priceOfSlot(slot: InventorySlot | null): { unit: number; all: number } | null {
     if (!slot) return null;
     if (slot.kind === 'equip' && slot.equipId) {
       if (!equipSellable(slot.equipId)) return null;
@@ -377,8 +466,9 @@ export class MerchantUI {
     const grid = document.createElement('div');
     grid.style.cssText = `display:grid;grid-template-columns:repeat(${balance.items.cols}, ${CELL_PX}px);gap:${GAP_PX}px;`;
     world.inventory.forEach((slot, i) => {
+      if (interactive) { grid.appendChild(this.sellCell(slot, i, 'bag')); return; }
       const cell = document.createElement('div');
-      const here = interactive && this.sel === i;
+      const here = false;
       cell.style.cssText =
         CELL +
         `border:1px solid ${here ? '#7fbfff' : '#3a3a44'};` +
@@ -396,23 +486,6 @@ export class MerchantUI {
           ? `position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:${isSigil ? sigilDef(slot.sigilId!).color : equipDef(slot.equipId!).color};`
           : 'position:absolute;bottom:3px;right:5px;font-size:11px;color:#cfd2da;';
         cell.appendChild(label);
-        if (interactive) {
-          // 매입가 — 왼쪽 위. 못 파는 것은 붉은 ×
-          const price = this.sellPriceOf(i);
-          const tag = document.createElement('div');
-          tag.textContent = price === null ? '×' : `◆${price.unit}`;
-          tag.style.cssText = `position:absolute;top:2px;left:4px;font-size:10px;color:${price === null ? '#a05050' : '#e8c76a'};`;
-          cell.appendChild(tag);
-        }
-      }
-      if (interactive) {
-        cell.onclick = () => { this.sel = i; this.act(); };
-        cell.oncontextmenu = (e) => { e.preventDefault(); this.sel = i; this.sellAll(); };
-        cell.onmousemove = (ev) => {
-          if (!this.hoverAllowed(ev) || this.sel === i) return;
-          this.sel = i;
-          this.rebuild();
-        };
       }
       grid.appendChild(cell);
     });
@@ -423,7 +496,7 @@ export class MerchantUI {
   /** 팔기 칸 팝업 — 설명 + 매입가 + 조작 */
   private sellPopup(index: number): PopupContent {
     const world = this.world;
-    const slot = world.inventory[index]!;
+    const slot = this.sellSlots()[index]!;
     const price = this.sellPriceOf(index);
     let content: PopupContent;
     if (slot.kind === 'equip' && slot.equipId) content = equipPopup(world, slot.equipId);

@@ -35,10 +35,41 @@ export interface ItemDef {
   /** 마시면 지워지는 플레이어 상태(PlayerStatusKind 이름) — 체력 물약의 진탕(기획서 §6 결정 22). JSON 추론 타입이라 문자열로 두고
    *  curableStatuses 가 PLAYER_STATUS_KINDS 와 대조한다. heal 이 있다고 지우는 게 아니다(말린 고기는 지우지 않는다) */
   cures?: readonly string[];
+  /** 쓰는 물건이 아니다 — 퀵슬롯에 오르지 않고 마실 수 없다 (성물함 열쇠, stash.md) */
+  passive?: boolean;
+  /** 주우면 성물함 안전 칸으로 먼저 들어간다(가득이면 가방) — 죽어도 잃지 않는다 */
+  secure?: boolean;
 }
 
 export function itemDef(kind: ItemKind): ItemDef {
   return balance.items.kinds[kind];
+}
+
+/** 쓰는 물건이 아닌 종류(열쇠) — 퀵슬롯·마시기·자동 등록에서 뺀다 */
+export function isPassiveKind(kind: ItemKind): boolean {
+  return kind !== 'sigil' && kind !== 'equip' && itemDef(kind).passive === true;
+}
+
+/** 안전 칸으로 먼저 들어가는 종류(열쇠) */
+export function isSecureKind(kind: ItemKind): boolean {
+  return kind !== 'sigil' && kind !== 'equip' && itemDef(kind).secure === true;
+}
+
+/** 칸 배열(가방·창고·안전 칸 공용)에 한 개 넣기 — 같은 종류가 stackMax 미만이면 쌓고, 아니면 빈 칸. 자리가 없으면 false */
+export function putOne(slots: (InventorySlot | null)[], kind: ItemKind, stackMax: number, ids?: { sigilId?: string; equipId?: string }): boolean {
+  const stackable = kind !== 'sigil' && kind !== 'equip';
+  if (stackable) {
+    for (const slot of slots) {
+      if (slot && slot.kind === kind && slot.count < stackMax) {
+        slot.count++;
+        return true;
+      }
+    }
+  }
+  const empty = slots.indexOf(null);
+  if (empty < 0) return false;
+  slots[empty] = { kind, count: 1, ...(ids?.sigilId ? { sigilId: ids.sigilId } : {}), ...(ids?.equipId ? { equipId: ids.equipId } : {}) };
+  return true;
 }
 
 /** 아이템 색 — Three.js·CSS 양쪽에서 쓰게 숫자로도 준다 (각인의 sigilColor 와 같은 규약) */
@@ -120,6 +151,11 @@ export function addItem(world: World, kind: ItemKind): boolean {
   if (kind === 'sigil') throw new Error('각인은 addSigil(world, sigilId) 로 넣는다');
   if (kind === 'equip') throw new Error('장비는 addEquip(world, equipId) 로 넣는다');
   const stackMax = balance.items.stackMax;
+  // 성물함 열쇠 — 안전 칸으로 먼저 (죽어도 잃지 않는다, stash.md §1). 가득이면 가방으로 떨어진다
+  if (isSecureKind(kind) && putOne(world.secure, kind, stackMax)) {
+    world.events.emit('item_secured', { kind, count: countOf(world, kind) });
+    return true;
+  }
   // 쌓을 자리를 먼저 찾는다 — 새 칸부터 쓰면 같은 물약이 칸을 여럿 잡아먹는다
   for (const slot of world.inventory) {
     if (slot && slot.kind === kind && slot.count < stackMax) {
@@ -182,6 +218,7 @@ export function splitSlot(world: World, index: number, amount: number): number {
 export function hasRoom(world: World, kind: ItemKind): boolean {
   const stackMax = balance.items.stackMax;
   if (kind === 'sigil' || kind === 'equip') return world.inventory.includes(null);
+  if (isSecureKind(kind) && world.secure.some((s) => s === null || (s.kind === kind && s.count < stackMax))) return true;
   return world.inventory.some(
     (slot) => slot === null || (slot.kind === kind && slot.count < stackMax),
   );
@@ -282,7 +319,7 @@ export function dropSlot(world: World, index: number): void {
  *  같은 물약이 두 칸을 차지하면 다섯 칸이 금방 의미를 잃는다 */
 export function bindQuickslot(world: World, index: number, kind: ItemKind): void {
   if (index < 0 || index >= world.quickslots.length) return;
-  if (kind === 'sigil' || kind === 'equip') return; // 각인·장비는 마시는 것이 아니다
+  if (kind === 'sigil' || kind === 'equip' || isPassiveKind(kind)) return; // 각인·장비·열쇠는 마시는 것이 아니다
   const already = world.quickslots.indexOf(kind);
   const displaced = world.quickslots[index] ?? null;
   world.quickslots[index] = kind;
@@ -300,7 +337,7 @@ export function unbindQuickslot(world: World, index: number): void {
 /** 등록 안 된 종류를 처음 주우면 빈 칸에 자동으로 꽂는다 —
  *  Tab 을 한 번도 안 열어도 물약을 쓸 수 있어야 한다 */
 export function autoBind(world: World, kind: ItemKind): void {
-  if (kind === 'sigil' || kind === 'equip') return;
+  if (kind === 'sigil' || kind === 'equip' || isPassiveKind(kind)) return;
   if (world.quickslots.includes(kind)) return;
   const empty = world.quickslots.indexOf(null);
   if (empty < 0) return;
@@ -311,7 +348,7 @@ export function autoBind(world: World, kind: ItemKind): void {
 /** 지금 이 종류를 써서 값어치가 있는가 — 가득 찬 자원에 부으면 그냥 버리는 것이다.
  *  음식은 둘 중 하나만 모자라도 먹을 값어치가 있다 (옛 Pickups.wants 규칙과 같다) */
 export function isUseful(world: World, kind: ItemKind): boolean {
-  if (kind === 'sigil' || kind === 'equip') return true; // 흐리게 그리지 않는다 — 마시는 값어치가 아니라 새기는/걸치는 것
+  if (kind === 'sigil' || kind === 'equip' || isPassiveKind(kind)) return true; // 흐리게 그리지 않는다 — 마시는 값어치가 아니라 새기는/걸치는/맡기는 것
   const def = itemDef(kind);
   if (def.heal > 0 && world.player.health < balance.player.healthMax) return true;
   // 지울 상태가 있으면 유용 — 체력 물약은 만피여도 진탕(concussion)을 지운다(기획서 §6 결정 22, def.cures × potionCures)

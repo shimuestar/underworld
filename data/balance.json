@@ -447,7 +447,11 @@
       "potion_large": { "name": "대형 체력 물약", "short": "대형HP", "color": "#ff5a6e", "icon": "flaskLarge", "heal": 50, "restore": 0, "cures": ["concussion"], "overTime": { "instantRatio": 0.5, "durationTicks": 300 } },
       "mana_large": { "name": "대형 마나 물약", "short": "대형MP", "color": "#5a9cff", "icon": "flaskLarge", "heal": 0, "restore": 70, "overTime": { "instantRatio": 0.5, "durationTicks": 300 } },
       "_foodKindNote": "2026-08-30 개념 변경 — 물약은 응급, 음식은 지속. 먹자마자 heal 만큼만 차고, 30초(1800틱) 동안 HP 가 아주 천천히 총 ~16 차오르며(healPerTick 0.009×1800) 스태미너 회복이 25% 빨라진다. 마나는 더 이상 안 준다",
-      "food": { "name": "말린 고기", "color": "#9c4a3c", "icon": "meat", "heal": 5, "restore": 0, "regen": { "durationTicks": 1800, "healPerTick": 0.009, "staminaRegenMul": 1.25 } }
+      "food": { "name": "말린 고기", "color": "#9c4a3c", "icon": "meat", "heal": 5, "restore": 0, "regen": { "durationTicks": 1800, "healPerTick": 0.009, "staminaRegenMul": 1.25 } },
+      "_keyNote": "성물함 열쇠 (창고 확장 재료, 2026-09-08 stash.md §4). passive: 마실 수 없고 퀵슬롯에 오르지 않으며 상인이 사지 않는다. secure: 주우면 성물함 안전 칸으로 먼저 들어간다(가득이면 가방). 크기별 색만 다르다",
+      "key_s": { "name": "성물함 열쇠 小", "short": "열쇠小", "color": "#c9a24a", "icon": "key", "heal": 0, "restore": 0, "passive": true, "secure": true },
+      "key_m": { "name": "성물함 열쇠 中", "short": "열쇠中", "color": "#e0d0a0", "icon": "key", "heal": 0, "restore": 0, "passive": true, "secure": true },
+      "key_l": { "name": "성물함 열쇠 大", "short": "열쇠大", "color": "#9fd8ff", "icon": "key", "heal": 0, "restore": 0, "passive": true, "secure": true }
     }
   },
 
@@ -491,6 +495,8 @@
     },
     "_equipDropNote": "장비 드랍 — 보스 주머니는 확정 1개(bossAlways), 일반 적은 dropChance (0 = 안 떨어진다, 2026-09-04). 어느 장비인지는 전체에서 무작위",
     "equip": { "dropChance": 0, "bossAlways": true },
+    "_stashKeyNote": "성물함 열쇠 드랍 (stash.md §4) — 상자를 처음 열 때 chestChance 로 chestKind 한 개, 보스 주머니에는 bossKinds[적 종](없으면 default) 확정 한 개",
+    "stashKey": { "chestChance": 0.2, "chestKind": "key_s", "bossKinds": { "default": "key_m", "scythe_behemoth": "key_l" } },
     "_largeDropNote": "대형 물약 드랍 — 흔치 않다. 보스는 대형 체력 물약 확정",
     "potionLarge": { "dropChance": 0.05, "bossAlways": true },
     "manaPotionLarge": { "dropChance": 0.04 },
@@ -1094,6 +1100,21 @@
     "merchant": {
       "sellRatio": 0.5,
       "basePrice": { "food": 8 }
+    },
+    "_stashNote": "창고(성물함, stash.md, 2026-09-08). baseSlots 에서 tiers 를 차례로 사서 넓힌다 — 단계마다 slots 만큼 늘고 gold 와 key(열쇠 종류, null 이면 골드만) 한 개를 낸다. stackMax 는 창고 한 칸 스택 상한(가방 items.stackMax 보다 크다). cols 는 창고 격자 열 수(그리기). secure: 성물함 안전 칸 — 죽어도 남는다, baseSlots 에서 maxSlots 까지(축복·퀘스트로 늘릴 자리). radius·facingArcDeg 는 NPC 와 같은 접근 규약, collisionHalf 는 성물함 차단 상자 반폭",
+    "stash": {
+      "cols": 10,
+      "baseSlots": 20,
+      "stackMax": 20,
+      "tiers": [
+        { "slots": 10, "gold": 150, "key": null },
+        { "slots": 10, "gold": 400, "key": "key_s" },
+        { "slots": 20, "gold": 900, "key": "key_m" }
+      ],
+      "secure": { "baseSlots": 2, "maxSlots": 4 },
+      "radius": 2.6,
+      "facingArcDeg": 100,
+      "collisionHalf": { "x": 0.75, "z": 0.45 }
     }
   },
   "_saveNote": "세이브/로드 (2026-09-07 사용자) — 체크포인트 자동 저장 + 테스트용 수동 저장, 저장 목록에서 골라 이어한다. 저장은 스냅샷이 아니라 재현 레시피: 캐릭터 진행(골드·XP·가방·장비·각인·탄약·오염·활성 제단·봉인 해제)과 층마다 원본과의 차이(죽인 적·연 상자·당긴 레버·부서진 자물쇠·부순 통·소품·발동한 함정·바닥 아이템)만 적고, 불러올 때 층은 레벨 JSON 에서 다시 짓는다. 살아 있던 적·보스는 배치 자리에서 만피로 돌아온다(사용자 결정). autosave: floorChange = 층을 옮길 때(로비 도착 포함) / altarActivated = 제단을 활성화할 때. 개수 제한은 없다 — 불러오기 목록에서 직접 지운다(2026-09-07 사용자). restoredItemIdBase: 불러온 바닥 아이템의 id 대역 — 세션 카운터(Loot 1200000 등)와 겹치지 않게 새로 매긴다. 시험방(함정·몬스터)에서는 저장하지 않는다",

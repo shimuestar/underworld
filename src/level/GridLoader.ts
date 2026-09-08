@@ -9,7 +9,8 @@ import {
   dungeonWallTexture,
 } from '../render/DungeonTextures';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { buildDecor, buildGrandAltar, buildRespawnCircle, CHURCH_COLORS, decorBlockers } from './ChurchDecor';
+import { buildDecor, buildGrandAltar, buildReliquary, buildRespawnCircle, CHURCH_COLORS, decorBlockers, dirNormal } from './ChurchDecor';
+import { balance } from '../core/Balance';
 
 export interface GlyphDef {
   cell: number[];
@@ -58,6 +59,8 @@ export interface LevelDef {
   spawnFacing?: 'N' | 'S' | 'E' | 'W';
   /** 장식 — 열주·장의자·색유리창·촛대·노점 (ChurchDecor). column/pew/stall 은 이동 차단 상자도 만든다 */
   decor?: DecorDef[];
+  /** 창고 성물함(성소 로비, stash.md §6) — 칸과 상판이 향하는 쪽. Level.stashPos + 차단 상자, 교회 테마에서 성물함 모형 */
+  stash?: { cell: number[]; dir?: string };
 }
 
 export interface FloorMarkDef {
@@ -133,6 +136,8 @@ export class Level {
   readonly theme: 'dungeon' | 'church';
   /** 장식 (LevelDef.decor) */
   readonly decor: DecorDef[];
+  /** 창고 성물함 자리 (LevelDef.stash) — 없으면 null. 상호작용은 Stash 시스템 */
+  readonly stashPos: { x: number; z: number; dirX: number; dirZ: number } | null;
   /** 잠긴 문(D·G) — 미닫이가 밀려 들어갈 축도 여기서 정한다 */
   readonly doors: DoorCell[];
 
@@ -214,6 +219,23 @@ export class Level {
     this.decor = def.decor ?? [];
     // 장식 중 몸으로 막히는 것(열주·장의자·노점 상판) — 제단 기둥과 같은 차단 상자
     for (const rect of decorBlockers(this.decor, this.cellSize)) this.props.push(rect);
+    // 창고 성물함 — 칸 가운데 상자. 차단 상자 반폭은 데이터(lobby.stash.collisionHalf), 긴 축은 dir 에 수직
+    if (def.stash) {
+      const [row, col] = def.stash.cell as [number, number];
+      const n = dirNormal(def.stash.dir);
+      const cx = (col + 0.5) * this.cellSize;
+      const cz = (row + 0.5) * this.cellSize;
+      const half = balance.lobby.stash.collisionHalf;
+      const alongX = n.z !== 0;
+      this.props.push(
+        alongX
+          ? { minX: cx - half.x, maxX: cx + half.x, minZ: cz - half.z, maxZ: cz + half.z }
+          : { minX: cx - half.z, maxX: cx + half.z, minZ: cz - half.x, maxZ: cz + half.x },
+      );
+      this.stashPos = { x: cx, z: cz, dirX: n.x, dirZ: n.z };
+    } else {
+      this.stashPos = null;
+    }
     this.bossArena = def.bossArena ?? false;
     this.arena = def.arena ?? null;
     this.levers = (def.triggers ?? []).filter(
@@ -1440,6 +1462,8 @@ export function buildLevelGroup(level: Level, torch: TorchParams): THREE.Group {
 
   // 장식 (교회 테마 — 열주·장의자·색유리창·촛대·노점). decor 가 빈 층은 아무것도 안 한다
   buildDecor(level, group);
+  // 창고 성물함 (stash.md §6)
+  if (level.stashPos) group.add(buildReliquary(level.stashPos.x, level.stashPos.z, { x: level.stashPos.dirX, z: level.stashPos.dirZ }));
 
   return group;
 }

@@ -12,7 +12,7 @@ import { randomEquipIds } from '../core/EquipData';
 import { bagSigilIds, bagEquipIds } from '../core/Inventory';
 import { sigilDef } from '../core/SigilData';
 import sigilsJson from '../../data/sigils.json';
-import type { ChestState, LootEntry, World } from '../core/World';
+import type { ChestState, LootEntry, World, ItemKind } from '../core/World';
 
 export function tick(world: World, _dt: number): void {
   const cfg = balance.chest;
@@ -55,6 +55,9 @@ export function open(world: World, chest: ChestState): void {
     // 장비 하나 — chest.equipChance 로. 몸에 걸친 것·가방에 든 것은 뺀다 (2026-09-04)
     const equipId = rollEquip(world);
     if (equipId) entries.push({ kind: 'equip', count: 1, equipId });
+    // 성물함 열쇠 小 — pickups.stashKey.chestChance 로 (stash.md §4)
+    const keyCfg = balance.pickups.stashKey;
+    if (Math.random() < keyCfg.chestChance) entries.push({ kind: keyCfg.chestKind as ItemKind, count: 1 });
     chest.chestItems = entries;
     world.events.emit('chest_opened', { id: chest.id, x: chest.x, z: chest.z, gold: total, sigilId, equipId });
   }

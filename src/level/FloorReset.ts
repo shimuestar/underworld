@@ -1,6 +1,7 @@
 // 던전 초기화 — 성소 로비에 들어오는 순간(워프·부활·계단) 모든 던전 층을 되돌린다 (2026-09-07 사용자).
-// 초기화 = 몬스터 전부 배치대로 부활(단, 잡은 보스는 돌아오지 않는다) · 함정 재무장 · 바닥 아이템(주머니 포함) 삭제.
-// 남기는 것 — 비석(유품, 사용자 지시) · 연 상자(빈 채로, 다시 주지 않는다) · 문·레버·자물쇠 · 부순 통·소품 ·
+// 초기화 = 몬스터 전부 배치대로 부활(단, 잡은 보스는 돌아오지 않는다) · 함정 재무장 · 바닥 아이템(주머니·비석 포함) 삭제.
+// 비석도 지운다 (2026-09-08 창고 도입, stash.md §3 — 들고 다닌 것은 다음 귀환까지만 되찾을 수 있다. 창고에 넣은 것만 안전하다).
+// 남기는 것 — 연 상자(빈 채로, 다시 주지 않는다) · 문·레버·자물쇠 · 부순 통·소품 ·
 // 부서진 균열벽·아레나 기둥(Level 격자와 차단 목록에 살아 있어 Level 을 그대로 두면 유지된다).
 // main 은 얼려 둔 FloorState(살아 있는 Level 포함)에는 resetFloor 를, 아직 짓지 않은 층의 세이브 차이에는 resetFloorDiff 를 쓴다.
 
@@ -39,8 +40,8 @@ export function resetFloor(fs: ResettableFloor, placements: EntityPlacement[], l
   if (fs.arena) fs.arena.bossId = null; // 새 몸은 Arena.tick 이 다시 찾는다 (잡았으면 없는 채로)
   // 연 상자는 빈 채로 — 더 주지 않는다
   for (const c of fs.chests) if (c.opened) c.chestItems = [];
-  // 바닥 — 비석만 남긴다
-  fs.groundItems = fs.groundItems.filter((g) => g.kind === 'grave');
+  // 바닥 — 전부 지운다 (비석 포함, stash.md §3)
+  fs.groundItems = [];
   fs.lifeMotes = [];
 }
 
@@ -67,6 +68,6 @@ export function resetFloorDiff(diff: FloorDiff, placements: EntityPlacement[], c
     barrelsBroken: [...diff.barrelsBroken],
     propsBroken: [...diff.propsBroken],
     traps: [],
-    groundItems: diff.groundItems.filter((g) => g.kind === 'grave'),
+    groundItems: [],
   };
 }

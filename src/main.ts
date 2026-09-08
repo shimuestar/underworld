@@ -68,6 +68,8 @@ import lobbyJson from '../data/levels/lobby.json';
 import * as Npc from './systems/Npc';
 import { ListDialog } from './render/ListDialog';
 import { MerchantUI } from './render/MerchantUI';
+import { StashUI } from './render/StashUI';
+import * as Stash from './systems/Stash';
 import * as Summon from './systems/Summon';
 import * as Equipment from './systems/Equipment';
 import { equipDef, slotLabel, type EquipSlot } from './core/EquipData';
@@ -408,6 +410,8 @@ const npcDialog = new ListDialog(undefined, 'npcdialog');
 const saveDialog = new ListDialog(undefined, 'savedialog');
 /** 상인 창 — 팔기·사기·퀘스트, 인벤토리 방식 (2026-09-07 사용자). 제단 상점(ShopUI)과 품목·재고를 공유한다 */
 const merchantUI = new MerchantUI(world);
+/** 창고(성물함) 창 — 보관·확장 (stash.md §5). 로비 성물함 앞에서 E */
+const stashUI = new StashUI(world);
 /** UI 오버레이 열기/닫기 — 닫을 때 포인터 락을 바로 되찾는다.
  *  안 그러면 메뉴를 나온 뒤 커서가 남아 화면을 한 번 클릭해야 조작이 돌아온다 */
 function setUiOpen(open: boolean): void {
@@ -422,6 +426,7 @@ function closeNpcUi(): void {
   setUiOpen(false);
 }
 merchantUI.onClose = closeNpcUi;
+stashUI.onClose = closeNpcUi;
 // 루팅 창 — 주머니·상자를 뒤진다. 열리는 건 loot_opened(Loot/Chest 가 낸다), 닫히면 규칙(빈 주머니 정리·재오픈 가드)을 Loot 에 맡긴다
 const lootUI = new LootUI(world);
 lootUI.onClose = () => {
@@ -442,7 +447,7 @@ events.on('loot_opened', (payload) => {
 // 메뉴 창 키 — I·Tab 가방 탭 · M 맵 탭으로 열고, 열려 있으면 어느 키든 닫는다. 스킬 탭은 ←→(LB/RB) 또는 헤더 클릭 (2026-09-04: Tab 기본을 가방으로)
 window.addEventListener('keydown', (e) => {
   if (lootUI.open) return; // 루팅 창은 자기 키(E/Esc)로만 닫는다 — 다른 창을 겹쳐 열지 않게
-  if (merchantUI.open) return; // 상인 창도 — Tab·1/2/3 은 그 안의 탭 전환이다
+  if (merchantUI.open || stashUI.open) return; // 상인·창고 창도 — Tab·숫자는 그 안의 탭 전환이다
   if (e.code === 'Tab') {
     e.preventDefault();
     // 상점에서 Tab — 스킬 탭(제단 모드: 패시브를 뗄 수 있다)으로 넘어간다 (둘이 겹쳐 뜨지 않게)
@@ -828,6 +833,11 @@ for (const name of [
   'blessing_ended',
   'item_sold',
   'item_sell_denied',
+  'stash_opened',
+  'stash_moved',
+  'stash_expanded',
+  'stash_denied',
+  'item_secured',
   'corruption_applied',
   'corruption_threshold',
   'enemy_cast',
@@ -2908,7 +2918,7 @@ function scheduleLobbyRevive(): void {
 /** 사망 메뉴 항목 — 개발 항목 유무에 따라 달라지므로 열 때마다 짓는다 */
 function showDeathMenu(): void {
   const entries = [
-    { id: 'lobby', label: '성소 로비에서 부활', sub: '로비의 부활 마법진에서 깨어난다 — 무료 · 죽은 자리의 유품(비석)은 그대로 남는다' },
+    { id: 'lobby', label: '성소 로비에서 부활', sub: '로비의 부활 마법진에서 깨어난다 — 무료 · 던전이 초기화되고 유품(비석)도 사라진다 (안전 칸은 남는다)' },
   ];
   if (balance.lobby.devDeathOptions) {
     entries.push(
@@ -2940,7 +2950,7 @@ events.on('respawn_registered', () => {
 });
 
 events.on('grave_dropped', () =>
-  showReaction('유품이 비석에 남았다 — 그 자리로 돌아가 상호작용으로 거둔다 (문을 열 때처럼 잠시 걸린다)', 3000),
+  showReaction('유품이 비석에 남았다 — 그 자리로 돌아가 상호작용으로 거둔다. 로비로 나오면 사라진다 (안전 칸은 남는다)', 3200),
 );
 // 비석에 손을 댔다 — 문 자물쇠와 같은 소리·진동 (채널도 같은 시간)
 events.on('grave_channel_started', () => {
@@ -3004,7 +3014,7 @@ function finishRevive(payload: Record<string, unknown>): void {
 // '최근 접촉한 제단에서 부활'(골드 비용, reviveAtAltar)은 폐지 (2026-09-07 사용자) — 부활은 로비(와 개발 항목)에서만.
 // 제단 진입은 여전히 world.respawn·world.altars 를 적는다 — 로비 대제단 워프 목록이 그것을 쓴다
 
-/** 로비 부활 — 성소 로비의 부활 마법진(스폰)에서 깨어난다. 무료. 로비에 들어오므로 던전은 초기화된다 (비석은 남는다 — resetDungeon) */
+/** 로비 부활 — 성소 로비의 부활 마법진(스폰)에서 깨어난다. 무료. 로비에 들어오므로 던전은 초기화된다 (비석도 사라진다 — resetDungeon, stash.md §3) */
 function reviveInLobby(): void {
   restorePlayer();
   loadFloor(LOBBY);
@@ -3012,7 +3022,7 @@ function reviveInLobby(): void {
 }
 
 /** 던전 초기화 — 로비에 들어오는 순간 모든 진행 층을 되돌린다 (2026-09-07 사용자). 규칙은 level/FloorReset:
- *  몬스터 부활(잡은 보스는 제외 — unlockedFloors 가 그 기록), 함정 재무장, 바닥 아이템 삭제(비석은 남긴다).
+ *  몬스터 부활(잡은 보스는 제외 — unlockedFloors 가 그 기록), 함정 재무장, 바닥 아이템 삭제(비석 포함 — 창고에 넣은 것만 안전하다, stash.md §3).
  *  얼려 둔 층은 Level 을 그대로 두고 배열만 갈아 끼우니 부서진 균열벽·기둥·문·레버·연 상자(빈 채)는 남는다.
  *  아직 짓지 않은 층(불러온 세이브의 차이)은 차이 자체를 같은 규칙으로 줄인다 */
 function resetDungeon(): void {
@@ -3099,6 +3109,7 @@ function loadGame(data: Save.SaveData): void {
     for (const f of data.barsCineSeen) barsCineSeen.add(f);
     pendingFloorDiffs = { ...data.floors };
     Save.restoreProgress(world, data); // loadFloor 보다 먼저 — 봉인·해독 판정이 진행 값을 읽는다
+    Stash.initStash(world); // 옛 저장(창고 없음)은 빈 창고로, 있으면 단계에 맞춰 칸 수를 잡는다
     loadFloor(data.floorIndex, 'entrance', true);
     floorStates.clear(); // loadFloor 가 떠나는(불러오기 전) 층을 얼려 둔 것도 버린다 — 그 층은 차이로 다시 짓는다
     Save.applyPlayerPose(world, data);
@@ -3437,6 +3448,37 @@ events.on('item_sold', (payload) => {
 events.on('item_sell_denied', (payload) => {
   audio.play('shop_deny');
   showReaction(`${itemDef((payload as { kind: ItemKind }).kind).name} — 상인이 사지 않는다`, 1600);
+});
+
+// ---- 창고(성물함, stash.md) ----
+events.on('stash_opened', () => {
+  audio.play('chest_opened');
+  padRumble('interact');
+  stashUI.padMode = input.usingPad;
+  stashUI.show();
+  setUiOpen(true);
+});
+events.on('stash_moved', () => audio.play('pickup'));
+events.on('stash_expanded', (payload) => {
+  const d = payload as { tier: number; slots: number; gold: number; key: string | null };
+  audio.play('altar_enter');
+  showReaction(`창고를 넓혔다 — ${d.slots}칸 (◆ ${d.gold}${d.key ? ` · ${itemDef(d.key as ItemKind).name}` : ''})`, 2600);
+});
+events.on('stash_denied', (payload) => {
+  const d = payload as { reason: string; to?: string; kind?: ItemKind };
+  audio.play('shop_deny');
+  const target = d.to === 'bag' ? '가방' : d.to === 'secure' ? '안전 칸' : '창고';
+  showReaction(
+    d.reason === 'full' ? `${target}이(가) 가득 찼다`
+      : d.reason === 'no_gold' ? '골드가 모자란다'
+        : d.reason === 'no_key' ? '성물함 열쇠가 없다 — 상자·보스 주머니에서 나온다'
+          : d.reason === 'max' ? '더 넓힐 수 없다' : '',
+    1600,
+  );
+});
+events.on('item_secured', (payload) => {
+  const d = payload as { kind: ItemKind };
+  showReaction(`${itemDef(d.kind).name} — 성물함 안전 칸에 들어갔다 (죽어도 잃지 않는다)`, 2600);
 });
 const SHOP_LABEL: Record<string, string> = {
   heal: '체력 물약', mana: '마나 물약', healLarge: '대형 체력 물약', manaLarge: '대형 마나 물약', ammo: '권총탄', arrow: '화살',
@@ -4090,6 +4132,7 @@ Equipment.init(world); // 장비 — 파생 수치·가방 칸을 장비 상태�
 LifeMotes.init(world);
 Projectiles.init(world);
 initInventory(world);
+Stash.initStash(world); // 창고·안전 칸 크기 — 단계·데이터에 맞춘다
 Progression.init(world);
 Corruption.init(world);
 Stamina.init(world);
@@ -4121,6 +4164,7 @@ const systems = [
   Mana.tick,
   Altar.tick,
   Npc.tick, // 로비의 사제·상인 — 제단과 같은 접근 규약. 축복 잔여 틱도 여기서 줄인다
+  Stash.tick, // 로비의 창고 성물함 — 접근만 (창은 main 이 stash_opened 로). 재진입 가드는 Npc 것을 읽는다
   Door.tick,
   Lever.tick,
   Chest.tick,
@@ -4187,6 +4231,25 @@ function simulate(dt: number): void {
       else if (input.gamepad.rawPressed(0)) merchantUI.padA();
       else if (input.gamepad.rawPressed(2)) merchantUI.padX();
       else if (input.gamepad.rawPressed(1)) merchantUI.padB();
+    }
+  }
+  // 창고 창 — 상인 창과 같은 규약 + Y 안전 칸, LT 가방 전부 넣기
+  if (stashUI.open) {
+    stashUI.padMode = input.lastDevice === 'pad';
+    if (input.gamepad.connected) {
+      const ms = menuStickStep();
+      if (input.gamepad.rawPressed(13)) stashUI.padMove(0, 1);
+      else if (input.gamepad.rawPressed(12)) stashUI.padMove(0, -1);
+      else if (input.gamepad.rawPressed(15)) stashUI.padMove(1, 0);
+      else if (input.gamepad.rawPressed(14)) stashUI.padMove(-1, 0);
+      else if (ms.dx !== 0 || ms.dy !== 0) stashUI.padMove(ms.dx, ms.dy);
+      else if (input.gamepad.rawPressed(4)) stashUI.padTab(-1); // LB
+      else if (input.gamepad.rawPressed(5)) stashUI.padTab(1); // RB
+      else if (input.gamepad.rawPressed(6)) stashUI.padLT(); // LT — 가방 전부 넣기
+      else if (input.gamepad.rawPressed(0)) stashUI.padA();
+      else if (input.gamepad.rawPressed(2)) stashUI.padX();
+      else if (input.gamepad.rawPressed(3)) stashUI.padY();
+      else if (input.gamepad.rawPressed(1)) stashUI.padB();
     }
   }
   // 메뉴 스틱 — 왼 스틱을 D-패드처럼 (한 번 밀면 한 칸, 계속 밀면 반복). 루팅 창·상점 공용
@@ -5051,9 +5114,10 @@ function render(alpha: number): void {
   const nearItem = world.itemInView !== null && !world.dead && !world.uiOpen;
   const nearGrave = world.graveInView !== null && !world.dead && !world.uiOpen;
   const nearNpc = world.npcInView !== null && !world.dead && !world.uiOpen;
+  const nearStash = world.stashInView && !world.dead && !world.uiOpen;
   altarPrompt!.classList.toggle(
     'visible',
-    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest || nearLoot || nearItem || nearGrave || nearNpc,
+    showAltarPrompt || nearDoor || nearLever || onExit || onEntrance || nearChest || nearLoot || nearItem || nearGrave || nearNpc || nearStash,
   );
   // 상호작용 키 표기 — 전용 키만 상호작용이다 (키보드는 현재 바인딩, 패드는 상호작용 버튼)
   const IK = keyLabel('interact', 'interact');
@@ -5078,6 +5142,10 @@ function render(alpha: number): void {
       `제단 — ${IK} 보급 상점\n` +
       `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
       `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 활성화됨 · 상점 마지막 줄로 성소 로비 워프`;
+  } else if (nearStash) {
+    altarPrompt!.textContent = `${IK} — 성물함(창고)을 연다  (창고 ${Stash.stashedCount(world)}개 보관 · 안전 칸 ${world.secure.filter((s) => s).length}/${world.secure.length})`;
+    centerKeycap = IK;
+    keycapWithPrompt = true;
   } else if (nearNpc) {
     const npc = world.npcInView!;
     altarPrompt!.textContent =
@@ -5444,6 +5512,7 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__warpDialog = warpDialog; // 로비 대제단 워프 목록 검증용
   (window as unknown as Record<string, unknown>).__npcDialog = npcDialog;
   (window as unknown as Record<string, unknown>).__merchantUI = merchantUI; // 상인 창(팔기·사기·퀘스트) 검증용
+  (window as unknown as Record<string, unknown>).__stashUI = stashUI; // 창고 창 검증용
   (window as unknown as Record<string, unknown>).__LOBBY = LOBBY;
 }
 // 게임은 성소 로비에서 시작한다 (2026-09-07 사용자). 지하 1층은 로비 남쪽 현관 계단으로 내려간다.

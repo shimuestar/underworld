@@ -6073,11 +6073,12 @@ export class Stage {
       group.add(mound);
       return group;
     }
-    if (kind === 'key') {
-      // 족장의 열쇠 — 금빛 고리 + 대 + 이빨 둘. 부유·회전은 syncGroundItems 가 준다
+    if (kind === 'key' || kind === 'key_s' || kind === 'key_m' || kind === 'key_l') {
+      // 열쇠 — 금빛 고리 + 대 + 이빨 둘. 성물함 열쇠(stash.md)는 크기별 색(items.kinds 색). 부유·회전은 syncGroundItems 가 준다
+      const keyColor = kind === 'key' ? KEY_COLOR : itemColor(kind);
       const gold = new THREE.MeshLambertMaterial({
-        color: KEY_COLOR,
-        emissive: KEY_COLOR,
+        color: keyColor,
+        emissive: keyColor,
         emissiveIntensity: 0.55,
       });
       const key = new THREE.Group();
@@ -6097,7 +6098,7 @@ export class Stage {
         key.add(tooth);
       }
       group.add(key);
-      group.add(new THREE.PointLight(KEY_COLOR, 0.9, 5, 0));
+      group.add(new THREE.PointLight(keyColor, 0.9, 5, 0));
     } else if (kind === 'potion' || kind === 'mana' || kind === 'potion_large' || kind === 'mana_large') {
       const large = kind === 'potion_large' || kind === 'mana_large';
       const color = kind === 'mana' || kind === 'mana_large' ? itemColor(kind) : itemColor(kind);
@@ -6284,6 +6285,7 @@ export class Stage {
         : kind === 'grenade' ? 0x86b06a
         : kind === 'battery' ? 0xd8c23a
         : kind === 'key' ? KEY_COLOR
+        : kind === 'key_s' || kind === 'key_m' || kind === 'key_l' ? itemColor(kind)
         : kind === 'pouch' ? (tier === 'boss' ? GOLD_COLOR : 0xd9a15c)
         : kind === 'equip' ? (equipId ? equipColor(equipId) : GROUND_ITEM_COLOR)
         : sigilId ? sigilColor(sigilId) : GROUND_ITEM_COLOR;
