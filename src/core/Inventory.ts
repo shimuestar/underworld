@@ -37,7 +37,7 @@ export interface ItemDef {
   cures?: readonly string[];
   /** 쓰는 물건이 아니다 — 퀵슬롯에 오르지 않고 마실 수 없다 (성물함 열쇠, stash.md) */
   passive?: boolean;
-  /** 주우면 성물함 안전 칸으로 먼저 들어간다(가득이면 가방) — 죽어도 잃지 않는다 */
+  /** 주우면 캐릭터의 안전 주머니로 먼저 들어간다(가득이면 가방) — 죽어도 잃지 않는다 */
   secure?: boolean;
 }
 
@@ -151,7 +151,7 @@ export function addItem(world: World, kind: ItemKind): boolean {
   if (kind === 'sigil') throw new Error('각인은 addSigil(world, sigilId) 로 넣는다');
   if (kind === 'equip') throw new Error('장비는 addEquip(world, equipId) 로 넣는다');
   const stackMax = balance.items.stackMax;
-  // 성물함 열쇠 — 안전 칸으로 먼저 (죽어도 잃지 않는다, stash.md §1). 가득이면 가방으로 떨어진다
+  // 성물함 열쇠 — 안전 주머니로 먼저 (죽어도 잃지 않는다, stash.md §1). 가득이면 가방으로 떨어진다
   if (isSecureKind(kind) && putOne(world.secure, kind, stackMax)) {
     world.events.emit('item_secured', { kind, count: countOf(world, kind) });
     return true;

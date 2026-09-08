@@ -2918,7 +2918,7 @@ function scheduleLobbyRevive(): void {
 /** 사망 메뉴 항목 — 개발 항목 유무에 따라 달라지므로 열 때마다 짓는다 */
 function showDeathMenu(): void {
   const entries = [
-    { id: 'lobby', label: '성소 로비에서 부활', sub: '로비의 부활 마법진에서 깨어난다 — 무료 · 던전이 초기화되고 유품(비석)도 사라진다 (안전 칸은 남는다)' },
+    { id: 'lobby', label: '성소 로비에서 부활', sub: '로비의 부활 마법진에서 깨어난다 — 무료 · 던전이 초기화되고 유품(비석)도 사라진다 (안전 주머니는 남는다)' },
   ];
   if (balance.lobby.devDeathOptions) {
     entries.push(
@@ -2950,7 +2950,7 @@ events.on('respawn_registered', () => {
 });
 
 events.on('grave_dropped', () =>
-  showReaction('유품이 비석에 남았다 — 그 자리로 돌아가 상호작용으로 거둔다. 로비로 나오면 사라진다 (안전 칸은 남는다)', 3200),
+  showReaction('유품이 비석에 남았다 — 그 자리로 돌아가 상호작용으로 거둔다. 로비로 나오면 사라진다 (안전 주머니는 남는다)', 3200),
 );
 // 비석에 손을 댔다 — 문 자물쇠와 같은 소리·진동 (채널도 같은 시간)
 events.on('grave_channel_started', () => {
@@ -3467,7 +3467,7 @@ events.on('stash_expanded', (payload) => {
 events.on('stash_denied', (payload) => {
   const d = payload as { reason: string; to?: string; kind?: ItemKind };
   audio.play('shop_deny');
-  const target = d.to === 'bag' ? '가방' : d.to === 'secure' ? '안전 칸' : '창고';
+  const target = d.to === 'bag' ? '가방' : d.to === 'secure' ? '안전 주머니' : '창고';
   showReaction(
     d.reason === 'full' ? `${target}이(가) 가득 찼다`
       : d.reason === 'no_gold' ? '골드가 모자란다'
@@ -3478,7 +3478,7 @@ events.on('stash_denied', (payload) => {
 });
 events.on('item_secured', (payload) => {
   const d = payload as { kind: ItemKind };
-  showReaction(`${itemDef(d.kind).name} — 성물함 안전 칸에 들어갔다 (죽어도 잃지 않는다)`, 2600);
+  showReaction(`${itemDef(d.kind).name} — 안전 주머니에 들어갔다 (죽어도 잃지 않는다 · 가방 탭 아래 칸)`, 2600);
 });
 const SHOP_LABEL: Record<string, string> = {
   heal: '체력 물약', mana: '마나 물약', healLarge: '대형 체력 물약', manaLarge: '대형 마나 물약', ammo: '권총탄', arrow: '화살',
@@ -5143,7 +5143,7 @@ function render(alpha: number): void {
       `◆ ${world.gold} 소지 · 체력·마나·탄약·수류탄·배터리를 산다 (무료 보급 없음)\n` +
       `오염 ${world.corruption.pending >= 0 ? '+' : ''}${world.corruption.pending} 정산 · 활성화됨 · 상점 마지막 줄로 성소 로비 워프`;
   } else if (nearStash) {
-    altarPrompt!.textContent = `${IK} — 성물함(창고)을 연다  (창고 ${Stash.stashedCount(world)}개 보관 · 안전 칸 ${world.secure.filter((s) => s).length}/${world.secure.length})`;
+    altarPrompt!.textContent = `${IK} — 성물함(창고)을 연다  (창고 ${Stash.stashedCount(world)}개 보관)`;
     centerKeycap = IK;
     keycapWithPrompt = true;
   } else if (nearNpc) {

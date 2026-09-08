@@ -448,7 +448,7 @@
       "mana_large": { "name": "대형 마나 물약", "short": "대형MP", "color": "#5a9cff", "icon": "flaskLarge", "heal": 0, "restore": 70, "overTime": { "instantRatio": 0.5, "durationTicks": 300 } },
       "_foodKindNote": "2026-08-30 개념 변경 — 물약은 응급, 음식은 지속. 먹자마자 heal 만큼만 차고, 30초(1800틱) 동안 HP 가 아주 천천히 총 ~16 차오르며(healPerTick 0.009×1800) 스태미너 회복이 25% 빨라진다. 마나는 더 이상 안 준다",
       "food": { "name": "말린 고기", "color": "#9c4a3c", "icon": "meat", "heal": 5, "restore": 0, "regen": { "durationTicks": 1800, "healPerTick": 0.009, "staminaRegenMul": 1.25 } },
-      "_keyNote": "성물함 열쇠 (창고 확장 재료, 2026-09-08 stash.md §4). passive: 마실 수 없고 퀵슬롯에 오르지 않으며 상인이 사지 않는다. secure: 주우면 성물함 안전 칸으로 먼저 들어간다(가득이면 가방). 크기별 색만 다르다",
+      "_keyNote": "성물함 열쇠 (창고 확장 재료, 2026-09-08 stash.md §4). passive: 마실 수 없고 퀵슬롯에 오르지 않으며 상인이 사지 않는다. secure: 주우면 캐릭터의 안전 주머니로 먼저 들어간다(가득이면 가방). 크기별 색만 다르다",
       "key_s": { "name": "성물함 열쇠 小", "short": "열쇠小", "color": "#c9a24a", "icon": "key", "heal": 0, "restore": 0, "passive": true, "secure": true },
       "key_m": { "name": "성물함 열쇠 中", "short": "열쇠中", "color": "#e0d0a0", "icon": "key", "heal": 0, "restore": 0, "passive": true, "secure": true },
       "key_l": { "name": "성물함 열쇠 大", "short": "열쇠大", "color": "#9fd8ff", "icon": "key", "heal": 0, "restore": 0, "passive": true, "secure": true }
@@ -1101,7 +1101,7 @@
       "sellRatio": 0.5,
       "basePrice": { "food": 8 }
     },
-    "_stashNote": "창고(성물함, stash.md, 2026-09-08). baseSlots 에서 tiers 를 차례로 사서 넓힌다 — 단계마다 slots 만큼 늘고 gold 와 key(열쇠 종류, null 이면 골드만) 한 개를 낸다. stackMax 는 창고 한 칸 스택 상한(가방 items.stackMax 보다 크다). cols 는 창고 격자 열 수(그리기). secure: 성물함 안전 칸 — 죽어도 남는다, baseSlots 에서 maxSlots 까지(축복·퀘스트로 늘릴 자리). radius·facingArcDeg 는 NPC 와 같은 접근 규약, collisionHalf 는 성물함 차단 상자 반폭",
+    "_stashNote": "창고(성물함, stash.md, 2026-09-08). baseSlots 에서 tiers 를 차례로 사서 넓힌다 — 단계마다 slots 만큼 늘고 gold 와 key(열쇠 종류, null 이면 골드만) 한 개를 낸다. stackMax 는 창고 한 칸 스택 상한(가방 items.stackMax 보다 크다). cols 는 창고 격자 열 수(그리기). secure: 캐릭터의 안전 주머니(Duckov 애완견 가방) — 창고가 아니라 몸에 지닌다, 가방 탭 아래 칸. 죽어도 남아 로비로 돌아온다, baseSlots 에서 maxSlots 까지(축복·퀘스트로 늘릴 자리). radius·facingArcDeg 는 NPC 와 같은 접근 규약, collisionHalf 는 성물함 차단 상자 반폭",
     "stash": {
       "cols": 10,
       "baseSlots": 20,

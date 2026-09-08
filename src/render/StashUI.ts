@@ -1,7 +1,7 @@
 // 창고(성물함) 창 — 보관 · 확장 두 탭. DOM 오버레이, 열려 있는 동안 시뮬레이션은 main 이 멈춘다. docs/systems/stash.md §5.
-// 보관: 왼쪽 열 = 내 가방 격자 + 성물함 안전 칸 + 설명 칸, 오른쪽 = 창고 격자(lobby.stash.cols 열).
+// 보관: 왼쪽 열 = 내 가방 격자 + 캐릭터의 안전 주머니 + 설명 칸, 오른쪽 = 창고 격자(lobby.stash.cols 열).
 //   커서 하나(마우스·키보드·패드 공용). ←→ 로 가방 ↔ 창고, 가방 아래 ↓ 로 안전 칸.
-//   Enter·A·클릭 = 한 개 옮기기(가방·안전 칸 → 창고, 창고 → 가방) · X·우클릭 = 칸 통째로 · Shift+Enter·패드 Y = 안전 칸으로/에서 · Q·패드 LT = 가방 전부 넣기.
+//   Enter·A·클릭 = 한 개 옮기기(가방·안전 칸 → 창고, 창고 → 가방) · X·우클릭 = 칸 통째로 · Shift+Enter·패드 Y = 안전 주머니로/에서 · Q·패드 LT = 가방 전부 넣기.
 // 확장: 현재 용량·다음 단계 비용·열쇠 보유, Enter·A·클릭으로 확장.
 // 옮기기·확장 규칙은 전부 systems/Stash — 여기는 그리기와 입력만.
 
@@ -32,7 +32,7 @@ const DOWN_KEYS = new Set(['KeyS', 'ArrowDown']);
 const LEFT_KEYS = new Set(['KeyA', 'ArrowLeft']);
 const RIGHT_KEYS = new Set(['KeyD', 'ArrowRight']);
 
-const PANE_LABEL: Record<Stash.StashPane, string> = { bag: '가방', stash: '창고', secure: '안전 칸' };
+const PANE_LABEL: Record<Stash.StashPane, string> = { bag: '가방', stash: '창고', secure: '안전 주머니' };
 
 export class StashUI {
   private readonly root: HTMLDivElement;
@@ -222,8 +222,8 @@ export class StashUI {
 
     const hint = document.createElement('div');
     hint.textContent = this.padMode
-      ? 'D-패드·왼 스틱 커서(←→ 가방↔창고, ↓ 안전 칸)   A 한 개 옮기기   X 칸 통째로   Y 안전 칸으로/에서   LT 가방 전부 넣기   LB/RB 탭   B 닫기'
-      : 'WASD·화살표 커서(←→ 가방↔창고, ↓ 안전 칸)   Enter·클릭 한 개   X·우클릭 칸 통째로   Shift+Enter 안전 칸으로/에서   Q 가방 전부 넣기   Tab·1/2 탭   E / Esc 닫기';
+      ? 'D-패드·왼 스틱 커서(←→ 가방↔창고, ↓ 안전 주머니)   A 한 개 옮기기   X 칸 통째로   Y 안전 주머니로/에서   LT 가방 전부 넣기   LB/RB 탭   B 닫기'
+      : 'WASD·화살표 커서(←→ 가방↔창고, ↓ 안전 주머니)   Enter·클릭 한 개   X·우클릭 칸 통째로   Shift+Enter 안전 주머니로/에서   Q 가방 전부 넣기   Tab·1/2 탭   E / Esc 닫기';
     hint.style.cssText = 'margin-top:16px;color:#8a8f9a;border-top:1px solid #23232b;padding-top:10px;white-space:pre-line;';
     panel.appendChild(hint);
     this.root.replaceChildren(panel);
@@ -238,7 +238,7 @@ export class StashUI {
     const left = document.createElement('div');
     left.style.cssText = 'flex:none;display:flex;flex-direction:column;gap:14px;';
     left.appendChild(this.grid('bag', `내 가방 ${world.inventory.filter((s) => s).length}/${world.inventory.length}칸`, '#7fbfff'));
-    left.appendChild(this.grid('secure', `성물함 안전 칸 ${world.secure.filter((s) => s).length}/${world.secure.length} — 죽어도 남는다`, '#9fe870'));
+    left.appendChild(this.grid('secure', `안전 주머니(캐릭터) ${world.secure.filter((s) => s).length}/${world.secure.length} — 죽어도 로비로 돌아온다`, '#9fe870'));
     const cur = this.slots(this.pane)[this.sel];
     left.appendChild(this.descBox(cur ? this.itemPopup(cur) : { title: `${PANE_LABEL[this.pane]} — 빈 칸`, lines: ['옮길 물건을 고른다'] }));
     row.appendChild(left);
@@ -310,13 +310,13 @@ export class StashUI {
     else if (slot.kind === 'sigil' && slot.sigilId) content = sigilPopup(world, slot.sigilId, ` (${PANE_LABEL[this.pane]})`);
     else content = consumablePopup(world, slot.kind, slot.count, ` (${PANE_LABEL[this.pane]})`);
     if (itemDef(slot.kind as ItemKind).passive) {
-      content.usefulText = '창고 확장 재료 — 주우면 안전 칸으로 먼저 들어간다';
+      content.usefulText = '창고 확장 재료 — 주우면 안전 주머니로 먼저 들어간다';
       content.useful = true;
     }
     const to = this.pane === 'stash' ? '가방' : '창고';
     content.actions = [{ key: this.key('A', 'Enter'), label: `${to}로 한 개` }];
     if (slot.count > 1) content.actions.push({ key: this.key('X', 'X'), label: `${to}로 전부 (×${slot.count})` });
-    content.actions.push({ key: this.key('Y', 'Shift+Enter'), label: this.pane === 'secure' ? '가방으로' : '안전 칸으로 (죽어도 남는다)' });
+    content.actions.push({ key: this.key('Y', 'Shift+Enter'), label: this.pane === 'secure' ? '가방으로' : '안전 주머니로 (죽어도 남는다)' });
     return content;
   }
 
@@ -363,7 +363,7 @@ export class StashUI {
     const box = document.createElement('div');
     box.style.cssText = 'padding:6px 4px;min-height:200px;';
     const cur = document.createElement('div');
-    cur.textContent = `지금 창고 ${world.stash.length}칸 · 안전 칸 ${world.secure.length}칸`;
+    cur.textContent = `지금 창고 ${world.stash.length}칸 · 안전 주머니 ${world.secure.length}칸`;
     cur.style.cssText = 'color:#cfd2da;font-size:14px;margin-bottom:12px;';
     box.appendChild(cur);
 
@@ -416,7 +416,7 @@ export class StashUI {
     btn.onclick = () => this.act();
     box.appendChild(btn);
     const note = document.createElement('div');
-    note.textContent = '열쇠는 안전 칸·가방·창고 어디에 있어도 된다. 열쇠 大는 다음 구역의 확장에 쓴다';
+    note.textContent = '열쇠는 안전 주머니·가방·창고 어디에 있어도 된다. 열쇠 大는 다음 구역의 확장에 쓴다';
     note.style.cssText = 'margin-top:10px;color:#8a8f9a;font-size:11px;';
     box.appendChild(note);
     return box;

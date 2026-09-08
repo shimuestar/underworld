@@ -1612,7 +1612,7 @@ export class World {
   stash: (InventorySlot | null)[] = [];
   /** 창고 확장 단계 — balance.lobby.stash.tiers 를 앞에서부터 산 개수 */
   stashTier = 0;
-  /** 성물함 안전 칸 — 몸에 지니되 죽어도 비석으로 떨어지지 않는다. 열쇠는 주우면 여기로 먼저 */
+  /** 안전 주머니 — 캐릭터의 것(Duckov 애완견 가방). 가방 탭 아래 칸, 죽어도 비석으로 떨어지지 않고 로비로 돌아온다. 열쇠는 주우면 여기로 먼저 */
   secure: (InventorySlot | null)[] = [];
   /** 성물함 오브젝트 반경 안 + 바라보는 중 — HUD 안내·상호작용 (Stash 가 갱신) */
   stashInView = false;

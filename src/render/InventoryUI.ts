@@ -31,7 +31,8 @@ import { isActiveSkill, SIGIL_SLOTS, type SigilSlot } from '../core/SigilData';
 import { BODY_ANCHORS, BODY_H, BODY_W, buildBodySvg, SLOT_LABELS, type BodySvgOptions } from './BodyDoll';
 import * as Sigils from '../systems/Sigils';
 import * as Equipment from '../systems/Equipment';
-import type { ItemKind, World } from '../core/World';
+import * as Stash from '../systems/Stash';
+import type { InventorySlot, ItemKind, World } from '../core/World';
 
 const CELL_PX = 64;
 const GAP_PX = 8;
@@ -56,7 +57,7 @@ const DOWN_KEYS = new Set(['KeyS', 'ArrowDown']);
 const LEFT_KEYS = new Set(['KeyA', 'ArrowLeft']);
 const RIGHT_KEYS = new Set(['KeyD', 'ArrowRight']);
 
-type Pane = 'bag' | 'quick' | 'doll';
+type Pane = 'bag' | 'quick' | 'doll' | 'pouch';
 /** 몸 패널의 칸 — 장비 7(실루엣 둘레) + 각인 소켓 5(실루엣 위). 위치는 패널 좌표(px).
  *  실루엣(BodyDoll 360×250)은 DOLL_BODY_SCALE 로 줄여 가운데에 놓고, 소켓 덮개는 그 소켓 자리에 얹는다 (2026-09-04) */
 type DollCell =
@@ -98,10 +99,12 @@ export class InventoryUI {
   private selQ = 0;
   /** 인형 칸 커서 (DOLL_ORDER 번호) */
   private selD = 0;
+  /** 안전 주머니 칸 커서 — 캐릭터의 안전 주머니(world.secure): 죽어도 남는다 (stash.md §1) */
+  private selP = 0;
   /** 퀵슬롯에 꽂으려고 골라 둔 가방 칸 (-1 = 없음) */
   private picked = -1;
-  /** 패드 집어 들기 — 들고 있는 가방 칸 (A 길게로 들고, A 놓기 / B 취소) */
-  private carry: { index: number } | null = null;
+  /** 패드 집어 들기 — 들고 있는 칸 (A 길게로 들고, A 놓기 / B 취소). 가방 칸 또는 안전 주머니 칸 */
+  private carry: { from: 'bag' | 'pouch'; index: number } | null = null;
   private aHoldTicks = 0;
   private aConsumed = false;
   private xHoldTicks = 0;
@@ -326,6 +329,14 @@ export class InventoryUI {
     const slots = this.world.inventory.length;
     const rows = Math.max(1, Math.ceil(slots / cols));
     const q = this.world.quickslots.length;
+    const pouch = this.world.secure.length;
+    if (this.pane === 'pouch') {
+      // 안전 주머니 — 가방 격자 바로 아래 한 줄. ↑ 로 가방 마지막 줄, ←→ 로 칸
+      if (dy < 0) { this.pane = 'bag'; this.sel = Math.min(slots - 1, (rows - 1) * cols + Math.min(this.selP, cols - 1)); }
+      else if (dx !== 0) this.selP = Math.max(0, Math.min(pouch - 1, this.selP + dx));
+      this.rebuild();
+      return;
+    }
     if (this.pane === 'doll') {
       // 몸 패널 — 누른 방향으로 가장 가까운 칸(장비·소켓). 오른쪽으로 더 갈 곳이 없으면 가방, 왼쪽이면 이전 탭
       const cur = dollCenter(DOLL_CELLS[this.selD]!);
@@ -361,6 +372,9 @@ export class InventoryUI {
       if (dx > 0 && col === cols - 1) {
         this.pane = 'quick';
         this.selQ = q === CROSS_AREAS.length ? 3 : 0; // 십자의 왼쪽 칸으로 들어간다
+      } else if (dy > 0 && row === rows - 1 && pouch > 0) {
+        this.pane = 'pouch'; // 가방 마지막 줄에서 ↓ — 안전 주머니
+        this.selP = Math.min(pouch - 1, col);
       } else if (dx !== 0) {
         this.sel = Math.min(slots - 1, row * cols + ((col + dx + cols) % cols));
       } else if (dy !== 0) {
@@ -391,6 +405,12 @@ export class InventoryUI {
   private act(): void {
     if (this.carry) { this.place(); return; }
     if (this.pane === 'doll') { this.unequipCursor(); return; }
+    if (this.pane === 'pouch') {
+      // 안전 주머니 칸 — A/Enter 는 가방으로 한 개 꺼내기 (퀵슬롯 등록은 가방에 든 것만)
+      if (this.world.secure[this.selP]) Stash.move(this.world, 'secure', this.selP, 'bag');
+      this.rebuild();
+      return;
+    }
     if (this.pane === 'bag') {
       const cur = this.world.inventory[this.sel];
       if (!cur) { this.rebuild(); return; }
@@ -416,6 +436,12 @@ export class InventoryUI {
   private dropCursor(): void {
     if (this.carry) return;
     if (this.pane === 'doll') { this.unequipCursor(); return; }
+    if (this.pane === 'pouch') {
+      // 안전 주머니에서는 버리지 않는다 — X 는 칸 통째로 가방에 꺼내기
+      if (this.world.secure[this.selP]) Stash.move(this.world, 'secure', this.selP, 'bag', true);
+      this.rebuild();
+      return;
+    }
     if (this.pane === 'bag') {
       const cur = this.world.inventory[this.sel];
       if (cur && cur.kind === 'sigil' && this.altar) Sigils.sellFromBag(this.world, this.sel); // 제단 앞 — 각인은 판다
@@ -437,16 +463,28 @@ export class InventoryUI {
 
   // ---- 집어 들기 (패드) ----
   private pickUp(): void {
-    if (this.pane !== 'bag' || !this.world.inventory[this.sel]) return;
-    this.carry = { index: this.sel };
+    if (this.pane === 'pouch' && this.world.secure[this.selP]) {
+      this.carry = { from: 'pouch', index: this.selP };
+    } else if (this.pane === 'bag' && this.world.inventory[this.sel]) {
+      this.carry = { from: 'bag', index: this.sel };
+    } else {
+      return;
+    }
     this.picked = -1;
-    this.world.events.emit('loot_carry_started', { pane: 'bag' });
+    this.world.events.emit('loot_carry_started', { pane: this.carry.from });
     this.rebuild();
+  }
+
+  /** 들고 있는 칸의 내용 — 가방 또는 안전 주머니 */
+  private carriedSlot(): InventorySlot | null {
+    const c = this.carry;
+    if (!c) return null;
+    return (c.from === 'bag' ? this.world.inventory : this.world.secure)[c.index] ?? null;
   }
   private place(): void {
     // 인형 칸 위에서 놓기 — 든 가방 칸의 장비를 그 칸에 걸친다 (부위가 다르면 무시)
     if (this.pane === 'doll' && this.carry) {
-      this.dropOnDoll(this.carry.index, this.selD);
+      if (this.carry.from === 'bag') this.dropOnDoll(this.carry.index, this.selD);
       this.carry = null;
       this.rebuild();
       return;
@@ -454,8 +492,9 @@ export class InventoryUI {
     const carry = this.carry;
     if (!carry) return;
     this.carry = null;
-    if (this.pane === 'bag') this.onDrop('bag', carry.index, `b${this.sel}`);
-    else this.onDrop('bag', carry.index, `q${this.selQ}`);
+    if (this.pane === 'bag') this.onDrop(carry.from, carry.index, `b${this.sel}`);
+    else if (this.pane === 'pouch') this.onDrop(carry.from, carry.index, `p${this.selP}`);
+    else this.onDrop(carry.from, carry.index, `q${this.selQ}`);
   }
 
   // ---- 수량 나누기 ----
@@ -484,10 +523,23 @@ export class InventoryUI {
   }
 
   /** 드래그/놓기 — 가방↔가방(이동·합침·교환), 가방→퀵슬롯(등록), 퀵슬롯↔퀵슬롯(교환), 퀵슬롯→빈 곳(해제) */
-  private onDrop(from: 'bag' | 'quick' | 'doll', fromIdx: number, key: string | null): void {
+  private onDrop(from: 'bag' | 'quick' | 'doll' | 'pouch', fromIdx: number, key: string | null): void {
     const world = this.world;
-    const to = key?.startsWith('b') ? 'bag' : key?.startsWith('q') ? 'quick' : key?.startsWith('d') || key?.startsWith('s') ? 'doll' : null;
+    const to = key?.startsWith('b') ? 'bag' : key?.startsWith('q') ? 'quick' : key?.startsWith('p') ? 'pouch' : key?.startsWith('d') || key?.startsWith('s') ? 'doll' : null;
     const toIdx = to === 'doll' ? DOLL_CELLS.findIndex((c) => c.key === key) : key ? Number.parseInt(key.slice(1), 10) : -1;
+    // 안전 주머니 ↔ 가방 — 그 칸에 놓기(빈 칸 옮김·같은 종류 합침·맞바꾸기). 주머니 → 퀵슬롯·몸은 안 된다 (가방에 든 것만 쓴다)
+    if ((from === 'pouch' && (to === 'bag' || to === 'pouch')) || (from === 'bag' && to === 'pouch')) {
+      const fromPane = from === 'pouch' ? 'secure' : 'bag';
+      const toPane = to === 'pouch' ? 'secure' : 'bag';
+      if (Stash.place(world, fromPane, fromIdx, toPane, toIdx) !== 'none') world.events.emit('loot_moved', { where: 'pouch' });
+      this.pane = to;
+      if (to === 'pouch') this.selP = toIdx;
+      else this.sel = toIdx;
+      this.picked = -1;
+      this.rebuild();
+      return;
+    }
+    if (from === 'pouch') { this.picked = -1; this.rebuild(); return; }
     if (from === 'doll') {
       // 몸 → 가방: 장비를 벗어서 그 칸(비어 있으면)으로. 소켓의 각인은 끌어낼 수 없다(제단에서 떼기)
       const cell = DOLL_CELLS[fromIdx]!;
@@ -549,7 +601,7 @@ export class InventoryUI {
 
   private rebuild(): void {
     const world = this.world;
-    if (this.carry && !world.inventory[this.carry.index]) this.carry = null; // 든 것이 사라졌다
+    if (this.carry && !this.carriedSlot()) this.carry = null; // 든 것이 사라졌다
     const panel = document.createElement('div');
     panel.style.cssText =
       `background:#15151b;border:1px solid #3a3a44;padding:20px 26px;width:${PANEL_PX}px;box-sizing:border-box;`;
@@ -592,7 +644,7 @@ export class InventoryUI {
     const hint = document.createElement('div');
     hint.textContent = this.padMode
       ? 'D-패드·왼 스틱 커서   Y 사용   A 고르기 → 퀵슬롯에서 A 등록(빈손 = 해제)   A 길게 집어 옮기기 → A 놓기 / B 취소   X 버리기 · X 길게 수량 나누기   Y 길게 주머니 내려놓기   B 닫기'
-      : `마우스로 칸 선택 · ←→ 탭 전환   E·더블클릭 사용   Enter/클릭 고르기 → 퀵슬롯 클릭(또는 1~${world.quickslots.length}) 등록(빈손 = 해제)   X·우클릭 버리기   Shift+Enter·Shift+클릭 수량 나누기   드래그로 옮기기   P 주머니 내려놓기   Esc·I 닫기`;
+      : `마우스로 칸 선택 · ←→ 탭 전환   E·더블클릭 사용   Enter/클릭 고르기 → 퀵슬롯 클릭(또는 1~${world.quickslots.length}) 등록(빈손 = 해제)   X·우클릭 버리기   Shift+Enter·Shift+클릭 수량 나누기   드래그로 옮기기(안전 주머니에 넣으면 죽어도 남는다)   P 주머니 내려놓기   Esc·I 닫기`;
     hint.style.cssText = 'margin-top:14px;color:#6c7280;font-size:11px;line-height:1.7;white-space:normal;';
     panel.appendChild(hint);
 
@@ -633,13 +685,15 @@ export class InventoryUI {
     }
     const world = this.world;
     const carry = this.carry!;
-    const src = world.inventory[carry.index];
+    const src = this.carriedSlot();
     const lines: string[] = [];
-    if (pane === 'quick') lines.push(`퀵슬롯 ${index + 1}에 등록한다`);
-    else if (index === carry.index) lines.push('원래 자리 — 놓으면 그대로 둔다');
+    const samePane = (pane === 'bag' && carry.from === 'bag') || (pane === 'pouch' && carry.from === 'pouch');
+    if (pane === 'quick') lines.push(carry.from === 'pouch' ? '주머니의 것은 퀵슬롯에 못 올린다 — 가방으로 먼저' : `퀵슬롯 ${index + 1}에 등록한다`);
+    else if (samePane && index === carry.index) lines.push('원래 자리 — 놓으면 그대로 둔다');
     else {
-      const dst = world.inventory[index];
+      const dst = (pane === 'pouch' ? world.secure : world.inventory)[index];
       const stackMax = balance.items.stackMax;
+      if (pane === 'pouch') lines.push('안전 주머니 — 여기 든 것은 죽어도 남는다');
       if (!dst) lines.push('빈 칸으로 옮긴다');
       else if (src && dst.kind === src.kind && dst.count < stackMax) lines.push(`같은 종류 — ${Math.min(stackMax - dst.count, src.count)}개 합친다 (나머지는 제자리)`);
       else lines.push('자리를 맞바꾼다');
@@ -655,8 +709,7 @@ export class InventoryUI {
   }
 
   private carriedOverlay(): HTMLElement | null {
-    const carry = this.carry;
-    const slot = carry ? this.world.inventory[carry.index] : null;
+    const slot = this.carriedSlot();
     if (!slot) return null;
     const el = document.createElement('div');
     el.innerHTML = itemIcon(slot.kind, ICON_PX).outerHTML;
@@ -787,7 +840,7 @@ export class InventoryUI {
     const hover: NonNullable<BodySvgOptions['hover']> = {};
     const cur = DOLL_CELLS[this.selD];
     if (this.pane === 'doll' && cur?.kind === 'sigil') hover[cur.slot] = 'cursor';
-    const held = this.carry ? world.inventory[this.carry.index] : this.picked >= 0 ? world.inventory[this.picked] : null;
+    const held = this.carry ? this.carriedSlot() : this.picked >= 0 ? world.inventory[this.picked] : null;
     if (held?.kind === 'sigil' && held.sigilId && !isActiveSkill(sigilDef(held.sigilId))) {
       const d = sigilDef(held.sigilId);
       hover[d.slot] = world.sigils.equipped[d.slot] ? 'blocked' : 'target';
@@ -928,7 +981,7 @@ export class InventoryUI {
         `border:1px solid ${here ? '#7fbfff' : isPicked ? '#e8c76a' : '#3a3a44'};` +
         `background:${here ? 'rgba(127,191,255,0.12)' : isPicked ? 'rgba(232,199,106,0.12)' : 'rgba(255,255,255,0.02)'};` +
         `cursor:${slot ? 'pointer' : 'default'};`;
-      if (this.carry && this.carry.index === i) cell.style.opacity = '0.35';
+      if (this.carry && this.carry.from === 'bag' && this.carry.index === i) cell.style.opacity = '0.35';
 
       if (slot) {
         const isSigil = slot.kind === 'sigil' && !!slot.sigilId;
@@ -948,7 +1001,7 @@ export class InventoryUI {
 
         // 지금 써도 값어치가 없으면(만피의 체력 물약·만마나의 마나 물약·버프 중인 음식) 흐리게 — "마셔도 안 나가는" 이유를
         // 미리 보여 준다. 칸이 아니라 아이콘·개수에만 건다 — 칸에 걸면 자식인 설명 팝업까지 흐려진다 (2026-09-04)
-        if (!isUseful(world, slot.kind) && !(this.carry && this.carry.index === i)) {
+        if (!isUseful(world, slot.kind) && !(this.carry && this.carry.from === 'bag' && this.carry.index === i)) {
           icon.style.opacity = '0.45';
           count.style.opacity = '0.45';
         }
@@ -1013,6 +1066,78 @@ export class InventoryUI {
           { key: this.key('X', 'X'), label: '바닥에 버리기' },
         ];
         if (slot.count >= 2) content.actions.push({ key: this.key('X 길게', 'Shift+Enter'), label: '수량 나누기' });
+        attachPopup(cell, content, 'right', this.padMode);
+      }
+      grid.appendChild(cell);
+    });
+    box.appendChild(grid);
+    box.appendChild(this.buildPouch());
+    return box;
+  }
+
+  /** 안전 주머니 — 캐릭터의 것. 여기 든 것은 죽어도 비석으로 떨어지지 않고 로비로 돌아온다 (stash.md §1).
+   *  가방 격자 아래 한 줄. 드래그·집어 옮기기로 넣고 빼고, A/Enter 한 개·X 통째로 가방에 꺼낸다. 열쇠는 주우면 저절로 들어온다 */
+  private buildPouch(): HTMLElement {
+    const world = this.world;
+    const box = document.createElement('div');
+    box.style.cssText = 'margin-top:14px;';
+    const used = world.secure.filter((s) => s).length;
+    const title = document.createElement('div');
+    title.textContent = `안전 주머니 ${used}/${world.secure.length}칸 — 죽어도 남는다 (드래그로 넣고 뺀다)`;
+    title.style.cssText = `color:${this.pane === 'pouch' ? '#9fe870' : '#8a8f9a'};margin-bottom:6px;`;
+    box.appendChild(title);
+    const grid = document.createElement('div');
+    grid.style.cssText = `display:grid;grid-template-columns:repeat(${Math.max(1, world.secure.length)}, ${CELL_PX}px);gap:${GAP_PX}px;`;
+    world.secure.forEach((slot, i) => {
+      const cell = document.createElement('div');
+      cell.dataset['key'] = `p${i}`;
+      const here = this.pane === 'pouch' && this.selP === i;
+      cell.style.cssText =
+        CELL +
+        `border:1px solid ${here ? '#9fe870' : '#3f5a3a'};` +
+        `background:${here ? 'rgba(159,232,112,0.12)' : 'rgba(159,232,112,0.03)'};cursor:${slot ? 'pointer' : 'default'};`;
+      if (this.carry && this.carry.from === 'pouch' && this.carry.index === i) cell.style.opacity = '0.35';
+      if (slot) {
+        const isSigil = slot.kind === 'sigil' && !!slot.sigilId;
+        const isEquip = slot.kind === 'equip' && !!slot.equipId;
+        const icon = isSigil ? sigilIcon(slot.sigilId!, ICON_PX) : isEquip ? equipIcon(slot.equipId!, ICON_PX) : itemIcon(slot.kind, ICON_PX);
+        icon.style.cssText += 'position:absolute;left:50%;top:24px;transform:translate(-50%,-50%);';
+        cell.appendChild(icon);
+        const count = document.createElement('div');
+        count.textContent = isSigil ? sigilDef(slot.sigilId!).name.slice(0, 4) : isEquip ? equipDef(slot.equipId!).name.slice(0, 5) : `×${slot.count}`;
+        count.style.cssText = isSigil || isEquip
+          ? `position:absolute;bottom:3px;width:100%;text-align:center;font-size:10px;color:${isSigil ? sigilDef(slot.sigilId!).color : equipDef(slot.equipId!).color};`
+          : 'position:absolute;bottom:3px;right:5px;font-size:11px;color:#cfd2da;';
+        cell.appendChild(count);
+        cell.oncontextmenu = (e) => { e.preventDefault(); this.pane = 'pouch'; this.selP = i; this.dropCursor(); };
+        const dragIcon = icon.outerHTML;
+        cell.onpointerdown = (ev) => { if (!ev.shiftKey) beginDrag(ev, dragIcon, (key) => this.onDrop('pouch', i, key)); };
+      }
+      cell.onclick = () => { this.pane = 'pouch'; this.selP = i; this.act(); };
+      cell.onmousemove = (ev) => {
+        if (!this.hoverAllowed(ev)) return;
+        if (this.pane === 'pouch' && this.selP === i) return;
+        this.pane = 'pouch';
+        this.selP = i;
+        this.rebuild();
+      };
+      if (here && this.carry) {
+        const overlay = this.carriedOverlay();
+        if (overlay) cell.appendChild(overlay);
+        attachPopup(cell, this.carryPopup('pouch', i), 'right', this.padMode);
+      } else if (here && slot) {
+        const content = slot.kind === 'equip' && slot.equipId
+          ? equipPopup(world, slot.equipId, ' (안전 주머니)')
+          : slot.kind === 'sigil' && slot.sigilId
+            ? sigilPopup(world, slot.sigilId, ' (안전 주머니)')
+            : consumablePopup(world, slot.kind, slot.count, ' (안전 주머니)');
+        content.usefulText = '죽어도 비석으로 떨어지지 않는다 — 로비로 그대로 돌아온다';
+        content.useful = true;
+        content.actions = [
+          { key: this.key('A', 'Enter'), label: '가방으로 한 개 꺼내기' },
+          { key: this.key('X', 'X·우클릭'), label: slot.count > 1 ? `가방으로 전부 꺼내기 (×${slot.count})` : '가방으로 꺼내기' },
+          { key: this.key('A 길게', '드래그'), label: '집어 옮기기' },
+        ];
         attachPopup(cell, content, 'right', this.padMode);
       }
       grid.appendChild(cell);

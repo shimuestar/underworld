@@ -97,6 +97,39 @@ export function move(world: World, from: StashPane, index: number, to: StashPane
   return moved;
 }
 
+/** 드래그·집어 옮기기 — from[i] 를 to[j] '그 칸'에 놓는다 (가방 탭의 가방 ↔ 안전 주머니). Inventory.moveSlot 과 같은 규칙을 두 배열 사이에:
+ *  빈 칸이면 옮기고(받는 쪽 상한만큼, 남는 건 제자리), 같은 종류면 상한까지 합치고, 다른 종류면 맞바꾼다(양쪽 상한 안일 때만) */
+export function place(world: World, from: StashPane, i: number, to: StashPane, j: number): 'moved' | 'merged' | 'swapped' | 'none' {
+  const src = slotsOf(world, from);
+  const dst = slotsOf(world, to);
+  const a = src[i];
+  if (!a || j < 0 || j >= dst.length) return 'none';
+  if (from === to && i === j) return 'none';
+  const maxTo = stackMaxOf(to);
+  const maxFrom = stackMaxOf(from);
+  const b = dst[j];
+  let result: 'moved' | 'merged' | 'swapped' | 'none' = 'none';
+  if (!b) {
+    const n = Math.min(a.count, maxTo);
+    dst[j] = { ...a, count: n };
+    a.count -= n;
+    if (a.count <= 0) src[i] = null;
+    result = 'moved';
+  } else if (b.kind === a.kind && a.kind !== 'sigil' && a.kind !== 'equip' && b.count < maxTo) {
+    const n = Math.min(maxTo - b.count, a.count);
+    b.count += n;
+    a.count -= n;
+    if (a.count <= 0) src[i] = null;
+    result = 'merged';
+  } else if (a.count <= maxTo && b.count <= maxFrom) {
+    src[i] = b;
+    dst[j] = a;
+    result = 'swapped';
+  }
+  if (result !== 'none') world.events.emit('stash_moved', { from, to, kind: a.kind, count: a.count, result });
+  return result;
+}
+
 /** 가방 전부 창고에 — 들어가는 만큼. 옮긴 개수 합 */
 export function depositAll(world: World): number {
   let total = 0;

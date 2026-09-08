@@ -130,7 +130,30 @@ describe('옮기기', () => {
   });
 });
 
-describe('안전 칸', () => {
+describe('그 칸에 놓기 (place — 가방 탭 드래그·집어 옮기기)', () => {
+  it('빈 칸이면 옮기고, 같은 종류면 합치고(상한까지), 다른 종류면 맞바꾼다 — 가방 ↔ 안전 주머니', () => {
+    for (let i = 0; i < 4; i++) addItem(world, 'potion');
+    addItem(world, 'food');
+    expect(Stash.place(world, 'bag', 0, 'secure', 1)).toBe('moved');
+    expect(world.secure[1]).toEqual({ kind: 'potion', count: 4 });
+    expect(world.inventory[0]).toBeNull();
+    addItem(world, 'potion');
+    addItem(world, 'potion');
+    const idx = world.inventory.findIndex((s) => s?.kind === 'potion');
+    expect(Stash.place(world, 'bag', idx, 'secure', 1)).toBe('merged'); // 4+2 → 5, 1 남음
+    expect(world.secure[1]!.count).toBe(balance.items.stackMax);
+    expect(world.inventory[idx]).toEqual({ kind: 'potion', count: 1 });
+    const foodIdx = world.inventory.findIndex((s) => s?.kind === 'food');
+    expect(Stash.place(world, 'bag', foodIdx, 'secure', 1)).toBe('swapped');
+    expect(world.secure[1]).toEqual({ kind: 'food', count: 1 });
+    expect(world.inventory[foodIdx]).toEqual({ kind: 'potion', count: balance.items.stackMax });
+    expect(Stash.place(world, 'secure', 1, 'bag', foodIdx)).toBe('swapped');
+    expect(Stash.place(world, 'secure', 0, 'bag', 0)).toBe('none'); // 빈 칸을 들었다
+    expect(Stash.place(world, 'bag', 0, 'bag', 0)).toBe('none');
+  });
+});
+
+describe('안전 주머니', () => {
   it('열쇠는 주우면(addItem) 안전 칸으로 먼저 — item_secured. 가득이면 가방으로', () => {
     const secured: unknown[] = [];
     world.events.on('item_secured', (p) => secured.push(p));
