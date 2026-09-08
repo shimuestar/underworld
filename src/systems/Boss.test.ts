@@ -1778,10 +1778,10 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     tickEnemiesUntil(() => boss.ai === 'recover', 300);
 
     expect(hits).toHaveLength(1);
-    expect(hits[0]!.amount).toBe(45);
+    expect(hits[0]!.amount).toBe(90);
     expect(hits[0]!.amount).toBe(ch.damage);
     expect(hits[0]!.blocked).toBe(false);
-    expect(world.player.health).toBe(100 - 45);
+    expect(world.player.health).toBe(100 - 90);
     // 밀림 — 공격별 재정의 7m 를 20틱에 걸쳐
     expect(world.player.kbTicks).toBe(ch.playerKnockbackTicks);
     const flung = Math.hypot(world.player.kbX!, world.player.kbZ!) * world.player.kbTicks!;
@@ -1975,7 +1975,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect({ ...altEx, joint: 'x' }).toEqual({ ...rightEx, joint: 'x' });
     expect(close).toMatchObject({
       type: 'contact', hitOnContact: true, parryable: false, telegraph: 'red',
-      windupTicks: 22, damage: 22, playerKnockback: 3.5, maxRange: 3.0, cooldownTicks: 240,
+      windupTicks: 22, damage: 44, playerKnockback: 3.5, maxRange: 3.0, cooldownTicks: 240,
     });
     // 판정 사거리 = maxRange — 붙어 있던 자리(3.0m 안)까지 닿는다
     expect(def.attackRange * close.impactRangeMul).toBeCloseTo(close.maxRange!, 2);
@@ -2112,9 +2112,9 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     expect(parries).toEqual(['fail']);
     Enemies.tick(world, DT);
     expect(hits).toHaveLength(1);
-    expect(hits[0]!.amount).toBe(22);
+    expect(hits[0]!.amount).toBe(44);
     expect(hits[0]!.blocked).toBe(false);
-    expect(world.player.health).toBe(100 - 22);
+    expect(world.player.health).toBe(100 - 44);
     expect(world.player.kbTicks).toBe(close.playerKnockbackTicks);
     const flung = Math.hypot(world.player.kbX!, world.player.kbZ!) * world.player.kbTicks!;
     expect(flung).toBeCloseTo(close.playerKnockback!, 3);
@@ -2849,7 +2849,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(ph[2]!.firstPick).toBe('roar');
       expect(ph[2]!.shiftText).toBe('거수가 광란한다');
       expect(ph[2]!.attackOverrides).toEqual({
-        attack: { damage: 34 }, attackAlt: { damage: 34 }, close: { damage: 24 }, charge: { damage: 50, cooldownTicks: 300 }, slam: { damage: 28, aoeRadius: 5.5 },
+        attack: { damage: 68 }, attackAlt: { damage: 68 }, close: { damage: 48 }, charge: { damage: 100, cooldownTicks: 300 }, slam: { damage: 56, aoeRadius: 5.5 },
       });
       expect(wpc.phaseShiftTicks).toBe(90);
       expect(wpc.phaseShiftCooldownMul).toBe(0.5);
@@ -2868,7 +2868,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(p3.speedMul).toBe(1.2);
       expect(p3.unlock.has('volley')).toBe(true);
       expect(p3.unlock.has('roar')).toBe(true);
-      expect(p3.attackOverrides['charge']).toEqual({ damage: 50, cooldownTicks: 300 });
+      expect(p3.attackOverrides['charge']).toEqual({ damage: 100, cooldownTicks: 300 });
       expect(p3.shellPlatesOn).toBe(true);
       expect(p3.shedPlates).toBe(true);
       expect(p3.name).toBe('광란');
@@ -2891,13 +2891,13 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(currentAttack(def, { attackMode: 'charge', phase: 3 })).toBe(def.chargeAttack);
       expect(currentAttack(def, { attackMode: 'charge', phase: 2 })).not.toBe(def.chargeAttack);
       expect(currentAttack(def, { attackMode: 'charge', phase: 2 }).cooldownTicks).toBe(360);
-      expect(currentAttack(def, { attackMode: 'charge', phase: 2 }).damage).toBe(45);
+      expect(currentAttack(def, { attackMode: 'charge', phase: 2 }).damage).toBe(90);
       expect(currentAttack(def, { attackMode: 'charge', phase: 2 })).toBe(currentAttack(def, { attackMode: 'charge', phase: 2 })); // 캐시
-      expect(currentAttack(def, { attackMode: 'melee', phase: 1 }).damage).toBe(34);
-      expect(currentAttack(def, { attackMode: 'alt', phase: 1 }).damage).toBe(34);
+      expect(currentAttack(def, { attackMode: 'melee', phase: 1 }).damage).toBe(68);
+      expect(currentAttack(def, { attackMode: 'alt', phase: 1 }).damage).toBe(68);
       expect(currentAttack(def, { attackMode: 'alt', phase: 1 }).windupTicks).toBe(28); // 나머지 필드는 그대로
-      expect(currentAttack(def, { attackMode: 'close', phase: 1 }).damage).toBe(24);
-      expect(currentAttack(def, { attackMode: 'charge', phase: 1 }).damage).toBe(50);
+      expect(currentAttack(def, { attackMode: 'close', phase: 1 }).damage).toBe(48);
+      expect(currentAttack(def, { attackMode: 'charge', phase: 1 }).damage).toBe(100);
       expect(currentAttack(def, { attackMode: 'charge', phase: 1 }).cooldownTicks).toBe(300);
       const chief = enemyDef('goblin_chieftain');
       expect(currentAttack(chief, { attackMode: 'melee' })).toBe(chief.attack);
@@ -3096,13 +3096,13 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(w.status.filter((st) => st.kind === 'molt' && st.on)).toHaveLength(1);
       // 덮어쓰기 — 낫 34(오른·왼)·들이받기 24·돌격 50/300, 해금은 P2 것까지
       boss.attackMode = 'melee';
-      expect(currentAttack(def, boss).damage).toBe(34);
+      expect(currentAttack(def, boss).damage).toBe(68);
       boss.attackMode = 'alt';
-      expect(currentAttack(def, boss).damage).toBe(34);
+      expect(currentAttack(def, boss).damage).toBe(68);
       boss.attackMode = 'close';
-      expect(currentAttack(def, boss).damage).toBe(24);
+      expect(currentAttack(def, boss).damage).toBe(48);
       boss.attackMode = 'melee';
-      expect(attackInPhase(def, boss, 'charge', def.chargeAttack!)).toMatchObject({ damage: 50, cooldownTicks: 300 });
+      expect(attackInPhase(def, boss, 'charge', def.chargeAttack!)).toMatchObject({ damage: 100, cooldownTicks: 300 });
       expect(slotUnlocked(def, boss, 'volley')).toBe(true);
       expect(slotUnlocked(def, boss, 'roar')).toBe(true);
       // 걷기 ×1.2 — 복귀 뒤 멀리 선 플레이어(돌격 maxRange 밖)를 향해 3.84 m/s 로 걷는다. 돌격 속도는 데이터 그대로
@@ -3177,7 +3177,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       boss.comboCooldown = 9999;
       tickEnemiesUntil(() => boss.ai === 'chase', 200);
       tickEnemiesUntil(() => w.hits.length > 0, 400);
-      expect(w.hits[0]!.amount).toBe(34);
+      expect(w.hits[0]!.amount).toBe(68);
       expect(['melee', 'alt']).toContain(boss.attackMode);
     });
 
@@ -3263,7 +3263,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     }
 
     it('데이터 — slamAttack(contact·aoe 5.0·46틱·24·4m·2.5 < d ≤ 6·쿨 420·패링 불가·빨강·rearPose 8~36·statusOnHit hobble·막으면 없음), wakeSlam 30, P2 unlock slam·wakeSlam, balance heart 66/600·backflow 60/45·status.hobble 300/×2/noSprint. currentAttack: P2 발구르기 = 정의, P3 28/5.5, 기상 발구르기 = 예고 30·rearPose 없음·P3 에서도 24/5.0(슬롯 wakeSlam)·캐시. 족장엔 없다', () => {
-      expect(slam).toMatchObject({ type: 'contact', aoeRadius: 5.0, windupTicks: 46, damage: 24, playerKnockback: 4.0, minRange: 2.5, maxRange: 6, cooldownTicks: 420, parryable: false, telegraph: 'red', statusOnHit: 'hobble' });
+      expect(slam).toMatchObject({ type: 'contact', aoeRadius: 5.0, windupTicks: 46, damage: 48, playerKnockback: 4.0, minRange: 2.5, maxRange: 6, cooldownTicks: 420, parryable: false, telegraph: 'red', statusOnHit: 'hobble' });
       expect(slam.rearPose).toEqual({ from: 8, to: 36 });
       expect(slam.rearPose!.to - slam.rearPose!.from).toBe(28); // 기획서 "28틱 안 66"
       expect(slam.statusOnBlock).toBeUndefined(); // 막으면 칩만, 절뚝 없음
@@ -3283,11 +3283,11 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(wp('heart').damageMul).toBe(3.0);
       // 공격 정의 — P2 그대로 / P3 덮어쓰기 / 기상 발구르기
       expect(currentAttack(def, { attackMode: 'slam', phase: 2 })).toBe(slam);
-      expect(currentAttack(def, { attackMode: 'slam', phase: 1 })).toMatchObject({ damage: 28, aoeRadius: 5.5, windupTicks: 46 });
+      expect(currentAttack(def, { attackMode: 'slam', phase: 1 })).toMatchObject({ damage: 56, aoeRadius: 5.5, windupTicks: 46 });
       const wake = wakeSlamAttack(def)!;
       expect(wake.windupTicks).toBe(30);
       expect(wake.rearPose).toBeUndefined();
-      expect(wake).toMatchObject({ aoeRadius: 5.0, damage: 24, playerKnockback: 4.0, statusOnHit: 'hobble', telegraph: 'red', parryable: false });
+      expect(wake).toMatchObject({ aoeRadius: 5.0, damage: 48, playerKnockback: 4.0, statusOnHit: 'hobble', telegraph: 'red', parryable: false });
       expect(slam.rearPose).toBeDefined(); // 원본은 건드리지 않는다
       expect(currentAttack(def, { attackMode: 'slam', phase: 2, wakeSlam: true })).toBe(wake);
       expect(currentAttack(def, { attackMode: 'slam', phase: 1, wakeSlam: true })).toBe(wake); // 슬롯 'wakeSlam' 엔 P3 덮어쓰기가 없다(표: 24/24)
@@ -3378,8 +3378,8 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       world.events.on('hobble_applied', (p) => applied.push(p as { kind: string; ticks: number }));
       untilSlamWindup(boss, 5);
       tickEnemiesUntil(() => boss.ai === 'recover', 60);
-      expect(w.hits).toEqual([expect.objectContaining({ amount: 24, blocked: false })]);
-      expect(world.player.health).toBe(76);
+      expect(w.hits).toEqual([expect.objectContaining({ amount: 48, blocked: false })]);
+      expect(world.player.health).toBe(52);
       expect(world.player.kbTicks).toBe(slam.playerKnockbackTicks);
       expect(Math.hypot(world.player.kbX!, world.player.kbZ!) * slam.playerKnockbackTicks!).toBeCloseTo(slam.playerKnockback!, 5);
       expect(world.player.hobbleTicks).toBe(balance.status.hobble.ticks);
@@ -3404,7 +3404,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       world.player.blocking = false;
       expect(w.hits).toHaveLength(2);
       expect(w.hits[1]).toMatchObject({ blocked: true });
-      expect(w.hits[1]!.amount).toBeCloseTo(24 * balance.block.chipDamageRatio, 5);
+      expect(w.hits[1]!.amount).toBeCloseTo(48 * balance.block.chipDamageRatio, 5);
       expect(world.player.hobbleTicks ?? 0).toBe(0);
       expect(world.player.stunTicks).toBeGreaterThan(0); // 방어 경직은 기존대로
       // 반경 밖 — 뒤 대시 뒤(5.5m): 안 맞고 땅만 울린다
@@ -3548,7 +3548,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(boss.slamCooldown).toBeGreaterThan(9000); // 기상 발구르기는 쿨다운을 물지 않는다(그 사이 흐른 틱만큼만 줄었다 — 420 으로 다시 세우지 않는다)
       expect(w.starts).toEqual([expect.objectContaining({ wake: true })]);
       tickEnemiesUntil(() => boss.ai === 'recover', 40);
-      expect(w.hits).toEqual([expect.objectContaining({ amount: 24 })]); // 4m — 반경 안. 머리에 붙어 있던 근접 플레이어의 벌칙
+      expect(w.hits).toEqual([expect.objectContaining({ amount: 48 })]); // 4m — 반경 안. 머리에 붙어 있던 근접 플레이어의 벌칙
       expect(world.player.hobbleTicks).toBe(300);
       // (b) 혼절 → 시간 만료 → recover → chase 에 확정
       world.enemies.length = 0;
@@ -3758,7 +3758,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
     it('데이터 — volleyAttack(projectile·48틱·보라·goo·16 m/s·r0.35·반사·부술 수 있음·3발/24틱·16·2.8m·minRange 6·abortRange 4·쿨 540·deflectSelfDamage 33·poolKind orb·corrosive 막아도), vent hp 132(= 33 × 4)·openMul 1.5·damageMul 3.0, 낫 poolKind blade·발구르기 stomp·완벽 회피 skid, balance hazards.pools{blade 1.6, stomp 2.0, orb 1.2, skid 1.6 / 480}·poolMax 12, status.corrosive, corruption 정화 1/6/×2, weakPoint ventGagThreshold 66·choke{1800, 10}. P2 해금 volley, P1 잠김. 족장 volley 는 옛 그대로', () => {
       expect(volley).toMatchObject({
         type: 'projectile', windupTicks: 48, telegraph: 'purple', projectileKind: 'goo', projectileSpeed: 16, projectileRadius: 0.35, deflectable: true, breakable: true,
-        shots: 3, shotIntervalTicks: 24, damage: 16, playerKnockback: 2.8, minRange: 6, abortRange: 4, cooldownTicks: 540, deflectSelfDamage: 33, poolKind: 'orb',
+        shots: 3, shotIntervalTicks: 24, damage: 32, playerKnockback: 2.8, minRange: 6, abortRange: 4, cooldownTicks: 540, deflectSelfDamage: 33, poolKind: 'orb',
         statusOnHit: 'corrosive', statusOnBlock: 'corrosive', parryable: false,
       });
       expect(volley.playerKnockback).toBe(balance.playerKnockback.magic); // "magic 밀림 2.8m"
@@ -3843,7 +3843,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       Enemies.tick(world, DT);
       expect(world.projectiles).toHaveLength(1);
       const orb = world.projectiles[0]!;
-      expect(orb).toMatchObject({ owner: 'enemy', kind: 'goo', deflectable: true, breakable: true, radius: 0.35, damage: 16, deflectSelfDamage: 33, poolKind: 'orb', statusOnHit: 'corrosive', statusOnBlock: 'corrosive', playerKnockback: 2.8, casterId: b2.id });
+      expect(orb).toMatchObject({ owner: 'enemy', kind: 'goo', deflectable: true, breakable: true, radius: 0.35, damage: 32, deflectSelfDamage: 33, poolKind: 'orb', statusOnHit: 'corrosive', statusOnBlock: 'corrosive', playerKnockback: 2.8, casterId: b2.id });
       expect(Math.hypot(orb.vx, orb.vy, orb.vz)).toBeCloseTo(16, 5);
       expect(orb.y).toBeCloseTo(wp('vent').offset.y, 6); // 분출공 높이에서 나간다
       expect(weakPointOpen(b2, wp('vent'))).toBe(true); // 시전 중에도 열려 있다
@@ -3877,8 +3877,8 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       untilVolleyWindup(boss, 5);
       // 첫 구슬이 플레이어에 닿을 때까지
       for (let i = 0; i < 200 && w.hits.length === 0; i++) stepAll();
-      expect(w.hits).toEqual([expect.objectContaining({ amount: 16, blocked: false })]);
-      expect(world.player.health).toBe(84);
+      expect(w.hits).toEqual([expect.objectContaining({ amount: 32, blocked: false })]);
+      expect(world.player.health).toBe(68);
       expect(world.player.kbTicks).toBe(balance.playerKnockback.ticks);
       expect(Math.hypot(world.player.kbX!, world.player.kbZ!) * balance.playerKnockback.ticks).toBeCloseTo(2.8, 5);
       expect(playerStatusTicks(world.player, 'corrosive')).toBe(balance.status.corrosive.lingerTicks); // 직격이 세운 값 — Status 는 다음 틱에 알린다
@@ -3899,7 +3899,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
         Hazards.tick(world, DT);
       }
       world.input = Input.emptySnapshot();
-      expect(w.hits[1]).toMatchObject({ amount: 16 * balance.block.chipDamageRatio, blocked: true });
+      expect(w.hits[1]).toMatchObject({ amount: 32 * balance.block.chipDamageRatio, blocked: true });
       expect(Math.hypot(world.player.kbX!, world.player.kbZ!) * balance.playerKnockback.ticks).toBeCloseTo(2.8 * balance.playerKnockback.blockedMul, 5);
       expect(world.pools).toHaveLength(2);
       // 셋째 구슬 — 회피 무적이면 통과해 벽·바닥에 떨어져 거기 웅덩이
@@ -3955,7 +3955,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       const hpBefore = boss.health;
       for (let n = 1; n <= 3; n++) {
         const orb = deflectNextOrb();
-        expect(orb.damage).toBeCloseTo(16 * 1.5, 5); // 반사 규약(×1.5)은 그대로지만 분출공엔 고정 33 이 들어간다
+        expect(orb.damage).toBeCloseTo(32 * 1.5, 5); // 반사 규약(×1.5)은 그대로지만 분출공엔 고정 33 이 들어간다
         flyUntilGone(orb);
         expect(w.weakHits).toHaveLength(n);
         expect(w.weakHits[n - 1]).toMatchObject({ id: 'vent', damage: 33 });
@@ -4558,11 +4558,11 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(roar.despair).toEqual({ windupTicks: 36, pull: 4, followUp: 'slam', followUpWindupTicks: 40, followUpRearPose: { from: 8, to: 30 } });
       expect(chain).toHaveLength(3);
       expect(chain[0]).toBe(def.comboAttack);
-      expect(chain[0]).toMatchObject({ windupTicks: 28, recoverTicks: 6, arcDeg: 110, damage: 34, playerKnockback: 2.0, parryable: true, telegraph: 'blue', continueOnParry: true, cooldownTicks: 600, statusOnBlock: 'numb_arm', poolKind: 'blade' });
+      expect(chain[0]).toMatchObject({ windupTicks: 28, recoverTicks: 6, arcDeg: 110, damage: 68, playerKnockback: 2.0, parryable: true, telegraph: 'blue', continueOnParry: true, cooldownTicks: 600, statusOnBlock: 'numb_arm', poolKind: 'blade' });
       expect(chain[0]!.exposeOnParry).toEqual({ joint: 'joint_r', normalTicks: 30, perfectTicks: 60 });
-      expect(chain[1]).toMatchObject({ windupTicks: 22, recoverTicks: 6, arcDeg: 110, damage: 34, continueOnParry: true });
+      expect(chain[1]).toMatchObject({ windupTicks: 22, recoverTicks: 6, arcDeg: 110, damage: 68, continueOnParry: true });
       expect(chain[1]!.exposeOnParry).toEqual({ joint: 'joint_l', normalTicks: 30, perfectTicks: 60 });
-      expect(chain[2]).toMatchObject({ windupTicks: 36, recoverTicks: 40, whiffRecoverTicks: 60, aoeRadius: 3.2, damage: 40, playerKnockback: 2.0, perfectOnly: true, noParryBuffer: true, parryable: true, statusOnBlock: 'numb_arm' });
+      expect(chain[2]).toMatchObject({ windupTicks: 36, recoverTicks: 40, whiffRecoverTicks: 60, aoeRadius: 3.2, damage: 80, playerKnockback: 2.0, perfectOnly: true, noParryBuffer: true, parryable: true, statusOnBlock: 'numb_arm' });
       expect(chain[2]!.exposeOnParry).toBeUndefined(); // 양낫 — 관절 짝 없음(Stage 는 이걸로 두 낫을 든다)
       expect(chain[2]!.continueOnParry).toBeUndefined();
       expect(chain[2]!.comboNext).toBeUndefined();
@@ -4599,7 +4599,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(ds.windupTicks).toBe(40);
       expect(ds.rearPose).toEqual({ from: 8, to: 30 });
       expect(def.slamAttack!.rearPose).toEqual({ from: 8, to: 36 });
-      expect(currentAttack(def, { attackMode: 'slam', phase: 1, despairSlam: true })).toMatchObject({ windupTicks: 40, damage: 28, aoeRadius: 5.5, statusOnHit: 'hobble' });
+      expect(currentAttack(def, { attackMode: 'slam', phase: 1, despairSlam: true })).toMatchObject({ windupTicks: 40, damage: 56, aoeRadius: 5.5, statusOnHit: 'hobble' });
       expect(currentAttack(def, { attackMode: 'slam', phase: 1, despairSlam: true }).rearPose).toEqual({ from: 8, to: 30 });
       expect(currentAttack(def, { attackMode: 'slam', phase: 1, wakeSlam: true, despairSlam: true })).toBe(wakeSlamAttack(def)); // 기상이 이긴다
       expect(currentAttack(def, { attackMode: 'combo', phase: 1, comboStep: 0 })).toBe(chain[0]);
@@ -4825,7 +4825,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(boss.despairRoar).toBe(false);
       expect(boss.ai).toBe('windup');
       expect(boss.timer).toBe(roar.despair!.followUpWindupTicks);
-      expect(currentAttack(def, boss)).toMatchObject({ windupTicks: 40, damage: 28, aoeRadius: 5.5 });
+      expect(currentAttack(def, boss)).toMatchObject({ windupTicks: 40, damage: 56, aoeRadius: 5.5 });
       expect(w.slamStarts).toEqual([expect.objectContaining({ wake: false, despair: true })]);
       expect(boss.wakeSlamPending ?? false).toBe(false);
       // 앞발 들기 8 ≤ t < 30 — 심장이 열린다
@@ -4848,7 +4848,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       world.player.x = boss.x - 4.0;
       world.player.prevX = world.player.x;
       Enemies.tick(world, DT);
-      expect(w.hits).toEqual([expect.objectContaining({ amount: 28, blocked: false })]);
+      expect(w.hits).toEqual([expect.objectContaining({ amount: 56, blocked: false })]);
       expect(world.player.hobbleTicks).toBe(balance.status.hobble.ticks);
       expect(boss.despairSlam).toBe(false);
       expect(boss.ai).toBe('recover');
@@ -4985,7 +4985,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       const w = watch();
       startCombo(boss);
       untilComboStep(boss, 2);
-      expect(w.hits.map((h) => h.amount)).toEqual([34, 34]); // ①② 는 흘려보냈다
+      expect(w.hits.map((h) => h.amount)).toEqual([68, 68]); // ①② 는 흘려보냈다
       tickEnemiesUntil(() => boss.ai === 'active_perfect');
       const dist = Math.hypot(boss.x - world.player.x, boss.z - world.player.z);
       // 일반 대역(완벽 밖·guardDepth 안)
@@ -4998,7 +4998,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       expect(world.player.parryBufferTicks ?? 0).toBe(0); // 버퍼로 살아남지 않는다
       expect(boss.ai).toBe('active_perfect'); // 공격은 그대로 온다
       tickEnemiesUntil(() => boss.ai === 'recover', 30);
-      expect(w.hits.at(-1)).toMatchObject({ amount: 40, blocked: false });
+      expect(w.hits.at(-1)).toMatchObject({ amount: 80, blocked: false });
       expect(world.player.kbX! * balance.playerKnockback.ticks).toBeCloseTo(-chain[2]!.playerKnockback!, 6); // smash 2.0
       tickEnemiesUntil(() => boss.ai === 'chase', 120);
       expect(boss.attackMode).toBe('melee');
@@ -5039,7 +5039,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       world.player.blocking = false;
       world.player.stunTicks = 0;
       tickEnemiesUntil(() => w.hits.length === 3, 300);
-      expect(w.hits.map((h) => Math.round(h.amount * 10) / 10)).toEqual([10.2, 34, 40]);
+      expect(w.hits.map((h) => Math.round(h.amount * 10) / 10)).toEqual([20.4, 68, 80]);
       expect(w.hits[2]!.blocked).toBe(false);
       tickEnemiesUntil(() => boss.ai === 'chase', 120);
       expect(boss.attackMode).toBe('melee');
@@ -5113,7 +5113,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       // 두 번째 질주 — 6m 안 눈 노출, 직격 50(P3) + 진탕, 그 뒤 선회 없음
       tickEnemiesUntil(() => weakPointOpen(boss, wp('eye')), 120);
       tickEnemiesUntil(() => boss.ai === 'recover', 120);
-      expect(w.hits.at(-1)).toMatchObject({ amount: 50, blocked: false });
+      expect(w.hits.at(-1)).toMatchObject({ amount: 100, blocked: false });
       expect(world.player.concussionTicks).toBe(balance.status.concussion.ticks);
       expect(w.chainTurns).toHaveLength(1);
       expect(boss.chainLeg).toBe(0);
@@ -5380,7 +5380,7 @@ describe('scythe_behemoth (낫뿔 거수) — 낫·돌격·처형 뼈대(B1) + �
       world.events.on('numb_arm_ended', (p) => numbEnded.push(p as { kind: string; reason: string }));
       startCombo(boss);
       untilComboStep(boss, 2);
-      expect(w.hits.map((h) => h.amount)).toEqual([34, 34]); // ①② 는 흘려보냈다
+      expect(w.hits.map((h) => h.amount)).toEqual([68, 68]); // ①② 는 흘려보냈다
       setPlayerStatus(world.player, 'numb_arm', balance.status.numbArm.ticks);
       Status.tick(world, DT);
       world.mana.value = 0;
