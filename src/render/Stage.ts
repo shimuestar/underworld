@@ -37,7 +37,13 @@ const ENEMY_COLORS: Record<string, number> = {
   leech: 0x7a4b6e,
   slime_small: 0x63c97e,
   scythe_behemoth: 0x4a3a52, // 검자주 키틴 — 파편 색도 이것 (BEHEMOTH_COLORS.body 와 같다)
+  // 해골 병사 — 누런 뼛빛. 셋이 미세하게 다르다(검사가 제일 밝고 해머병이 제일 묵다)
+  skeleton_sword: 0xd8d0bc,
+  skeleton_hammer: 0xc9bfa6,
+  skeleton_shield: 0xd2c9b3,
 };
+/** 해골 병사 — 기둥 몸통이 아니라 두개골·갈비·척추·골반·뼈다귀 다리로 짓는다(buildSkeletonBody). 죽으면 뼈가 흩어진다(spawnBoneScatter) */
+export const SKELETON_TYPES = new Set(['skeleton_sword', 'skeleton_hammer', 'skeleton_shield']);
 /** 거미는 기둥+머리가 아니라 몸통·배·다리로 만든다 */
 const SPIDER_TYPES = new Set(['spider_small', 'spider_large']);
 /** 슬라임 — 반투명 젤 덩어리. 다리·팔·머리·눈이 없다 (무정형) */
@@ -57,6 +63,9 @@ const BLOOD_COLORS: Record<string, number> = {
   slime_small: 0x328b4e,
   slime_mother: 0x328b4e,
   scythe_behemoth: 0x4a1a6e, // 오염 보라 — 갑각 틈에 고인 오염 진액
+  skeleton_sword: 0xb9b09a, // 뼛가루 — 피가 없다
+  skeleton_hammer: 0xb9b09a,
+  skeleton_shield: 0xb9b09a,
 };
 export function bloodColorOf(enemyType: string): number {
   return BLOOD_COLORS[enemyType] ?? BLOOD_RED;
@@ -65,6 +74,96 @@ export function bloodColorOf(enemyType: string): number {
 /** 거미 몸 — 낮게 깔린 몸통 + 뒤로 부푼 배 + 사방으로 뻗은 다리 8개.
  *  키(def.height)가 낮아 기둥+머리로 만들면 그냥 통조림처럼 보인다 */
 /** 박쥐 — 작은 몸통 + 피막 날개 둘(batWingL/R — syncEnemies 가 퍼덕인다) + 귀·안광 */
+/** 해골 병사 몸 — 골반·척추·갈비 4대·쇄골·두개골(턱)·뼈다귀 다리(대퇴·정강이·발). 팔은 공용 코드(무기 팔·맨팔)가 단다.
+ *  전부 프리미티브 + 단색, 모든 뼈 재질은 flashMaterials 에 올려 예고 발광·피격 명멸을 같이 받는다. 모든 부위는 충돌 반경(def.radius) 안 —
+ *  보이는 것 = 맞는 것. 반환한 hips 는 걸음 스윙(syncEnemies legs), head 는 헤드샷 젖힘. 죽으면 spawnBoneScatter 가 이 메시들을 하나씩 떼어 던진다 */
+export function buildSkeletonBody(
+  torso: THREE.Group,
+  def: { radius: number; height: number },
+  boneMat: THREE.MeshLambertMaterial,
+  eyes: EyeKit,
+  baseColor: number,
+  flashMaterials: THREE.MeshLambertMaterial[],
+): { legs: { left: THREE.Group; right: THREE.Group }; head: THREE.Object3D } {
+  const r = def.radius;
+  const h = def.height;
+  const jointMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(baseColor).multiplyScalar(0.8) }); // 관절·골반은 살짝 묵다
+  flashMaterials.push(jointMat);
+  const legH = h * 0.42; // 뼈다귀 다리는 살보다 길다 — 골반이 높다
+  const shoulderY = h * 0.78;
+
+  // 골반 — 넓적한 상자
+  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(r * 1.05, r * 0.36, r * 0.55), jointMat);
+  pelvis.position.y = legH + r * 0.18;
+  torso.add(pelvis);
+  // 척추 — 골반에서 쇄골까지 가는 기둥
+  const spineLen = shoulderY - pelvis.position.y;
+  const spine = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.11, r * 0.13, spineLen, 6), boneMat);
+  spine.position.set(0, pelvis.position.y + spineLen / 2, r * 0.12);
+  torso.add(spine);
+  // 갈비 — 납작한 고리 4대, 위로 갈수록 넓다. 앞뒤를 눌러 흉곽 꼴
+  const ribCount = 4;
+  for (let i = 0; i < ribCount; i++) {
+    const t = i / (ribCount - 1);
+    const ribR = r * (0.52 + 0.28 * t);
+    const rib = new THREE.Mesh(new THREE.TorusGeometry(ribR, r * 0.075, 5, 14), boneMat);
+    rib.rotation.x = Math.PI / 2;
+    rib.scale.z = 0.72; // 앞뒤로 눌린 흉곽 (torus 는 회전 뒤 z 가 앞뒤)
+    rib.position.set(0, pelvis.position.y + r * 0.55 + (spineLen - r * 0.85) * t, r * 0.02);
+    torso.add(rib);
+  }
+  // 쇄골 — 어깨를 가로지르는 가로대(팔 어깨 피벗 자리와 높이를 맞춘다: height*0.72 어깨 → 살짝 위)
+  const clavicle = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, r * 0.16, r * 0.2), boneMat);
+  clavicle.position.set(0, shoulderY, -r * 0.05);
+  torso.add(clavicle);
+
+  // 다리 — 골반 피벗. 대퇴(위) + 정강이(아래, 살짝 뒤) + 발
+  const makeLeg = (side: number): THREE.Group => {
+    const hip = new THREE.Group();
+    hip.position.set(side * r * 0.36, legH, 0);
+    const femurLen = legH * 0.5;
+    const femur = new THREE.Mesh(new THREE.BoxGeometry(r * 0.2, femurLen, r * 0.22), boneMat);
+    femur.position.y = -femurLen / 2;
+    hip.add(femur);
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(r * 0.15, 6, 5), jointMat);
+    knee.position.y = -femurLen;
+    hip.add(knee);
+    const shinLen = legH - femurLen - r * 0.1;
+    const shin = new THREE.Mesh(new THREE.BoxGeometry(r * 0.17, shinLen, r * 0.19), boneMat);
+    shin.position.set(0, -femurLen - shinLen / 2, r * 0.04);
+    hip.add(shin);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(r * 0.22, r * 0.1, r * 0.5), jointMat);
+    foot.position.set(0, -legH + r * 0.05, -r * 0.12);
+    hip.add(foot);
+    torso.add(hip);
+    return hip;
+  };
+  const legs = { left: makeLeg(-1), right: makeLeg(1) };
+
+  // 두개골 — 상자 머리 + 앞으로 튀어나온 턱. 머리 그룹째 젖힌다(헤드샷)
+  const head = new THREE.Group();
+  const skullSize = r * 0.82;
+  const skull = new THREE.Mesh(new THREE.BoxGeometry(skullSize, skullSize * 0.92, skullSize * 0.95), boneMat);
+  skull.position.y = skullSize * 0.46;
+  head.add(skull);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(skullSize * 0.7, skullSize * 0.26, skullSize * 0.6), jointMat);
+  jaw.position.set(0, skullSize * 0.06, -skullSize * 0.12);
+  head.add(jaw);
+  // 목 자리 — 쇄골 위. 머리는 살짝 앞으로(척추 굽음)
+  head.position.set(0, shoulderY + r * 0.1, -r * 0.12);
+  torso.add(head);
+
+  // 안광 — 눈구멍 자리(두개골 앞면)에 박힌다
+  const ec = balance.lighting.enemyEyes;
+  const eyeR = r * ec.radiusMul;
+  const eyeY = head.position.y + skullSize * 0.5;
+  const eyeZ = head.position.z - skullSize * 0.475 - eyeR * 0.3;
+  for (const side of [-1, 1]) {
+    addGlowEye(torso, side * skullSize * ec.spacingMul, eyeY, eyeZ, eyeR, eyes.eyeMat, eyes.haloMat, eyes.halos);
+  }
+  return { legs, head };
+}
+
 function buildBatBody(
   torso: THREE.Group,
   def: { radius: number; height: number },
@@ -382,12 +481,17 @@ const MELEE_WEAPONS: Record<
   goblin_spear: { length: 2.0, width: 0.07, color: 0x5c4a33, style: 'thrust', tip: true },
   // tip 이 있으면 창끝이 length + 0.23 지점까지 나온다 (아래 tipLocal 계산)
   goblin_chieftain: { length: 2.0, width: 0.26, color: 0x4a3826, style: 'smash', headSize: 0.5 },
+  // 해골 병사 — 녹슨 강철 검(검사) / 나무 자루 큰 해머(해머병) / 방패 너머로 내지르는 짧은 검(방패병, thrust)
+  skeleton_sword: { length: 1.25, width: 0.09, color: 0x8d949e, style: 'smash' },
+  skeleton_hammer: { length: 1.7, width: 0.15, color: 0x4a3826, style: 'smash', headSize: 0.42 },
+  skeleton_shield: { length: 0.95, width: 0.075, color: 0x8d949e, style: 'thrust', tip: true },
 };
 /** smash 팔 각도: 휴식/치켜듦/내리침.
  *  무기는 팔 피벗에서 -z로 뻗으므로 +회전이 무기 끝을 위로 올린다 */
 const ARM_REST = -0.45; // 무기를 내려 든 대기
 const ARM_RAISED = 2.0; // 머리 위로 치켜듦
 const ARM_SMASH = -1.15; // 앞아래로 내리찍음
+const ARM_READY = 0.6; // 대열 후열 대기(enemy.holding, 해골 해머병) — 어깨에 걸쳐 든 준비 자세
 /** 화살 세례 — 무기를 몸 앞으로 가로질러 당겼다(예고) 한 발마다 앞으로 튕긴다.
  *  높이 치켜들면(1.4대) 랜턴 조명 밖으로 나가 캄캄해서 안 보인다 — 몸통 높이로 잡는다 */
 const ARM_VOLLEY_DRAW = 0.42; // 거의 수평
@@ -2116,6 +2220,10 @@ interface Particle {
   landedAtAge?: number;
   landedX?: number;
   landedZ?: number;
+  /** 튕김(해골 뼈) — 착지 세로 속도가 minSpeed 이상이고 left 가 남았으면 착지점에서 다시 던진다(세로 restitution·가로 friction). 없으면 착지하며 바로 눕는다 */
+  bounce?: { restitution: number; friction: number; left: number; minSpeed: number };
+  /** 마지막으로 던져진 시각 — 튕김 뒤 탄도는 여기서 다시 잰다(수명은 bornMs). 없으면 bornMs */
+  launchMs?: number;
 }
 
 interface Tracer {
@@ -3892,6 +4000,10 @@ export class Stage {
       buildSpiderBody(torso, def, bodyMat, eyes, baseColor, flashMaterials);
     } else if (type === 'bat') {
       buildBatBody(torso, def, bodyMat, eyes, baseColor, flashMaterials);
+    } else if (SKELETON_TYPES.has(type)) {
+      const rig = buildSkeletonBody(torso, def, bodyMat, eyes, baseColor, flashMaterials);
+      legsPair = rig.legs;
+      headMesh = rig.head;
     } else {
       // 몸통은 충돌 원과 같은 반경의 8각 기둥 — 박스로 두면 모서리가 반경 밖으로
       // 0.21m 튀어나와(0.5→0.707) 비스듬히 부딪칠 때 뚫고 들어가 보인다
@@ -4000,7 +4112,8 @@ export class Stage {
 
     // 지면 강타 범위 원 — 예고 중에만 보인다. 반경은 매 프레임 attack.aoeRadius 로 맞춘다.
     // 화면 UI 가 아니라 월드 바닥에 놓인 표식이다 (몸이 기울어도 바닥에 붙어 있게 group 소속)
-    if (def.attack.aoeRadius) {
+    // closeAttack 에 광역이 있는 적(해골 해머병 지면 강타)도 같은 원을 쓴다 — 그 공격이 예고될 때 currentAttack 이 그 반경을 준다
+    if (def.attack.aoeRadius || def.closeAttack?.aoeRadius) {
       visual.aoeRingMaterial = new THREE.MeshBasicMaterial({
         color: AOE_RING_COLOR,
         transparent: true,
@@ -4785,7 +4898,7 @@ export class Stage {
             direct = true; // 발사 순간과 그림이 어긋나지 않게
           }
         } else {
-          armRotTarget = ARM_REST;
+          armRotTarget = enemy.holding ? ARM_READY : ARM_REST; // 후열 대기 중엔 해머를 어깨에 걸친다
           if (chargeCoil) {
             // 무기를 뒤아래로 끌어 내렸다가 달리며 치켜든다
             armRotTarget = ARM_REST + (ARM_CHARGE_COIL - ARM_REST) * windupProgress;
@@ -5119,19 +5232,110 @@ export class Stage {
         if (now < heldUntil) continue; // 처형 대기 — 마지막 자세 그대로 얼어 있는다
         this.heldVictims.delete(id);
       }
-      this.scene.remove(visual.group);
+      this.disposeEnemyVisual(id, visual);
+    }
+  }
+
+  /** 적 비주얼 제거 — 씬에서 떼고 지오메트리·재질·이름표를 해제하고 장부에서 지운다(사망 뒷정리·뼈 흩어짐 공용) */
+  private disposeEnemyVisual(id: number, visual: EnemyVisual): void {
+    this.scene.remove(visual.group);
+    visual.group.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        (obj.material as THREE.Material).dispose();
+      }
+    });
+    visual.plateTexture.dispose();
+    visual.plate.material.dispose();
+    visual.alert.material.dispose(); // 텍스처는 전 적이 공유하므로 건드리지 않는다
+    this.enemyVisuals.delete(id);
+    this.heldVictims.delete(id);
+    this.alertAt.delete(id); // 죽은 적의 표시 시각까지 들고 있지 않는다
+    for (const key of this.weakFlashAt.keys()) if (key.startsWith(`${id}:`)) this.weakFlashAt.delete(key);
+  }
+
+  /** 해골 뼈 흩어짐(balance.skeleton.boneScatter) — 살아 있던 리그의 뼈 메시(눈·후광·이름표·바닥 원 제외)를 지금 자세 그대로 월드로 떼어 내 하나씩 사방으로 던진다.
+   *  죽인 방향(dirX,dirZ — 플레이어 반대쪽 또는 폭심 반대쪽)에 killDirMul·launch 를 얹어 밀려 날아가고, 착지하면 몇 번 튕기다 눕고 lifeMs 뒤 옅어진다.
+   *  리그가 이미 지워졌으면(처형 지연 뒤 등) 뼈다귀 막대를 만들어 던진다. 리그는 여기서 바로 지운다 — 뼈는 파편으로 넘어갔다 */
+  spawnBoneScatter(enemyId: number | undefined, x: number, z: number, enemyType: string, dirX = 0, dirZ = 0, launch = 0): void {
+    const cfg = balance.skeleton.boneScatter;
+    const def = enemyDef(enemyType);
+    const now = performance.now();
+    const len = Math.hypot(dirX, dirZ);
+    const lx = len > 0 ? dirX / len : 0;
+    const lz = len > 0 ? dirZ / len : 0;
+    const pieces: { mesh: THREE.Mesh; pos: THREE.Vector3; quat: THREE.Quaternion; scale: THREE.Vector3; half: number }[] = [];
+    const visual = enemyId !== undefined ? this.enemyVisuals.get(enemyId) : undefined;
+    const box = new THREE.Box3();
+    const size = new THREE.Vector3();
+    if (visual) {
+      visual.group.updateMatrixWorld(true);
       visual.group.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose();
-          (obj.material as THREE.Material).dispose();
-        }
+        if (!(obj instanceof THREE.Mesh)) return;
+        if (!(obj.material instanceof THREE.MeshLambertMaterial)) return; // 눈(Basic)·균열(Basic)·바닥 원은 뼈가 아니다
+        if (obj === visual.aoeRing) return;
+        if (obj.geometry.boundingBox === null) obj.geometry.computeBoundingBox();
+        box.copy(obj.geometry.boundingBox!).getSize(size);
+        const scale = obj.getWorldScale(new THREE.Vector3());
+        size.multiply(scale);
+        pieces.push({
+          mesh: obj,
+          pos: obj.getWorldPosition(new THREE.Vector3()),
+          quat: obj.getWorldQuaternion(new THREE.Quaternion()),
+          scale,
+          half: Math.max(0.03, Math.min(size.x, size.y, size.z) / 2), // 제일 얇은 쪽으로 눕는다
+        });
       });
-      visual.plateTexture.dispose();
-      visual.plate.material.dispose();
-      visual.alert.material.dispose(); // 텍스처는 전 적이 공유하므로 건드리지 않는다
-      this.enemyVisuals.delete(id);
-      this.alertAt.delete(id); // 죽은 적의 표시 시각까지 들고 있지 않는다
-      for (const key of this.weakFlashAt.keys()) if (key.startsWith(`${id}:`)) this.weakFlashAt.delete(key);
+      this.disposeEnemyVisual(enemyId!, visual);
+    }
+    if (pieces.length === 0) {
+      // 리그가 없다 — 뼈다귀 막대 몇 개로 대신한다(개수는 리그 부위 수와 비슷하게)
+      const color = ENEMY_COLORS[enemyType] ?? ENEMY_COLOR_FALLBACK;
+      for (let i = 0; i < 10; i++) {
+        const boneLen = def.radius * (0.5 + Math.random() * 0.6);
+        const thick = def.radius * 0.16;
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(thick, boneLen, thick), new THREE.MeshLambertMaterial({ color }));
+        pieces.push({
+          mesh,
+          pos: new THREE.Vector3(x, def.height * (0.2 + Math.random() * 0.7), z),
+          quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * 3, Math.random() * 3, 0)),
+          scale: new THREE.Vector3(1, 1, 1),
+          half: thick / 2,
+        });
+      }
+    }
+    for (const piece of pieces) {
+      const src = piece.mesh.material as THREE.MeshLambertMaterial;
+      const mesh = new THREE.Mesh(
+        piece.mesh.geometry.clone(),
+        new THREE.MeshLambertMaterial({ color: src.color.getHex(), transparent: true, opacity: 1 }),
+      );
+      mesh.position.copy(piece.pos);
+      mesh.quaternion.copy(piece.quat);
+      mesh.scale.copy(piece.scale);
+      const ang = Math.random() * Math.PI * 2;
+      const speed = cfg.speedMin + Math.random() * cfg.speedSpan;
+      // 흩어지는 성분은 남기고 죽인 방향 성분을 얹는다 — 전부 한 방향이면 파편이 아니라 화살처럼 보인다
+      const kick = len > 0 ? cfg.killDirMul * (0.4 + Math.random() * 0.6) + launch * (0.55 + Math.random() * 0.9) : 0;
+      const particle: Particle = {
+        mesh,
+        ox: piece.pos.x,
+        oy: piece.pos.y,
+        oz: piece.pos.z,
+        vx: Math.cos(ang) * speed + lx * kick,
+        vy: cfg.upMin + Math.random() * cfg.upSpan + launch * 0.25,
+        vz: Math.sin(ang) * speed + lz * kick,
+        bornMs: now,
+        lifeMs: cfg.lifeMs,
+        gravity: cfg.gravity,
+        restY: piece.half,
+        spinX: (Math.random() * 2 - 1) * cfg.spinMax,
+        spinY: (Math.random() * 2 - 1) * cfg.spinMax,
+        spinZ: (Math.random() * 2 - 1) * cfg.spinMax,
+        bounce: { restitution: cfg.bounce.restitution, friction: cfg.bounce.friction, left: cfg.bounce.count, minSpeed: cfg.bounce.minSpeed },
+      };
+      this.particles.push(particle);
+      this.scene.add(mesh);
     }
   }
 
@@ -6314,7 +6518,7 @@ export class Stage {
     const now = performance.now();
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i]!;
-      const age = (now - p.bornMs) / 1000;
+      const age = (now - (p.launchMs ?? p.bornMs)) / 1000; // 탄도 시간 — 튕긴 뒤엔 마지막 던진 시각부터
       const lifeFrac = (now - p.bornMs) / (p.lifeMs ?? DEATH_PARTICLE_LIFE_MS);
       if (lifeFrac >= 1) {
         // 자식까지 걷는다 — 떨어져 나간 머리에는 눈이 붙어 있다
@@ -6322,8 +6526,28 @@ export class Stage {
         this.particles.splice(i, 1);
         continue;
       }
-      const ballisticY = p.oy + p.vy * age - 0.5 * (p.gravity ?? DEATH_GRAVITY) * age * age;
-      if (p.restY !== undefined && p.landedAtAge === undefined && ballisticY <= p.restY && age > 0.1) {
+      const gravity = p.gravity ?? DEATH_GRAVITY;
+      const ballisticY = p.oy + p.vy * age - 0.5 * gravity * age * age;
+      // 튕긴 뒤의 짧은 포물선은 0.1초 안에 되돌아온다 — 착지 감지 유예를 짧게
+      const landGrace = p.launchMs !== undefined ? 0.02 : 0.1;
+      if (p.restY !== undefined && p.landedAtAge === undefined && ballisticY <= p.restY && age > landGrace) {
+        const vyLand = p.vy - gravity * age; // 착지 순간 세로 속도(음수)
+        if (p.bounce && p.bounce.left > 0 && -vyLand >= p.bounce.minSpeed) {
+          // 튕김(해골 뼈) — 착지점에서 다시 던진다. 세로는 restitution, 가로는 friction 만큼 죽고 회전도 잦아든다
+          p.ox += p.vx * age;
+          p.oz += p.vz * age;
+          p.oy = p.restY;
+          p.vy = -vyLand * p.bounce.restitution;
+          p.vx *= p.bounce.friction;
+          p.vz *= p.bounce.friction;
+          p.spinX = (p.spinX ?? 0) * 0.6;
+          p.spinY = (p.spinY ?? 0) * 0.6;
+          p.spinZ = (p.spinZ ?? 0) * 0.6;
+          p.bounce.left--;
+          p.launchMs = now;
+          p.mesh.position.set(p.ox, p.oy, p.oz);
+          continue;
+        }
         // 착지 — 그 자리에 눕는다. 더 미끄러지지 않는다
         p.landedAtAge = age;
         p.landedX = p.ox + p.vx * age;

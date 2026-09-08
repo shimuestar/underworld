@@ -1992,6 +1992,11 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   enemy.prevZ = enemy.z;
   enemy.prevJumpY = enemy.jumpY ?? 0;
 
+  // 플레이어 해머 스윙 시작 감지(해골 검사 백스텝, def.evade) — weapon.swingSeq 가 지난 틱과 다르면 이번 틱에 스윙이 시작됐다.
+  // 매 틱 맨 앞에서 소비한다: 넉백·경직으로 아래에서 일찍 돌아가는 틱의 스윙은 그냥 지나간 것이다(묵혀 두고 뒤늦게 반응하지 않는다)
+  const swingStarted = enemy.seenSwingSeq !== undefined && world.weapon.swingSeq !== undefined && world.weapon.swingSeq !== enemy.seenSwingSeq;
+  enemy.seenSwingSeq = world.weapon.swingSeq ?? 0;
+
   // 약점 보스 장부 — 노출·혼절·자세 비추기. 넉백·경직보다 먼저(노출 창은 플레이어의 시간이다). 혼절로 넘어간 틱은 여기서 끝
   if (tickWeakPointStatus(world, enemy, def)) return;
   // 페이즈(거수, B2-6) — 칸이 비었으면 전환(또는 큐잉). 전환 틱은 아래 포즈 타이머(roar)가 이어받는다
@@ -2120,6 +2125,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   if ((enemy.slamCooldown ?? 0) > 0) enemy.slamCooldown = (enemy.slamCooldown ?? 0) - 1;
   if ((enemy.roarCooldown ?? 0) > 0) enemy.roarCooldown = (enemy.roarCooldown ?? 0) - 1;
   if ((enemy.comboCooldown ?? 0) > 0) enemy.comboCooldown = (enemy.comboCooldown ?? 0) - 1;
+  if ((enemy.evadeCooldown ?? 0) > 0) enemy.evadeCooldown = (enemy.evadeCooldown ?? 0) - 1;
 
   // 새끼 분리 — 타이머 구동 (2026-09-01): 전투에 들어오면 즉시 5마리, 그 뒤로는
   // 10초 박자(cooldownTicks)마다 살아 있는 새끼를 빼고 부족분만 시전 없이 충원한다.
@@ -2149,6 +2155,16 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   if ((enemy.kbTicks ?? 0) > 0) {
     enemy.kbTicks = (enemy.kbTicks ?? 0) - 1;
     world.level.slideMove(enemy, def.radius, enemy.kbX ?? 0, enemy.kbZ ?? 0);
+    return;
+  }
+
+  // 백스텝(해골 검사, def.evade) — 넉백처럼 뒤로 미끄러지는 동안 다른 행동은 없다(벽에는 막힘). 플레이어는 계속 마주 본다.
+  // 착지 틱에 lungeAfter 면 찔러 들어오기(chargeAttack)를 예약한다 — 위 wantsCharge 우회 경로가 다음 틱에 거리(minRange)·시야를 보고 낸다
+  if ((enemy.hopTicks ?? 0) > 0) {
+    enemy.hopTicks = (enemy.hopTicks ?? 0) - 1;
+    world.level.slideMove(enemy, def.radius, enemy.hopX ?? 0, enemy.hopZ ?? 0);
+    enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));
+    if ((enemy.hopTicks ?? 0) <= 0 && def.evade?.lungeAfter && def.chargeAttack) enemy.wantsCharge = true;
     return;
   }
 
@@ -2289,6 +2305,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
     case 'chase': {
       enemy.yaw = Math.atan2(-distX, -distZ);
 
+      // 백스텝(해골 검사) — 이번 틱에 플레이어의 해머 스윙이 시작됐고 maxDist 안이면 뒤로 뛴다(다른 선택보다 먼저 — 맞기 전에 빠져야 한다)
+      if (swingStarted && tryEvade(world, enemy, def, distX, distZ, dist)) break;
+
       // 아레나 홈 대기(B3-5, 기획서 §10.1) — 밖에서 깨어난 아레나 주인은 공격·추격 대신 홈 칸으로 돌아가 문 쪽을 노려본다(Arena 가 세우고 플레이어가 경계를 넘는 틱에 내린다)
       if (enemy.holdHome) {
         holdAtHome(world, enemy, def, dt);
@@ -2363,7 +2382,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         // 들이받기(closeAttack, 거수) — 코앞(maxRange)에 붙은 플레이어는 낫보다 먼저 머리로 밀어낸다.
         // 배 밑에 눌러앉는 플레이 방지. 쿨다운이 돌고 있으면 낫으로 (기획서 §9.2 3번). 슬롯이 없는 적은 옛 경로
         const close = def.closeAttack && attackInPhase(def, enemy, 'close', def.closeAttack);
-        if (close && dist <= (close.maxRange ?? def.attackRange) && (enemy.closeCooldown ?? 0) <= 0) {
+        // requiresBlocking(해골 해머병 지면 강타) — 플레이어가 방패를 들고 있을 때만: 막기에 기대는 플레이를 부수는 답
+        if (close && dist <= (close.maxRange ?? def.attackRange) && (enemy.closeCooldown ?? 0) <= 0 && (!close.requiresBlocking || p.blocking)) {
           enemy.attackMode = 'close';
           enemy.closeCooldown = close.cooldownTicks ?? 0;
           startWindup(world, enemy, close);
@@ -2382,6 +2402,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         startWindup(world, enemy, currentAttack(def, enemy));
         break;
       }
+      // 엄호(해골 방패병, def.coverAllies) — 사거리 밖에서 혼절한 동료가 보이면 돌격·접근 대신 그 동료와 플레이어 사이로 끼어든다
+      if (tryCover(world, enemy, def, dt)) break;
       // 발구르기(거수 P2+, B3-1, 기획서 §9.2 5번) — 낫 사거리 밖 2.5 < dist ≤ 6, 쿨 420. 돌격(4.5~15)보다 먼저 본다
       if (trySlam(world, enemy, def, dist, false)) break;
       // (새끼 분리는 AI 선택이 아니라 10초 박자 타이머가 돈다 — 위 beatBrood 블록)
@@ -2481,6 +2503,8 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         if (gd > ARENA_ARRIVE_M) moveAvoiding(world, enemy, def, gdx / gd, gdz / gd, Math.min(gd, moveSpeed(enemy, def) * dt));
         break;
       }
+      // 대열 후열 대기(해골 해머병, formation.role rear) — 방패병이 앞에 살아 있으면 holdRange 안에서는 다가가지 않고 선다. 돌격(위)은 여기서도 나간다
+      if (holdFormation(world, enemy, def, dist)) break;
       if (dist > 0) {
         // 살금살금 — stalk 이 있으면 달려들기 사정거리 밖에서는 천천히 걸어온다 (구울)
         const stalkMul = def.stalk && dist > def.stalk.untilRange ? def.stalk.speedMul : 1;
@@ -3147,10 +3171,16 @@ function approachDir(
   dist: number,
 ): { x: number; z: number; pursuing: boolean } {
   if (world.level.hasLineOfSight(enemy.x, enemy.z, world.player.x, world.player.z)) {
-    const fd = flankDir(enemy, distX / dist, distZ / dist, dist);
+    const def = enemyDef(enemy.type);
+    // 대열 측면(해골 검사, formation.role flank) — 방패병(front)이 앞에 있으면 편각을 키우고 수렴 거리를 줄여 크게 옆으로 돌아 들어온다
+    const fm = def.formation;
+    const spread = fm?.role === 'flank' && formationFront(world, enemy, def)
+      ? { maxOffsetDeg: fm.offsetDeg ?? balance.enemyAi.flank.maxOffsetDeg, convergeRange: fm.convergeRange ?? balance.enemyAi.flank.convergeRange }
+      : undefined;
+    const fd = flankDir(enemy, distX / dist, distZ / dist, dist, spread);
     // 편각이 한 발 앞 벽 칸을 향하면 접는다 — 문 옆 벽에 몸을 갈며 낭비하는 그림 방지
     const cs = world.level.cellSize;
-    const probe = 1.2 + (enemyDef(enemy.type).radius ?? 0.5);
+    const probe = 1.2 + (def.radius ?? 0.5);
     const px = enemy.x + fd.x * probe;
     const pz = enemy.z + fd.z * probe;
     if (world.level.solidAt(Math.floor(px / cs), Math.floor(pz / cs))) {
@@ -3171,16 +3201,126 @@ function flankDir(
   dirX: number,
   dirZ: number,
   dist: number,
+  spread?: { maxOffsetDeg: number; convergeRange: number }, // 대열 측면(formation flank)의 재정의 — 없으면 balance 기본
 ): { x: number; z: number } {
   const fl = balance.enemyAi.flank;
-  const t = Math.min(1, Math.max(0, (dist - fl.convergeRange) / (fl.fullRange - fl.convergeRange)));
+  const maxOffsetDeg = spread?.maxOffsetDeg ?? fl.maxOffsetDeg;
+  const convergeRange = spread?.convergeRange ?? fl.convergeRange;
+  const t = Math.min(1, Math.max(0, (dist - convergeRange) / (fl.fullRange - convergeRange)));
   if (t <= 0) return { x: dirX, z: dirZ };
   // id 해시 → [-1, 1) 고정 편향 — 같은 무리라도 제각각 다른 각으로 벌어진다
   const h = (((enemy.id * 2654435761) >>> 0) % 1000) / 500 - 1;
-  const ang = h * ((fl.maxOffsetDeg * Math.PI) / 180) * t;
+  const ang = h * ((maxOffsetDeg * Math.PI) / 180) * t;
   const c = Math.cos(ang);
   const s = Math.sin(ang);
   return { x: dirX * c - dirZ * s, z: dirX * s + dirZ * c };
+}
+
+/** 백스텝(해골 검사, def.evade) — 추격 중 maxDist 안에서 플레이어의 해머 스윙이 시작된 틱에 ticks 동안 distance 만큼 뒤로 뛴다(해머 사거리 밖으로).
+ *  쿨다운(cooldownTicks) 중이면 그냥 맞는다 — 연속 스윙의 두 번째부터는 통한다. 참 = 이번 틱 다른 선택 없음 */
+function tryEvade(
+  world: World,
+  enemy: EnemyState,
+  def: ReturnType<typeof enemyDef>,
+  distX: number,
+  distZ: number,
+  dist: number,
+): boolean {
+  const ev = def.evade;
+  if (!ev || dist <= 0.001 || dist > ev.maxDist || (enemy.evadeCooldown ?? 0) > 0) return false;
+  const ticks = Math.max(1, Math.round(ev.ticks));
+  enemy.hopTicks = ticks;
+  enemy.hopX = (-distX / dist) * (ev.distance / ticks);
+  enemy.hopZ = (-distZ / dist) * (ev.distance / ticks);
+  enemy.evadeCooldown = ev.cooldownTicks;
+  enemy.yaw = Math.atan2(-distX, -distZ);
+  world.events.emit('enemy_evade', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, dist });
+  return true;
+}
+
+/** 대열 기준(front) 동료(해골 병사, def.formation) — balance.enemyAi.formation.radius 안에 살아 있고 혼절하지 않은 front 중 가장 가까운 것.
+ *  role 이 front 인 적 자신이나 대열이 없는 적은 null */
+function formationFront(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>): EnemyState | null {
+  const fm = def.formation;
+  if (!fm || fm.role === 'front') return null;
+  const radius = balance.enemyAi.formation.radius;
+  let best: EnemyState | null = null;
+  let bestD = Infinity;
+  for (const other of world.enemies) {
+    if (other === enemy || !other.alive || other.ai === 'staggered') continue;
+    if (enemyDef(other.type).formation?.role !== 'front') continue;
+    const d = Math.hypot(other.x - enemy.x, other.z - enemy.z);
+    if (d > radius || d >= bestD) continue;
+    best = other;
+    bestD = d;
+  }
+  return best;
+}
+
+/** 대열 후열 대기(formation.role rear, 해골 해머병) — front 가 살아 있고 자기보다 플레이어에 가까우면 holdRange 안에서는 다가가지 않고 서서 노린다.
+ *  붙잡힌 채(holding)면 holdRange + holdSlack 까지 그대로 선다(경계에서 떨림 방지). 사거리 안은 이 함수보다 앞의 공격 분기가 먹는다. 참 = 이 틱 이동 없음 */
+function holdFormation(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>, dist: number): boolean {
+  const fm = def.formation;
+  if (!fm || fm.role !== 'rear' || fm.holdRange === undefined) {
+    enemy.holding = false;
+    return false;
+  }
+  const front = formationFront(world, enemy, def);
+  if (!front) {
+    enemy.holding = false;
+    return false;
+  }
+  const p = world.player;
+  const frontDist = Math.hypot(front.x - p.x, front.z - p.z);
+  // 방패병이 나보다 뒤에 있으면 내가 전열이다 — 평소 추격
+  if (frontDist >= dist) {
+    enemy.holding = false;
+    return false;
+  }
+  const limit = fm.holdRange + (enemy.holding ? balance.enemyAi.formation.holdSlack : 0);
+  if (dist > limit) {
+    enemy.holding = false;
+    return false;
+  }
+  enemy.holding = true;
+  return true;
+}
+
+/** 엄호(def.coverAllies, 해골 방패병) — radius 안의 혼절(staggered)한 동료 중 가장 가까운 것과 플레이어 사이 standoff 지점으로 speedMul 배속으로 끼어든다.
+ *  닿았으면 그 자리에서 플레이어를 마주 본다. 처음 끼어드는 틱에 enemy_cover_start. 참 = 이 틱은 엄호 이동(돌격·접근 대신). 사거리 안 공격은 이 함수보다 앞 */
+function tryCover(world: World, enemy: EnemyState, def: ReturnType<typeof enemyDef>, dt: number): boolean {
+  const cv = def.coverAllies;
+  if (!cv) return false;
+  const p = world.player;
+  let ally: EnemyState | null = null;
+  let bestD = Infinity;
+  for (const other of world.enemies) {
+    if (other === enemy || !other.alive || other.ai !== 'staggered') continue;
+    const d = Math.hypot(other.x - enemy.x, other.z - enemy.z);
+    if (d > cv.radius || d >= bestD) continue;
+    ally = other;
+    bestD = d;
+  }
+  if (!ally) {
+    enemy.covering = false;
+    return false;
+  }
+  const ax = p.x - ally.x;
+  const az = p.z - ally.z;
+  const ad = Math.hypot(ax, az);
+  if (ad <= 0.001) return false;
+  if (!enemy.covering) {
+    enemy.covering = true;
+    world.events.emit('enemy_cover_start', { enemyId: enemy.id, enemyType: enemy.type, allyId: ally.id, allyType: ally.type, x: enemy.x, z: enemy.z });
+  }
+  const tx = ally.x + (ax / ad) * cv.standoff;
+  const tz = ally.z + (az / ad) * cv.standoff;
+  const dx = tx - enemy.x;
+  const dz = tz - enemy.z;
+  const d = Math.hypot(dx, dz);
+  enemy.yaw = Math.atan2(-(p.x - enemy.x), -(p.z - enemy.z));
+  if (d > ARENA_ARRIVE_M) moveAvoiding(world, enemy, def, dx / d, dz / d, Math.min(d, moveSpeed(enemy, def) * cv.speedMul * dt));
+  return true;
 }
 
 /** 플레이어 곁에서 공격 동작(예고·돌진) 중인 적 수 — 교대 공격의 자리 계산 */

@@ -72,7 +72,7 @@ describe('1구역 층 구성', () => {
 
   it('난이도가 층마다 올라간다 — 쉬움 / 보통 / 어려움 (보스 결투 층은 곡선 밖)', () => {
     // 정예 = 패링·관통탄·기동을 요구하는 적. 잡몹 수가 아니라 이 비율이 체감 난이도를 만든다
-    const ELITE = new Set(['goblin_spear', 'warden', 'spider_large', 'goblin_chieftain', 'ghoul']);
+    const ELITE = new Set(['goblin_spear', 'warden', 'spider_large', 'goblin_chieftain', 'ghoul', 'skeleton_shield', 'skeleton_hammer']); // 해골 방패병·해머병은 정예(검사는 잡몹급)
     const stat = CURVE.map((json) => {
       // 층 보스는 곡선에서 뺀다 — 보스 체력은 잡몹 로스터의 난이도 곡선과 별개 축이다
       const ents = json.entities.filter(

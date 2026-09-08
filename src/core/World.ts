@@ -950,6 +950,8 @@ export interface WeaponState {
   grenadeCharge: number;
   /** 휘두른 해머가 닿기까지 남은 틱 (0 = 진행 중인 스윙 없음) */
   swingImpact: number;
+  /** 스윙 시작 횟수 — 휘두를 때마다 1 오른다(Weapons.startHammerSwing). 적 AI(해골 검사 백스텝)가 "이번 틱에 스윙이 시작됐다"를 상태로 읽는 손잡이 — 이벤트 구독 없이 */
+  swingSeq?: number;
   /** 진행 중인 스윙이 마무리 강타인가 */
   swingHeavy: boolean;
   /** 해머 연속타 단계 (0=처음). finisherStep 에 도달하면 강타 */
@@ -1321,6 +1323,18 @@ export interface EnemyState {
   kbTicks?: number;
   kbX?: number;
   kbZ?: number;
+  /** 백스텝(해골 검사, def.evade) — 잔여 틱 + 틱당 이동. 넉백처럼 이동만 하고 다른 행동은 없다. 끝나면 lungeAfter 로 wantsCharge */
+  hopTicks?: number;
+  hopX?: number;
+  hopZ?: number;
+  /** 백스텝 쿨다운 잔여 틱 */
+  evadeCooldown?: number;
+  /** 마지막으로 본 플레이어 스윙 번호(weapon.swingSeq) — 달라진 틱이 "스윙 시작" */
+  seenSwingSeq?: number;
+  /** 대열 후열(formation.role rear)이 방패병 뒤에서 기다리는 중(holdRange 안, 다가가지 않음) — 시험·연출용 표지 */
+  holding?: boolean;
+  /** 엄호(def.coverAllies) 중 — 혼절한 동료와 플레이어 사이로 끼어들고 있다 */
+  covering?: boolean;
 }
 
 /** 약점 명중 정산 — weak_point_hit 발행 + 이번 노출 장부(횟수·누적 피해) + 내구(weakHp)가 있으면 그만큼 깎고 0 에 닿는 순간

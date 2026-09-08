@@ -531,7 +531,13 @@
       ],
       "note": "소방 S3 천장",
       "ceiling": true
-    }
+    },
+    { "type": "skeleton_shield", "cell": [22, 7], "note": "남서 위병소 — 해골 대열(방패병 전열)" },
+    { "type": "skeleton_hammer", "cell": [23, 8], "note": "해골 대열 — 해머병(후열, 방패병 뒤 6m 대기)" },
+    { "type": "skeleton_sword", "cell": [24, 9], "note": "해골 대열 — 검사(측면)" },
+    { "type": "skeleton_shield", "cell": [23, 15], "note": "남쪽 위병소 — 해골 대열(방패병 전열)" },
+    { "type": "skeleton_hammer", "cell": [24, 16], "note": "해골 대열 — 해머병(후열)" },
+    { "type": "skeleton_sword", "cell": [22, 16], "note": "해골 대열 — 검사(측면)" }
   ],
   "triggers": [
     {

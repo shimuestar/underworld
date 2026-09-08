@@ -24,6 +24,8 @@ export interface EnemyAttackDef {
   cancelOnHit?: boolean;
   /** 끊겼을 때 뻗는 틱 — 반격 창 */
   cancelStaggerTicks?: number;
+  /** 참 = 플레이어가 방패를 들고(blocking) 있을 때만 고른다(해골 해머병 지면 강타 — 방패 부수기). closeAttack 슬롯의 선택 조건 */
+  requiresBlocking?: boolean;
   type: string;
   windupTicks: number;
   recoverTicks: number;
@@ -382,6 +384,16 @@ export interface EnemyDef {
   idleWander?: { radius: number; speedMul: number; pauseTicks: number };
   /** 살금살금 접근 — 추격 시 untilRange 밖에서는 speedMul 로 걷는다 (구울: 느리게 다가오다 사정거리에서만 달려든다) */
   stalk?: { speedMul: number; untilRange: number };
+  /** 관통 피해 배율(해골) — 권총·플레이어 화살이 이 배율로 들어간다(뼈 사이로 지나간다). 없으면 1 */
+  pierceDamageMul?: number;
+  /** 백스텝(해골 검사) — 추격 중 maxDist 안에서 플레이어의 해머 스윙이 시작되면(weapon.swingSeq 변화) ticks 동안 distance 만큼 뒤로 뛴다. cooldownTicks 뒤 다시.
+   *  lungeAfter 면 착지 틱에 wantsCharge 를 세워 chargeAttack(찔러 들어오기)으로 반격한다 */
+  evade?: { maxDist: number; distance: number; ticks: number; cooldownTicks: number; lungeAfter?: boolean };
+  /** 대열(해골 병사) — front: 전열(기준). flank: front 가 있으면 offsetDeg/convergeRange 로 크게 옆으로 돌아 들어온다.
+   *  rear: front 가 자기보다 플레이어에 가까우면 holdRange 안에서는 다가가지 않고 선다. 판정 반경·히스테리시스는 balance.enemyAi.formation */
+  formation?: { role: 'front' | 'flank' | 'rear'; offsetDeg?: number; convergeRange?: number; holdRange?: number };
+  /** 엄호(해골 방패병) — radius 안의 혼절(staggered)한 동료와 플레이어 사이 standoff(m) 지점으로 speedMul 배속으로 끼어든다 */
+  coverAllies?: { radius: number; speedMul: number; standoff: number };
   /** 걷는 동안 이 간격으로 흐느낀다 — 들리는 거리(14m)에서만 (구울) */
   moanIntervalTicks?: number;
   /** 얼굴 흡혈 (거머리) — 낙하 명중 시 얼굴에 붙어 피를 빤다 */

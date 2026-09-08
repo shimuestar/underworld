@@ -214,13 +214,16 @@ export function tick(world: World, _dt: number): void {
         enemy.recoiled = true;
       }
     } else if (perfect) {
-      // 완벽 패링 — 적 스태거 → 처형 가능
+      // 완벽 패링 — 적 스태거 → 처형 가능. 콤보(해골 검사 이연격)는 무너짐으로 끝난다 — recover 가 다음 타를 잇지 않게 모드를 접는다
       enemy.ai = 'staggered';
       enemy.timer = reaction.staggerTicks;
+      if (enemy.attackMode === 'combo') enemy.attackMode = 'melee';
     } else {
-      // 일반 패링 — 스태거는 없지만 크게 튕겨 후딜이 붙는다 (막기보다 큰 보상)
+      // 일반 패링 — 스태거는 없지만 크게 튕겨 후딜이 붙는다 (막기보다 큰 보상).
+      // 콤보 타가 continueOnParry 면(이연격 ①) 튕기되 짧은 이음(recoverTicks)만 두고 다음 타가 온다 — 두 번 막아야 한다
       enemy.ai = 'recover';
-      enemy.timer = attack.recoverTicks + reaction.parryRecoilTicks;
+      const comboContinues = enemy.attackMode === 'combo' && attack.continueOnParry === true && attack.comboNext !== undefined;
+      enemy.timer = comboContinues ? attack.recoverTicks : attack.recoverTicks + reaction.parryRecoilTicks;
       enemy.recoiled = true;
     }
     p.parryBufferTicks = 0;
@@ -322,7 +325,7 @@ export function tick(world: World, _dt: number): void {
       x: enemy.x,
       z: enemy.z,
     });
-    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
+    world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     return;
   }
 

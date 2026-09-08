@@ -129,6 +129,8 @@ export type SoundName =
   | 'prop_break_ceramic'
   | 'prop_break_wood'
   | 'prop_break_bone'
+  | 'bone_rattle'
+  | 'skeleton_death'
   | 'prop_break_stone'
   | 'prop_break_metal'
   | 'prop_fuse'
@@ -816,6 +818,26 @@ export class GameAudio {
         this.tone(90, 0.16, 'square', 1.0, 0, 45);
         this.noise(0.12, 0.8, 1600, 0.17);
         this.noise(0.14, 0.5, 1300, 0.27);
+        break;
+      case 'bone_rattle':
+        // 해골 — 마른 뼈가 달그락거린다(예고·백스텝에 얹는 짧은 소리). 높은 노이즈 두 톡 + 나무 톤
+        this.noise(0.03, 0.9, 5200);
+        this.tone(1400, 0.05, 'square', 0.35, 0, 900);
+        this.noise(0.04, 0.7, 3800, 0.06);
+        this.tone(1100, 0.05, 'square', 0.3, 0.07, 700);
+        break;
+      case 'skeleton_death':
+        // 해골 무너짐 — 뼈가 쏟아져 바닥에 흩어지며 몇 번 튕긴다. 마른 파열(prop_break_bone)보다 길고 잔뼈 톡톡이 이어진다
+        this.noise(0.05, 1.6, 4400);
+        this.tone(160, 0.12, 'square', 0.8, 0, 70);
+        this.noise(0.09, 1.3, 3000, 0.03);
+        this.noise(0.08, 0.9, 2400, 0.12);
+        this.tone(1500, 0.04, 'square', 0.35, 0.16, 1000);
+        this.noise(0.06, 0.7, 3600, 0.22);
+        this.tone(1250, 0.04, 'square', 0.3, 0.3, 850);
+        this.noise(0.05, 0.5, 3200, 0.36);
+        this.noise(0.05, 0.35, 2800, 0.47);
+        this.tone(1000, 0.04, 'square', 0.22, 0.52, 700);
         break;
       case 'prop_break_stone':
         // 석관 — 돌판이 쾅 무너진다. 제일 무겁고 제일 통쾌해야 한다

@@ -23,7 +23,7 @@ import { PauseMenu } from './render/PauseMenu';
 import { GamepadUI, padDiagramSvg } from './render/GamepadUI';
 import { buttonName, type PadAction } from './core/Gamepad';
 import { KEY_ACTIONS, keyBindings, type KeyAction } from './core/KeyBindings';
-import { Stage } from './render/Stage';
+import { SKELETON_TYPES, Stage } from './render/Stage';
 import { grenadeThrowSpeed } from './systems/Weapons';
 import * as PlayerMove from './systems/PlayerMove';
 import { assistStrength, padAimAssist } from './systems/PlayerMove';
@@ -887,6 +887,8 @@ events.on('enemy_windup', (payload) => {
   const at = panOf(payload); // 예고음에 방향을 싣는다 — 등 뒤 공격을 귀가 먼저 안다
   // 슬라임 — 몸이 부풀어 오르는 꿀렁임을 텔레그래프 소리에 얹는다
   if (wind.enemyType?.startsWith('slime')) audio.play('slime_windup', at);
+  // 해골 — 마른 뼈 달그락을 얹는다(어느 병사든)
+  if (wind.enemyType !== undefined && SKELETON_TYPES.has(wind.enemyType)) audio.play('bone_rattle', at);
   const telegraph = wind.telegraph;
   // 완벽 전용 파랑(거수 삼연낫 ③, attack.perfectOnly — 결정 17)은 같은 파랑 예고음을 고음으로
   audio.play(
@@ -1710,8 +1712,8 @@ events.on('headshot', (payload) => {
 events.on('headshot_kill', (payload) => {
   const kill = payload as { enemyType: string; x: number; z: number };
   audio.play('heavy_hit');
-  // 구울 머리는 소품(GhoulHeads)으로 남는다 — 파티클 머리는 다른 적만
-  if (kill.enemyType !== 'ghoul') stage.spawnHeadPop(kill.enemyType, kill.x, kill.z);
+  // 구울 머리는 소품(GhoulHeads)으로 남는다 — 파티클 머리는 다른 적만. 해골은 두개골이 뼈 흩어짐(spawnBoneScatter)에 실려 날아간다
+  if (kill.enemyType !== 'ghoul' && !SKELETON_TYPES.has(kill.enemyType)) stage.spawnHeadPop(kill.enemyType, kill.x, kill.z);
   stage.spawnDeathBurst(kill.x, kill.z, kill.enemyType, balance.weapons.headshotKillBurstScale);
   const d = Math.hypot(kill.x - world.player.x, kill.z - world.player.z);
   if (d < 14) stage.triggerCameraKick(0.35 * (1 - d / 14), 200);
@@ -2129,11 +2131,13 @@ events.on('reload_finished', () => {
 });
 let executedThisFrame = false; // 직전 melee_kill 이 처형이었는지 (파편 세기 결정)
 events.on('melee_kill', (payload) => {
-  const kill = payload as { execution: boolean; enemyId?: number };
+  const kill = payload as { execution: boolean; enemyId?: number; enemyType?: string };
   executedThisFrame = kill.execution;
-  // 해머가 닿기 전에 시체가 사라지면 허공을 치는 그림이 된다 — 접촉까지 붙잡아 둔다
+  // 해머가 닿기 전에 시체가 사라지면 허공을 치는 그림이 된다 — 접촉까지 붙잡아 둔다.
+  // 해골은 접촉 뒤 뼈 흩어짐(enemy_died 의 지연 콜백)이 리그를 직접 떼어 간다 — 그때까지 조금 더 붙잡는다(콜백이 먼저 지우면 리그 없이 막대만 난다)
   if (kill.execution && kill.enemyId !== undefined) {
-    stage.holdExecutionVictim(kill.enemyId, executeContactMs);
+    const skeleton = kill.enemyType !== undefined && SKELETON_TYPES.has(kill.enemyType);
+    stage.holdExecutionVictim(kill.enemyId, executeContactMs + (skeleton ? balance.skeleton.boneScatter.executeHoldExtraMs : 0));
   }
 });
 events.on('enemy_died', (payload) => {
@@ -2171,13 +2175,35 @@ events.on('enemy_died', (payload) => {
       },
     );
   };
+  // 해골 병사 — 살이 없다: 피 대신 뼛가루 조금, 몸 파편 대신 리그의 뼈가 사방으로 흩어진다(spawnBoneScatter). 소리도 뼈 무너짐
+  const skeleton = SKELETON_TYPES.has(dead.enemyType);
+  const scatterBones = (): void => {
+    // 죽인 방향 — 폭발이면 폭심 반대쪽, 아니면 플레이어 반대쪽
+    let kx = dead.blastX ?? dead.x - world.player.x;
+    let kz = dead.blastZ ?? dead.z - world.player.z;
+    const kl = Math.hypot(kx, kz);
+    if (kl > 0.001) {
+      kx /= kl;
+      kz /= kl;
+    }
+    stage.spawnBoneScatter(dead.enemyId, dead.x, dead.z, dead.enemyType, kx, kz, launch);
+    stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType, balance.skeleton.boneScatter.dustPower, kx, kz, launch);
+  };
   if (executedThisFrame) {
     // 처형 — 사망 연출도 해머가 닿는 순간까지 미룬다
     afterMs(executeContactMs, () => {
+      if (skeleton) {
+        audio.play('skeleton_death', deathAt);
+        scatterBones();
+        return;
+      }
       audio.play('enemy_death', deathAt);
       stage.spawnDeathBurst(dead.x, dead.z, dead.enemyType, 1.8);
       spillDeathBlood();
     });
+  } else if (skeleton) {
+    audio.play('skeleton_death', deathAt);
+    scatterBones();
   } else {
     audio.play('enemy_death', deathAt);
     stage.spawnDeathBurst(
@@ -3670,10 +3696,34 @@ events.on('boss_roar_hit', (payload) => {
   );
 });
 // 삼연낫(거수 P3, B3-4) — ① 시작·② ③ 진행 안내. 예고음은 enemy_windup 이 타마다 낸다(③ 은 고음 telegraph_blue_high)
-events.on('enemy_combo_start', () => showReaction('삼연낫 — ①오른 ②왼 ③양낫(완벽만): 셋 다 완벽이면 탈진', 1400));
+events.on('enemy_combo_start', (payload) => {
+  const c = payload as { enemyType: string };
+  // 해골 검사 이연격 — ①을 일반 패링해도 ②가 온다: 두 번 막거나 ①을 완벽 패링해 무너뜨려라
+  if (SKELETON_TYPES.has(c.enemyType)) {
+    showReaction('이연격 — ①베기 ②역베기: 두 번 패링하거나 ①을 완벽 패링해 무너뜨려라', 1300);
+    return;
+  }
+  showReaction('삼연낫 — ①오른 ②왼 ③양낫(완벽만): 셋 다 완벽이면 탈진', 1400);
+});
 events.on('enemy_combo_step', (payload) => {
-  const c = payload as { step: number; steps: number; perfectOnly: boolean };
+  const c = payload as { enemyType: string; step: number; steps: number; perfectOnly: boolean };
+  if (SKELETON_TYPES.has(c.enemyType)) {
+    showReaction(`이연격 ${c.step + 1}/${c.steps} — 역베기, 더 빠르다`, 900);
+    return;
+  }
   showReaction(c.perfectOnly ? `삼연낫 ③ 양낫 내려찍기 — 완벽 패링만 통한다(일반 대역은 실패), 아니면 3.2m 밖으로` : `삼연낫 ${c.step + 1}/${c.steps} — 왼낫`, 1100);
+});
+// 해골 검사 백스텝(def.evade) — 해머를 휘두르자 뒤로 뛴다: 뼈 달그락 + 안내(곧 찔러 들어온다)
+events.on('enemy_evade', (payload) => {
+  const ev = payload as { enemyType: string; x: number; z: number };
+  audio.play('bone_rattle', panAt(ev.x, ev.z));
+  showReaction(`${enemyDef(ev.enemyType).name ?? '적'}이 물러난다 — 곧 찔러 들어온다`, 900);
+});
+// 해골 방패병 엄호(def.coverAllies) — 혼절한 동료와 플레이어 사이로 끼어든다: 방패 소리 + 안내
+events.on('enemy_cover_start', (payload) => {
+  const cv = payload as { enemyType: string; allyType: string; x: number; z: number };
+  audio.play('shield_brace', panAt(cv.x, cv.z));
+  showReaction(`${enemyDef(cv.enemyType).name ?? '적'}이 ${enemyDef(cv.allyType).name ?? '동료'}를 감싼다 — 처형이 막힌다`, 1100);
 });
 // 광란 돌격 선회(거수 P3, B3-4) — 첫 질주 뒤 제자리 선회 = 2차 예고: 회전 소리(예고음 버스) + 안내. 두 번째 질주는 예고 없이 온다
 events.on('enemy_chain_turn', (payload) => {

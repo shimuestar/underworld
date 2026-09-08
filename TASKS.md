@@ -242,6 +242,8 @@ B3-5(2026-09-06)가 문서 드리프트(B3-1)·돌격 장부(B3-4 chainLeg)를 �
 
 처리 결과(2026-09-07): §12 이벤트 목록 갱신 · 부활 장부는 `Arena.carryOver` 유지가 의도(main·Status 주석·B3-2 문구 정정) · 기둥 낙석 진동 'blast'·킥 0.6/12m 로 함정 낙석과 통일 · 문 밖 저격 캠핑은 (b) 밖에서 깨우면 문 D 를 닫아 시야를 끊음(`door_closing{sealed:false}`, 봉쇄 아님) · 밖 분기에서 `anticampCharge` 도 내림 + chargeCollide 판정을 `anticampCharge && anticampTarget` 으로 · 사망/처형 정화는 `EnemyDef.deathCleanse`(거수만) · 관절 원뿔 facing (±0.6, −0.5, −0.6)(정면 2.5~4.4m 성립, WeakPoint.test 3.0m 케이스) · `boss.executeFinishes` 는 `enemy_died{phased}` 로 kills 와 같은 모집단 · 원격 최신 확인.
 
+- [x] **해골 병사 3종** (2026-09-08 사용자) — `skeleton_sword`(해골 검사: 베기·이연격 콤보(①일반 패링해도 ②가 온다, 완벽이면 무너짐)·백스텝(플레이어 해머 스윙 시작 = `weapon.swingSeq` 변화에 뒤로 2.4m) → 찔러 들어오기 반격), `skeleton_hammer`(해골 해머병, heavy: 내려치기 파랑·지면 강타(플레이어가 막고 있을 때만 `requiresBlocking`, 빨강 광역·막아도 0.7)·달려와 내려치기), `skeleton_shield`(해골 방패병: 정면 방패 150°·찌르기·밀쳐내기·방패 돌격(빨강)·엄호 `coverAllies` — 혼절한 동료와 플레이어 사이로 끼어든다). 대열 `formation`(front/flank/rear — 검사는 방패병이 있으면 편각 ±75°, 해머병은 방패병 뒤 6m 에서 대기하다 돌격). 관통 절반(`pierceDamageMul` — 권총·화살). 사망 = 뼈 흩어짐(`Stage.spawnBoneScatter` — 리그의 뼈 메시를 지금 자세 그대로 떼어 사방으로 던지고 튕기다 눕는다, `Particle.bounce`), 소리 `skeleton_death`/`bone_rattle`. 외형 `buildSkeletonBody`(두개골·갈비·척추·골반·뼈다귀 다리). 배치 f2 위병소 1조·f3 위병소 2조(Zone ELITE 에 방패병·해머병). `enemy_died` 전 발신처에 enemyId. 스펙 `docs/systems/skeletons.md`, 시험 `Skeleton.test.ts` 19건, 몬스터 시험방 헤드리스 스크린샷(대기·예고·뼈 흩어짐·착지) 확인
+
 ## 의존성 주의
 
 - M3 이전에 M4를 건드리지 않는다. 패링 감각이 확정되기 전 마나 수치를 잡으면 전부 다시 한다

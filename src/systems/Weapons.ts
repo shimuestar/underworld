@@ -188,6 +188,7 @@ function startHammerSwing(world: World): void {
   w.comboStep = (w.comboTimer > 0 ? w.comboStep : 0) + 1;
   const heavy = w.comboStep >= combo.finisherStep;
   w.swingHeavy = heavy;
+  w.swingSeq = (w.swingSeq ?? 0) + 1; // 스윙 시작 표지 — 적 AI(해골 검사 백스텝)가 상태로 읽는다
   // 적중 가속 — 직전 타가 실제로 적을 때렸으면 예비동작이 짧아진다.
   // 뷰모델도 같은 배율로 빨라져야 해머가 닿는 시점과 그림이 어긋나지 않는다
   const rush = w.meleeRush === true;
@@ -402,7 +403,7 @@ function resolveHammerHit(world: World, heavy: boolean): void {
         x: enemy.x,
         z: enemy.z,
       });
-      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
+      world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     }
   }
 
@@ -1013,7 +1014,8 @@ function fire(world: World): void {
       falloff.minMul -
       (falloff.minMul - falloff.farMul) * ((hit.t - falloff.endDist) / (falloff.farDist - falloff.endDist));
   else falloffMul = falloff.farMul;
-  const damage = pistol.damage * zoneMul * falloffMul;
+  // 관통 배율(해골 pierceDamageMul) — 총알은 뼈 사이로 지나간다. 없으면 1
+  const damage = pistol.damage * zoneMul * falloffMul * (def.pierceDamageMul ?? 1);
 
   if (zone === 'head') world.events.emit('headshot', { enemyId: hit.enemy.id });
 
@@ -1047,6 +1049,7 @@ function fire(world: World): void {
       });
     }
     world.events.emit('enemy_died', {
+      enemyId: hit.enemy.id,
       enemyType: hit.enemy.type,
       x: hit.enemy.x,
       z: hit.enemy.z,

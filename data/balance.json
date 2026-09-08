@@ -180,6 +180,8 @@
     "arrow": 0.35,
     "contact": 0.8,
     "thrust": 1.6,
+    "_slashNote": "베기(해골 검사) — 찌르기보다 덜 민다",
+    "slash": 1.2,
     "smash": 2.0,
     "rock": 1.8,
     "magic": 2.8
@@ -994,6 +996,23 @@
     "maxDist": 26,
     "minVol": 0.35
   },
+  "_skeletonNote": "해골 병사 공용 연출 수치(2026-09-08). boneScatter — 죽을 때 리그의 뼈 메시가 하나씩 떨어져 사방으로 튄다(Stage.spawnBoneScatter): 수평 speedMin+rand·speedSpan, 위로 upMin+rand·upSpan, 죽인 방향(플레이어 반대/폭심 반대)에 killDirMul 을 얹는다. 착지하면 bounce 만큼 튕기고(restitution 세로·friction 가로, 착지 세로 속도가 minSpeed 미만이면 그냥 눕는다) lifeMs 뒤 사라진다(끝 0.4초 옅어짐). dustPower 는 함께 나는 뼛가루 파편 세기(spawnDeathBurst power)",
+  "skeleton": {
+    "boneScatter": {
+      "speedMin": 2.0,
+      "speedSpan": 3.2,
+      "upMin": 2.4,
+      "upSpan": 3.4,
+      "killDirMul": 2.0,
+      "spinMax": 12,
+      "gravity": 13,
+      "lifeMs": 5200,
+      "bounce": { "restitution": 0.38, "friction": 0.55, "count": 2, "minSpeed": 1.4 },
+      "dustPower": 0.5,
+      "_executeHoldNote": "처형 사망 — 리그를 해머 접촉(executeContactMs) 뒤 이만큼 더 붙잡아 둔다. 뼈 흩어짐 콜백이 리그를 직접 떼어 가므로, 콜백보다 먼저 지워지면 뼈 대신 막대가 난다",
+      "executeHoldExtraMs": 400
+    }
+  },
   "enemyAi": {
     "strafe": {
       "_comment": "캐스터(궁수/주술사)가 아군에 사선이 막혔을 때 옆으로 각을 잡는 동작. giveUpTicks는 교착 방지용 안전장치(10초) — 평소엔 각이 날 때까지 쏘지 않는다",
@@ -1027,6 +1046,11 @@
       "maxSimultaneous": 2,
       "countRadius": 4,
       "circleSpeedMul": 0.55
+    },
+    "_formationNote": "대열(해골 병사, 2026-09-08) — def.formation.role 이 front/flank/rear 인 적의 무리 행동. radius(m) 안에 살아 있고 혼절하지 않은 front 가 있을 때만 켜진다: flank 는 def.formation.offsetDeg/convergeRange 로 산개 편각을 키우고, rear 는 front 가 자기보다 플레이어에 가까우면 def.formation.holdRange 안에서 다가가지 않는다(holdSlack 은 붙잡는 히스테리시스 — 붙잡힌 채면 holdRange+slack 까지 서 있는다). 사거리 안에 들어온 플레이어는 평소처럼 친다",
+    "formation": {
+      "radius": 10,
+      "holdSlack": 0.8
     },
     "separation": {
       "_comment": "추격 중 서로 밀어내는 힘 — 일렬로 겹쳐 서는 것을 막는다. 2.2/0.85 → 2.6/1.1 (2026-08-30, 몸통 뭉침이 광역 한 방에 다 쓸린다는 피드백)",

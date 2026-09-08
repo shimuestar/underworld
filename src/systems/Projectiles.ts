@@ -147,7 +147,7 @@ function skillDamage(world: World, enemy: EnemyState, damage: number, source: st
   if (enemy.health <= 0 && enemy.alive) {
     enemy.alive = false;
     world.events.emit('spell_kill', { enemyType: enemy.type, source });
-    world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
+    world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
   }
 }
 
@@ -1362,6 +1362,8 @@ function applyProjectileHit(
       : proj.damage;
   // 약점 배율 — 화살·화염구 직격(호출부가 weakEligible 로 골라 넘긴다). 폭발·내파 광역은 배율 없음. 배율은 열림 방식에 따른다(분출공: 타이머 ×1.5 / 자세 ×3.0)
   if (weak && proj.owner === 'player') damage *= weakPointDamageMul(enemy, weak);
+  // 관통 배율(해골 pierceDamageMul) — 플레이어 화살은 권총과 같이 뼈 사이로 지나간다. 화염구 등 마법은 온전히
+  if (proj.kind === 'arrow' && proj.owner === 'player') damage *= def.pierceDamageMul ?? 1;
   const directDealt = applyFrostOnHit(world.events, enemy, damage);
   enemy.health -= directDealt;
   // 약점 장부 — 피해 숫자보다 먼저(HUD 가 같은 틱의 약점 명중을 보고 숫자 옆에 '약점!' 을 붙인다). 분출공이면 오염 정화(B3-2)도 함께
@@ -1477,7 +1479,7 @@ function explodeFireball(
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('spell_kill', { enemyType: enemy.type, splash: true });
-      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
+      world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     }
   }
 
@@ -1547,7 +1549,7 @@ function implodeBolt(
         proj.owner === 'player' ? 'spell_kill' : 'friendly_fire_kill',
         { enemyType: enemy.type, splash: true },
       );
-      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
+      world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     }
   }
 
@@ -1658,6 +1660,7 @@ function explodeGrenade(world: World, proj: (typeof world.projectiles)[number]):
       world.events.emit('weapon_kill', { weapon: 'grenade', enemyType: enemy.type });
       // 폭심 반대 방향을 함께 실어 보낸다 — 밀려날 몸이 안 남으니 파편이 대신 날아간다
       world.events.emit('enemy_died', {
+        enemyId: enemy.id,
         enemyType: enemy.type,
         x: enemy.x,
         z: enemy.z,
@@ -1726,7 +1729,7 @@ function applyBurns(world: World): void {
     if (enemy.health <= 0) {
       enemy.alive = false;
       world.events.emit('spell_kill', { enemyType: enemy.type, burn: true });
-      world.events.emit('enemy_died', { enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
+      world.events.emit('enemy_died', { enemyId: enemy.id, enemyType: enemy.type, x: enemy.x, z: enemy.z, noLoot: enemy.noLoot });
     }
   }
 }
