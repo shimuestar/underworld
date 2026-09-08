@@ -2140,7 +2140,6 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
   if ((enemy.evadeCooldown ?? 0) > 0) enemy.evadeCooldown = (enemy.evadeCooldown ?? 0) - 1;
   if ((enemy.riposteCooldown ?? 0) > 0) enemy.riposteCooldown = (enemy.riposteCooldown ?? 0) - 1;
   if ((enemy.rangedCooldown ?? 0) > 0) enemy.rangedCooldown = (enemy.rangedCooldown ?? 0) - 1;
-  if ((enemy.armlessTicks ?? 0) > 0) enemy.armlessTicks = (enemy.armlessTicks ?? 0) - 1;
 
   // 새끼 분리 — 타이머 구동 (2026-09-01): 전투에 들어오면 즉시 5마리, 그 뒤로는
   // 10초 박자(cooldownTicks)마다 살아 있는 새끼를 빼고 부족분만 시전 없이 충원한다.
@@ -2410,8 +2409,9 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         // 들이받기(closeAttack, 거수) — 코앞(maxRange)에 붙은 플레이어는 낫보다 먼저 머리로 밀어낸다.
         // 배 밑에 눌러앉는 플레이 방지. 쿨다운이 돌고 있으면 낫으로 (기획서 §9.2 3번). 슬롯이 없는 적은 옛 경로
         const close = def.closeAttack && attackInPhase(def, enemy, 'close', def.closeAttack);
-        // requiresBlocking(해골 해머병 지면 강타) — 플레이어가 방패를 들고 있을 때만: 막기에 기대는 플레이를 부수는 답
-        if (close && dist <= (close.maxRange ?? def.attackRange) && (enemy.closeCooldown ?? 0) <= 0 && (!close.requiresBlocking || p.blocking)) {
+        // requiresBlocking(해골 해머병 지면 강타·방패병 밀어붙이기) — 플레이어가 방패를 들고 있을 때만(또는 hugRange 안에 붙었을 때): 막기에 기대는 플레이를 부수는 답
+        const closeOk = close !== undefined && (!close.requiresBlocking || p.blocking || (close.hugRange !== undefined && dist <= close.hugRange));
+        if (close && closeOk && dist <= (close.maxRange ?? def.attackRange) && (enemy.closeCooldown ?? 0) <= 0) {
           enemy.attackMode = 'close';
           enemy.closeCooldown = close.cooldownTicks ?? 0;
           startWindup(world, enemy, close);
@@ -2419,7 +2419,7 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
         }
         // 삼연낫(거수 P3, B3-4) — 낫 사거리 안에선 단발 낫보다 먼저(기획서 §9.2 4번), 쿨 600, 양 낫이 자유일 때
         if (tryCombo(world, enemy, def)) break;
-        const bladeMode = pickMeleeMode(def, enemy);
+        const bladeMode = pickMeleeMode(world, def, enemy);
         if (bladeMode === null) {
           // 양 낫 잠김(절뚝) — 낫이 없다. 들이받기(위)·발구르기(P2+, 2.5m 밖)·돌격(아래 거리 조건)만 남으니 붙은 플레이어에게서 물러나 거리를 유지한다(기획서 §9.2)
           if (trySlam(world, enemy, def, dist, false)) break;
@@ -2635,8 +2635,6 @@ function tickEnemy(world: World, enemy: EnemyState, dt: number): void {
           break;
         }
         fireProjectile(world, enemy, attack);
-        // 뼈 투척(해골 검사) — 왼팔뼈를 뽑아 던졌다: 한동안 왼팔이 없다(연출, Stage 가 맨팔을 숨긴다)
-        if (attack.projectileKind === 'bone') enemy.armlessTicks = balance.skeleton.boneThrow.armlessTicks;
         enemy.ai = 'recover';
         enemy.timer = attack.recoverTicks;
       } else if (attack.chargeRunTicks) {
@@ -3709,7 +3707,22 @@ function advanceStrike(
  *  낸다. 마지막으로 휘두른 낫은 enemy.lastBlade 가 기억한다(첫 낫은 오른낫). 관절 파열로 잠긴 낫(bladeLock)은 선택지에서 빠져
  *  남은 낫만 나가고(예측 가능해진다 — 통제 노선), 둘 다 잠겼으면 null(낫 없음 — 호출부가 물러선다).
  *  슬롯·플래그가 없는 적은 예전처럼 늘 'melee' */
-function pickMeleeMode(def: ReturnType<typeof enemyDef>, enemy: EnemyState): 'melee' | 'alt' | null {
+function pickMeleeMode(world: World, def: ReturnType<typeof enemyDef>, enemy: EnemyState): 'melee' | 'alt' | null {
+  // 가로 속도 조건(해골 해머병 옆으로 후려치기) — 플레이어가 적→플레이어 선에 수직으로 whenLateralSpeed(m/s) 이상 움직이고 있으면 후려치기
+  const alt = def.attackAlt;
+  if (alt?.whenLateralSpeed !== undefined) {
+    const p = world.player;
+    const dx = p.x - enemy.x;
+    const dz = p.z - enemy.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 0.001) {
+      const vx = (p.x - p.prevX) * 60;
+      const vz = (p.z - p.prevZ) * 60;
+      const lateral = Math.abs((dx * vz - dz * vx) / d);
+      if (lateral >= alt.whenLateralSpeed) return 'alt';
+    }
+    if (!alt.alternate) return 'melee';
+  }
   if (!def.attackAlt?.alternate) return 'melee';
   const rLocked = bladeLocked(enemy, 'r');
   const lLocked = bladeLocked(enemy, 'l');
@@ -3809,7 +3822,7 @@ function fireProjectile(world: World, enemy: EnemyState, attack: EnemyAttackDef)
     casterId: enemy.id,
     deflectable: attack.deflectable ?? false,
     kind:
-      (attack.projectileKind as 'rock' | 'web' | 'goo' | 'bone' | undefined) ??
+      (attack.projectileKind as 'rock' | 'web' | 'goo' | undefined) ??
       ((attack.deflectable ?? false) ? 'magic' : 'arrow'),
     // 광역 효과는 투사체가 들고 간다 — 시전자가 먼저 죽어도, 반사돼도 그대로 터진다
     splash: attack.splash,

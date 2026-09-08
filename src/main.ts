@@ -1541,7 +1541,6 @@ events.on('enemy_frozen', (payload) => {
 events.on('enemy_cast', (payload) => {
   const info = payload as { enemyType: string; enemyId: number };
   if (info.enemyType === 'goblin_archer') audio.play('bow_twang');
-  if (SKELETON_TYPES.has(info.enemyType)) audio.play('bone_rattle', panOf(payload)); // 뼈 투척 — 팔뼈를 뽑는 달그락
   // 족장 화살 세례 — 발사할 때마다 시위 소리 (바위 투척과 구분). 거수 갑각 떨기(진액 구슬, B3-2)는 젖은 분출음
   const boss = world.enemies.find((e) => e.id === info.enemyId);
   if (boss?.ai === 'volley') {
@@ -3705,9 +3704,8 @@ events.on('boss_roar_hit', (payload) => {
 events.on('enemy_combo_start', (payload) => {
   const c = payload as { enemyType: string };
   if (SKELETON_TYPES.has(c.enemyType)) {
-    // 해골 해머병 지진(광역 콤보) / 해골 검사 찌르기 난무(슈퍼아머 — 끊을 수 없다: 세 번 패링하거나 한 번 완벽하게)
-    const quake = enemyDef(c.enemyType).comboAttack?.aoeRadius !== undefined;
-    showReaction(quake ? '지진 — 강타 뒤 여진(고리): 안쪽으로 붙거나 6.5m 밖으로' : '찌르기 난무 — 끊을 수 없다: 세 번 패링하거나 한 번 완벽하게', 1300);
+    // 해골 검사 올려베기 → 내려베기 — ①은 끊기고 일반 패링해도 ②가 온다, ②는 슈퍼아머
+    showReaction('올려베기 → 내려베기 — 두 번 패링하거나 ①을 완벽 패링해 무너뜨려라(②는 끊을 수 없다)', 1300);
     return;
   }
   showReaction('삼연낫 — ①오른 ②왼 ③양낫(완벽만): 셋 다 완벽이면 탈진', 1400);
@@ -3715,8 +3713,7 @@ events.on('enemy_combo_start', (payload) => {
 events.on('enemy_combo_step', (payload) => {
   const c = payload as { enemyType: string; step: number; steps: number; perfectOnly: boolean };
   if (SKELETON_TYPES.has(c.enemyType)) {
-    const quake = enemyDef(c.enemyType).comboAttack?.aoeRadius !== undefined;
-    showReaction(quake ? '여진 — 고리가 온다: 안쪽으로 붙거나 밖으로!' : `찌르기 난무 ${c.step + 1}/${c.steps}`, 900);
+    showReaction('내려베기 — 끊을 수 없다, 패링!', 900);
     return;
   }
   showReaction(c.perfectOnly ? `삼연낫 ③ 양낫 내려찍기 — 완벽 패링만 통한다(일반 대역은 실패), 아니면 3.2m 밖으로` : `삼연낫 ${c.step + 1}/${c.steps} — 왼낫`, 1100);

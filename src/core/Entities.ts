@@ -31,8 +31,15 @@ export interface EnemyAttackDef {
   superArmor?: boolean;
   /** 광역 안쪽 빈 반경(m) — aoeRadius 고리의 안쪽(해골 해머병 여진: 3.2~6.5 만 맞는다). attackReaches 가 같은 값을 읽는다 */
   aoeInnerRadius?: number;
-  /** 가드 부수기(해골 방패병 방패 찍기) — 막은 플레이어를 stunTicks 동안 굳힌다(막기 경직 10 대신) + guard_broken */
+  /** 가드 부수기(해골 방패병 밀어붙이기) — 막은 플레이어를 stunTicks 동안 굳힌다(막기 경직 10 대신) + guard_broken */
   guardBreak?: { stunTicks: number };
+  /** 동작(해골 팔꿈치 리그, Stage) — overhead 머리 위에서 내려침 / horizontal 옆에서 가로로 / rising 아래에서 올려침 / thrust 팔꿈치를 펴 찌름 / bash 방패로 밀침.
+   *  없으면 type 으로 추정(thrust→thrust, slash→horizontal, bash→bash, 그 외 overhead). 판정은 attackRange·arcDeg·impactRangeMul 그대로 */
+  swing?: 'overhead' | 'horizontal' | 'rising' | 'thrust' | 'bash';
+  /** attackAlt 선택 조건(해골 해머병 옆으로 후려치기) — 플레이어의 가로(적→플레이어 선에 수직) 속도가 이 값(m/s) 이상이면 기본 공격 대신 이것. alternate 와 별개 */
+  whenLateralSpeed?: number;
+  /** closeAttack 보조 조건(해골 해머병 지면 강타) — requiresBlocking 이라도 플레이어가 이 거리(m) 안에 붙어 있으면 막지 않아도 고른다 */
+  hugRange?: number;
   type: string;
   windupTicks: number;
   recoverTicks: number;

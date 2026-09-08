@@ -222,7 +222,7 @@ export interface ProjectileState {
   /** 반응 버튼으로 반사 가능한가 (마법탄 true, 화살 false) */
   deflectable?: boolean;
   /** 렌더 형태. 'goo' = 거수 진액 구슬(보라 구 + 꼬리, 반사 가능·부술 수 있음, 착탄 웅덩이·오염 진액 — B3-2) */
-  kind?: 'fireball' | 'frost' | 'magic' | 'arrow' | 'rock' | 'grenade' | 'web' | 'goo' | 'bone';
+  kind?: 'fireball' | 'frost' | 'magic' | 'arrow' | 'rock' | 'grenade' | 'web' | 'goo';
   /** 반사된 채 시전자 몸에 되돌아가면 시전자의 분출공(vent)에 넣는 고정 피해(거수 진액 구슬 33 — 배율·열림 무관, 기획서 §4.1 vent). 없으면 반사 마법의 옛 경로(×1.5 몸 피해) */
   deflectSelfDamage?: number;
   /** 착탄 자리에 남기는 진액 웅덩이 종류(balance.hazards.pools 키 — 거수 진액 구슬 'orb'). 분출공으로 되돌아간 반사 구슬은 남기지 않는다 */
@@ -1342,8 +1342,6 @@ export interface EnemyState {
   riposteCooldown?: number;
   /** 원거리 보조 공격(rangedAttack.cooldownTicks) 잔여 틱 — 해골 검사 뼈 투척. 정의에 쿨이 없는 적(족장 바위)은 0 */
   rangedCooldown?: number;
-  /** 뼈 투척 뒤 왼팔이 없는 잔여 틱(연출 — Stage 가 맨팔을 숨긴다) */
-  armlessTicks?: number;
 }
 
 /** 약점 명중 정산 — weak_point_hit 발행 + 이번 노출 장부(횟수·누적 피해) + 내구(weakHp)가 있으면 그만큼 깎고 0 에 닿는 순간

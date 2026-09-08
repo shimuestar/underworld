@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { equipColor } from '../core/EquipData';
 import { balance } from '../core/Balance';
 import { itemColor } from '../core/Inventory';
-import { bladeLocked, bladeOfJoint, comboChain, currentAttack, enemyDef, hasSuperArmorAttack, inSuperArmor, headDownPose, healthBarState, jointOfBlade, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, weakPointScaleMul, type EnemyDef, type ResolvedPhase, type WeakPointDef } from '../core/Entities';
+import { bladeLocked, bladeOfJoint, comboChain, currentAttack, enemyDef, hasSuperArmorAttack, inSuperArmor, type EnemyAttackDef, headDownPose, healthBarState, jointOfBlade, resolvePhase, shieldLowered, weakPointOffset, weakPointOpen, weakPointScaleMul, type EnemyDef, type ResolvedPhase, type WeakPointDef } from '../core/Entities';
 import { sigilColor } from '../core/SigilData';
 import { COLOR_EXIT_LOCKED, COLOR_EXIT_OPEN, COLOR_PILLAR, DOOR_OPEN_HEIGHT, DOOR_OPEN_WIDTH, STAIR_STONE } from '../level/GridLoader';
 import type {
@@ -162,6 +162,94 @@ export function buildSkeletonBody(
     addGlowEye(torso, side * skullSize * ec.spacingMul, eyeY, eyeZ, eyeR, eyes.eyeMat, eyes.haloMat, eyes.halos);
   }
   return { legs, head };
+}
+
+/** 공격의 동작 종류 — 정의의 swing, 없으면 type 으로 추정(Entities.EnemyAttackDef.swing 주석과 같다) */
+function swingOf(attack: EnemyAttackDef): NonNullable<EnemyAttackDef['swing']> {
+  if (attack.swing) return attack.swing;
+  if (attack.type === 'thrust') return 'thrust';
+  if (attack.type === 'slash') return 'horizontal';
+  if (attack.type === 'bash') return 'bash';
+  return 'overhead';
+}
+
+/** 해골 팔꿈치 리그의 팔 자세(매 프레임). 어깨(arm.rotation.x/y·position.z)와 팔꿈치(elbow.rotation.x)를 동작(swing)·구간(예고·질주·타격·후딜·튕김)으로 잡는다.
+ *  타격 구간은 로직 진행도(strikeProgress)를 그대로 따라간다 — 도달 시점이 판정과 일치. 빨강(패링 불가) 공격은 타격 구간이 없으므로 예고 끝 RED_SWING_TICKS 동안 무기가 내려와
+ *  타격 틱에 닿는다(그림만 — 판정은 Enemies 그대로). 후딜 앞부분은 마지막 자세를 유지(SK_FOLLOW_THROUGH). 두 손 무기(twoHanded)는 맨팔(왼팔)이 무기 팔을 따라간다 */
+function poseSkeletonArm(
+  visual: EnemyVisual,
+  enemy: EnemyState,
+  attack: EnemyAttackDef,
+  spec: { length: number; tip?: boolean; twoHanded?: boolean } | undefined,
+  c: {
+    swing: NonNullable<EnemyAttackDef['swing']>; inWindup: boolean; striking: boolean; charging: boolean; recoiled: boolean; isMelee: boolean;
+    windupProgress: number; strikeProgress: number; timer: number; trembling: boolean; solidIce: boolean; now: number; torsoLean: number; torsoZ: number;
+  },
+): void {
+  const arm = visual.arm!;
+  const elbow = visual.elbow!;
+  const rest = { x: enemy.holding ? ARM_READY : ARM_REST, y: 0, z: 0, e: SK_ELBOW_REST };
+  let x = rest.x;
+  let y = rest.y;
+  let z = rest.z;
+  let e = rest.e;
+  let direct = false;
+  const sw = c.swing;
+  const wp = c.windupProgress;
+  const sp = c.strikeProgress;
+  // 동작별 시작(예고 끝)·끝(타격 끝) 자세
+  const poses: Record<NonNullable<EnemyAttackDef['swing']>, { s: { x: number; y: number; e: number; z: number }; f: { x: number; y: number; e: number; z: number } }> = {
+    overhead: { s: { x: ARM_RAISED, y: 0, e: 1.25, z: 0 }, f: { x: ARM_SMASH, y: 0, e: 0.15, z: 0 } },
+    horizontal: { s: { x: 0.15, y: -1.3, e: 0.35, z: 0 }, f: { x: 0.15, y: 1.1, e: 0.35, z: 0 } },
+    rising: { s: { x: -1.5, y: 0, e: 0.6, z: 0.1 }, f: { x: 1.7, y: 0, e: 0.2, z: 0 } },
+    thrust: { s: { x: -0.9, y: 0, e: 1.4, z: 0.25 }, f: { x: THRUST_LEVEL - c.torsoLean, y: 0, e: 0, z: -0.15 } },
+    bash: { s: { x: ARM_REST, y: 0, e: SK_ELBOW_REST, z: 0 }, f: { x: ARM_REST, y: 0, e: SK_ELBOW_REST, z: 0 } },
+  };
+  const P = poses[sw];
+  const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+  if (c.recoiled) {
+    // 튕김(패링·막힘·끊김) — 팔이 위로 들리고 팔꿈치가 접힌다
+    x = SK_RECOIL_ARM;
+    e = 0.9;
+    z = 0.1;
+  } else if (c.charging) {
+    // 질주 — 시작 자세(무기를 든 채) 그대로 달려온다. 찌르기는 팔을 뒤로 뺀 채(당겨진 활처럼)
+    x = P.s.x; y = P.s.y; e = P.s.e; z = P.s.z;
+  } else if (c.isMelee && c.inWindup) {
+    x = lerp(rest.x, P.s.x, wp); y = lerp(rest.y, P.s.y, wp); e = lerp(rest.e, P.s.e, wp); z = lerp(rest.z, P.s.z, wp);
+    if (c.trembling) x += Math.sin(c.now / 12) * 0.06;
+    // 빨강 공격 — 예고 끝 RED_SWING_TICKS 동안 무기가 실제로 내려온다(타격 틱에 끝 자세). 판정 창이 없으니 그림이 대신 알린다
+    if (!attack.parryable && c.timer <= RED_SWING_TICKS && sw !== 'bash') {
+      const t = 1 - c.timer / RED_SWING_TICKS;
+      x = lerp(P.s.x, P.f.x, t); y = lerp(P.s.y, P.f.y, t); e = lerp(P.s.e, P.f.e, t); z = lerp(P.s.z, P.f.z, t);
+      direct = true;
+    }
+  } else if (c.isMelee && c.striking) {
+    x = lerp(P.s.x, P.f.x, sp); y = lerp(P.s.y, P.f.y, sp); e = lerp(P.s.e, P.f.e, sp); z = lerp(P.s.z, P.f.z, sp);
+    direct = true;
+  } else if (enemy.ai === 'impact' || (enemy.ai === 'recover' && !enemy.whiffed && c.timer > attack.recoverTicks * (1 - SK_FOLLOW_THROUGH))) {
+    // 타격 순간·후딜 앞부분 — 마지막 자세를 유지(팔로우 스루)
+    x = P.f.x; y = P.f.y; e = P.f.e; z = P.f.z;
+  } else if (enemy.ai === 'recover' && enemy.whiffed) {
+    // 헛침 — 휘두른 자세 그대로 굳어 무방비
+    x = P.f.x; y = P.f.y; e = P.f.e; z = P.f.z;
+  }
+  if (direct) {
+    arm.rotation.x = x; arm.rotation.y = y; arm.position.z = z; elbow.rotation.x = e;
+  } else {
+    const k = c.solidIce ? 0 : 0.25;
+    arm.rotation.x += (x - arm.rotation.x) * k;
+    arm.rotation.y += (y - arm.rotation.y) * k;
+    arm.position.z += (z - arm.position.z) * k;
+    elbow.rotation.x += (e - elbow.rotation.x) * k;
+  }
+  // 두 손 무기 — 왼팔이 자루를 따라 잡는다(어깨 회전을 따라가고 안쪽으로 모인다)
+  if (spec?.twoHanded && visual.plainArms?.[0]) {
+    const left = visual.plainArms[0];
+    left.rotation.x = arm.rotation.x;
+    left.rotation.y = 0.35;
+    left.position.z = arm.position.z;
+  }
 }
 
 function buildBatBody(
@@ -450,10 +538,19 @@ const EXIT_FLASH_MS = 900; // 출구가 열리는 순간의 섬광
 /** 지면 강타 범위 원 — 예고 중 바닥에 그려진다. 안쪽 반지름은 바깥 대비 비율 */
 const AOE_RING_COLOR = 0xff5a3c;
 const AOE_RING_INNER = 0.9;
-// 해골 병사 연출 상수 — 팔이 치고 몸은 거의 서 있다(사용자: 몸을 기울이는 인간형 기본 동작이 어색하다)
-const SKELETON_LEAN_MUL = 0.15; // 인간형 기본 기울임·전진의 배율
-const SKELETON_WHIRL_COIL = 0.7; // 회전 베기 예고에 반대로 감는 각(rad)
-const SKELETON_WHIRL_ARM = 0.15; // 회전 베기 타격 중 팔 각 — 수평으로 뻗어 휘두른다
+// 해골 병사 연출 상수(3차, 2026-09-08) — 팔꿈치 리그의 팔이 치고 몸은 거의 서 있다(사용자: 몸을 기울이는 인간형 기본 동작이 어색하다). 무게는 발(앞발 내딛기)에서
+const SKELETON_LEAN_MUL = 0.15; // 인간형 기본 기울임·전진의 배율(베기·내려치기)
+const SKELETON_THRUST_LEAN_MUL = 0.3; // 찌르기의 기울임 배율 — 런지는 몸이 나가는 동작이라 전진은 크게(아래)
+const SKELETON_THRUST_LUNGE_MUL = 0.8;
+const SK_UPPER_ARM = 0.16; // 위팔 길이(height 비율)
+const SK_FOREARM = 0.16; // 아래팔 길이(height 비율)
+const SK_ELBOW_REST = 0.55; // 대기 팔꿈치 굽힘(rad)
+const SK_STANCE_FRONT = -0.5; // 공격 중 앞발(오른발) 내딛는 각(rad)
+const SK_STANCE_BACK = 0.3; // 뒷발
+const SK_TWIST = 0.25; // 가로 베기에 허리가 따라 도는 각(rad)
+const RED_SWING_TICKS = 10; // 빨강(패링 불가) 공격 — 예고 끝 이 틱 동안 무기가 실제로 내려와 타격 틱에 닿는다(판정은 그대로, 그림만)
+const SK_FOLLOW_THROUGH = 0.35; // 후딜 앞부분(비율) 동안 마지막 자세를 유지한다 — 휘두른 뒤 곧장 되감지 않는다
+const SK_RECOIL_ARM = 1.0; // 튕김(패링·끊김) — 팔이 위로 들린다
 // 슈퍼아머 표현(사용자 결정 2026-09-08: 시작 신호 + 지속 껍질만) — 몸의 파랑·빨강 예고색은 그대로 두고 그 위에 금빛 반투명 껍질을 씌운다(주술사 방어막 껍질과 같은 방식).
 // 눈빛도 금빛으로. 시작 3틱은 발을 굳게 딛는다(웅크림 + 앞발 내딛음, 먼지·잠기는 소리는 main). 텔레그래프 3색과 겹치지 않는 네 번째 신호
 const ARMOR_SHELL_COLOR = 0xf2c14e;
@@ -463,8 +560,6 @@ const ARMOR_EYE_COLOR = 0xffd24a;
 const ARMOR_STANCE_TICKS = 3; // 시작 신호 — 발 딛는 웅크림이 유지되는 틱
 const ARMOR_STANCE_CROUCH = 0.07; // 시작 신호 웅크림(height 비율)
 const ARMOR_STANCE_LEG = 0.45; // 슈퍼아머 동안 앞발을 내딛는 각(rad) — 뒤로 물러서지 않는 자세
-const BONE_PROJECTILE_COLOR = 0xd8d0bc;
-const BONE_PROJECTILE_GLOW = 0x2a1440; // 반사 가능 규약(보라)을 옅게
 
 const SHIELD_COLOR = 0x6f7480;
 const SHIELD_CRACKED_COLOR = 0x4a4238; // 반파 — 그을리고 쪼개진 판
@@ -490,6 +585,8 @@ const MELEE_WEAPONS: Record<
     style: 'smash' | 'thrust';
     tip?: boolean;
     headSize?: number;
+    /** 두 손으로 잡는다(해골 해머병) — 맨팔(왼팔)이 무기 팔을 따라 움직인다 */
+    twoHanded?: boolean;
   }
 > = {
   goblin_runner: { length: 1.0, width: 0.11, color: 0x6b5233, style: 'smash' },
@@ -497,8 +594,9 @@ const MELEE_WEAPONS: Record<
   // tip 이 있으면 창끝이 length + 0.23 지점까지 나온다 (아래 tipLocal 계산)
   goblin_chieftain: { length: 2.0, width: 0.26, color: 0x4a3826, style: 'smash', headSize: 0.5 },
   // 해골 병사 — 녹슨 강철 검(검사) / 나무 자루 큰 해머(해머병) / 방패 너머로 내지르는 짧은 검(방패병, thrust)
-  skeleton_sword: { length: 1.25, width: 0.09, color: 0x8d949e, style: 'smash' },
-  skeleton_hammer: { length: 1.7, width: 0.15, color: 0x4a3826, style: 'smash', headSize: 0.42 },
+  // 검 1.1 = 사거리 2.2 에 팔꿈치 팔(0.58)·찌르기 몸 전진(0.8)을 더한 판정 끝(2.75)에 맞춘 길이 — 보이는 검끝 ≈ 판정 검끝
+  skeleton_sword: { length: 1.1, width: 0.09, color: 0x8d949e, style: 'smash' },
+  skeleton_hammer: { length: 1.7, width: 0.15, color: 0x4a3826, style: 'smash', headSize: 0.42, twoHanded: true },
   skeleton_shield: { length: 0.95, width: 0.075, color: 0x8d949e, style: 'thrust', tip: true },
 };
 /** smash 팔 각도: 휴식/치켜듦/내리침.
@@ -595,6 +693,8 @@ interface EnemyVisual {
   zap?: { group: THREE.Group; mat: THREE.MeshBasicMaterial; segs: THREE.Mesh[] };
   /** 근접 무기 팔 피벗 — 치켜들었다 내리찍는다 */
   arm?: THREE.Group;
+  /** 팔꿈치 피벗(해골) — arm 의 자식. 위팔 끝에서 아래팔·손·무기가 접힌다(poseSkeletonArm) */
+  elbow?: THREE.Group;
   shieldFlashUntil: number;
   /** warden 방어막 셸 */
   barrier?: THREE.Mesh;
@@ -4302,33 +4402,61 @@ export class Stage {
     if (weaponSpec) {
       const arm = new THREE.Group();
       arm.position.set(def.radius * 0.85, def.height * 0.72, 0);
-      // 팔뚝 — 어깨에서 손잡이까지. 이게 없으면 몽둥이만 허공에 떠 있다 (실측 피드백)
-      const limbLen = Math.min(def.height * 0.28, weaponSpec.length * 0.5);
-      const limb = new THREE.Mesh(
-        new THREE.BoxGeometry(def.radius * 0.32, def.radius * 0.32, limbLen),
-        armMat,
-      );
-      limb.position.z = -limbLen / 2;
-      arm.add(limb);
-      // 손 — 자루를 감싸 쥔 뭉치
-      const hand = new THREE.Mesh(
+      // 해골은 팔꿈치가 있다 — 위팔(arm) 끝에 elbow 피벗, 그 밑에 아래팔·손·무기. 무기는 손에서 앞(-z)으로 뻗는다
+      const skeletonRig = SKELETON_TYPES.has(type);
+      let handParent: THREE.Group = arm;
+      if (skeletonRig) {
+        const upperLen = def.height * SK_UPPER_ARM;
+        const foreLen = def.height * SK_FOREARM;
+        const upper = new THREE.Mesh(new THREE.BoxGeometry(def.radius * 0.26, def.radius * 0.26, upperLen), armMat);
+        upper.position.z = -upperLen / 2;
+        arm.add(upper);
+        const elbow = new THREE.Group();
+        elbow.position.z = -upperLen;
+        arm.add(elbow);
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(def.radius * 0.17, 6, 5), armMat);
+        elbow.add(joint);
+        const fore = new THREE.Mesh(new THREE.BoxGeometry(def.radius * 0.22, def.radius * 0.22, foreLen), armMat);
+        fore.position.z = -foreLen / 2;
+        elbow.add(fore);
+        const hand = new THREE.Group();
+        hand.position.z = -foreLen;
+        elbow.add(hand);
+        elbow.rotation.x = SK_ELBOW_REST;
+        visual.elbow = elbow;
+        handParent = hand;
+      } else {
+        // 팔뚝 — 어깨에서 손잡이까지. 이게 없으면 몽둥이만 허공에 떠 있다 (실측 피드백)
+        const limbLen = Math.min(def.height * 0.28, weaponSpec.length * 0.5);
+        const limb = new THREE.Mesh(
+          new THREE.BoxGeometry(def.radius * 0.32, def.radius * 0.32, limbLen),
+          armMat,
+        );
+        limb.position.z = -limbLen / 2;
+        arm.add(limb);
+        const hand = new THREE.Group();
+        hand.position.z = -limbLen;
+        arm.add(hand);
+        handParent = hand;
+      }
+      // 손 — 자루를 감싸 쥔 뭉치. 무기는 손에서 -z 로
+      const grip = new THREE.Mesh(
         new THREE.BoxGeometry(weaponSpec.width + 0.07, weaponSpec.width + 0.07, 0.14),
         armMat,
       );
-      hand.position.z = -limbLen;
-      arm.add(hand);
+      handParent.add(grip);
       const shaft = new THREE.Mesh(
         new THREE.BoxGeometry(weaponSpec.width, weaponSpec.width, weaponSpec.length),
         new THREE.MeshLambertMaterial({ color: weaponSpec.color }),
       );
       shaft.position.z = -weaponSpec.length / 2;
-      arm.add(shaft);
+      handParent.add(shaft);
       if (weaponSpec.tip) {
         const tipMat = new THREE.MeshLambertMaterial({ color: SPEAR_TIP });
         flashMaterials.push(tipMat);
         const tip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.26), tipMat);
         tip.position.z = -weaponSpec.length - 0.1;
-        arm.add(tip);
+        handParent.add(tip);
       }
       if (weaponSpec.headSize) {
         const clubHead = new THREE.Mesh(
@@ -4336,9 +4464,9 @@ export class Stage {
           new THREE.MeshLambertMaterial({ color: 0x7a7d84 }),
         );
         clubHead.position.z = -weaponSpec.length + 0.15;
-        arm.add(clubHead);
+        handParent.add(clubHead);
       }
-      arm.rotation.x = weaponSpec.style === 'thrust' ? THRUST_LEVEL : ARM_REST;
+      arm.rotation.x = weaponSpec.style === 'thrust' && !skeletonRig ? THRUST_LEVEL : ARM_REST;
       visual.arm = arm;
       torso.add(arm);
     }
@@ -4704,9 +4832,9 @@ export class Stage {
       const isMelee = attack.type !== 'projectile';
       const trembling = inWindup && enemy.timer <= balance.telegraph.visualLeadTicks;
 
-      // 해골은 공격마다 다르다 — 찌르기 난무·방패 반격은 thrust, 베기·회전 베기는 smash. 나머지 적은 무기 규격이 정한다
-      const isThrust = SKELETON_TYPES.has(enemy.type) && isMelee ? attack.type === 'thrust' : (MELEE_WEAPONS[enemy.type]?.style ?? 'smash') === 'thrust';
-      const whirl = SKELETON_TYPES.has(enemy.type) && isMelee && (attack.arcDeg ?? 0) >= 300; // 회전 베기(해골 검사) — 몸이 한 바퀴 돈다
+      // 해골은 공격마다 다르다(attack.swing) — 찌르기·반격은 thrust, 베기·내려치기는 smash 계열. 나머지 적은 무기 규격이 정한다
+      const skSwing = SKELETON_TYPES.has(enemy.type) ? swingOf(attack) : undefined;
+      const isThrust = skSwing !== undefined && isMelee ? skSwing === 'thrust' : (MELEE_WEAPONS[enemy.type]?.style ?? 'smash') === 'thrust';
       let leanTarget: number;
       let lungeTarget: number;
       let crouchTarget = 0;
@@ -4786,18 +4914,25 @@ export class Stage {
         }
       }
 
-      // 해골 병사 — 팔이 치고 몸통은 거의 서 있다(기울임·전진 ×0.15). 회전 베기는 몸통이 예고에 반대로 감겼다가 타격에 한 바퀴 돈다(그림 = 판정: strikeProgress)
-      if (SKELETON_TYPES.has(enemy.type)) {
-        leanTarget *= SKELETON_LEAN_MUL;
-        lungeTarget *= SKELETON_LEAN_MUL;
-        let spinTarget = 0;
-        if (whirl && inWindup) spinTarget = -SKELETON_WHIRL_COIL * windupProgress;
-        else if (whirl && striking) spinTarget = -SKELETON_WHIRL_COIL + (Math.PI * 2 + SKELETON_WHIRL_COIL) * (enemy.strikeProgress ?? 0);
-        if (whirl && striking) visual.torso.rotation.y = spinTarget;
-        else {
-          // 한 바퀴 돈 뒤(≈2π)엔 0 과 같은 각이다 — 거꾸로 되감지 않게 접는다
-          if (visual.torso.rotation.y > Math.PI) visual.torso.rotation.y -= Math.PI * 2;
-          visual.torso.rotation.y += (spinTarget - visual.torso.rotation.y) * 0.3;
+      // 해골 병사 — 팔이 치고 몸통은 거의 서 있다. 베기·내려치기는 기울임·전진 ×0.15, 찌르기(런지)는 몸이 나가는 동작이라 전진 ×0.8·기울임 ×0.3.
+      // 무게는 발에서: 공격 중엔 오른발을 내딛고 선다. 가로 베기는 허리가 살짝 따라 돈다(감았다 푼다)
+      if (skSwing !== undefined) {
+        if (skSwing === 'thrust') {
+          leanTarget *= SKELETON_THRUST_LEAN_MUL;
+          lungeTarget *= SKELETON_THRUST_LUNGE_MUL;
+        } else {
+          leanTarget *= SKELETON_LEAN_MUL;
+          lungeTarget *= SKELETON_LEAN_MUL;
+        }
+        let twist = 0;
+        if (skSwing === 'horizontal' && isMelee) {
+          if (inWindup) twist = SK_TWIST * windupProgress;
+          else if (striking) twist = SK_TWIST - SK_TWIST * 2 * (enemy.strikeProgress ?? 0);
+        }
+        visual.torso.rotation.y += (twist - visual.torso.rotation.y) * 0.3;
+        if (visual.legs && isMelee && (inWindup || striking || charging)) {
+          visual.legs.right.rotation.x += (SK_STANCE_FRONT - visual.legs.right.rotation.x) * 0.3;
+          visual.legs.left.rotation.x += (SK_STANCE_BACK - visual.legs.left.rotation.x) * 0.3;
         }
       }
 
@@ -4953,7 +5088,13 @@ export class Stage {
       // 무기 팔 — smash: 치켜들었다 내리침 / thrust: 뒤로 당겼다 내지름.
       // 타격 구간에서는 로직이 계산한 무기 끝 거리(enemy.weaponTipDist)를 그대로 따라간다.
       // 보이는 창끝 = 패링 판정에 쓰이는 창끝 (시간 기반 스냅 애니메이션 금지)
-      if (visual.arm) {
+      if (visual.arm && visual.elbow && skSwing !== undefined) {
+        // 해골 — 팔꿈치 리그. 공격 정의의 swing 마다 다른 궤적(머리 위·가로·올려침·찌름·방패 밀침)
+        poseSkeletonArm(visual, enemy, attack, MELEE_WEAPONS[enemy.type], {
+          swing: skSwing, inWindup, striking, charging, recoiled, isMelee, windupProgress, trembling, solidIce, now,
+          strikeProgress: enemy.strikeProgress ?? 0, timer: enemy.timer, torsoLean: visual.torso.rotation.x, torsoZ: visual.torso.position.z,
+        });
+      } else if (visual.arm) {
         const spec = MELEE_WEAPONS[enemy.type];
         const style: 'smash' | 'thrust' = isThrust ? 'thrust' : 'smash'; // 해골은 공격마다(isThrust 참조), 나머지는 무기 규격
         const strikeProgress = enemy.strikeProgress ?? 0;
@@ -5002,11 +5143,9 @@ export class Stage {
             armRotTarget = ARM_REST + (ARM_RAISED - ARM_REST) * windupProgress;
             if (trembling) armRotTarget += Math.sin(now / 12) * 0.08;
           } else if (isMelee && striking) {
-            // 호를 그리는 무기는 진행도로 각도를 몰아준다 (도달 시점이 판정과 일치). 회전 베기는 팔을 수평으로 뻗은 채 몸이 돈다
-            armRotTarget = whirl ? SKELETON_WHIRL_ARM : ARM_RAISED + (ARM_SMASH - ARM_RAISED) * strikeProgress;
+            // 호를 그리는 무기는 진행도로 각도를 몰아준다 (도달 시점이 판정과 일치)
+            armRotTarget = ARM_RAISED + (ARM_SMASH - ARM_RAISED) * strikeProgress;
             direct = true;
-          } else if (whirl && inWindup) {
-            armRotTarget = ARM_REST + (SKELETON_WHIRL_ARM - ARM_REST) * windupProgress; // 회전 베기 예고 — 팔을 수평으로 올린다(치켜들지 않는다)
           }
         }
         if (direct) {
@@ -5298,9 +5437,6 @@ export class Stage {
       // 반파 — 3대째부터 금이 드러나고 판이 그을린다. 6대째에 부서진다
       const halfBroken = (enemy.shieldHits ?? 0) >= balance.shieldBreak.hammerHitsToCrack;
       if (visual.shieldCracks) visual.shieldCracks.visible = halfBroken;
-      // 뼈 투척 뒤(해골 검사, armlessTicks) — 던진 왼팔이 없다. 맨팔 첫 번째가 왼팔(무기 팔은 오른쪽)
-      if (visual.plainArms?.[0]) visual.plainArms[0].visible = (enemy.armlessTicks ?? 0) <= 0;
-
       if (visual.shield && visual.shieldMaterial) {
         visual.shieldMaterial.color.set(halfBroken ? SHIELD_CRACKED_COLOR : SHIELD_COLOR);
         visual.shieldMaterial.emissive.set(now < visual.shieldFlashUntil ? 0xffffff : 0x000000);
@@ -5313,14 +5449,11 @@ export class Stage {
         let targetY = down ? def.height * SHIELD_DOWN_Y : def.height * 0.5;
         let targetTilt = down ? SHIELD_DOWN_TILT : 0;
         const targetX = down ? SHIELD_DOWN_X : SHIELD_BASE_X;
-        // 방패 찍기(해골 방패병 closeAttack) — 방패가 무기다: 예고에 높이 치켜들고(뒤로 젖힘) 타격·착지에 앞아래로 내리찍는다
-        const shieldSlam = enemy.attackMode === 'close' && def.closeAttack?.type === 'bash';
-        if (shieldSlam && inWindup) {
-          targetY = def.height * (0.5 + 0.22 * windupProgress);
-          targetTilt = 0.45 * windupProgress;
-        } else if (shieldSlam && (striking || enemy.ai === 'impact' || (enemy.ai === 'recover' && !recoiled))) {
-          targetY = def.height * 0.26;
-          targetTilt = -1.15;
+        // 방패 밀어붙이기(해골 방패병 close·charge, swing bash) — 방패를 앞세운다: 예고에 살짝 낮춰 어깨에 붙이고, 질주·타격에 모서리를 앞으로 기울인 채 밀친다
+        const shoving = swingOf(attack) === 'bash' && (enemy.attackMode === 'close' || enemy.attackMode === 'charge') && (inWindup || charging || striking || enemy.ai === 'impact');
+        if (shoving) {
+          targetY = def.height * (inWindup ? 0.47 : 0.44);
+          targetTilt = inWindup ? -0.1 * windupProgress : -0.3;
         }
         if (!down && visual.shieldDown) {
           // 밀림이 끝나는 순간 즉시 다시 든다 — 방어가 켜지는 시점과 그림이 어긋나면 안 된다
@@ -5466,16 +5599,6 @@ export class Stage {
               new THREE.MeshLambertMaterial({ color: 0x3d4a2e, emissive: 0x141a10 }),
             ),
           );
-        } else if (proj.kind === 'bone') {
-          // 뼈다귀(해골 검사 투척) — 마디 두 개 달린 뼛빛 막대, 반사 가능 규약(보라)을 옅게 띤다. 날면서 빙글빙글 돈다(아래)
-          const boneMat = new THREE.MeshLambertMaterial({ color: BONE_PROJECTILE_COLOR, emissive: BONE_PROJECTILE_GLOW });
-          const shaft = new THREE.Mesh(new THREE.BoxGeometry(proj.radius * 0.5, proj.radius * 0.5, proj.radius * 2.6), boneMat);
-          group.add(shaft);
-          for (const end of [-1, 1]) {
-            const knob = new THREE.Mesh(new THREE.SphereGeometry(proj.radius * 0.42, 6, 5), boneMat);
-            knob.position.z = end * proj.radius * 1.3;
-            group.add(knob);
-          }
         } else if (proj.kind === 'rock') {
           // 바위 — 크고 어두운 덩어리, 무발광
           group.add(
@@ -5583,7 +5706,6 @@ export class Stage {
         pz = launch.from.z + (pz - launch.from.z) * k;
       }
       group.position.set(px, py, pz);
-      if (proj.kind === 'bone') group.rotation.set(group.rotation.x + 0.22, group.rotation.y + 0.09, 0); // 던진 뼈는 빙글빙글
       if (proj.kind === 'arrow' || proj.kind === 'frost' || proj.kind === 'goo') {
         // 화살대·얼음 결정·진액 구슬 꼬리를 비행 방향으로 정렬 (로컬 -Z가 진행 방향)
         group.lookAt(px - proj.vx, py - proj.vy, pz - proj.vz);

@@ -1016,9 +1016,7 @@
       "dustPower": 0.5,
       "_executeHoldNote": "처형 사망 — 리그를 해머 접촉(executeContactMs) 뒤 이만큼 더 붙잡아 둔다. 뼈 흩어짐 콜백이 리그를 직접 떼어 가므로, 콜백보다 먼저 지워지면 뼈 대신 막대가 난다",
       "executeHoldExtraMs": 400
-    },
-    "_boneThrowNote": "뼈 투척(해골 검사 rangedAttack, projectileKind bone) — 던진 뒤 왼팔이 없는 시간(틱, 연출 — Stage 가 맨팔을 숨긴다)",
-    "boneThrow": { "armlessTicks": 240 }
+    }
   },
   "enemyAi": {
     "strafe": {
