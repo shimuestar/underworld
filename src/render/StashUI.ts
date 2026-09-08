@@ -32,8 +32,8 @@ const MID_PX = CELL_PX * 3 + GAP_PX * 2;
 /** 창 폭 — 왼쪽 열(352) + 가운데(208) + 창고 5열(352) + 사이 24×2 + 안쪽 여백 26×2.
  *  퀵슬롯을 아래 별도 줄에 두면 창이 뷰포트보다 높아져 위쪽 칸이 화면 밖으로 잘린다(헤드리스 800px 에서 실측) */
 const PANEL_PX = LEFT_PX * 2 + MID_PX + COLUMN_GAP_PX * 2 + 52;
-/** 착용 장비 칸 순서 — 4열 두 줄: 투구·갑옷·부츠·짐칸 / 목걸이·반지 1·반지 2 */
-const EQUIP_ORDER: EquipSlot[] = ['head', 'body', 'feet', 'pack', 'neck', 'ring1', 'ring2'];
+/** 착용 장비 칸 순서 — 4열 두 줄: 투구·갑옷·부츠·목걸이 / 반지 1·반지 2·안전주머니(pack — 맨 아래, 캐릭터 아래 자리) */
+const EQUIP_ORDER: EquipSlot[] = ['head', 'body', 'feet', 'neck', 'ring1', 'ring2', 'pack'];
 const EQUIP_COLS = 4;
 /** 퀵슬롯 십자 — HUD 마름모 넷과 같은 자리(위 1·오른쪽 2·아래 3·왼쪽 4). grid-area 'row / col' (InventoryUI 와 같다) */
 const CROSS_AREAS = ['1 / 2', '2 / 3', '3 / 2', '2 / 1'];
